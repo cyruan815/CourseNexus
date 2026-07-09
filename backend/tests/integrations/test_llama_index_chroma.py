@@ -110,16 +110,29 @@ def test_chroma_filters_user_material_and_folder(tmp_path: Path) -> None:
 
 def test_chroma_repeat_upsert_replaces_existing_chunk(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
-    rag_index.index_chunks([math_chunk("matrix")])
+    rag_index.index_chunks(
+        [
+            math_chunk("matrix"),
+            rag_chunk("math-c2", material_id="math-m2", text="matrix"),
+        ]
+    )
     rag_index.index_chunks([math_chunk("history updated")])
 
-    hits = rag_index.retrieve(
+    matrix_hits = rag_index.retrieve(
+        query="matrix",
+        scope=RagScopeFilter(user_id="u1", course_id="math"),
+        top_k=1,
+    )
+    updated_hits = rag_index.retrieve(
         query="updated",
         scope=RagScopeFilter(user_id="u1", course_id="math"),
-        top_k=8,
+        top_k=1,
     )
+    stored = rag_index.collection.get(ids=["math-c1"], include=["documents"])
 
-    assert [hit.chunk_id for hit in hits] == ["math-c1"]
+    assert [hit.chunk_id for hit in matrix_hits] == ["math-c2"]
+    assert [hit.chunk_id for hit in updated_hits] == ["math-c1"]
+    assert stored["documents"] == ["history updated"]
 
 
 def test_chroma_delete_material_removes_vectors(tmp_path: Path) -> None:

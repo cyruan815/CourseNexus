@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Sequence
 
 import chromadb
+from llama_index.core import StorageContext
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.schema import TextNode
 from llama_index.core.vector_stores import (
@@ -27,6 +28,7 @@ class LlamaIndexChromaRagIndex:
         self.client = chromadb.PersistentClient(path=str(self.persist_path))
         self.collection = self.client.get_or_create_collection(collection_name)
         self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
+        self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
     def index_chunks(self, chunks: Sequence[RagChunk]) -> None:
         if not chunks:
@@ -36,6 +38,7 @@ class LlamaIndexChromaRagIndex:
             embeddings = self.embed_model.get_text_embedding_batch([node.text for node in nodes])
             for node, embedding in zip(nodes, embeddings, strict=True):
                 node.embedding = embedding
+            self.collection.delete(ids=[node.node_id for node in nodes])
             self.vector_store.add(nodes)
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引失败", status_code=502) from exc
