@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session
 from app.core.errors import CourseNexusError
 from app.integrations.file_storage.base import FileStorage, material_type_for_filename
 from app.integrations.parsers.base import Parser
+from app.integrations.rag.base import RagChunk, RagIndex
 from app.modules.courses.service import assert_course_owner
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.materials.repository import (
     get_active_material_for_user,
     list_active_materials_for_course,
     replace_material_chunks,
+    replace_material_chunks_in_session,
     save_material,
 )
 from app.modules.materials.schemas import MaterialLinkCreate
@@ -25,8 +27,8 @@ def _new_material_id() -> str:
     return f"mat_{uuid4().hex}"
 
 
-def _new_chunk_id() -> str:
-    return f"chk_{uuid4().hex}"
+def _chunk_id(material_id: str, chunk_index: int) -> str:
+    return f"chk_{material_id.removeprefix('mat_')}_{chunk_index:06d}"
 
 
 def _material_type_for_filename(filename: str) -> str:
@@ -101,8 +103,16 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     return material
 
 
-def delete_material(db: Session, user_id: str, material_id: str) -> CourseMaterial:
+def delete_material(
+    db: Session,
+    user_id: str,
+    material_id: str,
+    *,
+    rag_index: RagIndex | None = None,
+) -> CourseMaterial:
     material = get_material_detail(db, user_id, material_id)
+    if rag_index is not None:
+        rag_index.delete_material(material.id)
     now = datetime.now(timezone.utc)
     material.parse_status = "deleted"
     material.deleted_at = now
@@ -116,6 +126,7 @@ def parse_material(
     user_id: str,
     material_id: str,
     parser: Parser,
+    rag_index: RagIndex,
     storage_root: str | Path,
 ) -> CourseMaterial:
     material = get_material_detail(db, user_id, material_id)
@@ -125,18 +136,18 @@ def parse_material(
     save_material(db, material)
 
     if material.source_type != "file" or material.file_url is None:
-        return _mark_parse_failed(db, material, "UNSUPPORTED_FILE_TYPE")
+        return _mark_parse_failed(db, material, "UNSUPPORTED_FILE_TYPE", rag_index=rag_index)
 
     try:
         parsed_document = parser.parse(Path(storage_root) / material.file_url)
     except CourseNexusError as exc:
-        return _mark_parse_failed(db, material, exc.code)
+        return _mark_parse_failed(db, material, exc.code, rag_index=rag_index)
     except Exception:
-        return _mark_parse_failed(db, material, "PARSE_FAILED")
+        return _mark_parse_failed(db, material, "PARSE_FAILED", rag_index=rag_index)
 
     chunks = [
         MaterialChunk(
-            id=_new_chunk_id(),
+            id=_chunk_id(material.id, chunk.chunk_index),
             material_id=material.id,
             course_id=material.course_id,
             chunk_index=chunk.chunk_index,
@@ -147,13 +158,59 @@ def parse_material(
         )
         for chunk in parsed_document.chunks
     ]
+    replace_material_chunks_in_session(db, material=material, chunks=chunks)
+    db.commit()
+    db.refresh(material)
+
+    try:
+        rag_index.delete_material(material.id)
+        rag_index.index_chunks(_rag_chunks_for_material(material, chunks))
+    except CourseNexusError as exc:
+        rag_index.delete_material(material.id)
+        return _mark_parse_failed(db, material, exc.code)
+    except Exception:
+        rag_index.delete_material(material.id)
+        return _mark_parse_failed(db, material, "INDEXING_FAILED")
+
+    for chunk in chunks:
+        chunk.embedding_id = chunk.id
     material.parse_status = "parsed"
     material.parse_error = None
     material.updated_at = datetime.now(timezone.utc)
-    return replace_material_chunks(db, material=material, chunks=chunks)
+    db.add_all(chunks)
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return material
 
 
-def _mark_parse_failed(db: Session, material: CourseMaterial, error_code: str) -> CourseMaterial:
+def _rag_chunks_for_material(material: CourseMaterial, chunks: list[MaterialChunk]) -> list[RagChunk]:
+    return [
+        RagChunk(
+            chunk_id=chunk.id,
+            user_id=material.user_id,
+            course_id=material.course_id,
+            material_id=material.id,
+            folder_id=material.folder_id,
+            chunk_index=chunk.chunk_index,
+            text=chunk.content_text,
+            page=chunk.page,
+            page_index=chunk.page_index,
+            heading=chunk.heading,
+        )
+        for chunk in chunks
+    ]
+
+
+def _mark_parse_failed(
+    db: Session,
+    material: CourseMaterial,
+    error_code: str,
+    *,
+    rag_index: RagIndex | None = None,
+) -> CourseMaterial:
+    if rag_index is not None:
+        rag_index.delete_material(material.id)
     material.parse_status = "parse_failed"
     material.parse_error = error_code
     material.updated_at = datetime.now(timezone.utc)

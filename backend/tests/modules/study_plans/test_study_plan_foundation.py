@@ -15,6 +15,7 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.parsers.plain_text import PlainTextParser
+from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
@@ -56,7 +57,14 @@ def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id:
         content_type="text/plain",
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
-    parse_material(db, user_id=user_id, material_id=material.id, parser=PlainTextParser(), storage_root=tmp_path)
+    parse_material(
+        db,
+        user_id=user_id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=FakeRagIndex(),
+        storage_root=tmp_path,
+    )
     return material.id
 
 

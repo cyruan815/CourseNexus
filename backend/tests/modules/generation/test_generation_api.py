@@ -12,8 +12,9 @@ from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.rag.fake import FakeRagIndex
 from app.main import app
-from app.modules.materials.router import get_material_storage
+from app.modules.materials.router import get_material_storage, get_rag_index
 
 
 @pytest.fixture()
@@ -38,6 +39,7 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         root_path=tmp_path,
         max_file_size_bytes=1024,
     )
+    app.dependency_overrides[get_rag_index] = FakeRagIndex
     try:
         yield TestClient(app)
     finally:

@@ -15,6 +15,7 @@ import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.model_provider.mock import MockModelProvider
 from app.integrations.parsers.plain_text import PlainTextParser
+from app.integrations.rag.fake import FakeRagIndex
 from app.modules.course_qa.models import Message, SourceCitation
 from app.modules.course_qa.schemas import CourseQuestionCreate
 from app.modules.course_qa.service import ask_course_question
@@ -57,6 +58,7 @@ def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id:
         user_id=user_id,
         material_id=material.id,
         parser=PlainTextParser(),
+        rag_index=FakeRagIndex(),
         storage_root=tmp_path,
     )
 

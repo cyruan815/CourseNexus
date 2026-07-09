@@ -14,6 +14,7 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.parsers.plain_text import PlainTextParser
+from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.materials.models import MaterialChunk
@@ -65,12 +66,14 @@ def material_chunks(db: Session, material_id: str) -> list[MaterialChunk]:
 
 def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Path) -> None:
     user, course, material = create_uploaded_material(db, tmp_path)
+    rag_index = FakeRagIndex()
 
     parsed = parse_material(
         db,
         user_id=user.id,
         material_id=material.id,
         parser=PlainTextParser(),
+        rag_index=rag_index,
         storage_root=tmp_path,
     )
 
@@ -82,6 +85,11 @@ def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Pa
     assert chunks[0].chunk_index == 0
     assert chunks[0].heading == "Intro"
     assert chunks[0].content_text == "Alpha"
+    assert chunks[0].id == f"chk_{material.id.removeprefix('mat_')}_000000"
+    assert chunks[0].embedding_id == chunks[0].id
+    assert {record.material_id for record in rag_index.records.values()} == {material.id}
+    assert {record.course_id for record in rag_index.records.values()} == {course.id}
+    assert {record.user_id for record in rag_index.records.values()} == {user.id}
 
 
 def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path) -> None:
@@ -96,6 +104,7 @@ def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path) 
         user_id=user.id,
         material_id=material.id,
         parser=FailingParser(),
+        rag_index=FakeRagIndex(),
         storage_root=tmp_path,
     )
 
@@ -107,15 +116,34 @@ def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path) 
 def test_reparse_material_replaces_old_chunks(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
     parser = PlainTextParser()
-    parse_material(db, user_id=user.id, material_id=material.id, parser=parser, storage_root=tmp_path)
+    rag_index = FakeRagIndex()
+    parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=parser,
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
     (tmp_path / material.file_url).write_text("First\n\nSecond\n", encoding="utf-8")
 
-    reparsed = parse_material(db, user_id=user.id, material_id=material.id, parser=parser, storage_root=tmp_path)
+    reparsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=parser,
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
 
     chunks = material_chunks(db, material.id)
     assert reparsed.parse_status == "parsed"
     assert [chunk.chunk_index for chunk in chunks] == [0, 1]
     assert [chunk.content_text for chunk in chunks] == ["First", "Second"]
+    assert set(rag_index.records) == {
+        f"chk_{material.id.removeprefix('mat_')}_000000",
+        f"chk_{material.id.removeprefix('mat_')}_000001",
+    }
 
 
 def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
@@ -128,7 +156,68 @@ def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
             user_id=user.id,
             material_id=material.id,
             parser=PlainTextParser(),
+            rag_index=FakeRagIndex(),
             storage_root=tmp_path,
         )
 
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_parse_indexes_every_saved_chunk(db: Session, tmp_path: Path) -> None:
+    rag_index = FakeRagIndex()
+    user, course, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parsed"
+    assert {record.material_id for record in rag_index.records.values()} == {material.id}
+    assert {record.course_id for record in rag_index.records.values()} == {course.id}
+
+
+def test_parse_material_index_failure_marks_failed_and_clears_chunks(db: Session, tmp_path: Path) -> None:
+    class FailingRagIndex(FakeRagIndex):
+        def index_chunks(self, chunks):
+            super().index_chunks(chunks)
+            raise CourseNexusError(code="INDEXING_FAILED", message="索引失败", status_code=502)
+
+    rag_index = FailingRagIndex()
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parse_failed"
+    assert parsed.parse_error == "INDEXING_FAILED"
+    assert material_chunks(db, material.id) == []
+    assert rag_index.records == {}
+
+
+def test_delete_material_removes_vectors(db: Session, tmp_path: Path) -> None:
+    rag_index = FakeRagIndex()
+    user, _, material = create_uploaded_material(db, tmp_path)
+    parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    deleted = delete_material(db, user.id, material.id, rag_index=rag_index)
+
+    assert deleted.parse_status == "deleted"
+    assert rag_index.records == {}

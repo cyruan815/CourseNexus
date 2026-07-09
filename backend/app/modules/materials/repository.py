@@ -45,9 +45,18 @@ def replace_material_chunks(
     material: CourseMaterial,
     chunks: list[MaterialChunk],
 ) -> CourseMaterial:
-    db.execute(delete(MaterialChunk).where(MaterialChunk.material_id == material.id))
-    db.add_all(chunks)
-    db.add(material)
+    replace_material_chunks_in_session(db, material=material, chunks=chunks)
     db.commit()
     db.refresh(material)
     return material
+
+
+def replace_material_chunks_in_session(
+    db: Session,
+    *,
+    material: CourseMaterial,
+    chunks: list[MaterialChunk],
+) -> None:
+    db.execute(delete(MaterialChunk).where(MaterialChunk.material_id == material.id))
+    db.add_all(chunks)
+    db.add(material)

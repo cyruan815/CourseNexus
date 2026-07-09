@@ -14,6 +14,7 @@ from llama_index.core.vector_stores import (
     MetadataFilters,
     VectorStoreQuery,
 )
+from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from app.core.errors import CourseNexusError
@@ -99,3 +100,20 @@ class LlamaIndexChromaRagIndex:
         if scope.folder_ids:
             filters.append(MetadataFilter(key="folder_id", value=list(scope.folder_ids), operator=FilterOperator.IN))
         return MetadataFilters(filters=filters, condition=FilterCondition.AND)
+
+
+def create_openai_chroma_rag_index(
+    *,
+    persist_path: str | Path,
+    collection_name: str,
+    api_key: str,
+    embedding_model: str,
+) -> LlamaIndexChromaRagIndex:
+    return LlamaIndexChromaRagIndex(
+        persist_path=persist_path,
+        collection_name=collection_name,
+        embed_model=OpenAIEmbedding(
+            model=embedding_model,
+            api_key=api_key,
+        ),
+    )
