@@ -55,6 +55,7 @@ def ask_course_question(
             role="user",
             content=payload.question,
             material_scope_json=material_scope_json,
+            created_at=datetime.now(timezone.utc),
         ),
     )
     context = resolve_context(db, user_id, course_id, payload.material_scope)
@@ -71,6 +72,7 @@ def ask_course_question(
                 answer_type="no_source",
                 generation_status="success",
                 material_scope_json=material_scope_json,
+                created_at=datetime.now(timezone.utc),
             ),
         )
         _touch_conversation(db, conversation)
@@ -98,6 +100,7 @@ def ask_course_question(
                 generation_status="failed",
                 error_code="GENERATION_FAILED",
                 material_scope_json=material_scope_json,
+                created_at=datetime.now(timezone.utc),
             ),
         )
         _touch_conversation(db, conversation)
@@ -114,6 +117,7 @@ def ask_course_question(
             answer_type="grounded",
             generation_status="success",
             material_scope_json=material_scope_json,
+            created_at=datetime.now(timezone.utc),
         ),
     )
     selected_chunks = _select_citation_chunks(context.chunks, model_answer.citation_chunk_ids)
