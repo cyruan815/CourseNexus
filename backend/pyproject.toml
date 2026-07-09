@@ -6,7 +6,9 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.13",
     "fastapi>=0.115",
+    "openai>=2.0",
     "pydantic-settings>=2.0",
+    "python-multipart>=0.0.9",
     "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.30",
 ]

@@ -9,6 +9,7 @@
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
 | [0001-tech-stack.md](0001-tech-stack.md) | Accepted；v0.1 技术栈与本地 POC 架构选择。 | 2026-07-09 |
+| [0002-foundation-runtime-dependencies.md](0002-foundation-runtime-dependencies.md) | Accepted；基础设施阶段运行依赖、Vite 7 主版本和 OpenAI SDK 接入边界。 | 2026-07-09 |
 
 ## 相关链接
 
