@@ -27,6 +27,7 @@ coverage/
 *.sqlite3
 /uploads/
 /exports/
+/data/chroma/
 
 # Local agent/plugin process notes
 /docs/superpowers/

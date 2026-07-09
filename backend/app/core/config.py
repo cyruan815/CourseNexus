@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.4-mini"
     openai_embedding_model: str = "text-embedding-3-small"
     model_api_base_url: str | None = None
+    chroma_persist_path: str = "./data/chroma"
+    chroma_collection: str = "course_nexus_material_chunks"
+    rag_similarity_top_k: int = 8
+    rag_chunk_max_tokens: int = 800
+    material_batch_max_tokens: int = 12_000
 
 
 @lru_cache
