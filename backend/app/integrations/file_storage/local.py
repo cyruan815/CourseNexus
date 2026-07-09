@@ -1,16 +1,26 @@
 from __future__ import annotations
 
-import codecs
 from pathlib import Path
 from typing import BinaryIO
+import zipfile
 
 from app.core.errors import CourseNexusError
 from app.integrations.file_storage.base import StoredFile
 
 
-SUPPORTED_TEXT_MIME_TYPES = {
-    ".md": "text/markdown",
-    ".txt": "text/plain",
+SUPPORTED_FILE_TYPES = {
+    ".md": ("text/markdown", "markdown"),
+    ".txt": ("text/plain", "text"),
+    ".pdf": ("application/pdf", "pdf"),
+    ".docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "word"),
+    ".pptx": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", "ppt"),
+    ".png": ("image/png", "image"),
+    ".jpg": ("image/jpeg", "image"),
+    ".jpeg": ("image/jpeg", "image"),
+}
+OFFICE_REQUIRED_MEMBERS = {
+    ".docx": "word/document.xml",
+    ".pptx": "ppt/presentation.xml",
 }
 RESERVED_WINDOWS_NAMES = {
     "CON",
@@ -21,6 +31,14 @@ RESERVED_WINDOWS_NAMES = {
     *(f"LPT{index}" for index in range(1, 10)),
 }
 CHUNK_SIZE_BYTES = 1024 * 1024
+
+
+def material_type_for_filename(filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    file_type = SUPPORTED_FILE_TYPES.get(extension)
+    if file_type is None:
+        raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
+    return file_type[1]
 
 
 class LocalFileStorage:
@@ -40,11 +58,11 @@ class LocalFileStorage:
     ) -> StoredFile:
         safe_filename = self._validate_filename(filename)
         mime_type = self._mime_type_for_filename(safe_filename)
+        extension = Path(safe_filename).suffix.lower()
         target_dir = self.root_path / user_id / course_id / material_id
         target_path = target_dir / safe_filename
         temp_path = target_path.with_name(f"{target_path.name}.tmp")
         total_size = 0
-        decoder = codecs.getincrementaldecoder("utf-8")()
 
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -61,24 +79,9 @@ class LocalFileStorage:
                             status_code=413,
                             details={"max_upload_file_size_bytes": self.max_file_size_bytes},
                         )
-                    try:
-                        decoder.decode(chunk)
-                    except UnicodeDecodeError as exc:
-                        raise CourseNexusError(
-                            code="UNSUPPORTED_FILE_TYPE",
-                            message="文件类型不支持或无法按 UTF-8 解码",
-                            status_code=415,
-                        ) from exc
                     output.write(chunk)
 
-                try:
-                    decoder.decode(b"", final=True)
-                except UnicodeDecodeError as exc:
-                    raise CourseNexusError(
-                        code="UNSUPPORTED_FILE_TYPE",
-                        message="文件类型不支持或无法按 UTF-8 解码",
-                        status_code=415,
-                    ) from exc
+            self._validate_file_content(temp_path, extension)
 
             temp_path.replace(target_path)
         except Exception:
@@ -109,10 +112,54 @@ class LocalFileStorage:
 
     def _mime_type_for_filename(self, filename: str) -> str:
         extension = Path(filename).suffix.lower()
-        mime_type = SUPPORTED_TEXT_MIME_TYPES.get(extension)
-        if mime_type is None:
+        file_type = SUPPORTED_FILE_TYPES.get(extension)
+        if file_type is None:
             raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
-        return mime_type
+        return file_type[0]
+
+    def _validate_file_content(self, path: Path, extension: str) -> None:
+        try:
+            if extension in {".md", ".txt"}:
+                path.read_text(encoding="utf-8")
+                return
+            if extension == ".pdf":
+                self._require_prefix(path, b"%PDF-")
+                return
+            if extension == ".png":
+                self._require_prefix(path, b"\x89PNG\r\n\x1a\n")
+                return
+            if extension in {".jpg", ".jpeg"}:
+                self._require_prefix(path, b"\xff\xd8\xff")
+                return
+            if extension in OFFICE_REQUIRED_MEMBERS:
+                self._validate_office_zip(path, OFFICE_REQUIRED_MEMBERS[extension])
+                return
+        except (OSError, UnicodeDecodeError, zipfile.BadZipFile) as exc:
+            raise CourseNexusError(
+                code="UNSUPPORTED_FILE_TYPE",
+                message="文件类型不支持或内容无法识别",
+                status_code=415,
+            ) from exc
+        raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
+
+    def _require_prefix(self, path: Path, expected_prefix: bytes) -> None:
+        with path.open("rb") as file:
+            actual_prefix = file.read(len(expected_prefix))
+        if actual_prefix != expected_prefix:
+            raise CourseNexusError(
+                code="UNSUPPORTED_FILE_TYPE",
+                message="文件类型不支持或内容无法识别",
+                status_code=415,
+            )
+
+    def _validate_office_zip(self, path: Path, required_member: str) -> None:
+        with zipfile.ZipFile(path) as archive:
+            if required_member not in set(archive.namelist()):
+                raise CourseNexusError(
+                    code="UNSUPPORTED_FILE_TYPE",
+                    message="文件类型不支持或内容无法识别",
+                    status_code=415,
+                )
 
     def _cleanup_failed_write(self, temp_path: Path, target_dir: Path) -> None:
         if temp_path.exists():

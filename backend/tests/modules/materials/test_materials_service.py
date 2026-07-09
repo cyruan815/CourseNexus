@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from io import BytesIO
+import zipfile
 
 import pytest
 from sqlalchemy import create_engine
@@ -24,6 +25,14 @@ from app.modules.materials.service import (
 )
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def office_stream(member_name: str) -> BytesIO:
+    stream = BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr(member_name, "<xml />")
+    stream.seek(0)
+    return stream
 
 
 @pytest.fixture()
@@ -67,6 +76,53 @@ def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -
     assert material.parse_status == "uploaded"
     assert material.file_url == f"{user.id}/{course.id}/{material.id}/notes.md"
     assert (tmp_path / material.file_url).read_text(encoding="utf-8") == "# Intro"
+
+
+@pytest.mark.parametrize(
+    ("filename", "stream", "material_type", "mime_type"),
+    [
+        ("slides.pdf", BytesIO(b"%PDF-1.7\n%%EOF"), "pdf", "application/pdf"),
+        (
+            "notes.docx",
+            office_stream("word/document.xml"),
+            "word",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        (
+            "deck.pptx",
+            office_stream("ppt/presentation.xml"),
+            "ppt",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+        ("diagram.png", BytesIO(b"\x89PNG\r\n\x1a\nrest"), "image", "image/png"),
+        ("photo.jpeg", BytesIO(b"\xff\xd8\xff\xe0rest"), "image", "image/jpeg"),
+    ],
+)
+def test_upload_file_material_accepts_complex_formats(
+    db: Session,
+    tmp_path,
+    filename: str,
+    stream: BytesIO,
+    material_type: str,
+    mime_type: str,
+) -> None:
+    user = register_user(db, UserCreate(username=f"alice_{material_type}_{filename}", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+
+    material = upload_file_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        filename=filename,
+        stream=stream,
+        content_type="application/octet-stream",
+        storage=storage,
+    )
+
+    assert material.material_type == material_type
+    assert material.mime_type == mime_type
+    assert material.parse_status == "uploaded"
 
 
 def test_create_link_material_creates_url_material(db: Session) -> None:

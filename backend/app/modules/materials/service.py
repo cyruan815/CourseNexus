@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.integrations.file_storage.base import FileStorage
+from app.integrations.file_storage.local import material_type_for_filename
 from app.integrations.parsers.base import Parser
 from app.modules.courses.service import assert_course_owner
 from app.modules.materials.models import CourseMaterial, MaterialChunk
@@ -30,12 +31,7 @@ def _new_chunk_id() -> str:
 
 
 def _material_type_for_filename(filename: str) -> str:
-    extension = Path(filename).suffix.lower()
-    if extension == ".md":
-        return "markdown"
-    if extension == ".txt":
-        return "text"
-    raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
+    return material_type_for_filename(filename)
 
 
 def upload_file_material(
