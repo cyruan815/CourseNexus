@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.core.request_id import get_request_id
+from app.modules.course_qa.router import router as course_qa_router
 from app.modules.courses.router import router as courses_router
 from app.modules.materials.router import router as materials_router
 from app.modules.users.router import router as users_router
@@ -11,6 +12,7 @@ api_router = APIRouter()
 api_router.include_router(users_router)
 api_router.include_router(courses_router)
 api_router.include_router(materials_router)
+api_router.include_router(course_qa_router)
 
 
 @api_router.get("/health", tags=["system"])

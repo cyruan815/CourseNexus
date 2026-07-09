@@ -307,15 +307,111 @@
 
 前端最小工作台只需要展示 `uploaded`、`parsing`、`parsed`、`parse_failed`、未知状态兜底，以及在 `parse_failed` 时提供重试入口。
 
+### 3.17 课程对话列表
+
+`GET /api/v1/courses/{course_id}/conversations`
+
+要求：Bearer token。只返回当前用户当前课程下 active、未删除对话。
+
+响应 `data` 单项字段：
+
+```json
+{
+  "id": "cnv_123",
+  "user_id": "usr_123",
+  "course_id": "crs_123",
+  "title": "What is Alpha?",
+  "source_page": "course_detail",
+  "status": "active",
+  "created_at": "2026-07-09T12:00:00+00:00",
+  "updated_at": "2026-07-09T12:00:00+00:00",
+  "deleted_at": null
+}
+```
+
+### 3.18 对话消息列表
+
+`GET /api/v1/conversations/{conversation_id}/messages`
+
+要求：Bearer token。只能读取当前用户自己的对话。
+
+响应 `data` 单项字段：
+
+```json
+{
+  "id": "msg_123",
+  "conversation_id": "cnv_123",
+  "course_id": "crs_123",
+  "role": "assistant",
+  "content": "回答正文",
+  "answer_type": "grounded",
+  "generation_status": "success",
+  "error_code": null,
+  "material_scope_json": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  },
+  "created_at": "2026-07-09T12:00:00+00:00"
+}
+```
+
+### 3.19 课程问答
+
+`POST /api/v1/courses/{course_id}/qa/questions`
+
+要求：Bearer token。当前后端默认无 `OPENAI_API_KEY` 时使用 deterministic mock provider；配置真实 key 后统一通过后端 `OpenAIModelProvider` 使用 OpenAI Python SDK。
+
+请求：
+
+```json
+{
+  "conversation_id": null,
+  "question": "What is Alpha?",
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  },
+  "source_page": "course_detail"
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "conversation_id": "cnv_123",
+  "user_message_id": "msg_user",
+  "assistant_message_id": "msg_assistant",
+  "answer_text": "回答正文",
+  "answer_type": "grounded",
+  "source_citations": [
+    {
+      "material_id": "mat_123",
+      "chunk_id": "chk_123",
+      "material_name": "notes.md",
+      "page": null,
+      "page_index": 0,
+      "hit_text": "Alpha"
+    }
+  ]
+}
+```
+
+`answer_type` 规则：
+
+- `grounded`：当前资料范围存在 parsed chunk，回答引用来自真实 `MaterialChunk`。
+- `no_source`：当前资料范围没有可用 parsed chunk，`source_citations = []`，前端不得展示伪引用。
+
+追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
+
 ## 4. 待后续任务落地的接口入口
 
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
 | --- | --- |
-| 课程对话列表 | `GET /api/v1/courses/{course_id}/conversations` |
-| 对话消息列表 | `GET /api/v1/conversations/{conversation_id}/messages` |
-| 课程问答 | `POST /api/v1/courses/{course_id}/qa/questions` |
 | 生成内容列表 | `GET /api/v1/courses/{course_id}/generated-contents` |
 | 生成内容详情 | `GET /api/v1/generated-contents/{content_id}` |
 | 统一生成入口 | `POST /api/v1/courses/{course_id}/generations` |
