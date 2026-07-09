@@ -100,7 +100,7 @@ def test_default_scope_returns_all_parsed_chunks_only(db: Session, tmp_path: Pat
         content=b"deleted content",
     )
     parse_uploaded_material(db, tmp_path, user.id, parsed.id)
-    delete_material(db, user.id, deleted.id)
+    delete_material(db, user.id, deleted.id, rag_index=FakeRagIndex())
 
     result = resolve_context(db, user.id, course.id, MaterialScope())
 

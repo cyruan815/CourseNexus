@@ -148,7 +148,7 @@ def test_reparse_material_replaces_old_chunks(db: Session, tmp_path: Path) -> No
 
 def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
-    delete_material(db, user.id, material.id)
+    delete_material(db, user.id, material.id, rag_index=FakeRagIndex())
 
     with pytest.raises(CourseNexusError) as exc_info:
         parse_material(
@@ -205,6 +205,31 @@ def test_parse_material_index_failure_marks_failed_and_clears_chunks(db: Session
     assert rag_index.records == {}
 
 
+def test_parse_material_index_failure_still_marks_failed_when_cleanup_raises(db: Session, tmp_path: Path) -> None:
+    class FailingCleanupRagIndex(FakeRagIndex):
+        def index_chunks(self, chunks):
+            super().index_chunks(chunks)
+            raise CourseNexusError(code="INDEXING_FAILED", message="索引失败", status_code=502)
+
+        def delete_material(self, material_id: str) -> None:
+            raise CourseNexusError(code="INDEXING_FAILED", message="删除失败", status_code=502)
+
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=FailingCleanupRagIndex(),
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parse_failed"
+    assert parsed.parse_error == "INDEXING_FAILED"
+    assert material_chunks(db, material.id) == []
+
+
 def test_delete_material_removes_vectors(db: Session, tmp_path: Path) -> None:
     rag_index = FakeRagIndex()
     user, _, material = create_uploaded_material(db, tmp_path)
@@ -221,3 +246,10 @@ def test_delete_material_removes_vectors(db: Session, tmp_path: Path) -> None:
 
     assert deleted.parse_status == "deleted"
     assert rag_index.records == {}
+
+
+def test_delete_material_requires_rag_index(db: Session, tmp_path: Path) -> None:
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    with pytest.raises(TypeError):
+        delete_material(db, user.id, material.id)

@@ -14,6 +14,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.rag.fake import FakeRagIndex
 import app.modules.materials.service as materials_service
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
@@ -197,7 +198,7 @@ def test_delete_material_soft_deletes_and_hides_from_list(db: Session, tmp_path)
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
 
-    deleted = delete_material(db, user.id, material.id)
+    deleted = delete_material(db, user.id, material.id, rag_index=FakeRagIndex())
 
     assert deleted.parse_status == "deleted"
     assert deleted.deleted_at is not None

@@ -108,11 +108,10 @@ def delete_material(
     user_id: str,
     material_id: str,
     *,
-    rag_index: RagIndex | None = None,
+    rag_index: RagIndex,
 ) -> CourseMaterial:
     material = get_material_detail(db, user_id, material_id)
-    if rag_index is not None:
-        rag_index.delete_material(material.id)
+    rag_index.delete_material(material.id)
     now = datetime.now(timezone.utc)
     material.parse_status = "deleted"
     material.deleted_at = now
@@ -166,10 +165,10 @@ def parse_material(
         rag_index.delete_material(material.id)
         rag_index.index_chunks(_rag_chunks_for_material(material, chunks))
     except CourseNexusError as exc:
-        rag_index.delete_material(material.id)
+        _try_delete_material_vectors(rag_index, material.id)
         return _mark_parse_failed(db, material, exc.code)
     except Exception:
-        rag_index.delete_material(material.id)
+        _try_delete_material_vectors(rag_index, material.id)
         return _mark_parse_failed(db, material, "INDEXING_FAILED")
 
     for chunk in chunks:
@@ -210,8 +209,15 @@ def _mark_parse_failed(
     rag_index: RagIndex | None = None,
 ) -> CourseMaterial:
     if rag_index is not None:
-        rag_index.delete_material(material.id)
+        _try_delete_material_vectors(rag_index, material.id)
     material.parse_status = "parse_failed"
     material.parse_error = error_code
     material.updated_at = datetime.now(timezone.utc)
     return replace_material_chunks(db, material=material, chunks=[])
+
+
+def _try_delete_material_vectors(rag_index: RagIndex, material_id: str) -> None:
+    try:
+        rag_index.delete_material(material_id)
+    except Exception:
+        pass
