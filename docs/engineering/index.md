@@ -12,6 +12,7 @@
 | [development-conventions.md](development-conventions.md) | 命名、目录、代码风格、错误、日志、配置、测试、数据库和文档约定。 | 2026-07-09 |
 | [collaboration.md](collaboration.md) | 小团队分工、分支、提交、评审、任务拆分和文档责任。 | 2026-07-09 |
 | [definition-of-done.md](definition-of-done.md) | 代码、测试、文档、API / 数据契约和 Review 完成标准。 | 2026-07-09 |
+| [rag-consumer-guide.md](rag-consumer-guide.md) | 业务功能接入材料上下文 RAG 的调用链、边界、错误和测试规则。 | 2026-07-10 |
 
 ## 相关链接
 
