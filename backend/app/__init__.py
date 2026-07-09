@@ -1,0 +1,1 @@
+"""CourseNexus backend package."""

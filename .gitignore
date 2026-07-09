@@ -1,0 +1,31 @@
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.py[cod]
+*.pyo
+
+# Node
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Local databases and files
+*.db
+*.sqlite
+*.sqlite3
+/uploads/
+/exports/
+
+# Local agent/plugin process notes
+/docs/superpowers/

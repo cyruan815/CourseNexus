@@ -1,0 +1,15 @@
+{
+  "name": "course-nexus",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build",
+    "frontend:test": "pnpm --dir frontend test -- --run",
+    "backend:dev": "cd backend && python -m uvicorn app.main:app --reload",
+    "backend:test": "cd backend && python -m pytest",
+    "backend:migrate": "cd backend && python -m alembic upgrade head",
+    "test": "pnpm backend:test && pnpm frontend:test"
+  }
+}

@@ -1,0 +1,28 @@
+[project]
+name = "course-nexus-backend"
+version = "0.1.0"
+description = "CourseNexus FastAPI backend POC"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.13",
+    "fastapi>=0.115",
+    "pydantic-settings>=2.0",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

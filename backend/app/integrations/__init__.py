@@ -1,0 +1,1 @@
+"""Replaceable external capability adapters."""

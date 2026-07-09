@@ -1,0 +1,62 @@
+# Project Skeleton v0.1
+
+## 项目基座目标
+
+项目基座的目标是先支撑一个可运行、可验证、可继续扩展的 CourseNexus 本地 POC。基座不实现完整业务功能，但要为后续前后端开发提供清晰目录、配置、鉴权、数据库、错误处理、日志、测试和文档入口。
+
+## 推荐目录结构
+
+代码结构的架构权威见 [../architecture/codebase-structure.md](../architecture/codebase-structure.md)。本文件只说明项目基座阶段应该先搭到什么程度，避免在 engineering 文档里复制一套可能漂移的目录结构。
+
+基座阶段至少需要建立：
+
+- `frontend/`：React + TypeScript/TSX + Vite 前端应用入口。
+- `backend/`：Python + FastAPI 后端应用入口。
+- `docs/`：长期知识库入口。
+- 前端最小 `api`、`router`、`pages`、`features` 结构。
+- 后端最小 `api`、`core`、`db`、`modules`、`integrations` 结构。
+- 测试目录：`frontend/tests/`、`backend/tests/`。
+
+## 当前初始化状态
+
+截至 2026-07-09，仓库已完成以下基座初始化：
+
+- 根目录保留 `README.md`、`AGENTS.md`、`docs/`、`frontend/`、`backend/`。
+- 根目录提供 `package.json` 和 `pnpm-workspace.yaml`，用于统一运行前端和后端常用命令。
+- `frontend/` 已创建 Vite + React + TypeScript/TSX 最小应用入口，并保留 `api`、`app`、`components`、`features`、`hooks`、`pages`、`router`、`types`、`utils`、`tests` 目录。
+- `backend/` 已创建 FastAPI 最小应用入口、API router、SQLAlchemy base/session、Alembic migration、模块目录、integration 目录和测试目录。
+- 当前只实现健康检查、数据表模型与 schema 验证测试，不实现完整业务 API。
+
+## Walking Skeleton 范围
+
+walking skeleton 应只证明端到端链路可用：
+
+1. 前端能启动并访问一个受登录态保护的页面。
+2. 后端能启动并暴露 `/api/v1` 基础接口。
+3. 前端能调用后端并处理成功、未登录和错误响应。
+4. 后端能连接 SQLite，并通过 ORM 读写最小数据。
+5. 有基础账号登录态和当前用户识别。
+6. 有最小课程或健康检查类链路用于验证前后端、数据库和错误处理。
+7. 有最小测试和手动验收清单。
+
+## 当前阶段必须具备的基础能力
+
+- 配置管理：区分开发配置、数据库地址、密钥占位和文件存储路径。
+- 环境变量：不把密钥、初始密码或本地路径硬编码进业务代码。
+- 日志：后端至少记录请求 ID、关键错误和长耗时任务失败原因。
+- 错误处理：统一错误响应格式和稳定 `error.code`。
+- 鉴权基础：多用户账号、密码哈希、登录态校验、当前用户依赖。
+- 数据库连接：SQLAlchemy session 管理，SQLite 作为本地 POC。
+- migration 机制：采用 Alembic 管理结构变化，但基座文档不生成具体 migration。
+- 基础测试：后端 pytest，前端 Vitest，关键流程保留手动验收清单。
+- lint / format：按项目最终工具链统一执行，避免不同成员格式漂移。
+- 文档入口：`AGENTS.md` 和 `docs/index.md` 必须作为 Agent 入口。
+
+## 当前阶段不做什么
+
+- 不实现完整业务功能。
+- 不创建具体模块知识库。
+- 不生成完整 OpenAPI 文件。
+- 不引入缓存、微服务或复杂后台基础设施。
+- 不建设教师端、管理员端、班级空间或多角色权限。
+- 不提前实现多课程联合计划、复杂推荐或完整统计报表。
