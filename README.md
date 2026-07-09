@@ -10,8 +10,9 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - `backend/`：FastAPI 后端基础设施，包含鉴权、课程、资料上传 / 解析、资料上下文、课程问答、生成编排和学习计划基础接口。
 - `docs/`：PRD、架构、API / 数据契约、工程规范、阶段状态和路线图入口。
 - SQLite baseline migration 可创建 PRD v0.1 的核心业务表。
+- 本地资料上下文 RAG 基础设施已接入 Docling、LlamaIndex、Chroma `PersistentClient` 和 OpenAI embedding 配置；Chroma 索引是可从 SQLite `MaterialChunk` 重建的派生存储。
 
-当前基础设施阶段不实现完整产品前端。资料上传面板、资料范围选择器和课程问答面板已后置为独立前端任务；PDF / PPT / Word 解析、真实 LLM 结构化生成、计划执行页、今日待办、大日历和 PDF 导出仍未实现。
+当前基础设施阶段不实现完整产品前端。资料上传面板、资料范围选择器和课程问答面板已后置为独立前端任务；Flashcard / Quiz / Mindmap 等真实业务提示词、AI 学习计划算法、计划执行页、今日待办、大日历和 PDF 导出仍未实现。
 
 ## 仓库结构
 
@@ -114,6 +115,8 @@ conda activate course-nexus
 python -m uvicorn app.main:app --reload
 python -m pytest
 python -m alembic upgrade head
+python -m app.commands.rebuild_rag_index --all
+python -m app.commands.rebuild_rag_index --material-id <material_id>
 ```
 
 ## 数据库
@@ -142,8 +145,15 @@ pnpm test
 
 已覆盖：
 
-- 后端健康检查、schema、鉴权、课程、资料上传 / 解析、资料上下文、问答、生成、学习计划和集成链路。
+- 后端健康检查、schema、鉴权、课程、资料上传 / 解析、Docling 路由、RAG 索引与检索、资料上下文、覆盖执行器、参考消费者、问答、生成、学习计划和集成链路。
 - 前端 API client、鉴权字段契约、路由壳、课程列表和课程详情空工作台。
+
+资料支持状态：
+
+- 上传安全校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`。
+- `.txt` / `.md` 走本地纯文本解析器；`.pdf` / `.docx` / `.pptx` / 图片格式走 Docling adapter。
+- 图片 OCR 已进入 adapter 路由，但 OCR 质量和版面回归夹具仍显式后置。
+- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `155 passed`。
 
 ## 协作规则
 

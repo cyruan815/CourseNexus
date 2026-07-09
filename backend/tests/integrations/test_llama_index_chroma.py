@@ -150,6 +150,29 @@ def test_chroma_delete_material_removes_vectors(tmp_path: Path) -> None:
     assert [hit.chunk_id for hit in hits] == ["c2"]
 
 
+def test_chroma_clear_only_removes_configured_collection(tmp_path: Path) -> None:
+    primary = LlamaIndexChromaRagIndex(
+        persist_path=tmp_path,
+        collection_name="primary_chunks",
+        embed_model=KeywordEmbedding(),
+    )
+    unrelated = LlamaIndexChromaRagIndex(
+        persist_path=tmp_path,
+        collection_name="unrelated_chunks",
+        embed_model=KeywordEmbedding(),
+    )
+    primary.index_chunks([math_chunk()])
+    unrelated.index_chunks([rag_chunk("unrelated-c1", text="matrix", material_id="unrelated-m1")])
+
+    primary.clear()
+
+    primary_hits = primary.retrieve(query="matrix", scope=RagScopeFilter(user_id="u1", course_id="math"), top_k=8)
+    unrelated_hits = unrelated.retrieve(query="matrix", scope=RagScopeFilter(user_id="u1", course_id="math"), top_k=8)
+
+    assert primary_hits == []
+    assert [hit.chunk_id for hit in unrelated_hits] == ["unrelated-c1"]
+
+
 def test_chroma_maps_indexing_errors(tmp_path: Path) -> None:
     rag_index = LlamaIndexChromaRagIndex(
         persist_path=tmp_path,

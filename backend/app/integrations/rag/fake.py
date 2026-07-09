@@ -23,6 +23,9 @@ class FakeRagIndex:
         for chunk in chunks:
             self.records[chunk.chunk_id] = chunk
 
+    def clear(self) -> None:
+        self.records = {}
+
     def delete_material(self, material_id: str) -> None:
         self.records = {
             chunk_id: chunk

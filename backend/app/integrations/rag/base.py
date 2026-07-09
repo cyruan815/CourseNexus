@@ -33,6 +33,9 @@ class RetrievalHit:
 
 
 class RagIndex(Protocol):
+    def clear(self) -> None:
+        """Remove all derived records from the configured retrieval collection."""
+
     def index_chunks(self, chunks: Sequence[RagChunk]) -> None:
         """Index or upsert chunks into a derived retrieval store."""
 

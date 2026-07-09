@@ -80,7 +80,11 @@
 | `FILE_TOO_LARGE` | 文件超过限制。 |
 | `NO_PARSED_MATERIAL` | 当前范围没有已解析资料。 |
 | `PARSE_FAILED` | 资料解析失败。 |
+| `INDEXING_FAILED` | 资料索引写入、删除或重建失败。 |
+| `RETRIEVAL_FAILED` | 资料向量检索失败。 |
+| `MATERIAL_COVERAGE_INCOMPLETE` | 指定材料生成没有覆盖全部预期材料。 |
 | `GENERATION_FAILED` | Agent 或 AI 内容生成失败。 |
+| `GENERATION_SCHEMA_INVALID` | AI 结构化输出不符合调用方 schema。 |
 | `IDEMPOTENCY_CONFLICT` | 幂等键对应的请求内容冲突。 |
 | `RATE_LIMITED` | 请求过于频繁。 |
 | `INTERNAL_ERROR` | 服务端内部错误。 |

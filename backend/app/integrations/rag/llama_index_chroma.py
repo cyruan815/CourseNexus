@@ -31,6 +31,15 @@ class LlamaIndexChromaRagIndex:
         self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
+    def clear(self) -> None:
+        try:
+            self.client.delete_collection(self.collection_name)
+            self.collection = self.client.get_or_create_collection(self.collection_name)
+            self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
+            self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="资料索引清理失败", status_code=502) from exc
+
     def index_chunks(self, chunks: Sequence[RagChunk]) -> None:
         if not chunks:
             return

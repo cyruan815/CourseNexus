@@ -11,7 +11,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 当前已打通的后端基础链路：
 
 ```text
-注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> resolve_context() -> ask_question() -> 保存回答和引用
+注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> Chroma 索引 -> retrieve_relevant_context() / iter_material_context_batches()
 ```
 
 前端当前只作为最小集成验证工作台，交付 API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传面板、资料范围选择器、问答面板等完整交互已经从基础设施主线移出，后续在 Materials / Context / QA 接口稳定后作为独立前端任务分发。
@@ -40,13 +40,17 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 已实现课程创建、列表、详情、更新和删除接口。
    - 已实现课程资料上传、资料链接记录、资料列表、详情和删除接口。
    - 本地文件存储已具备路径穿越防护、文件大小上限配置和真实 MIME / 文本内容校验。
-   - 已实现 `.txt` / `.md` 解析、解析失败状态、重试解析和 `MaterialChunk` 写入。
+   - 已实现 `.txt` / `.md` 解析、Docling adapter 路由、解析失败状态、重试解析和 `MaterialChunk` 写入。
+   - 上传校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`；图片 OCR 质量验证后置。
 
 5. 资料上下文和问答基础
    - 已实现 `material_context.resolve_context()`，统一处理课程范围、资料范围、已解析过滤和引用候选。
+   - 已实现 `retrieve_relevant_context()` 问答 Top-K 检索接口，基于 user/course/material/folder 硬过滤并回查 SQLite 权威 chunk。
+   - 已实现 `iter_material_context_batches()` 指定材料全覆盖接口和 `run_material_coverage()` 覆盖执行器。
+   - 已实现 LlamaIndex + Chroma `PersistentClient` 本地向量索引、fake index、OpenAI embedding factory 和重建命令 `python -m app.commands.rebuild_rag_index --all` / `--material-id <id>`。
    - 已实现课程问答接口、会话列表、消息列表、回答保存和 `SourceCitation` 保存。
-   - 模型调用统一通过 OpenAI SDK provider 边界；测试和本地无 key 场景使用 mock provider。
-   - 已确定下一阶段本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。该技术栈尚未进入代码依赖。
+   - 模型调用统一通过 OpenAI SDK provider 边界；已支持调用方自定义 Pydantic schema 的结构化输出；测试和本地无 key 场景使用 mock provider。
+   - 本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。
 
 6. 生成和计划基础
    - 已实现 `generation-orchestrator` 基础编排、生成内容保存和引用保存。
@@ -68,9 +72,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 资料上传面板、资料范围选择器、资料状态列表等完整前端资料交互。
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
-- Docling 对 PDF、PPT、Word、图片等复杂资料的解析和结构化切片。
-- LlamaIndex + Chroma embedding、持久化索引、metadata 范围过滤和语义检索。
-- `material-context` 的问答 Top-K 检索接口和指定材料全覆盖分批接口。
+- 图片 OCR 质量验收和复杂版面回归夹具。
 - 学习计划执行页、今日待办、大日历、打卡同步和 PDF 导出。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
 
@@ -79,8 +81,22 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 后端验证：
 
 ```powershell
-conda run -n course-nexus python -m pytest backend
+pnpm backend:test
 ```
+
+RAG 维护和持久化验证：
+
+```powershell
+cd backend
+conda run -n course-nexus python -m app.commands.rebuild_rag_index --all
+conda run -n course-nexus python -m pytest tests/integrations/test_llama_index_chroma.py::test_chroma_persists_and_filters_course -q
+```
+
+最近一次后端完整验证：
+
+- `pnpm backend:test`：`155 passed in 27.07s`。
+- `pnpm backend:migrate`：Alembic `upgrade head` 成功。
+- Chroma persistence smoke：`1 passed in 3.82s`。
 
 前端验证：
 
@@ -98,8 +114,7 @@ pnpm test
 ## 下一步重点
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
-2. 按 [../architecture/material-context-rag.md](../architecture/material-context-rag.md) 接入 Docling、LlamaIndex 和本地 Chroma，先完成解析、索引和问答检索闭环。
-3. 建立指定材料全覆盖的分批上下文、覆盖执行器和参考验证，供后续 Flashcard、Mindmap、Quiz 和学习计划团队接入。
-4. 当前基础设施阶段只交付上下文接口、结构化 provider 契约、覆盖执行器、测试替身和参考消费者；不实现 Flashcard、Mindmap、Quiz 或 AI 学习计划业务。
-5. 全程使用现有 Conda 本地环境和 Chroma `PersistentClient`，不引入 Docker 或独立 RAG 服务。
-6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
+2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将课程问答和具体生成能力分批迁移到新上下文接口。
+3. 为 Flashcard、Mindmap、Quiz 和学习计划分别设计业务 schema、prompt、质量验收和保存流程。
+4. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
+5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。

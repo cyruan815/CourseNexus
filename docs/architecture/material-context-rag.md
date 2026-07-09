@@ -165,7 +165,7 @@ sequenceDiagram
 - 索引失败写 `parse_status = parse_failed` 和稳定错误 `INDEXING_FAILED`；清理本轮部分向量后允许重试。
 - 删除资料时同时软删除业务记录并按 `material_id` 删除 Chroma records。
 
-当前 `.txt` / `.md` parser 可保留为快速路径和测试替身；PDF、DOCX、PPTX、图片等进入 Docling adapter。
+当前 `.txt` / `.md` parser 保留为快速路径和测试替身；`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg` 进入 Docling adapter。图片 OCR 已纳入路由和基础错误映射，但 OCR 质量、复杂版面和跨页结构回归夹具后置。
 
 ## 6. 两类上下文接口
 
@@ -178,6 +178,7 @@ def retrieve_relevant_context(
     course_id: str,
     query: str,
     material_scope: MaterialScope,
+    rag_index: RagIndex,
     top_k: int,
 ) -> MaterialContextResult: ...
 
@@ -284,7 +285,7 @@ GENERATION_CONTEXT_MAX_TOKENS=12000
 
 | 场景 | 处理 |
 | --- | --- |
-| 不支持的文件或 Docling 解析失败 | `parse_status = parse_failed`，记录 `PARSING_FAILED`。 |
+| 不支持的文件或 Docling 解析失败 | `parse_status = parse_failed`，记录 `UNSUPPORTED_FILE_TYPE` 或 `PARSE_FAILED`。 |
 | OpenAI embedding 失败 | 清理本轮部分向量，记录 `INDEXING_FAILED`，资料不可进入问答。 |
 | Chroma 目录损坏或记录缺失 | 返回 `RETRIEVAL_FAILED`；提供按 SQLite 全量重建索引命令。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
@@ -292,7 +293,15 @@ GENERATION_CONTEXT_MAX_TOKENS=12000
 | 指定材料生成中单个 batch 失败 | 整次生成标记失败，保留可重试状态，不输出“已覆盖全部材料”的部分结果。 |
 | 结构化输出校验失败 | 有限修复后写 `GENERATION_SCHEMA_INVALID`。 |
 
-Chroma 是可重建派生存储。系统需要提供 `reindex material` 和 `rebuild collection` 两级维护入口，但当前不引入后台队列；本地 POC 可同步执行并通过状态字段反映过程。
+Chroma 是可重建派生存储。系统提供 `--material-id` 和 `--all` 两级维护入口，但当前不引入后台队列；本地 POC 可同步执行并通过进程退出码和输出计数反映结果。
+
+```powershell
+cd backend
+python -m app.commands.rebuild_rag_index --all
+python -m app.commands.rebuild_rag_index --material-id <material_id>
+```
+
+`--all` 只重建当前配置的 CourseNexus Chroma collection，不删除 SQLite 业务数据、上传文件或其他 Chroma collection。`--material-id` 只删除并重建单个资料的派生向量；未解析资料会清理旧向量并返回 0 个索引 chunk。
 
 ## 11. 测试与验收重点
 
@@ -306,6 +315,7 @@ Chroma 是可重建派生存储。系统需要提供 `reindex material` 和 `reb
 - 删除和重试解析不会留下可检索的旧 chunk。
 - 无 OpenAI key 的单元测试和基础开发仍可运行。
 - 本轮验收不包含 Flashcard、Quiz、Mindmap 或 AI 学习计划的业务正确性。
+- 图片格式已进入 Docling adapter 路由；OCR 质量、复杂版面和跨页结构回归夹具后置。
 
 ## 12. 技术资料
 
