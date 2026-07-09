@@ -406,15 +406,99 @@
 
 追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
 
+### 3.20 生成内容对象字段
+
+生成内容相关接口返回的 `GeneratedContentRead` 字段如下：
+
+```json
+{
+  "id": "gen_123",
+  "user_id": "usr_123",
+  "course_id": "crs_123",
+  "study_subtask_id": null,
+  "source_message_id": null,
+  "content_type": "outline",
+  "title": "Outline",
+  "content": "Alpha",
+  "content_json": {
+    "items": ["Alpha"]
+  },
+  "generation_status": "success",
+  "material_scope_json": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  },
+  "error_code": null,
+  "created_at": "2026-07-09T12:00:00+00:00",
+  "updated_at": "2026-07-09T12:00:00+00:00",
+  "deleted_at": null
+}
+```
+
+当前已注册的基础生成类型：
+
+- `flashcard`
+- `mindmap`
+- `quiz`
+- `outline`
+- `knowledge_list`
+
+这些类型当前只是后续功能接入点，返回 deterministic placeholder 结构，不代表最终生成质量或前端渲染协议。
+
+### 3.21 生成内容列表
+
+`GET /api/v1/courses/{course_id}/generated-contents`
+
+要求：Bearer token。只返回当前用户当前课程下未删除生成内容。
+
+响应 `data`：`GeneratedContentRead[]`。
+
+### 3.22 生成内容详情
+
+`GET /api/v1/generated-contents/{generated_content_id}`
+
+要求：Bearer token。只能访问当前用户自己的生成内容。
+
+响应 `data`：`GeneratedContentRead`。
+
+### 3.23 统一生成入口
+
+`POST /api/v1/courses/{course_id}/generations`
+
+要求：Bearer token。当前实现通过 `generation/orchestrator` 统一解析资料上下文、调用注册 generator、保存 `AIGeneratedContent` 和真实 `SourceCitation`。
+
+请求：
+
+```json
+{
+  "content_type": "outline",
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  },
+  "parameters": {}
+}
+```
+
+响应 `data`：`GeneratedContentRead`。
+
+主要错误码：
+
+| 错误码 | 场景 |
+| --- | --- |
+| `VALIDATION_ERROR` | `content_type` 未注册。 |
+| `NO_PARSED_MATERIAL` | 当前资料范围没有可用 parsed chunk。 |
+
+生成器失败时，当前后端会保存 `generation_status = "failed"` 且 `error_code = "GENERATION_FAILED"` 的生成内容记录。
+
 ## 4. 待后续任务落地的接口入口
 
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
 | --- | --- |
-| 生成内容列表 | `GET /api/v1/courses/{course_id}/generated-contents` |
-| 生成内容详情 | `GET /api/v1/generated-contents/{content_id}` |
-| 统一生成入口 | `POST /api/v1/courses/{course_id}/generations` |
 | 学习计划预览 | `POST /api/v1/courses/{course_id}/study-plans/preview` |
 | 学习计划保存 | `POST /api/v1/courses/{course_id}/study-plans` |
 | 课程学习计划列表 | `GET /api/v1/courses/{course_id}/study-plans` |
