@@ -2,7 +2,7 @@
 name = "course-nexus-backend"
 version = "0.1.0"
 description = "CourseNexus FastAPI backend POC"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.13",
     "fastapi>=0.115",
@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "httpx2>=2.5",
     "pytest>=8.0",
 ]
 

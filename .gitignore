@@ -8,6 +8,7 @@ __pycache__/
 .mypy_cache/
 *.py[cod]
 *.pyo
+*.egg-info/
 
 # Node
 node_modules/

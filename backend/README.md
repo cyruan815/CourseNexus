@@ -20,16 +20,25 @@ tests/
 
 ## 安装
 
-```powershell
-python -m pip install -e ".[dev]"
-```
-
-如果使用 conda，从仓库根目录运行：
+推荐使用项目专属 conda 环境：
 
 ```powershell
 cd backend
 conda env create -f environment.yml
-conda activate course-nexus-backend
+conda activate course-nexus
+```
+
+如果环境已经存在，更新依赖：
+
+```powershell
+cd backend
+conda env update -f environment.yml --prune
+```
+
+`environment.yml` 会创建 Python 3.12 环境，并通过 `pip -e ".[dev]"` 安装后端运行依赖和测试依赖。若未使用 conda，也可以在 Python 3.12 环境中手动安装：
+
+```powershell
+python -m pip install -e ".[dev]"
 ```
 
 ## 命令

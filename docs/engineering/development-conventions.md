@@ -55,7 +55,7 @@
 - 前端包管理使用 pnpm，workspace 配置位于根目录 `pnpm-workspace.yaml`，锁文件为根目录 `pnpm-lock.yaml`。
 - 前端依赖声明只放在 `frontend/package.json`。
 - 后端依赖声明以 `backend/pyproject.toml` 为准；conda 环境示例位于 `backend/environment.yml`。
-- `backend/environment.yml` 是后端 Python 环境文件，创建或更新 conda 环境时从 `backend/` 目录执行，确保 `-e ".[dev]"` 指向后端包。
+- 后端项目 conda 环境固定使用 Python 3.12；`backend/environment.yml` 是后端 Python 环境文件，创建或更新 conda 环境时从 `backend/` 目录执行，确保 `-e ".[dev]"` 指向后端包。
 - `.gitignore` 统一放在根目录，子项目不再维护独立 `.gitignore`。
 - 根目录 `.env.example` 可以提交，真实 `.env` 不得提交。
 

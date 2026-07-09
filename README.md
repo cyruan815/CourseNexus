@@ -44,7 +44,23 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 
 - Node.js 24 或兼容版本。
 - pnpm 11 或兼容版本。
-- Python 3.11+。
+- Conda。
+- 后端 Python 版本固定为 3.12，由 [backend/environment.yml](./backend/environment.yml) 管理。
+
+创建后端项目专属 conda 环境：
+
+```powershell
+cd backend
+conda env create -f environment.yml
+conda activate course-nexus
+```
+
+如果环境已经存在，更新后端依赖：
+
+```powershell
+cd backend
+conda env update -f environment.yml --prune
+```
 
 安装前端依赖：
 
@@ -52,19 +68,11 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 pnpm install
 ```
 
-安装后端依赖：
+`backend/environment.yml` 会创建 Python 3.12 环境，并通过 `pip -e ".[dev]"` 安装后端运行依赖和测试依赖。若未使用 conda，也可以在 Python 3.12 环境中手动安装后端依赖：
 
 ```powershell
 cd backend
 python -m pip install -e ".[dev]"
-```
-
-如果使用 conda，可参考 [backend/environment.yml](./backend/environment.yml) 创建环境。
-
-```powershell
-cd backend
-conda env create -f environment.yml
-conda activate course-nexus-backend
 ```
 
 环境变量：
