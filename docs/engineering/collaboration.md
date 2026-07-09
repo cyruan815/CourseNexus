@@ -17,12 +17,25 @@
 
 ## Commit 规范
 
-提交信息保持简单明确：
+提交信息使用 Angular / Conventional Commits 结构：
 
-- `docs: update architecture baseline`
-- `feat: add course skeleton`
-- `fix: handle unauthorized response`
-- `test: cover task completion`
+```text
+<type>(<scope>): <subject>
+```
+
+规则：
+
+- `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
+- `scope` 可选，使用英文短名标识影响范围。
+- 除模板字段和固定标识外，`subject`、正文和说明性内容使用中文。
+- 文档类提交使用 `docs`，不要使用非 Angular 规范的 `doc`。
+
+示例：
+
+- `docs(engineering): 明确提交信息使用中文说明`
+- `feat(courses): 新增课程列表骨架`
+- `fix(api): 修正未登录错误响应`
+- `test(tasks): 覆盖任务完成状态流转`
 
 一次提交只做一类事情，避免混入无关格式化或临时文件。
 

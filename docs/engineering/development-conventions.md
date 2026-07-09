@@ -73,6 +73,12 @@
 - 一次提交应包含该小改动所需的代码、测试和文档，避免只提交半成品。
 - 提交前运行与本次改动匹配的验证命令；文档-only 变更可不跑完整测试，但最终说明中必须写明未运行测试。
 - 如果后续需要整理提交历史，应优先在合并前通过 review 或 rebase 处理，不在开发过程中牺牲小步提交记录。
+- 提交信息使用 Angular / Conventional Commits 结构：`<type>(<scope>): <subject>`。
+- `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
+- `scope` 可选，使用英文短名标识影响范围，例如 `backend`、`frontend`、`docs`、`db`、`materials`、`courses`。
+- 除模板字段和固定标识外，`subject`、正文和说明性内容使用中文。
+- 文档类提交使用 `docs`，不要使用非 Angular 规范的 `doc`。
+- 示例：`docs(engineering): 明确提交信息使用中文说明`、`fix(api): 修正未登录错误响应`。
 
 ## 数据库和 migration 约定
 
