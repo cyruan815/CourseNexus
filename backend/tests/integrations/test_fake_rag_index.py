@@ -11,6 +11,7 @@ def rag_chunk(
     course_id: str = "math",
     material_id: str = "m1",
     folder_id: str | None = None,
+    chunk_index: int = 0,
     text: str = "matrix eigenvalue",
 ) -> RagChunk:
     return RagChunk(
@@ -19,7 +20,7 @@ def rag_chunk(
         course_id=course_id,
         material_id=material_id,
         folder_id=folder_id,
-        chunk_index=0,
+        chunk_index=chunk_index,
         text=text,
         page="1",
         page_index=0,
@@ -32,7 +33,7 @@ def test_fake_rag_index_filters_and_ranks() -> None:
     index.index_chunks(
         [
             rag_chunk("c1", text="matrix eigenvalue"),
-            rag_chunk("c2", course_id="history", material_id="m2", text="industrial revolution"),
+            rag_chunk("c2", course_id="history", material_id="m2", text="matrix eigenvalue"),
         ]
     )
 
@@ -45,7 +46,7 @@ def test_fake_rag_index_filters_and_ranks() -> None:
     assert [hit.chunk_id for hit in hits] == ["c1"]
 
 
-def test_fake_rag_index_ranks_by_token_overlap_then_chunk_index() -> None:
+def test_fake_rag_index_ranks_by_token_overlap() -> None:
     index = FakeRagIndex.from_chunks(
         [
             rag_chunk("c1", text="matrix", material_id="m1"),
@@ -61,6 +62,24 @@ def test_fake_rag_index_ranks_by_token_overlap_then_chunk_index() -> None:
 
     assert [hit.chunk_id for hit in hits] == ["c2", "c1"]
     assert hits[0].score > hits[1].score
+
+
+def test_fake_rag_index_breaks_equal_scores_by_chunk_index() -> None:
+    index = FakeRagIndex.from_chunks(
+        [
+            rag_chunk("c1", chunk_index=2, text="matrix", material_id="m1"),
+            rag_chunk("c2", chunk_index=1, text="matrix", material_id="m1"),
+        ]
+    )
+
+    hits = index.retrieve(
+        query="matrix",
+        scope=RagScopeFilter(user_id="u1", course_id="math"),
+        top_k=8,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["c2", "c1"]
+    assert hits[0].score == hits[1].score
 
 
 def test_fake_rag_index_applies_selected_material_filter() -> None:
