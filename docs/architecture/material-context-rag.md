@@ -21,6 +21,25 @@ FastAPI + LlamaIndex + Docling + Chroma + OpenAI API
 - `model-provider` 继续统一封装 OpenAI 生成调用。
 - `generated-content` 和 `SourceCitation` 继续保存结果和引用。
 
+### 1.1 当前基础设施交付边界
+
+当前阶段以架构和基础设施身份交付共享能力，不实现下游学习业务。必须交付：
+
+- Docling 解析、结构化切片、LlamaIndex embedding 编排和 Chroma 本地索引；
+- 资料上传、重试解析、删除和重建索引的一致性链路；
+- `retrieve_relevant_context()` 问答相关性检索契约；
+- `iter_material_context_batches()` 指定材料全覆盖契约；
+- 通用结构化模型 provider 协议和材料覆盖执行器；
+- fake index、mock provider、契约测试、参考消费者和后续接入指南。
+
+当前阶段明确不实现：
+
+- Flashcard、Quiz、Mindmap、Outline、Knowledge List、Handout、Task Test 的真实提示词、输出 schema、API 和页面；
+- AI 学习计划算法或现有学习计划业务迁移；
+- 现有 `course-qa` 和生成模块向新接口的生产迁移。
+
+下文中的问答和指定材料生成链路用于定义未来消费者如何接入，不表示这些业务功能属于本轮基础设施交付。
+
 ## 2. 组件拓扑
 
 ```mermaid
@@ -79,9 +98,9 @@ flowchart LR
 | Chroma adapter | 用本地 `PersistentClient` 持久化向量，按 chunk upsert/delete/query。 | 不保存用户、课程、计划或生成记录。 |
 | `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`。 | 不调用生成模型，不保存生成结果。 |
 | `model-provider` | 调用 OpenAI 生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件。 |
-| `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不读取全部 chunk，不生成其他内容类型。 |
-| `generation-orchestrator` / generators | 调用全材料读取，分批生成和汇总目标结构，保存生成结果与引用。 | 不直接查询 Chroma 或 SQL chunk。 |
-| `study-plans` | 使用全材料摘要生成计划预览并保存计划 / 任务结构。 | 不写 `AIGeneratedContent`，不提前生成讲义或测试题。 |
+| `course-qa`（后续消费者） | 后续调用相关性检索，生成并保存回答、会话和引用。 | 本轮不迁移其生产实现。 |
+| `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
+| `study-plans`（后续消费者） | 后续使用全材料上下文生成计划预览。 | 本轮不实现 AI 计划算法，不改变当前计划行为。 |
 
 ## 4. 存储和标识
 
@@ -175,6 +194,8 @@ def iter_material_context_batches(
 
 ## 7. 问答类链路：相关性检索
 
+本节是后续问答模块的接入契约。当前基础设施通过参考消费者和契约测试验证检索、范围过滤和引用限制，不修改现有 `course-qa` 生产流程。
+
 ```mermaid
 sequenceDiagram
     participant QA as course-qa
@@ -198,6 +219,8 @@ sequenceDiagram
 问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。模型只能引用本次返回的 chunk id；无可用资料、无检索命中或模型没有依据时返回 `no_source`。
 
 ## 8. 指定材料生成链路：全材料覆盖
+
+本节是后续生成模块的接入契约。当前基础设施只实现有序 batch、覆盖校验、结构化 provider 协议和参考 map/reduce 消费者，不实现任何具体学习内容。
 
 ```mermaid
 sequenceDiagram
@@ -278,10 +301,11 @@ Chroma 是可重建派生存储。系统需要提供 `reindex material` 和 `reb
 - 同一 query 在两个课程或两个用户之间不会串数据。
 - `material_scope` 指定资料后，检索结果不包含范围外 chunk。
 - 问答只向模型传 Top-K 命中片段，引用只来自这些片段。
-- 指定材料生成的测试记录每个选中 `material_id` 都进入 map 阶段。
-- 超长资料触发多个 batch，最终 schema 合法且引用并集正确。
+- 参考消费者记录每个选中 `material_id` 都进入 map 阶段。
+- 超长资料触发多个 batch，覆盖执行器能校验处理材料集合和引用 chunk 集合。
 - 删除和重试解析不会留下可检索的旧 chunk。
 - 无 OpenAI key 的单元测试和基础开发仍可运行。
+- 本轮验收不包含 Flashcard、Quiz、Mindmap 或 AI 学习计划的业务正确性。
 
 ## 12. 技术资料
 

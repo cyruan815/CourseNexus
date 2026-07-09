@@ -99,6 +99,7 @@ pnpm test
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 按 [../architecture/material-context-rag.md](../architecture/material-context-rag.md) 接入 Docling、LlamaIndex 和本地 Chroma，先完成解析、索引和问答检索闭环。
-3. 建立指定材料全覆盖的分批 map-reduce 上下文，再为 Flashcard、Mindmap、Quiz 和学习计划补真实结构化生成。
-4. 全程使用现有 Conda 本地环境和 Chroma `PersistentClient`，不引入 Docker 或独立 RAG 服务。
-5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
+3. 建立指定材料全覆盖的分批上下文、覆盖执行器和参考验证，供后续 Flashcard、Mindmap、Quiz 和学习计划团队接入。
+4. 当前基础设施阶段只交付上下文接口、结构化 provider 契约、覆盖执行器、测试替身和参考消费者；不实现 Flashcard、Mindmap、Quiz 或 AI 学习计划业务。
+5. 全程使用现有 Conda 本地环境和 Chroma `PersistentClient`，不引入 Docker 或独立 RAG 服务。
+6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。

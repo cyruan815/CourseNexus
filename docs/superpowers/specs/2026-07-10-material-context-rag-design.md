@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved direction, documented 2026-07-10.
+Approved infrastructure-only revision, documented 2026-07-10.
 
 The selected approach is mode 1: CourseNexus owns material parsing, indexing, retrieval, context assembly, citations, and generation orchestration. RAGFlow is a future option only.
 
@@ -13,6 +13,8 @@ The selected approach is mode 1: CourseNexus owns material parsing, indexing, re
 - Run all infrastructure locally without Docker or a separate Chroma / RAG server.
 - Support two distinct business semantics: scoped RAG Q&A and selected-material generation.
 - Preserve current CourseNexus ownership of users, courses, material scope, generated content, citations, and study plans.
+- Deliver stable context APIs, provider contracts, test doubles, and reference consumers for later feature teams.
+- Prove both context semantics without implementing downstream learning features.
 
 ## Non-Goals
 
@@ -22,6 +24,10 @@ The selected approach is mode 1: CourseNexus owns material parsing, indexing, re
 - Local LLM serving.
 - RAGFlow deployment or integration.
 - A production task queue in this phase.
+- Production Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, or Task Test generation.
+- AI study-plan algorithms or changes to current study-plan behavior.
+- Feature-specific prompts, Pydantic output schemas, API endpoints, persistence flows, or frontend pages.
+- Migrating existing `course-qa`, generator, or `study-plans` services to the new contracts in this infrastructure phase.
 
 ## Chosen Architecture
 
@@ -56,9 +62,9 @@ The answer provider receives only retrieved chunks. A citation is valid only whe
 
 `iter_material_context_batches(material_scope, max_tokens)` loads every eligible selected chunk from SQLite in stable material and chunk order. It never substitutes a Top-K query for complete material coverage.
 
-Each batch is mapped into a typed intermediate result carrying source chunk ids. A reduce pass deduplicates and shapes the final feature schema. Every selected parsed material must enter at least one batch; a partial batch failure fails the whole generation rather than presenting an incomplete result as full coverage.
+The infrastructure stage returns complete, ordered batches and provides a generic coverage runner that records processed material and source chunk ids. A reference consumer demonstrates map/reduce control flow, but it does not define a product feature schema or call a production feature prompt. Every selected parsed material must enter at least one batch; a partial batch failure fails the reference run rather than presenting an incomplete result as full coverage.
 
-Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, and Task Test persist to `AIGeneratedContent` plus `SourceCitation`. Study-plan generation uses the same coverage context but persists to `StudyPlan`, `StudyTask`, and `StudySubTask`.
+Future Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, and Task Test teams will consume this contract and persist to `AIGeneratedContent` plus `SourceCitation`. A future study-plan generation task will consume the same coverage contract and persist to `StudyPlan`, `StudyTask`, and `StudySubTask`. Those consumers are explicitly outside the current implementation scope.
 
 ## Ingestion and Consistency
 
@@ -94,11 +100,12 @@ Errors remain stable CourseNexus errors; raw third-party exceptions do not cross
 
 - PDF, DOCX, PPTX, Markdown, and text fixtures produce ordered chunks with useful source metadata.
 - Chroma persists across client recreation and enforces user, course, and material filters.
-- Q&A uses query-dependent Top-K results and only stores citations from those results.
-- Selected-material generation records coverage of every selected material, including when input spans multiple batches.
+- A reference Q&A consumer receives query-dependent Top-K results and cannot cite chunks outside those results.
+- A reference selected-material consumer records coverage of every selected material, including when input spans multiple batches.
 - Deletion and reparse remove stale vector hits.
 - Business modules contain no third-party RAG imports.
 - The complete test suite runs without Docker and without live OpenAI calls.
+- No production learning-feature generator, AI study-plan algorithm, or feature UI is added by this plan.
 
 ## Formal Documentation
 
