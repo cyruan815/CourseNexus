@@ -18,6 +18,19 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `learning-execution` 负责任务执行状态，不负责计划生成。
 - `checkins` 只根据任务完成事实维护学习打卡记录。
 
+## 1.1 当前已落地边界（2026-07-09）
+
+当前基础设施阶段已经落地以下模块边界：
+
+- `users` / `courses`：提供本地账号、token 校验、当前用户依赖和课程归属校验。
+- `materials`：拥有资料元数据、本地文件存储、上传校验、解析状态和 `MaterialChunk` 写入。
+- `material-context`：作为问答、生成、学习计划共用的上下文解析入口；调用方不得绕过它直接拼装 chunk。
+- `course-qa`：拥有会话、消息和课程问答引用保存；不负责 Flashcard、Mindmap、Quiz 或学习计划。
+- `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI 调用统一集中在 OpenAI SDK provider 实现中。
+- `generation-orchestrator`：当前负责生成请求编排、上下文解析、占位生成器调用、`AIGeneratedContent` 和 `SourceCitation` 保存。
+- `study-plans`：当前只负责单课程计划预览、保存和任务结构写入，不负责执行页、日历聚合、打卡或讲义 / 任务测试题生成。
+- `frontend`：当前只承担最小集成验证工作台，不承载完整资料上传 UI、资料范围选择 UI 或课程问答 UI。
+
 ## 2. 模块拓扑图
 
 ```mermaid

@@ -3,6 +3,8 @@
 ## 前后端契约基线
 
 - 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
+- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation 和 Study Plans。
+- 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 成功响应统一包含 `data` 和 `meta`。
 - 错误响应统一包含 `error.code`、`error.message`、`error.details` 和 `meta.request_id`。

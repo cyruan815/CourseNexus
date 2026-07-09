@@ -2,6 +2,16 @@
 
 > 本文记录 CourseNexus 的关键运行链路。它关注模块如何协作，不展开具体 API 字段；字段和响应格式见 [../api-data/index.md](../api-data/index.md)。
 
+## 当前基础设施落地范围（2026-07-09）
+
+当前已落地的 POC 基础链路以稳定后端接口为主：
+
+```text
+注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> resolve_context() -> ask_question() -> 保存回答和引用
+```
+
+前端在本阶段只承担最小集成验证：API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传 UI、资料范围选择 UI 和问答 UI 不属于当前基础设施主线验收条件。
+
 ## 1. 资料上传与解析链路
 
 ```mermaid
@@ -38,19 +48,18 @@ sequenceDiagram
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
-    participant O as generation-orchestrator
     participant CTX as material-context
     participant QA as course-qa
-    participant GC as generated-content / citations
+    participant MP as model-provider
     participant DB as DB
 
     FE->>API: ask(course_id, question, material_scope)
-    API->>O: validate owner + idempotency
-    O->>CTX: resolve parsed chunks
-    CTX-->>O: chunks + citation candidates
-    O->>QA: generate answer
-    QA->>DB: save Conversation / Message
-    QA->>GC: save SourceCitation
+    API->>QA: validate owner + load/create conversation
+    QA->>CTX: resolve_context(course_id, material_scope)
+    CTX-->>QA: chunks + citation candidates
+    QA->>MP: generate answer via provider
+    MP-->>QA: answer_text + used citations
+    QA->>DB: save Conversation / Message / SourceCitation
     QA-->>FE: answer_text + answer_type + citations
 ```
 
@@ -64,6 +73,8 @@ sequenceDiagram
 ## 3. 独立 AI 生成链路
 
 适用于 Quiz、Flashcard、Mindmap、复习提纲、知识点清单。
+
+当前基础设施阶段已落地统一编排、统一存储和占位生成器，用于验证模块边界。真实 LLM 提示词、结构化输出质量和前端渲染体验属于后续独立任务。
 
 ```mermaid
 sequenceDiagram
@@ -96,14 +107,14 @@ sequenceDiagram
     participant FE as Frontend
     participant SP as study-plans
     participant CTX as material-context
-    participant Model as plan generator
+    participant Builder as plan builder
     participant DB as DB
     participant TC as todos-calendar
 
     FE->>SP: parse goal_text and config(course_id)
     SP->>CTX: resolve material scope
-    SP->>Model: generate plan preview
-    Model-->>SP: plan preview
+    SP->>Builder: build deterministic plan preview
+    Builder-->>SP: plan preview
     SP-->>FE: preview
     FE->>SP: save preview
     SP->>DB: save StudyPlan / StudyTask / StudySubTask

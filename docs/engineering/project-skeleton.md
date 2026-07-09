@@ -23,9 +23,11 @@
 
 - 根目录保留 `README.md`、`AGENTS.md`、`docs/`、`frontend/`、`backend/`。
 - 根目录提供 `package.json` 和 `pnpm-workspace.yaml`，用于统一运行前端和后端常用命令。
-- `frontend/` 已创建 Vite + React + TypeScript/TSX 最小应用入口，并保留 `api`、`app`、`components`、`features`、`hooks`、`pages`、`router`、`types`、`utils`、`tests` 目录。
-- `backend/` 已创建 FastAPI 最小应用入口、API router、SQLAlchemy base/session、Alembic migration、模块目录、integration 目录和测试目录。
-- 当前只实现健康检查、数据表模型与 schema 验证测试，不实现完整业务 API。
+- `frontend/` 已创建 Vite 7 + React + TypeScript/TSX 最小应用入口，并保留 `api`、`app`、`components`、`features`、`hooks`、`pages`、`router`、`types`、`utils`、`tests` 目录。
+- `frontend/` 当前已实现 API client、token 管理、路由壳、登录页、课程列表和课程详情空工作台。
+- `backend/` 已创建 FastAPI 应用入口、API router、SQLAlchemy base/session、Alembic migration、模块目录、integration 目录和测试目录。
+- `backend/` 当前已实现鉴权、课程、资料上传 / 解析、资料上下文、课程问答、生成编排和学习计划基础接口。
+- 当前基础设施阶段重点是后端链路稳定，不实现资料上传面板、资料范围选择器或课程问答面板等完整前端业务交互。
 
 ## Walking Skeleton 范围
 
@@ -54,9 +56,26 @@ walking skeleton 应只证明端到端链路可用：
 - lint / format：按项目最终工具链统一执行，避免不同成员格式漂移。
 - 文档入口：`AGENTS.md` 和 `docs/index.md` 必须作为 Agent 入口。
 
+## 当前验证入口
+
+后端应优先在项目 Conda 环境中验证：
+
+```powershell
+conda run -n course-nexus python -m pytest backend
+```
+
+前端最小工作台验证：
+
+```powershell
+pnpm frontend:test
+pnpm frontend:build
+```
+
+只修改文档时可以不运行完整测试，但提交说明必须写明未运行测试的原因。
+
 ## 当前阶段不做什么
 
-- 不实现完整业务功能。
+- 不实现完整产品前端。
 - 不实现资料上传面板、资料范围选择器、课程问答面板等完整前端交互。
 - 不创建具体模块知识库。
 - 不生成完整 OpenAPI 文件。
