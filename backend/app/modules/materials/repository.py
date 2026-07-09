@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import CourseMaterial
+from app.modules.materials.models import CourseMaterial, MaterialChunk
 
 
 def save_material(db: Session, material: CourseMaterial) -> CourseMaterial:
@@ -37,3 +37,17 @@ def get_active_material_for_user(db: Session, user_id: str, material_id: str) ->
             CourseMaterial.parse_status != "deleted",
         )
     ).scalar_one_or_none()
+
+
+def replace_material_chunks(
+    db: Session,
+    *,
+    material: CourseMaterial,
+    chunks: list[MaterialChunk],
+) -> CourseMaterial:
+    db.execute(delete(MaterialChunk).where(MaterialChunk.material_id == material.id))
+    db.add_all(chunks)
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return material

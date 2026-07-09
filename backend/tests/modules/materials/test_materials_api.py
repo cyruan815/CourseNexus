@@ -114,6 +114,24 @@ def test_create_link_material(client: TestClient) -> None:
     assert material["source_url"] == "https://example.com/course"
 
 
+def test_parse_retry_parses_uploaded_text_material(client: TestClient) -> None:
+    token = register_and_token(client, "alice")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    upload_response = client.post(
+        f"/api/v1/courses/{course_id}/materials",
+        headers=headers,
+        files={"file": ("notes.md", b"# Intro\nAlpha\n", "text/markdown")},
+    )
+    material_id = upload_response.json()["data"]["id"]
+
+    parse_response = client.post(f"/api/v1/materials/{material_id}/parse-retries", headers=headers)
+
+    assert parse_response.status_code == 200
+    assert parse_response.json()["data"]["parse_status"] == "parsed"
+    assert parse_response.json()["data"]["parse_error"] is None
+
+
 def test_material_detail_does_not_cross_user_boundary(client: TestClient) -> None:
     alice_token = register_and_token(client, "alice")
     bob_token = register_and_token(client, "bob")

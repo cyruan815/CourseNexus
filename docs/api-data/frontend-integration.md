@@ -211,6 +211,16 @@
 
 当前上传大小上限由后端 `MAX_UPLOAD_FILE_SIZE_BYTES` 配置控制，默认 `52428800`，即 50 MiB。
 
+`parse_status` 当前可能值：
+
+| 状态 | 含义 |
+| --- | --- |
+| `uploaded` | 已创建资料记录，尚未解析。 |
+| `parsing` | 正在同步解析。 |
+| `parsed` | 已解析并写入 `MaterialChunk`。 |
+| `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
+| `deleted` | 已软删除，不进入列表和上下文。 |
+
 ### 3.11 课程资料列表
 
 `GET /api/v1/courses/{course_id}/materials`
@@ -275,13 +285,34 @@
 
 响应 `data`：`MaterialRead`，其中 `parse_status = "deleted"` 且 `deleted_at` 非空。
 
+### 3.16 资料解析 / 解析重试
+
+`POST /api/v1/materials/{material_id}/parse-retries`
+
+要求：Bearer token。当前实现为同步解析本地 `.md` / `.txt` 文件；后续支持后台任务时，响应语义需单独更新。
+
+响应 `data`：`MaterialRead`。
+
+成功时：
+
+- `parse_status = "parsed"`。
+- `parse_error = null`。
+- 后端已写入有序 `MaterialChunk`，供后续资料上下文、问答和计划基础能力使用。
+
+失败时：
+
+- HTTP 仍返回成功响应和 `MaterialRead`。
+- `parse_status = "parse_failed"`。
+- `parse_error` 保存稳定错误码，例如 `PARSE_FAILED` 或 `UNSUPPORTED_FILE_TYPE`。
+
+前端最小工作台只需要展示 `uploaded`、`parsing`、`parsed`、`parse_failed`、未知状态兜底，以及在 `parse_failed` 时提供重试入口。
+
 ## 4. 待后续任务落地的接口入口
 
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
 | --- | --- |
-| 解析重试 | `POST /api/v1/materials/{material_id}/parse-retries` |
 | 课程对话列表 | `GET /api/v1/courses/{course_id}/conversations` |
 | 对话消息列表 | `GET /api/v1/conversations/{conversation_id}/messages` |
 | 课程问答 | `POST /api/v1/courses/{course_id}/qa/questions` |

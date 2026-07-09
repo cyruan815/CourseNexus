@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.integrations.file_storage.base import FileStorage
+from app.integrations.parsers.base import Parser
 from app.modules.courses.service import assert_course_owner
-from app.modules.materials.models import CourseMaterial
+from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.materials.repository import (
     get_active_material_for_user,
     list_active_materials_for_course,
+    replace_material_chunks,
     save_material,
 )
 from app.modules.materials.schemas import MaterialLinkCreate
@@ -21,6 +23,10 @@ from app.modules.materials.schemas import MaterialLinkCreate
 
 def _new_material_id() -> str:
     return f"mat_{uuid4().hex}"
+
+
+def _new_chunk_id() -> str:
+    return f"chk_{uuid4().hex}"
 
 
 def _material_type_for_filename(filename: str) -> str:
@@ -107,3 +113,53 @@ def delete_material(db: Session, user_id: str, material_id: str) -> CourseMateri
     material.deleted_at = now
     material.updated_at = now
     return save_material(db, material)
+
+
+def parse_material(
+    db: Session,
+    *,
+    user_id: str,
+    material_id: str,
+    parser: Parser,
+    storage_root: str | Path,
+) -> CourseMaterial:
+    material = get_material_detail(db, user_id, material_id)
+    material.parse_status = "parsing"
+    material.parse_error = None
+    material.updated_at = datetime.now(timezone.utc)
+    save_material(db, material)
+
+    if material.source_type != "file" or material.file_url is None:
+        return _mark_parse_failed(db, material, "UNSUPPORTED_FILE_TYPE")
+
+    try:
+        parsed_document = parser.parse(Path(storage_root) / material.file_url)
+    except CourseNexusError as exc:
+        return _mark_parse_failed(db, material, exc.code)
+    except Exception:
+        return _mark_parse_failed(db, material, "PARSE_FAILED")
+
+    chunks = [
+        MaterialChunk(
+            id=_new_chunk_id(),
+            material_id=material.id,
+            course_id=material.course_id,
+            chunk_index=chunk.chunk_index,
+            page=chunk.page,
+            page_index=chunk.page_index,
+            heading=chunk.heading,
+            content_text=chunk.content_text,
+        )
+        for chunk in parsed_document.chunks
+    ]
+    material.parse_status = "parsed"
+    material.parse_error = None
+    material.updated_at = datetime.now(timezone.utc)
+    return replace_material_chunks(db, material=material, chunks=chunks)
+
+
+def _mark_parse_failed(db: Session, material: CourseMaterial, error_code: str) -> CourseMaterial:
+    material.parse_status = "parse_failed"
+    material.parse_error = error_code
+    material.updated_at = datetime.now(timezone.utc)
+    return replace_material_chunks(db, material=material, chunks=[])
