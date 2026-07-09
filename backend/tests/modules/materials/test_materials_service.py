@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from io import BytesIO
+from pathlib import Path
 import zipfile
 
 import pytest
@@ -13,6 +14,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+import app.modules.materials.service as materials_service
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.materials.schemas import MaterialLinkCreate
@@ -25,6 +27,12 @@ from app.modules.materials.service import (
 )
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def test_materials_service_depends_on_file_storage_protocol_not_local_adapter() -> None:
+    source = Path(materials_service.__file__).read_text(encoding="utf-8")
+
+    assert "app.integrations.file_storage.local" not in source
 
 
 def office_stream(member_name: str) -> BytesIO:

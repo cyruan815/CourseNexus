@@ -5,19 +5,9 @@ from typing import BinaryIO
 import zipfile
 
 from app.core.errors import CourseNexusError
-from app.integrations.file_storage.base import StoredFile
+from app.integrations.file_storage.base import StoredFile, mime_type_for_filename
 
 
-SUPPORTED_FILE_TYPES = {
-    ".md": ("text/markdown", "markdown"),
-    ".txt": ("text/plain", "text"),
-    ".pdf": ("application/pdf", "pdf"),
-    ".docx": ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "word"),
-    ".pptx": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", "ppt"),
-    ".png": ("image/png", "image"),
-    ".jpg": ("image/jpeg", "image"),
-    ".jpeg": ("image/jpeg", "image"),
-}
 OFFICE_REQUIRED_MEMBERS = {
     ".docx": "word/document.xml",
     ".pptx": "ppt/presentation.xml",
@@ -31,14 +21,6 @@ RESERVED_WINDOWS_NAMES = {
     *(f"LPT{index}" for index in range(1, 10)),
 }
 CHUNK_SIZE_BYTES = 1024 * 1024
-
-
-def material_type_for_filename(filename: str) -> str:
-    extension = Path(filename).suffix.lower()
-    file_type = SUPPORTED_FILE_TYPES.get(extension)
-    if file_type is None:
-        raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
-    return file_type[1]
 
 
 class LocalFileStorage:
@@ -111,11 +93,7 @@ class LocalFileStorage:
         return safe_filename
 
     def _mime_type_for_filename(self, filename: str) -> str:
-        extension = Path(filename).suffix.lower()
-        file_type = SUPPORTED_FILE_TYPES.get(extension)
-        if file_type is None:
-            raise CourseNexusError(code="UNSUPPORTED_FILE_TYPE", message="文件类型不支持", status_code=415)
-        return file_type[0]
+        return mime_type_for_filename(filename)
 
     def _validate_file_content(self, path: Path, extension: str) -> None:
         try:

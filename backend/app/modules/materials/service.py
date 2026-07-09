@@ -8,8 +8,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
-from app.integrations.file_storage.base import FileStorage
-from app.integrations.file_storage.local import material_type_for_filename
+from app.integrations.file_storage.base import FileStorage, material_type_for_filename
 from app.integrations.parsers.base import Parser
 from app.modules.courses.service import assert_course_owner
 from app.modules.materials.models import CourseMaterial, MaterialChunk
