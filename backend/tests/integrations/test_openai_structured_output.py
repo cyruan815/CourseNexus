@@ -67,6 +67,19 @@ def test_openai_provider_maps_sdk_error_to_generation_failed() -> None:
     assert exc_info.value.code == "GENERATION_FAILED"
 
 
+def test_openai_provider_maps_sdk_parse_validation_error_to_schema_invalid() -> None:
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="test-model",
+        client=FakeClient(FakeResponses(error=_schema_validation_error())),
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
 def test_openai_provider_maps_invalid_parsed_data_to_schema_invalid() -> None:
     provider = OpenAIModelProvider(
         api_key="test",
@@ -78,3 +91,11 @@ def test_openai_provider_maps_invalid_parsed_data_to_schema_invalid() -> None:
         provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+def _schema_validation_error() -> Exception:
+    try:
+        ReferenceExtraction.model_validate({"facts": ["A"]})
+    except Exception as exc:
+        return exc
+    raise AssertionError("Expected schema validation to fail")

@@ -15,6 +15,11 @@ class MappedReference:
     citation_chunk_ids: list[str]
 
 
+@dataclass(frozen=True)
+class SetReference:
+    citation_chunk_ids: set[str]
+
+
 def test_coverage_runner_rejects_missing_material() -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         run_material_coverage(
@@ -42,6 +47,17 @@ def test_coverage_runner_maps_multiple_batches_and_unions_citation_ids() -> None
 
     assert result.value == ["fact:m1", "fact:m2"]
     assert result.processed_material_ids == {"m1", "m2"}
+    assert result.citation_chunk_ids == {"c1", "c2"}
+
+
+def test_coverage_runner_unions_set_citation_ids() -> None:
+    result = run_material_coverage(
+        batches=[_batch_for("m1", "c1")],
+        expected_material_ids={"m1"},
+        map_batch=lambda batch: SetReference(citation_chunk_ids={batch.chunks[0].chunk_id}),
+        reduce_results=lambda _items: {"citation_chunk_ids": {"c2"}},
+    )
+
     assert result.citation_chunk_ids == {"c1", "c2"}
 
 

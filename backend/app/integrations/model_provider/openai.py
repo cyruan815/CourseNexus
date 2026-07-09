@@ -54,6 +54,12 @@ class OpenAIModelProvider:
                 input=prompt,
                 text_format=output_schema,
             )
+        except ValidationError as exc:
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="模型结构化输出不符合约定",
+                status_code=502,
+            ) from exc
         except Exception as exc:
             raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
 

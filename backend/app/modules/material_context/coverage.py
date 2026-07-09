@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
@@ -76,6 +76,6 @@ def _extract_citation_chunk_ids(value: object) -> set[str]:
         return set()
     if isinstance(citation_chunk_ids, str):
         return {citation_chunk_ids}
-    if isinstance(citation_chunk_ids, Sequence):
+    if isinstance(citation_chunk_ids, Iterable):
         return {chunk_id for chunk_id in citation_chunk_ids if isinstance(chunk_id, str)}
     return set()
