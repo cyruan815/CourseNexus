@@ -164,9 +164,9 @@ def parse_material(
     try:
         rag_index.delete_material(material.id)
         rag_index.index_chunks(_rag_chunks_for_material(material, chunks))
-    except CourseNexusError as exc:
+    except CourseNexusError:
         _try_delete_material_vectors(rag_index, material.id)
-        return _mark_parse_failed(db, material, exc.code)
+        return _mark_parse_failed(db, material, "INDEXING_FAILED")
     except Exception:
         _try_delete_material_vectors(rag_index, material.id)
         return _mark_parse_failed(db, material, "INDEXING_FAILED")
