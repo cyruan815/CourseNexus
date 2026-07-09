@@ -1,11 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setSessionToken } from "../../src/features/auth/session";
 import { AppRouter } from "../../src/router/AppRouter";
 
 describe("AppRouter", () => {
   afterEach(() => {
+    vi.unstubAllGlobals();
     window.localStorage.clear();
     window.history.pushState({}, "", "/");
   });
@@ -18,14 +19,24 @@ describe("AppRouter", () => {
     expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
   });
 
-  it("renders home for authenticated users", () => {
+  it("renders home for authenticated users", async () => {
     setSessionToken("token-123");
     window.history.pushState({}, "", "/");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [], meta: { request_id: "req_1" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
 
     render(<AppRouter />);
 
     expect(screen.getByRole("heading", { name: "CourseNexus" })).toBeInTheDocument();
     expect(screen.getByText("课程工作台")).toBeInTheDocument();
+    expect(await screen.findByText("还没有课程")).toBeInTheDocument();
   });
 
   it("keeps login page public", () => {
@@ -34,5 +45,37 @@ describe("AppRouter", () => {
     render(<AppRouter />);
 
     expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
+  });
+
+  it("renders protected course detail route for authenticated users", async () => {
+    setSessionToken("token-123");
+    window.history.pushState({}, "", "/courses/crs_123");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "crs_123",
+              user_id: "usr_123",
+              name: "高等数学",
+              description: "期末复习",
+              teacher: "王老师",
+              term: "2026 Spring",
+              status: "active",
+              created_at: "2026-07-09T12:00:00+00:00",
+              updated_at: "2026-07-09T12:00:00+00:00",
+              deleted_at: null,
+            },
+            meta: { request_id: "req_1" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    render(<AppRouter />);
+
+    expect(await screen.findByRole("heading", { name: "高等数学" })).toBeInTheDocument();
   });
 });
