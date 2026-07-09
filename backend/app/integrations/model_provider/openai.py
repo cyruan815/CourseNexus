@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from openai import OpenAI
+from pydantic import BaseModel, ValidationError
 
 from app.core.errors import CourseNexusError
-from app.integrations.model_provider.base import ModelAnswer
+from app.integrations.model_provider.base import ModelAnswer, StructuredOutputT
 from app.modules.material_context.schemas import ContextChunk
 
 
@@ -40,6 +41,33 @@ class OpenAIModelProvider:
             answer_text=answer_text,
             citation_chunk_ids=[chunk.chunk_id for chunk in context_chunks[:1]],
         )
+
+    def generate_structured(
+        self,
+        *,
+        prompt: str,
+        output_schema: type[StructuredOutputT],
+    ) -> StructuredOutputT:
+        try:
+            response = self.client.responses.parse(
+                model=self.model,
+                input=prompt,
+                text_format=output_schema,
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+
+        parsed = getattr(response, "output_parsed", None)
+        try:
+            if isinstance(parsed, BaseModel):
+                return output_schema.model_validate(parsed.model_dump())
+            return output_schema.model_validate(parsed)
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="模型结构化输出不符合约定",
+                status_code=502,
+            ) from exc
 
     def _build_prompt(self, question: str, context_chunks: list[ContextChunk]) -> str:
         context_text = "\n\n".join(
