@@ -1,3 +1,5 @@
+import { AppRouter } from "../router/AppRouter";
+
 export function App() {
-  return <div>CourseNexus</div>;
+  return <AppRouter />;
 }
