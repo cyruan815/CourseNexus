@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     max_upload_file_size_bytes: int = 52_428_800
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     model_api_base_url: str | None = None
 
 
