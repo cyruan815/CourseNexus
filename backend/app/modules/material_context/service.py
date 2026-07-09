@@ -9,6 +9,7 @@ from app.core.errors import CourseNexusError
 from app.integrations.rag.base import RagIndex, RagScopeFilter
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.repository import (
+    has_parsed_context_chunks,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
     list_parsed_context_chunks,
@@ -68,14 +69,20 @@ def retrieve_relevant_context(
     if resolved_scope.empty_selection:
         return MaterialContextResult(chunks=[], no_parsed_material=True)
 
+    material_ids = list(resolved_scope.material_ids) or None
+    folder_ids = list(resolved_scope.folder_ids) or None
+    if not resolved_scope.eligible_material_ids or not has_parsed_context_chunks(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_ids=material_ids,
+        folder_ids=folder_ids,
+    ):
+        return MaterialContextResult(chunks=[], no_parsed_material=True)
+
     hits = rag_index.retrieve(
         query=query,
-        scope=RagScopeFilter(
-            user_id=user_id,
-            course_id=course_id,
-            material_ids=resolved_scope.material_ids,
-            folder_ids=resolved_scope.folder_ids,
-        ),
+        scope=_rag_scope_filter(user_id=user_id, course_id=course_id, resolved_scope=resolved_scope),
         top_k=top_k,
     )
     rows_by_chunk_id = {
@@ -85,6 +92,8 @@ def retrieve_relevant_context(
             user_id=user_id,
             course_id=course_id,
             chunk_ids=[hit.chunk_id for hit in hits],
+            material_ids=material_ids,
+            folder_ids=folder_ids,
         )
     }
     chunks = []
@@ -95,7 +104,7 @@ def retrieve_relevant_context(
         chunk, material_name = row
         chunks.append(_to_context_chunk(chunk, material_name, score=hit.score))
 
-    return MaterialContextResult(chunks=chunks, no_parsed_material=len(resolved_scope.eligible_material_ids) == 0)
+    return MaterialContextResult(chunks=chunks, no_parsed_material=False)
 
 
 def iter_material_context_batches(
@@ -165,6 +174,16 @@ def _resolve_scope(
         folder_ids=folder_ids,
         eligible_material_ids=eligible_material_ids,
     )
+
+
+def _rag_scope_filter(*, user_id: str, course_id: str, resolved_scope: _ResolvedScope) -> RagScopeFilter:
+    if resolved_scope.material_ids or resolved_scope.folder_ids:
+        return RagScopeFilter(
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=resolved_scope.eligible_material_ids,
+        )
+    return RagScopeFilter(user_id=user_id, course_id=course_id)
 
 
 def _batch_context_chunks(chunks: list[ContextChunk], *, max_tokens: int) -> Iterator[MaterialContextBatch]:

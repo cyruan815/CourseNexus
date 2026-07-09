@@ -54,6 +54,46 @@ def test_relevant_context_preserves_hit_order_scope_and_score(db: Session, conte
     )
 
 
+def test_relevant_context_uses_union_scope_for_material_and_folder(db: Session, context_seed) -> None:
+    class RecordingRagIndex(FakeRagIndex):
+        def __init__(self) -> None:
+            super().__init__()
+            self.seen_scope: RagScopeFilter | None = None
+
+        def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
+            self.seen_scope = scope
+            return super().retrieve(query=query, scope=scope, top_k=top_k)
+
+    rag_index = RecordingRagIndex.from_chunks(context_seed.rag_index.records.values())
+
+    result = retrieve_relevant_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        query="eigenvalue",
+        material_scope=MaterialScope(
+            include_all_parsed_materials=False,
+            material_ids=[context_seed.math_material.id],
+            folder_ids=[context_seed.folder.id],
+        ),
+        rag_index=rag_index,
+        top_k=8,
+    )
+
+    assert {chunk.material_id for chunk in result.chunks} == {
+        context_seed.math_material.id,
+        context_seed.folder_material.id,
+    }
+    assert rag_index.seen_scope is not None
+    assert rag_index.seen_scope.user_id == context_seed.user.id
+    assert rag_index.seen_scope.course_id == context_seed.course.id
+    assert set(rag_index.seen_scope.material_ids) == {
+        context_seed.math_material.id,
+        context_seed.folder_material.id,
+    }
+    assert rag_index.seen_scope.folder_ids == ()
+
+
 def test_relevant_context_rejects_cross_user_material_id(db: Session, tmp_path, context_seed) -> None:
     other_rag_index = FakeRagIndex()
     other_material = upload_file_material(
@@ -125,3 +165,49 @@ def test_relevant_context_ignores_stale_vector_chunk_ids(db: Session, context_se
 
     assert [chunk.chunk_id for chunk in result.chunks] == [valid_chunk.id]
     assert result.chunks[0].score == 0.6
+
+
+def test_relevant_context_filters_hits_against_sql_scope_after_reload(db: Session, context_seed) -> None:
+    out_of_scope_chunk = context_seed.history_chunks[0]
+
+    class StaleMetadataRagIndex:
+        def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
+            return [RetrievalHit(chunk_id=out_of_scope_chunk.id, score=0.9)]
+
+    result = retrieve_relevant_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        query="source",
+        material_scope=MaterialScope(
+            include_all_parsed_materials=False,
+            material_ids=[context_seed.math_material.id],
+        ),
+        rag_index=StaleMetadataRagIndex(),
+        top_k=4,
+    )
+
+    assert result.chunks == []
+    assert result.no_parsed_material is False
+
+
+def test_relevant_context_does_not_call_rag_when_scope_has_no_chunks(db: Session, context_seed) -> None:
+    class FailingRagIndex:
+        def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
+            raise AssertionError("RAG retrieval should not run without available chunks")
+
+    result = retrieve_relevant_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        query="anything",
+        material_scope=MaterialScope(
+            include_all_parsed_materials=False,
+            material_ids=[context_seed.empty_material.id],
+        ),
+        rag_index=FailingRagIndex(),
+        top_k=4,
+    )
+
+    assert result.chunks == []
+    assert result.no_parsed_material is True

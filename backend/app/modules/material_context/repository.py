@@ -69,6 +69,8 @@ def list_context_chunks_by_ids(
     user_id: str,
     course_id: str,
     chunk_ids: list[str],
+    material_ids: list[str] | None = None,
+    folder_ids: list[str] | None = None,
 ) -> list[ContextRow]:
     if not chunk_ids:
         return []
@@ -84,7 +86,37 @@ def list_context_chunks_by_ids(
             CourseMaterial.parse_status == "parsed",
         )
     )
+    scope_conditions = _scope_conditions(material_ids=material_ids, folder_ids=folder_ids)
+    if scope_conditions:
+        statement = statement.where(or_(*scope_conditions))
+
     return [(row[0], row[1]) for row in db.execute(statement).all()]
+
+
+def has_parsed_context_chunks(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_ids: list[str] | None = None,
+    folder_ids: list[str] | None = None,
+) -> bool:
+    statement = (
+        select(MaterialChunk.id)
+        .join(CourseMaterial, CourseMaterial.id == MaterialChunk.material_id)
+        .where(
+            CourseMaterial.user_id == user_id,
+            CourseMaterial.course_id == course_id,
+            CourseMaterial.deleted_at.is_(None),
+            CourseMaterial.parse_status == "parsed",
+        )
+        .limit(1)
+    )
+    scope_conditions = _scope_conditions(material_ids=material_ids, folder_ids=folder_ids)
+    if scope_conditions:
+        statement = statement.where(or_(*scope_conditions))
+
+    return db.execute(statement).scalar_one_or_none() is not None
 
 
 def list_eligible_material_ids(
