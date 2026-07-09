@@ -6,12 +6,12 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 
 当前仓库处于本地 POC 基座阶段，已完成：
 
-- `frontend/`：React + TypeScript/TSX + Vite 最小项目骨架。
-- `backend/`：FastAPI 后端骨架、SQLAlchemy 数据模型、Alembic baseline migration。
-- `docs/`：PRD、架构、API / 数据契约、工程规范入口。
-- SQLite baseline migration 可创建 PRD v0.1 的 13 张核心业务表。
+- `frontend/`：React + TypeScript/TSX + Vite 7 最小集成工作台，包含 API client、token 管理、路由壳、课程列表和课程详情空工作台。
+- `backend/`：FastAPI 后端基础设施，包含鉴权、课程、资料上传 / 解析、资料上下文、课程问答、生成编排和学习计划基础接口。
+- `docs/`：PRD、架构、API / 数据契约、工程规范、阶段状态和路线图入口。
+- SQLite baseline migration 可创建 PRD v0.1 的核心业务表。
 
-尚未实现完整业务 API、页面工作流、资料解析、Agent 生成、计划生成和 PDF 导出。
+当前基础设施阶段不实现完整产品前端。资料上传面板、资料范围选择器和课程问答面板已后置为独立前端任务；PDF / PPT / Word 解析、真实 LLM 结构化生成、计划执行页、今日待办、大日历和 PDF 导出仍未实现。
 
 ## 仓库结构
 
@@ -34,7 +34,7 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 
 ## 技术栈
 
-- Frontend：React、TypeScript/TSX、Vite、Vitest，包管理使用 pnpm。
+- Frontend：React、TypeScript/TSX、Vite 7、Vitest，包管理使用 pnpm。
 - Backend：Python、FastAPI、SQLAlchemy、Alembic、pytest。
 - Database：SQLite，本地 POC 使用；模型和 migration 保留 PostgreSQL 迁移空间。
 
@@ -97,6 +97,8 @@ pnpm backend:migrate
 pnpm test
 ```
 
+根目录 `backend:*` 和 `test` 脚本会通过 `conda run -n course-nexus` 使用项目专属 Python 3.12 环境，避免调用系统 Python。
+
 也可以进入子目录运行：
 
 ```powershell
@@ -108,6 +110,7 @@ pnpm test -- --run
 
 ```powershell
 cd backend
+conda activate course-nexus
 python -m uvicorn app.main:app --reload
 python -m pytest
 python -m alembic upgrade head
@@ -121,6 +124,7 @@ python -m alembic upgrade head
 
 ```powershell
 cd backend
+conda activate course-nexus
 python -m alembic upgrade head
 ```
 
@@ -138,9 +142,8 @@ pnpm test
 
 已覆盖：
 
-- 后端健康检查接口。
-- SQLAlchemy metadata 可创建 13 张核心表。
-- 前端最小应用壳渲染。
+- 后端健康检查、schema、鉴权、课程、资料上传 / 解析、资料上下文、问答、生成、学习计划和集成链路。
+- 前端 API client、鉴权字段契约、路由壳、课程列表和课程详情空工作台。
 
 ## 协作规则
 
