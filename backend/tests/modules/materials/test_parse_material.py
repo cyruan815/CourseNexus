@@ -151,10 +151,17 @@ def test_reparse_material_deletes_old_vectors_before_reindex(db: Session, tmp_pa
         def __init__(self) -> None:
             super().__init__()
             self.deleted_material_ids: list[str] = []
+            self.operations: list[tuple[str, str]] = []
 
         def delete_material(self, material_id: str) -> None:
             self.deleted_material_ids.append(material_id)
+            self.operations.append(("delete", material_id))
             super().delete_material(material_id)
+
+        def index_chunks(self, chunks):
+            indexed_chunks = list(chunks)
+            self.operations.extend(("index", chunk.material_id) for chunk in indexed_chunks)
+            super().index_chunks(indexed_chunks)
 
     user, _, material = create_uploaded_material(db, tmp_path)
     parser = PlainTextParser()
@@ -179,6 +186,12 @@ def test_reparse_material_deletes_old_vectors_before_reindex(db: Session, tmp_pa
     )
 
     assert rag_index.deleted_material_ids == [material.id, material.id]
+    assert rag_index.operations == [
+        ("delete", material.id),
+        ("index", material.id),
+        ("delete", material.id),
+        ("index", material.id),
+    ]
 
 
 def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
