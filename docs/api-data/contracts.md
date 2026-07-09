@@ -14,6 +14,7 @@
 ## 模块间契约基线
 
 - 资料模块只把 `parse_status = parsed` 的资料暴露给检索和 Agent。
+- 问答、生成和学习计划不得直接读取资料表或 chunk 表，必须通过 `material_context.resolve_context()` 获取资料上下文。
 - Agent 模块不得跨课程混用上下文。
 - 无资料命中时，Agent 必须返回 `answer_type = no_source`，并禁止伪引用。
 - AI 生成内容统一写入 `AIGeneratedContent`，通过 `content_type` 区分用途。
@@ -30,6 +31,41 @@
 - `material_name` 是快照字段，避免资料改名后历史引用展示异常。
 - 历史引用定位失败时，前端仍可展示快照文本和定位失败提示。
 - `StudySubTask.related_material_ids_json` 只能引用当前课程下当前用户可访问的资料。
+
+## 资料上下文契约
+
+`MaterialScope` 是前端工作台、问答、生成和计划基础能力共用的资料范围结构：
+
+```json
+{
+  "include_all_parsed_materials": true,
+  "folder_ids": [],
+  "material_ids": []
+}
+```
+
+规则：
+
+- 默认 `include_all_parsed_materials = true`，返回当前课程下全部 `parsed` 且未删除资料的 chunk。
+- 当 `include_all_parsed_materials = false` 时，`material_ids` 和 `folder_ids` 表示显式选择范围。
+- 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、已解析且未删除；否则返回 `NOT_FOUND`。
+- 未解析、解析失败和已删除资料不得进入上下文结果。
+
+`resolve_context()` 返回的 `ContextChunk` 最小字段：
+
+```json
+{
+  "material_id": "mat_123",
+  "chunk_id": "chk_123",
+  "material_name": "notes.md",
+  "page": null,
+  "page_index": null,
+  "heading": "Intro",
+  "content_text": "Alpha"
+}
+```
+
+当前范围没有可用 parsed chunk 时，返回 `no_parsed_material = true`，调用方应进入 no source 或无资料兜底流程。
 
 ## 请求 / 响应示例格式
 
