@@ -2,6 +2,7 @@
 
 ## 前后端契约基线
 
+- 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 成功响应统一包含 `data` 和 `meta`。
 - 错误响应统一包含 `error.code`、`error.message`、`error.details` 和 `meta.request_id`。
