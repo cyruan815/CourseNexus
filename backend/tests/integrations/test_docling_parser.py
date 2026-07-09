@@ -11,7 +11,7 @@ from app.integrations.parsers.docling_parser import DoclingParser
 
 class FakeConverter:
     def __init__(self, *, document: object | None = None, error: Exception | None = None) -> None:
-        self.document = document or FakeDoclingDocument()
+        self.document = document if document is not None else FakeDoclingDocument()
         self.error = error
         self.converted_path: Path | None = None
 
@@ -24,6 +24,11 @@ class FakeConverter:
 
 class FakeDoclingDocument:
     pass
+
+
+class NullDocumentConverter:
+    def convert(self, file_path: Path):
+        return SimpleNamespace(document=None)
 
 
 class FakeChunker:
@@ -79,6 +84,15 @@ def test_docling_parser_discards_empty_chunks() -> None:
 
 def test_docling_parser_maps_empty_conversion_to_parse_failed() -> None:
     parser = DoclingParser(converter=FakeConverter(), chunker=FakeChunker([FakeChunk("  ")]))
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        parser.parse(Path("slides.pdf"))
+
+    assert exc_info.value.code == "PARSE_FAILED"
+
+
+def test_docling_parser_maps_missing_document_to_parse_failed() -> None:
+    parser = DoclingParser(converter=NullDocumentConverter(), chunker=FakeChunker([]))
 
     with pytest.raises(CourseNexusError) as exc_info:
         parser.parse(Path("slides.pdf"))
