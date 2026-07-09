@@ -2,7 +2,7 @@
 
 ## 日期
 
-2026-07-09
+2026-07-10
 
 ## 当前阶段结论
 
@@ -46,6 +46,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 已实现 `material_context.resolve_context()`，统一处理课程范围、资料范围、已解析过滤和引用候选。
    - 已实现课程问答接口、会话列表、消息列表、回答保存和 `SourceCitation` 保存。
    - 模型调用统一通过 OpenAI SDK provider 边界；测试和本地无 key 场景使用 mock provider。
+   - 已确定下一阶段本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。该技术栈尚未进入代码依赖。
 
 6. 生成和计划基础
    - 已实现 `generation-orchestrator` 基础编排、生成内容保存和引用保存。
@@ -67,7 +68,9 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 资料上传面板、资料范围选择器、资料状态列表等完整前端资料交互。
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
-- PDF、PPT、Word 等复杂资料解析。
+- Docling 对 PDF、PPT、Word、图片等复杂资料的解析和结构化切片。
+- LlamaIndex + Chroma embedding、持久化索引、metadata 范围过滤和语义检索。
+- `material-context` 的问答 Top-K 检索接口和指定材料全覆盖分批接口。
 - 学习计划执行页、今日待办、大日历、打卡同步和 PDF 导出。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
 
@@ -95,6 +98,7 @@ pnpm test
 ## 下一步重点
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
-2. 为 Flashcard、Mindmap、Quiz 等生成器分别补真实提示词、结构化解析和质量测试。
-3. 扩展资料解析器支持 PDF、PPT、Word，并保持 `MaterialChunk` 契约不变。
-4. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
+2. 按 [../architecture/material-context-rag.md](../architecture/material-context-rag.md) 接入 Docling、LlamaIndex 和本地 Chroma，先完成解析、索引和问答检索闭环。
+3. 建立指定材料全覆盖的分批 map-reduce 上下文，再为 Flashcard、Mindmap、Quiz 和学习计划补真实结构化生成。
+4. 全程使用现有 Conda 本地环境和 Chroma `PersistentClient`，不引入 Docker 或独立 RAG 服务。
+5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。

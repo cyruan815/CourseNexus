@@ -24,7 +24,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 
 - `users` / `courses`：提供本地账号、token 校验、当前用户依赖和课程归属校验。
 - `materials`：拥有资料元数据、本地文件存储、上传校验、解析状态和 `MaterialChunk` 写入。
-- `material-context`：作为问答、生成、学习计划共用的上下文解析入口；调用方不得绕过它直接拼装 chunk。
+- `material-context`：作为问答、生成、学习计划共用的资料范围与上下文入口；当前只具备顺序读取基础，目标升级为“相关性检索”和“全材料分批读取”两个接口。调用方不得绕过它直接查询 Chroma 或拼装 chunk。
 - `course-qa`：拥有会话、消息和课程问答引用保存；不负责 Flashcard、Mindmap、Quiz 或学习计划。
 - `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI 调用统一集中在 OpenAI SDK provider 实现中。
 - `generation-orchestrator`：当前负责生成请求编排、上下文解析、占位生成器调用、`AIGeneratedContent` 和 `SourceCitation` 保存。
@@ -37,8 +37,8 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 flowchart TB
     U["users<br/>账号 / 登录态 / 当前用户"]
     C["courses<br/>课程归属边界"]
-    M["materials<br/>上传 / 解析 / 切片 / 资料范围"]
-    MC["material-context<br/>可检索上下文 / 引用候选"]
+    M["materials<br/>上传 / Docling 解析 / 切片 / 索引"]
+    MC["material-context<br/>范围过滤 / 语义检索 / 全材料批次 / 引用候选"]
     GO["generation-orchestrator<br/>生成请求编排 / 状态 / 幂等"]
     GC["generated-content<br/>AIGeneratedContent / SourceCitation"]
 
@@ -110,8 +110,8 @@ flowchart TB
 | --- | --- | --- | --- | --- |
 | `users` | 注册、登录、退出、修改密码、当前用户识别。 | `User`、登录态。 | 当前用户上下文、登录状态。 | 不查询课程、资料、计划等业务对象。 |
 | `courses` | 课程创建、编辑、删除、列表、详情、课程归属校验。 | `Course`。 | 可访问课程、课程基础信息、课程归属判断。 | 不解析资料，不生成内容，不处理任务状态。 |
-| `materials` | 文件 / 链接资料、一级目录、上传状态、解析状态、资料切片和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`。 | 已解析资料、资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划。 |
-| `material-context` | 根据课程、资料范围、任务上下文筛选可用切片，生成引用候选。 | 可不单独建表，读取 `MaterialChunk`。 | 检索结果、上下文片段、引用候选。 | 不调用模型，不保存生成内容。 |
+| `materials` | 文件 / 链接资料、一级目录、上传状态、Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`；触发可重建向量索引。 | 已解析且已索引资料、资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划。 |
+| `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为指定材料生成按顺序提供全量分批上下文。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`iter_material_context_batches()`、`ContextChunk`、引用候选。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |
 | `generation-orchestrator` | 接收生成请求、校验权限、校验资料范围、处理幂等、维护生成状态、调用具体生成模块。 | 生成请求状态，可复用 `AIGeneratedContent.generation_status`。 | 生成任务状态、错误码、生成模块调用结果。 | 不写具体业务算法，不直接渲染结果。 |
 | `course-qa` | 基于课程资料问答，保存对话消息和引用来源。 | `Conversation`、`Message`、`SourceCitation`。 | `answer_text`、`answer_type`、引用列表。 | 不生成 Flashcard、Mindmap 或学习计划。 |
 | `quiz-generator` | 基于资料范围生成课程自测 Quiz。 | `AIGeneratedContent(content_type=quiz)`、`SourceCitation`。 | 题目、选项、答案、解析、引用。 | 不处理任务测试题入口。 |
@@ -141,8 +141,8 @@ sequenceDiagram
     participant Store as generated-content
 
     Caller->>Orchestrator: submit(course_id, material_scope, params, idempotency_key)
-    Orchestrator->>Context: resolve_context(course_id, material_scope, task_context?)
-    Context-->>Orchestrator: chunks + citation_candidates
+    Orchestrator->>Context: iter_material_context_batches(course_id, material_scope, token_budget)
+    Context-->>Orchestrator: all eligible chunks in ordered batches
     Orchestrator->>Generator: generate(chunks, params)
     Generator-->>Orchestrator: structured_content + citations
     Orchestrator->>Store: save AIGeneratedContent + SourceCitation
@@ -153,6 +153,7 @@ sequenceDiagram
 
 - 生成模块不能直接读未校验权限的数据。
 - 生成模块不能绕过 `material-context` 使用资料。
+- 问答必须调用 `retrieve_relevant_context(query, material_scope)`；指定材料生成必须调用 `iter_material_context_batches(material_scope)`，不能用一次 Top-K 检索代替全部材料。
 - 生成模块不能直接写其他模块状态。
 - 生成结果必须结构化保存，不能只返回临时文本。
 - 引用必须落到 `SourceCitation`，不能伪造没有资料来源的引用。
@@ -163,6 +164,9 @@ sequenceDiagram
 允许的依赖方向：
 
 - `users -> courses -> materials -> material-context -> generation-orchestrator -> generator -> generated-content`
+- `materials -> integrations/docling + integrations/rag(llama-index/chroma)`
+- `course-qa -> material-context.retrieve_relevant_context`
+- `generation-orchestrator / study-plans -> material-context.iter_material_context_batches`
 - `courses -> study-plans -> learning-execution -> checkins`
 - `study-plans -> todos-calendar`
 - `learning-execution -> todos-calendar`

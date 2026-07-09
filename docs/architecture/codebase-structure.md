@@ -160,6 +160,27 @@ app/modules/
 └── exports/
 ```
 
+资料上下文与 RAG 的 integration 落位：
+
+```text
+app/integrations/
+├── parsers/
+│   ├── base.py
+│   ├── plain_text.py
+│   └── docling_parser.py
+├── rag/
+│   ├── base.py
+│   ├── llama_index_chroma.py
+│   └── fake.py
+├── model_provider/
+└── file_storage/
+```
+
+- `parsers/docling_parser.py` 只把本地文件转换成项目内部 `ParsedDocument` / `ParsedChunk`。
+- `rag/llama_index_chroma.py` 是唯一允许 import `llama_index`、`chromadb` 和 OpenAI embedding integration 的位置。
+- `modules/material_context/` 只依赖 `rag/base.py` 定义的项目内部协议和 DTO。
+- 业务 generator、`course_qa` 和 `study_plans` 不直接依赖第三方 RAG 类型。
+
 关键落位规则：
 
 - `generation/orchestrator/` 只处理生成请求编排、幂等、状态、错误和调用具体 generator。

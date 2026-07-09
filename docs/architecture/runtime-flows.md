@@ -2,7 +2,7 @@
 
 > 本文记录 CourseNexus 的关键运行链路。它关注模块如何协作，不展开具体 API 字段；字段和响应格式见 [../api-data/index.md](../api-data/index.md)。
 
-## 当前基础设施落地范围（2026-07-09）
+## 当前基础设施落地范围（2026-07-10）
 
 当前已落地的 POC 基础链路以稳定后端接口为主：
 
@@ -12,6 +12,8 @@
 
 前端在本阶段只承担最小集成验证：API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传 UI、资料范围选择 UI 和问答 UI 不属于当前基础设施主线验收条件。
 
+下一阶段已确定使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API，把当前顺序读取 chunk 的基础链路升级为真实本地 RAG。详细设计见 [material-context-rag.md](material-context-rag.md)。
+
 ## 1. 资料上传与解析链路
 
 ```mermaid
@@ -20,8 +22,10 @@ sequenceDiagram
     participant API as Backend API
     participant C as courses
     participant M as materials
-    participant P as parser adapter
-    participant DB as DB / Files
+    participant P as Docling parser adapter
+    participant DB as SQLite / Files
+    participant R as LlamaIndex RAG adapter
+    participant V as Chroma PersistentClient
 
     FE->>API: upload material(course_id, file/link)
     API->>C: assert_course_owner(current_user, course_id)
@@ -29,8 +33,11 @@ sequenceDiagram
     M->>DB: save file/link metadata
     M->>M: set parse_status=parsing
     M->>P: parse file/link
-    P-->>M: text chunks + page info
-    M->>DB: save MaterialChunk
+    P-->>M: ordered chunks + heading/page metadata
+    M->>DB: replace MaterialChunk
+    M->>R: index chunks + course/material metadata
+    R->>V: delete old records + embed/upsert new records
+    V-->>R: indexed chunk ids
     M->>M: set parse_status=parsed
     API-->>FE: material_id + parse_status
 ```
@@ -40,6 +47,9 @@ sequenceDiagram
 - 上传失败不创建可用资料。
 - 课程创建成功但资料上传失败时，不回滚课程。
 - 解析失败写 `parse_status = parse_failed` 和 `parse_error`。
+- embedding 或 Chroma 写入失败写稳定错误 `INDEXING_FAILED`，并清理本轮部分索引。
+- 只有 SQLite `MaterialChunk` 和 Chroma 索引都成功后才进入 `parsed`。
+- 删除或重试解析资料时，必须按 `material_id` 删除旧 Chroma records。
 - 失败资料不得进入检索、问答、生成或计划上下文。
 
 ## 2. 课程 Agent 问答链路
@@ -55,8 +65,9 @@ sequenceDiagram
 
     FE->>API: ask(course_id, question, material_scope)
     API->>QA: validate owner + load/create conversation
-    QA->>CTX: resolve_context(course_id, material_scope)
-    CTX-->>QA: chunks + citation candidates
+    QA->>CTX: retrieve_relevant_context(question, material_scope, top_k)
+    CTX->>CTX: Chroma vector query with user/course/material filters
+    CTX-->>QA: scored Top-K chunks + citation candidates
     QA->>MP: generate answer via provider
     MP-->>QA: answer_text + used citations
     QA->>DB: save Conversation / Message / SourceCitation
@@ -67,6 +78,7 @@ sequenceDiagram
 
 - 默认使用当前课程全部 `parsed` 资料。
 - 用户选择资料范围后，只能在该范围内检索。
+- `user_id`、`course_id` 和 `material_scope` 必须转换为 Chroma metadata 硬过滤条件，不能只写进 prompt。
 - 无资料命中时返回 `answer_type = no_source`，并明确提示当前课程资料中未找到直接答案。
 - 不允许生成没有真实资料关联的伪引用。
 
@@ -85,10 +97,14 @@ sequenceDiagram
     participant Store as generated-content
 
     FE->>O: generate(content_type, course_id, material_scope, params)
-    O->>CTX: resolve_context(course_id, material_scope)
-    CTX-->>O: parsed chunks + citation candidates
-    O->>G: generate structured content
-    G-->>O: content_json/content + citations
+    O->>CTX: iter_material_context_batches(course_id, material_scope, token_budget)
+    CTX-->>O: all selected chunks in ordered batches
+    loop every material batch
+        O->>G: extract typed intermediate content
+        G-->>O: intermediate result + citation chunk ids
+    end
+    O->>G: reduce/deduplicate into final schema
+    G-->>O: content_json/content + citation union
     O->>Store: save AIGeneratedContent + SourceCitation
     Store-->>FE: content_id + generation_status
 ```
@@ -96,6 +112,8 @@ sequenceDiagram
 解耦规则：
 
 - Flashcard、Mindmap、Quiz 等模块互不依赖。
+- 每份选中且已解析资料都必须进入至少一个 batch；这条链路不使用普通 Top-K 检索。
+- 超长材料使用 map-reduce，不能静默截断后宣称已使用全部材料。
 - 每个模块只关心自己的输出结构。
 - 前端渲染方式不影响后端生成模块边界。
 - 生成内容统一进入 `AIGeneratedContent`，历史列表按 `content_type` 区分。
@@ -112,8 +130,8 @@ sequenceDiagram
     participant TC as todos-calendar
 
     FE->>SP: parse goal_text and config(course_id)
-    SP->>CTX: resolve material scope
-    SP->>Builder: build deterministic plan preview
+    SP->>CTX: iter all selected material batches
+    SP->>Builder: extract material units + build plan preview
     Builder-->>SP: plan preview
     SP-->>FE: preview
     FE->>SP: save preview
@@ -124,6 +142,7 @@ sequenceDiagram
 规则：
 
 - `StudyPlan` 只绑定一个 `course_id`。
+- 学习计划属于指定材料生成类，所有选中资料都参与章节、难度和任务候选提取。
 - 计划保存只生成任务结构。
 - 今日讲义、任务测试题、学习笔记不在计划保存时生成。
 - 首页今日待办和大日历通过查询聚合多个单课程计划。

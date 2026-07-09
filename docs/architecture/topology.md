@@ -12,9 +12,13 @@ v0.1 是本地 POC，采用前后端分离部署：
 | Backend API | Python + FastAPI | conda 环境启动本地服务 | 鉴权、API、业务编排、资料解析编排、AI 生成编排、数据读写。 |
 | Database | SQLite | 本地文件 | POC 数据持久化，后续可迁 PostgreSQL。 |
 | File Storage | 本地目录 | 本地文件系统 | 上传资料、解析中间产物、导出文件。 |
-| Model / Parser / Export Adapters | Python 适配层 | 后端内调用或可替换外部能力 | 文档解析、模型生成、PDF 导出。 |
+| Document Parsing | Docling | FastAPI 进程内的 Python adapter | 本地解析复杂文档并输出结构化 chunk。 |
+| RAG Orchestration | LlamaIndex | FastAPI 进程内的 Python adapter | 组织 node、embedding、Chroma 写入和 retriever。 |
+| Vector Index | Chroma `PersistentClient` | 后端进程内调用，本地目录持久化 | chunk 向量和 metadata filter；可从 SQLite 重建。 |
+| Model / Embedding | OpenAI API | 通过后端 integration / provider 访问 | embedding、问答和结构化生成。 |
+| Export Adapter | Python 适配层 | 后端内调用 | PDF 导出。 |
 
-当前不引入 Redis、独立队列、微服务、Kubernetes 或复杂发布体系。
+当前不引入 Docker、Redis、独立队列、微服务、Kubernetes、Chroma Server 或复杂发布体系。
 
 ## 2. 技术拓扑图
 
@@ -33,13 +37,14 @@ flowchart TB
         Auth["Auth<br/>current_user / password hash / session or token"]
         AppServices["Application Services<br/>业务编排"]
         DomainModules["Domain Modules<br/>courses / materials / generation / plans / execution"]
-        Adapters["Adapters<br/>parser / model / pdf / file storage"]
+        Adapters["Adapters<br/>Docling / LlamaIndex / Chroma / model / file storage"]
         Repositories["Repositories<br/>SQLAlchemy data access"]
     end
 
     subgraph Storage["Local Persistence"]
         SQLite[("SQLite DB")]
         Files[("Local Files")]
+        Chroma[("Chroma Persistent Path")]
     end
 
     subgraph External["Replaceable Capabilities"]
@@ -58,6 +63,7 @@ flowchart TB
     DomainModules --> Adapters
     Repositories --> SQLite
     Adapters --> Files
+    Adapters --> Chroma
     Adapters --> Parser
     Adapters --> Model
     Adapters --> PdfTool
@@ -95,7 +101,7 @@ flowchart LR
 - 前端是用户输入边界，不能承担权限判断的最终责任。
 - 后端 API 是业务可信边界，所有资源访问必须校验当前用户归属。
 - 数据库和文件系统只能通过 repository / storage adapter 访问。
-- 模型、解析器和 PDF 工具是可替换能力，不能直接拥有业务数据。
+- Docling、LlamaIndex、Chroma、模型和 PDF 工具只能通过 integration / provider 边界访问，不能直接拥有业务状态。
 - 外部能力返回的内容必须经过后端校验、状态记录和错误处理后再进入业务存储。
 
 ## 5. 数据与文件流向
@@ -103,8 +109,9 @@ flowchart LR
 | 流向 | 说明 |
 | --- | --- |
 | 上传资料 | 前端 multipart 上传到后端；后端保存文件和 `CourseMaterial`；解析过程写 `parse_status`。 |
-| 资料解析 | parser adapter 读取文件，输出文本、页码或页序号；后端写 `MaterialChunk`。 |
-| Agent / 生成 | generation-orchestrator 从 `material-context` 取切片，调用模型 adapter，写 `AIGeneratedContent` 和 `SourceCitation`。 |
+| 资料解析与索引 | Docling adapter 读取文件并输出有序结构化 chunk；后端写 `MaterialChunk`，LlamaIndex 生成 embedding 并写入本地 Chroma；两者成功后资料才进入 `parsed`。 |
+| 课程问答 | `course-qa` 通过 `material-context` 在材料范围内执行 Chroma Top-K 检索，调用模型 provider，写 `Message` 和 `SourceCitation`。 |
+| 指定材料生成 | generation-orchestrator 或 study-plans 通过 `material-context` 按顺序分批读取全部选定 chunk，执行 map-reduce 生成并保存结果与引用。 |
 | 学习计划 | study-plans 调用模型或规则生成计划结构，写 `StudyPlan`、`StudyTask`、`StudySubTask`。 |
 | 日历聚合 | todos-calendar 只读查询 `StudyTask`、`StudySubTask`，按日期和课程聚合。 |
 | 任务完成 | learning-execution 更新 `StudySubTask`，汇总 `StudyTask`，触发 checkins 更新。 |
@@ -114,7 +121,7 @@ flowchart LR
 
 - SQLite 可替换为 PostgreSQL；SQLAlchemy 模型和 Alembic migration 应避免 SQLite 专有能力。
 - 本地文件存储可替换为对象存储。
-- 文档解析 adapter 可替换实现。
+- 当前 RAG 组件固定为 FastAPI 内嵌 LlamaIndex + Docling + Chroma；RAGFlow 仅是 future 备选，接入前必须新增 ADR。
 - LLM / 生成 provider 可替换。
 - PDF 导出 adapter 可替换。
 - 长耗时任务当前可用状态字段表达，后续可引入后台任务队列，但必须新增 ADR。
@@ -124,5 +131,7 @@ flowchart LR
 - 不允许前端直连数据库或文件系统。
 - 不允许具体生成模块直接访问未校验权限的资料。
 - 不允许 adapter 写业务表，业务状态必须由 domain service 统一保存。
+- 不允许业务模块直接 import `docling`、`llama_index`、`chromadb` 或 `openai`。
+- 不允许把指定材料生成简化为一次普通 Top-K 检索；所有选中且可用的资料必须参与分批处理。
 - 不允许日历聚合模块写计划或任务主状态。
 - 不允许把外部模型返回直接作为可信数据写入引用来源；引用必须能回到真实 `CourseMaterial` / `MaterialChunk`。

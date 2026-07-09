@@ -80,11 +80,16 @@
 - 实现资料文本抽取的最小适配层。
 - 实现 `material_chunks` 写入、查询和引用定位。
 - 建立课程范围、资料范围和任务上下文的统一筛选接口。
+- 使用 Docling 解析复杂文档并保留标题、页码和表格等结构。
+- 使用 LlamaIndex + OpenAI Embeddings 将 chunk 写入本地 Chroma `PersistentClient`。
+- 分离 `retrieve_relevant_context()` 和 `iter_material_context_batches()` 两类上下文接口。
 
 验收：
 
 - 已解析资料可以生成可检索 chunk。
 - chunk 可以追溯到资料、页码或位置。
+- 问答检索通过 `user_id`、`course_id`、`material_scope` metadata 硬过滤，不能跨范围命中。
+- 指定材料生成能证明每份选中资料都进入至少一个处理批次。
 - 上下文层不直接调用模型，不保存生成内容。
 
 ## 阶段 4：课程问答
@@ -94,6 +99,7 @@
 - 实现 conversation、message 和 source citation 的最小 API。
 - 接入模型 adapter 占位或真实 provider。
 - 回答必须带可追溯引用。
+- 问答基于 Chroma Top-K 语义检索，不再顺序截取前若干 chunk。
 
 验收：
 
@@ -112,6 +118,7 @@
 验收：
 
 - 每类生成结果有结构化 `content_json`。
+- 所有选中资料按顺序分批处理并经 map-reduce 汇总，不能用一次 Top-K 检索代替全材料覆盖。
 - 生成失败保存失败状态并允许重试。
 - 各生成模块互不直接调用。
 

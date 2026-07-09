@@ -4,7 +4,7 @@
 
 本目录记录 CourseNexus v0.1 的产品架构、技术架构、功能模块拓扑、模块边界和关键运行链路。它的目标是让项目负责人、后端、前端和 Agent 接手后，能快速理解系统为什么这样拆、组件之间怎么连、哪些地方必须保持解耦。
 
-当前架构口径是：前后端分离、本地 POC、FastAPI 单体后端按业务能力分包、SQLite 当前存储并保留 PostgreSQL 迁移空间、不引入缓存、不做多角色权限。AI 生成能力按独立功能模块拆分，例如 Flashcard、Mindmap、Quiz、复习提纲、知识点清单、今日讲义、任务测试题只通过资料上下文、生成请求和统一生成内容存储与主系统相连。
+当前架构口径是：前后端分离、本地 POC、FastAPI 单体后端按业务能力分包、SQLite 当前存储并保留 PostgreSQL 迁移空间、不引入缓存、不做多角色权限。资料上下文与 RAG 在 FastAPI 进程内采用 LlamaIndex + Docling + Chroma `PersistentClient`，不使用 Docker；OpenAI API 提供 embedding 和生成。问答使用范围过滤后的 Top-K 检索，指定材料生成功能按顺序覆盖全部选中资料。RAGFlow 仅作为 future 方案。
 
 ## 文档清单
 
@@ -15,8 +15,10 @@
 | [codebase-structure.md](codebase-structure.md) | 代码结构架构：仓库目录、前端分层、后端分层、模块落位和依赖方向。 | 2026-07-09 |
 | [module-boundaries.md](module-boundaries.md) | 功能模块拓扑与模块边界：账号、课程、资料、Agent、独立 AI 生成模块、计划、日历、执行和打卡的依赖关系与禁止耦合事项。 | 2026-07-09 |
 | [runtime-flows.md](runtime-flows.md) | 关键运行链路：资料解析、问答、独立生成、计划生成、任务执行、日历聚合和导出。 | 2026-07-09 |
+| [material-context-rag.md](material-context-rag.md) | 资料上传、解析、索引、检索和引用架构，以及问答与指定材料生成两条链路。 | 2026-07-10 |
 | [adr/index.md](adr/index.md) | 架构决策记录入口、命名规则和当前 ADR 清单。 | 2026-07-09 |
 | [adr/0001-tech-stack.md](adr/0001-tech-stack.md) | v0.1 技术栈与本地 POC 架构选择。 | 2026-07-09 |
+| [adr/0003-local-rag-stack.md](adr/0003-local-rag-stack.md) | 本地资料上下文与 RAG 核心依赖和运行边界。 | 2026-07-10 |
 
 ## 推荐阅读顺序
 
@@ -25,7 +27,8 @@
 3. 要搭项目基座或判断代码应该放在哪里时，读 [codebase-structure.md](codebase-structure.md)。
 4. 需要拆任务或接手模块时，读 [module-boundaries.md](module-boundaries.md)。
 5. 需要实现或排查主流程时，读 [runtime-flows.md](runtime-flows.md)。
-6. 需要判断技术选型或修改核心依赖时，读 [adr/index.md](adr/index.md)。
+6. 实现资料解析、检索、问答或指定材料生成时，读 [material-context-rag.md](material-context-rag.md)。
+7. 需要判断技术选型或修改核心依赖时，读 [adr/index.md](adr/index.md)。
 
 ## 相关链接
 

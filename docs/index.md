@@ -21,8 +21,8 @@
 
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
-| [product/index.md](product/index.md) | 产品目标、PRD 和业务范围入口。 | 2026-07-09 |
-| [architecture/index.md](architecture/index.md) | 架构文档、模块边界和技术决策入口。 | 2026-07-09 |
+| [product/index.md](product/index.md) | 产品目标、PRD 和 AI 资料业务范围入口。 | 2026-07-10 |
+| [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-07-10 |
 | [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-07-09 |
 | [engineering/index.md](engineering/index.md) | 项目骨架、开发约定和轻量协作规范入口。 | 2026-07-09 |
 | [planning/index.md](planning/index.md) | 当前状态、实现路线图、技术债和信息处理优化计划入口。 | 2026-07-09 |
@@ -33,6 +33,8 @@
 - [../AGENTS.md](../AGENTS.md)：Agent 接手项目的入口、阅读顺序和行为约束。
 - [../README.md](../README.md)：项目简介和仓库级入口。
 - [product/prd.md](product/prd.md)：产品需求权威入口。
+- [product/ai-material-business.md](product/ai-material-business.md)：AI 资料业务线，两类业务及共同约束。
+- [architecture/material-context-rag.md](architecture/material-context-rag.md)：本地资料上下文与 RAG 架构。
 
 ## 维护规则
 
