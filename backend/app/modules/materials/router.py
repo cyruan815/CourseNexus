@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from sqlalchemy.orm import Session
+
+from app.api.dependencies import get_required_user
+from app.core.config import get_settings
+from app.core.request_id import get_request_id
+from app.db.session import get_db
+from app.integrations.file_storage.base import FileStorage
+from app.integrations.file_storage.local import LocalFileStorage
+from app.modules.materials.schemas import MaterialLinkCreate, MaterialRead
+from app.modules.materials.service import (
+    create_link_material,
+    delete_material,
+    get_material_detail,
+    list_course_materials,
+    upload_file_material,
+)
+from app.modules.users.models import User
+from app.shared.responses import success_response
+
+router = APIRouter(tags=["materials"])
+
+
+def get_material_storage() -> FileStorage:
+    settings = get_settings()
+    return LocalFileStorage(
+        root_path=settings.file_storage_path,
+        max_file_size_bytes=settings.max_upload_file_size_bytes,
+    )
+
+
+def _material_data(material) -> dict[str, object]:
+    return MaterialRead.model_validate(material).model_dump(mode="json")
+
+
+@router.get("/courses/{course_id}/materials")
+def list_materials_endpoint(
+    course_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    materials = list_course_materials(db, current_user.id, course_id)
+    data = [_material_data(material) for material in materials]
+    return success_response(data, request_id=get_request_id(request))
+
+
+@router.post("/courses/{course_id}/materials")
+def upload_material_endpoint(
+    course_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    storage: FileStorage = Depends(get_material_storage),
+) -> dict[str, object]:
+    material = upload_file_material(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        filename=file.filename or "",
+        stream=file.file,
+        content_type=file.content_type,
+        storage=storage,
+    )
+    return success_response(_material_data(material), request_id=get_request_id(request))
+
+
+@router.post("/courses/{course_id}/material-links")
+def create_link_material_endpoint(
+    course_id: str,
+    payload: MaterialLinkCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    material = create_link_material(db, user_id=current_user.id, course_id=course_id, payload=payload)
+    return success_response(_material_data(material), request_id=get_request_id(request))
+
+
+@router.get("/materials/{material_id}")
+def get_material_endpoint(
+    material_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    material = get_material_detail(db, current_user.id, material_id)
+    return success_response(_material_data(material), request_id=get_request_id(request))
+
+
+@router.delete("/materials/{material_id}")
+def delete_material_endpoint(
+    material_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    material = delete_material(db, current_user.id, material_id)
+    return success_response(_material_data(material), request_id=get_request_id(request))

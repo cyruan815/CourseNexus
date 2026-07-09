@@ -178,17 +178,109 @@
 
 响应 `data`：`CourseRead`，其中 `status = "deleted"` 且 `deleted_at` 非空。
 
+### 3.10 资料对象字段
+
+资料相关接口返回的 `MaterialRead` 字段如下：
+
+```json
+{
+  "id": "mat_123",
+  "course_id": "crs_123",
+  "user_id": "usr_123",
+  "folder_id": null,
+  "name": "notes.md",
+  "material_type": "markdown",
+  "source_type": "file",
+  "file_url": "usr_123/crs_123/mat_123/notes.md",
+  "source_url": null,
+  "file_size": 7,
+  "mime_type": "text/markdown",
+  "parse_status": "uploaded",
+  "parse_error": null,
+  "page_count": null,
+  "created_at": "2026-07-09T12:00:00+00:00",
+  "updated_at": "2026-07-09T12:00:00+00:00",
+  "deleted_at": null
+}
+```
+
+当前支持的文件资料类型：
+
+- `.md`：`material_type = "markdown"`，`mime_type = "text/markdown"`。
+- `.txt`：`material_type = "text"`，`mime_type = "text/plain"`。
+
+当前上传大小上限由后端 `MAX_UPLOAD_FILE_SIZE_BYTES` 配置控制，默认 `52428800`，即 50 MiB。
+
+### 3.11 课程资料列表
+
+`GET /api/v1/courses/{course_id}/materials`
+
+要求：Bearer token。只能列出当前用户拥有的课程资料；软删除资料不返回。
+
+响应 `data`：`MaterialRead[]`。
+
+### 3.12 文件资料上传
+
+`POST /api/v1/courses/{course_id}/materials`
+
+要求：Bearer token。请求格式为 `multipart/form-data`。
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | File | 是 | 当前仅支持 UTF-8 `.md` / `.txt`。 |
+
+响应 `data`：`MaterialRead`，初始 `parse_status = "uploaded"`。
+
+主要错误码：
+
+| 错误码 | 场景 |
+| --- | --- |
+| `VALIDATION_ERROR` | 文件名为空、包含路径、路径穿越或保留设备名。 |
+| `UNSUPPORTED_FILE_TYPE` | 扩展名不支持，或文本文件无法按 UTF-8 解码。 |
+| `FILE_TOO_LARGE` | 文件大小超过 `MAX_UPLOAD_FILE_SIZE_BYTES`。 |
+| `NOT_FOUND` | 课程不存在或不属于当前用户。 |
+
+### 3.13 链接资料创建
+
+`POST /api/v1/courses/{course_id}/material-links`
+
+要求：Bearer token。
+
+请求：
+
+```json
+{
+  "name": "Course Site",
+  "source_url": "https://example.com/course"
+}
+```
+
+响应 `data`：`MaterialRead`，其中 `source_type = "url"`、`material_type = "link"`、`parse_status = "uploaded"`。
+
+### 3.14 资料详情
+
+`GET /api/v1/materials/{material_id}`
+
+要求：Bearer token。只能访问当前用户自己的资料。
+
+响应 `data`：`MaterialRead`。
+
+### 3.15 资料删除
+
+`DELETE /api/v1/materials/{material_id}`
+
+要求：Bearer token。当前实现为软删除。
+
+响应 `data`：`MaterialRead`，其中 `parse_status = "deleted"` 且 `deleted_at` 非空。
+
 ## 4. 待后续任务落地的接口入口
 
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
 | --- | --- |
-| 课程资料列表 | `GET /api/v1/courses/{course_id}/materials` |
-| 文件资料上传 | `POST /api/v1/courses/{course_id}/materials` |
-| 链接资料创建 | `POST /api/v1/courses/{course_id}/material-links` |
-| 资料详情 | `GET /api/v1/materials/{material_id}` |
-| 资料删除 | `DELETE /api/v1/materials/{material_id}` |
 | 解析重试 | `POST /api/v1/materials/{material_id}/parse-retries` |
 | 课程对话列表 | `GET /api/v1/courses/{course_id}/conversations` |
 | 对话消息列表 | `GET /api/v1/conversations/{conversation_id}/messages` |

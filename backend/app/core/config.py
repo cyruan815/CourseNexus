@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     secret_key: str = "replace-with-local-dev-secret"
     access_token_expire_minutes: int = 1440
     file_storage_path: str = "./uploads"
+    max_upload_file_size_bytes: int = 52_428_800
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.4-mini"
     model_api_base_url: str | None = None
