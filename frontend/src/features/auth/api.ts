@@ -3,23 +3,27 @@ import { clearSessionToken, setSessionToken } from "./session";
 
 export interface AuthUser {
   id: string;
-  email: string;
-  display_name: string | null;
+  username: string;
+  nickname: string | null;
+  avatar_url: string | null;
+  status: string;
+  created_at: string;
 }
 
 export interface AuthResponse {
   access_token: string;
   token_type: "bearer";
+  expires_at: string;
   user: AuthUser;
 }
 
 export interface LoginPayload {
-  email: string;
+  username: string;
   password: string;
 }
 
 export interface RegisterPayload extends LoginPayload {
-  display_name?: string | null;
+  nickname?: string | null;
 }
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {

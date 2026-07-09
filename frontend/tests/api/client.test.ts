@@ -79,14 +79,14 @@ describe("apiRequest", () => {
 
     await apiRequest("/api/v1/auth/login", {
       method: "POST",
-      body: { email: "student@example.com", password: "password123" },
+      body: { username: "student@example.com", password: "password123" },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/auth/login",
       expect.objectContaining({
         body: JSON.stringify({
-          email: "student@example.com",
+          username: "student@example.com",
           password: "password123",
         }),
         headers: expect.objectContaining({
