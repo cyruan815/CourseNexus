@@ -493,16 +493,115 @@
 
 生成器失败时，当前后端会保存 `generation_status = "failed"` 且 `error_code = "GENERATION_FAILED"` 的生成内容记录。
 
+### 3.24 学习计划预览
+
+`POST /api/v1/courses/{course_id}/study-plans/preview`
+
+要求：Bearer token。当前实现为确定性基础规则，不调用模型，不代表最终 AI 计划算法。
+
+请求：
+
+```json
+{
+  "goal_text": "期末复习",
+  "start_date": "2026-07-10",
+  "end_date": "2026-07-12",
+  "daily_available_minutes": 60,
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  }
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "course_id": "crs_123",
+  "title": "Linear Algebra 学习计划",
+  "goal_text": "期末复习",
+  "start_date": "2026-07-10",
+  "end_date": "2026-07-12",
+  "daily_available_minutes": 60,
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "folder_ids": [],
+    "material_ids": []
+  },
+  "tasks": [
+    {
+      "title": "第 1 天学习任务",
+      "task_date": "2026-07-10",
+      "sort_order": 1,
+      "subtasks": [
+        {
+          "title": "学习: Intro",
+          "subtask_type": "learn",
+          "description": "Alpha",
+          "related_material_ids": ["mat_123"],
+          "sort_order": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+主要错误码：
+
+| 错误码 | 场景 |
+| --- | --- |
+| `NO_PARSED_MATERIAL` | 当前资料范围没有可用 parsed chunk。 |
+| `NOT_FOUND` | 课程或显式资料范围不属于当前用户。 |
+
+### 3.25 学习计划保存
+
+`POST /api/v1/courses/{course_id}/study-plans`
+
+要求：Bearer token。请求体同预览接口。保存时只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+
+响应 `data`：
+
+```json
+{
+  "plan": {
+    "id": "sp_123",
+    "course_id": "crs_123",
+    "status": "active"
+  },
+  "tasks": [],
+  "subtasks": []
+}
+```
+
+实际响应字段以 `StudyPlanRead`、`StudyTaskRead`、`StudySubTaskRead` 为准，包含创建时间、更新时间、排序和状态字段。
+
+### 3.26 课程学习计划列表
+
+`GET /api/v1/courses/{course_id}/study-plans`
+
+要求：Bearer token。只返回当前用户当前课程下未删除学习计划。
+
+响应 `data`：`StudyPlanRead[]`。
+
+### 3.27 学习计划详情
+
+`GET /api/v1/study-plans/{plan_id}`
+
+要求：Bearer token。只能读取当前用户自己的计划。
+
+响应 `data`：与学习计划保存接口一致，包含 `plan`、`tasks`、`subtasks`。
+
 ## 4. 待后续任务落地的接口入口
 
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
 | --- | --- |
-| 学习计划预览 | `POST /api/v1/courses/{course_id}/study-plans/preview` |
-| 学习计划保存 | `POST /api/v1/courses/{course_id}/study-plans` |
-| 课程学习计划列表 | `GET /api/v1/courses/{course_id}/study-plans` |
-| 学习计划详情 | `GET /api/v1/study-plans/{plan_id}` |
+| 今日待办聚合 | 待后续计划执行阶段定义 |
+| 首页大日历聚合 | 待后续计划执行阶段定义 |
 
 ## 5. 前端最小工作台验收口径
 
