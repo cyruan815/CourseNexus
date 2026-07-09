@@ -35,7 +35,14 @@ def get_material_storage() -> FileStorage:
 
 
 def get_material_parser() -> Parser:
-    return PlainTextParser()
+    from app.integrations.parsers.docling_parser import DoclingParser
+    from app.integrations.parsers.routing import RoutingParser
+
+    settings = get_settings()
+    return RoutingParser(
+        plain_text=PlainTextParser(),
+        docling=DoclingParser(max_tokens=settings.rag_chunk_max_tokens),
+    )
 
 
 def _material_data(material) -> dict[str, object]:
