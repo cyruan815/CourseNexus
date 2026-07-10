@@ -4,6 +4,8 @@ import { useParams } from "react-router-dom";
 import { ApiError } from "../api/errors";
 import { fetchCourse } from "../features/courses/api";
 import { CourseHeader } from "../features/courses/CourseHeader";
+import { MaterialWorkspace } from "../features/materials/MaterialWorkspace";
+import type { MaterialScope } from "../features/materials/types";
 import type { Course } from "../types/course";
 
 function errorMessage(error: unknown): string {
@@ -27,6 +29,10 @@ export function CourseDetailPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [materialScope, setMaterialScope] = useState<MaterialScope>({
+    include_all_parsed_materials: true,
+    material_ids: [],
+  });
 
   useEffect(() => {
     let ignore = false;
@@ -73,7 +79,11 @@ export function CourseDetailPage() {
   return (
     <main>
       <CourseHeader course={course} />
-      <WorkspaceSection label="资料区" />
+      <MaterialWorkspace
+        courseId={course.id}
+        materialScope={materialScope}
+        onMaterialScopeChange={setMaterialScope}
+      />
       <WorkspaceSection label="问答区" />
       <WorkspaceSection label="生成内容区" />
       <WorkspaceSection label="学习计划入口" />
