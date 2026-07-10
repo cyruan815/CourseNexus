@@ -1,8 +1,17 @@
+﻿import { MantineProvider } from "@mantine/core";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setSessionToken } from "../../src/features/auth/session";
 import { AppRouter } from "../../src/router/AppRouter";
+
+function renderRouter() {
+  render(
+    <MantineProvider>
+      <AppRouter />
+    </MantineProvider>,
+  );
+}
 
 describe("AppRouter", () => {
   afterEach(() => {
@@ -14,9 +23,10 @@ describe("AppRouter", () => {
   it("redirects anonymous users to login", () => {
     window.history.pushState({}, "", "/");
 
-    render(<AppRouter />);
+    renderRouter();
 
-    expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /课枢 CourseNexus/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "开始" })).toHaveAttribute("href", "/login");
   });
 
   it("renders home for authenticated users", async () => {
@@ -32,7 +42,7 @@ describe("AppRouter", () => {
       ),
     );
 
-    render(<AppRouter />);
+    renderRouter();
 
     expect(screen.getByRole("heading", { name: "CourseNexus" })).toBeInTheDocument();
     expect(screen.getByText("课程工作台")).toBeInTheDocument();
@@ -42,9 +52,17 @@ describe("AppRouter", () => {
   it("keeps login page public", () => {
     window.history.pushState({}, "", "/login");
 
-    render(<AppRouter />);
+    renderRouter();
 
     expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
+  });
+
+  it("keeps register page public", () => {
+    window.history.pushState({}, "", "/register");
+
+    renderRouter();
+
+    expect(screen.getByRole("heading", { name: "注册 CourseNexus" })).toBeInTheDocument();
   });
 
   it("renders protected course detail route for authenticated users", async () => {
@@ -74,7 +92,7 @@ describe("AppRouter", () => {
       ),
     );
 
-    render(<AppRouter />);
+    renderRouter();
 
     expect(await screen.findByRole("heading", { name: "高等数学" })).toBeInTheDocument();
   });
