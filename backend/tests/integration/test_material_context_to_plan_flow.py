@@ -4,6 +4,7 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -15,6 +16,72 @@ from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.rag.fake import FakeRagIndex
 from app.main import app
 from app.modules.materials.router import get_material_storage, get_rag_index
+from app.modules.study_plans import router as study_plan_router
+
+
+class MaterialPlanProvider:
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        material_ids = sorted({part.strip(",;[]'") for part in prompt.split() if part.startswith("mat_")})
+        if not material_ids:
+            material_ids = ["mat_missing"]
+        if output_schema.__name__ == "PlanBatchExtraction":
+            return output_schema.model_validate(
+                {
+                    "units": [
+                        {
+                            "topic": "intro",
+                            "summary": "summary",
+                            "difficulty": "easy",
+                            "estimated_minutes": 30,
+                            "related_material_ids": [material_ids[0]],
+                            "citation_chunk_ids": ["chk_flow"],
+                        }
+                    ],
+                    "citation_chunk_ids": ["chk_flow"],
+                }
+            )
+        if output_schema.__name__ == "StudyPlanReduction":
+            return output_schema.model_validate(
+                {
+                    "title": "Linear Algebra 学习计划",
+                    "tasks": [
+                        {
+                            "title": "第 1 天学习任务",
+                            "task_date": "2026-07-10",
+                            "sort_order": 1,
+                            "subtasks": [
+                                {
+                                    "title": "学习: Intro",
+                                    "subtask_type": "learn",
+                                    "description": "Alpha",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 30,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 1,
+                                }
+                            ],
+                        },
+                        {
+                            "title": "第 2 天学习任务",
+                            "task_date": "2026-07-11",
+                            "sort_order": 2,
+                            "subtasks": [
+                                {
+                                    "title": "复习: Intro",
+                                    "subtask_type": "review",
+                                    "description": "Alpha",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 30,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 1,
+                                }
+                            ],
+                        },
+                    ],
+                    "citation_chunk_ids": ["chk_flow"],
+                }
+            )
+        raise AssertionError(output_schema)
 
 
 @pytest.fixture()
@@ -41,6 +108,7 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         max_file_size_bytes=1024,
     )
     app.dependency_overrides[get_rag_index] = lambda: rag_index
+    app.dependency_overrides[study_plan_router.get_model_provider] = lambda: MaterialPlanProvider()
     try:
         yield TestClient(app)
     finally:
@@ -80,6 +148,7 @@ def test_material_context_to_study_plan_flow(client: TestClient) -> None:
     preview = client.post(f"/api/v1/courses/{course_id}/study-plans/preview", headers=headers, json=payload)
     assert preview.status_code == 200
     assert len(preview.json()["data"]["tasks"]) == 2
+    assert preview.json()["data"]["coverage"]["expected_material_ids"] == [material_id]
 
     saved = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=payload)
     assert saved.status_code == 200

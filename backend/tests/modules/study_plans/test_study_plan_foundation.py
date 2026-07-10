@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -55,6 +56,56 @@ def db() -> Generator[Session, None, None]:
         session.close()
 
 
+class FoundationPlanProvider:
+    def __init__(self, material_id: str) -> None:
+        self.material_id = material_id
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        if output_schema.__name__ == "PlanBatchExtraction":
+            return output_schema.model_validate(
+                {
+                    "units": [
+                        {
+                            "topic": "linear algebra topic",
+                            "summary": "summary",
+                            "difficulty": "medium",
+                            "estimated_minutes": 30,
+                            "related_material_ids": [self.material_id],
+                            "citation_chunk_ids": ["chk_foundation"],
+                        }
+                    ],
+                    "citation_chunk_ids": ["chk_foundation"],
+                }
+            )
+        if output_schema.__name__ == "StudyPlanReduction":
+            return output_schema.model_validate(
+                {
+                    "title": "Linear Algebra 学习计划",
+                    "tasks": [
+                        {
+                            "title": f"第 {index + 1} 天学习任务",
+                            "task_date": task_date,
+                            "sort_order": index + 1,
+                            "subtasks": [
+                                {
+                                    "title": "学习: Intro",
+                                    "subtask_type": "learn",
+                                    "description": "Alpha",
+                                    "related_material_ids": [self.material_id],
+                                    "estimated_minutes": 30,
+                                    "citation_chunk_ids": ["chk_foundation"],
+                                    "sort_order": 1,
+                                }
+                            ],
+                        }
+                        for index, task_date in enumerate(["2026-07-10", "2026-07-11", "2026-07-12"])
+                    ],
+                    "citation_chunk_ids": ["chk_foundation"],
+                }
+            )
+        raise AssertionError(output_schema)
+
+
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, content: bytes = b"Alpha") -> str:
     material = upload_file_material(
         db,
@@ -91,13 +142,20 @@ def test_preview_study_plan_uses_resolved_context(db: Session, tmp_path: Path) -
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
 
-    preview = preview_study_plan(db, user_id=user.id, course_id=course.id, payload=build_request())
+    preview = preview_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=build_request(),
+        model_provider=FoundationPlanProvider(material_id),
+        max_tokens=12_000,
+    )
 
     assert preview.course_id == course.id
     assert preview.title == "Linear Algebra 学习计划"
     assert [task.task_date for task in preview.tasks] == [date(2026, 7, 10), date(2026, 7, 11), date(2026, 7, 12)]
     assert preview.tasks[0].subtasks[0].related_material_ids == [material_id]
-    assert 1 <= len(preview.tasks[0].subtasks) <= 3
+    assert preview.coverage.expected_material_ids == [material_id]
 
 
 def test_preview_study_plan_requires_parsed_material(db: Session) -> None:
@@ -105,7 +163,14 @@ def test_preview_study_plan_requires_parsed_material(db: Session) -> None:
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
 
     with pytest.raises(CourseNexusError) as exc_info:
-        preview_study_plan(db, user_id=user.id, course_id=course.id, payload=build_request())
+        preview_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=build_request(),
+            model_provider=FoundationPlanProvider("mat_missing"),
+            max_tokens=12_000,
+        )
 
     assert exc_info.value.code == "NO_PARSED_MATERIAL"
 
@@ -117,7 +182,14 @@ def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: P
     material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
 
     try:
-        saved = save_study_plan(db, user_id=user.id, course_id=course.id, payload=build_request())
+        saved = save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=build_request(),
+            model_provider=FoundationPlanProvider(material_id),
+            max_tokens=12_000,
+        )
     finally:
         logger.removeHandler(caplog.handler)
 
@@ -126,6 +198,7 @@ def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: P
     assert saved.tasks[0].course_id == course.id
     assert saved.subtasks[0].course_id == course.id
     assert saved.subtasks[0].related_material_ids_json == [material_id]
+    assert saved.plan.parsed_config_json["coverage"]["expected_material_ids"] == [material_id]
     assert list_study_plans(db, user_id=user.id, course_id=course.id)[0].id == saved.plan.id
     assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).plan.id == saved.plan.id
     record = next(record for record in caplog.records if record.name.endswith("study_plan.build"))
@@ -148,6 +221,8 @@ def test_study_plan_scope_rejects_cross_user_material_id(db: Session, tmp_path: 
             user_id=alice.id,
             course_id=alice_course.id,
             payload=build_request(MaterialScope(include_all_parsed_materials=False, material_ids=[bob_material_id])),
+            model_provider=FoundationPlanProvider(bob_material_id),
+            max_tokens=12_000,
         )
 
     assert exc_info.value.code == "NOT_FOUND"

@@ -83,8 +83,17 @@ def preview_study_plan_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_model_provider),
 ) -> dict[str, object]:
-    preview = preview_study_plan(db, user_id=current_user.id, course_id=course_id, payload=payload)
+    settings = get_settings()
+    preview = preview_study_plan(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+        model_provider=model_provider,
+        max_tokens=settings.material_batch_max_tokens,
+    )
     return success_response(StudyPlanPreview.model_validate(preview).model_dump(mode="json"), request_id=get_request_id(request))
 
 
@@ -95,8 +104,17 @@ def save_study_plan_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_model_provider),
 ) -> dict[str, object]:
-    bundle = save_study_plan(db, user_id=current_user.id, course_id=course_id, payload=payload)
+    settings = get_settings()
+    bundle = save_study_plan(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+        model_provider=model_provider,
+        max_tokens=settings.material_batch_max_tokens,
+    )
     return success_response(_bundle_data(bundle), request_id=get_request_id(request))
 
 
