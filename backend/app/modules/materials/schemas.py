@@ -62,6 +62,18 @@ class MaterialLinkCreate(BaseModel):
     folder_id: str | None = None
 
 
+class MaterialUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("资料名称不能为空")
+        return normalized
+
+
 class MaterialRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

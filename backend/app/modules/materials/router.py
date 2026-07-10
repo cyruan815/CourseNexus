@@ -19,6 +19,7 @@ from app.modules.materials.schemas import (
     MaterialFolderUpdate,
     MaterialLinkCreate,
     MaterialRead,
+    MaterialUpdate,
 )
 from app.modules.materials.service import (
     create_material_folder,
@@ -30,6 +31,7 @@ from app.modules.materials.service import (
     list_course_materials,
     move_material_to_folder,
     parse_material,
+    rename_material,
     update_material_folder,
     upload_file_material,
 )
@@ -168,6 +170,18 @@ def get_material_endpoint(
     current_user: User = Depends(get_required_user),
 ) -> dict[str, object]:
     material = get_material_detail(db, current_user.id, material_id)
+    return success_response(_material_data(material), request_id=get_request_id(request))
+
+
+@router.patch("/materials/{material_id}")
+def rename_material_endpoint(
+    material_id: str,
+    payload: MaterialUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    material = rename_material(db, user_id=current_user.id, material_id=material_id, payload=payload)
     return success_response(_material_data(material), request_id=get_request_id(request))
 
 

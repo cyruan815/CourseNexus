@@ -93,6 +93,16 @@ def test_upload_list_detail_and_delete_file_material(client: TestClient) -> None
     assert detail_response.status_code == 200
     assert detail_response.json()["data"]["id"] == material_id
 
+    rename_response = client.patch(
+        f"/api/v1/materials/{material_id}",
+        headers=headers,
+        json={"name": "  第一章笔记.md  "},
+    )
+    assert rename_response.status_code == 200
+    assert rename_response.json()["data"]["name"] == "第一章笔记.md"
+    assert rename_response.json()["data"]["file_url"] == material["file_url"]
+    assert rename_response.json()["data"]["parse_status"] == "uploaded"
+
     delete_response = client.delete(f"/api/v1/materials/{material_id}", headers=headers)
     assert delete_response.status_code == 200
     assert delete_response.json()["data"]["parse_status"] == "deleted"
@@ -153,6 +163,14 @@ def test_material_detail_does_not_cross_user_boundary(client: TestClient) -> Non
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "NOT_FOUND"
+
+    rename_response = client.patch(
+        f"/api/v1/materials/{bob_material_id}",
+        headers={"Authorization": f"Bearer {alice_token}"},
+        json={"name": "stolen.txt"},
+    )
+    assert rename_response.status_code == 404
+    assert rename_response.json()["error"]["code"] == "NOT_FOUND"
 
 
 def test_upload_rejects_unsafe_filename(client: TestClient) -> None:

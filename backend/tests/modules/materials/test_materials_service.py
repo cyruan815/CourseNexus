@@ -19,7 +19,7 @@ from app.integrations.rag.fake import FakeRagIndex
 import app.modules.materials.service as materials_service
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate, MaterialUpdate
 from app.modules.materials.service import (
     create_material_folder,
     create_link_material,
@@ -28,6 +28,7 @@ from app.modules.materials.service import (
     get_material_detail,
     list_course_materials,
     move_material_to_folder,
+    rename_material,
     upload_file_material,
 )
 from app.modules.users.schemas import UserCreate
@@ -153,6 +154,32 @@ def test_create_link_material_creates_url_material(db: Session) -> None:
     assert material.source_type == "url"
     assert material.source_url == "https://example.com/course"
     assert material.parse_status == "uploaded"
+
+
+def test_rename_material_only_changes_display_name(db: Session, tmp_path) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material = upload_file_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        filename="notes.txt",
+        stream=BytesIO(b"notes"),
+        content_type="text/plain",
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
+    original_file_url = material.file_url
+
+    renamed = rename_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        payload=MaterialUpdate(name="  Week 1 Notes  "),
+    )
+
+    assert renamed.name == "Week 1 Notes"
+    assert renamed.file_url == original_file_url
+    assert renamed.parse_status == "uploaded"
 
 
 def test_list_and_detail_are_scoped_to_user(db: Session, tmp_path) -> None:

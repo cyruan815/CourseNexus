@@ -25,7 +25,7 @@ from app.modules.materials.repository import (
     save_material,
     save_material_folder,
 )
-from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate, MaterialUpdate
 
 
 def _new_material_id() -> str:
@@ -115,6 +115,19 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     if material is None:
         raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
     return material
+
+
+def rename_material(
+    db: Session,
+    *,
+    user_id: str,
+    material_id: str,
+    payload: MaterialUpdate,
+) -> CourseMaterial:
+    material = get_material_detail(db, user_id, material_id)
+    material.name = payload.name
+    material.updated_at = datetime.now(timezone.utc)
+    return save_material(db, material)
 
 
 def create_material_folder(
