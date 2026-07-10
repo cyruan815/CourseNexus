@@ -4,12 +4,18 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
+from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
+from app.integrations.model_provider.base import ModelProvider
+from app.integrations.model_provider.mock import MockModelProvider
+from app.integrations.model_provider.openai import OpenAIModelProvider
 from app.modules.study_plans.repository import StudyPlanBundle
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanBundleRead,
+    StudyPlanConfigParseRequest,
+    StudyPlanConfigParseResponse,
     StudyPlanRead,
     StudyPlanPreview,
     StudySubTaskRead,
@@ -18,6 +24,7 @@ from app.modules.study_plans.schemas import (
 from app.modules.study_plans.service import (
     get_study_plan_detail,
     list_study_plans,
+    parse_study_plan_config,
     preview_study_plan,
     save_study_plan,
 )
@@ -27,6 +34,19 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["study_plans"])
 
 
+def get_model_provider() -> ModelProvider:
+    settings = get_settings()
+    endpoint = settings.model_endpoint("study_plan_parser")
+    if endpoint.api_key:
+        return OpenAIModelProvider(
+            api_key=endpoint.api_key,
+            model=endpoint.model,
+            base_url=endpoint.base_url,
+            api_key_env_name="STUDY_PLAN_PARSER_API_KEY",
+        )
+    return MockModelProvider()
+
+
 def _bundle_data(bundle: StudyPlanBundle) -> dict[str, object]:
     data = StudyPlanBundleRead(
         plan=StudyPlanRead.model_validate(bundle.plan),
@@ -34,6 +54,26 @@ def _bundle_data(bundle: StudyPlanBundle) -> dict[str, object]:
         subtasks=[StudySubTaskRead.model_validate(subtask) for subtask in bundle.subtasks],
     )
     return data.model_dump(mode="json")
+
+
+@router.post("/courses/{course_id}/study-plan-config-parses")
+def parse_study_plan_config_endpoint(
+    course_id: str,
+    payload: StudyPlanConfigParseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_model_provider),
+) -> dict[str, object]:
+    parsed = parse_study_plan_config(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+        model_provider=model_provider,
+    )
+    data = StudyPlanConfigParseResponse.model_validate(parsed.model_dump(mode="json")).model_dump(mode="json")
+    return success_response(data, request_id=get_request_id(request))
 
 
 @router.post("/courses/{course_id}/study-plans/preview")
