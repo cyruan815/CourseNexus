@@ -23,9 +23,14 @@ class FakeClient:
 
 def test_openai_model_provider_requires_api_key() -> None:
     with pytest.raises(CourseNexusError) as exc_info:
-        OpenAIModelProvider(api_key=None, model="gpt-test")
+        OpenAIModelProvider(
+            api_key=None,
+            model="gpt-test",
+            api_key_env_name="COURSE_QA_API_KEY",
+        )
 
     assert exc_info.value.code == "GENERATION_FAILED"
+    assert exc_info.value.details == {"missing": "COURSE_QA_API_KEY"}
 
 
 def test_openai_model_provider_uses_sdk_client() -> None:

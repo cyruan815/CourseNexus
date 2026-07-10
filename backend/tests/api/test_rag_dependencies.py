@@ -10,7 +10,7 @@ from app.core.errors import CourseNexusError
 
 
 def test_retrieval_rag_dependency_reports_retrieval_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dependencies, "get_settings", lambda: Settings(_env_file=None, openai_api_key=None))
+    monkeypatch.setattr(dependencies, "get_settings", lambda: Settings(_env_file=None, embedding_api_key=None))
 
     with pytest.raises(CourseNexusError) as exc_info:
         get_retrieval_rag_index()
@@ -18,7 +18,7 @@ def test_retrieval_rag_dependency_reports_retrieval_config_error(monkeypatch: py
     assert exc_info.value.code == "RETRIEVAL_FAILED"
 
 
-def test_rag_dependency_passes_model_api_base_url_to_embedding_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rag_dependency_passes_embedding_endpoint_to_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_create_openai_chroma_rag_index(
@@ -43,9 +43,9 @@ def test_rag_dependency_passes_model_api_base_url_to_embedding_adapter(monkeypat
         "get_settings",
         lambda: Settings(
             _env_file=None,
-            openai_api_key="key",
-            openai_embedding_model="text-embedding-3-large",
-            model_api_base_url="https://example.test/v1",
+            embedding_api_key="embedding-key",
+            embedding_model="text-embedding-3-large",
+            embedding_base_url="https://embedding.example/v1",
         ),
     )
     monkeypatch.setattr(llama_index_chroma, "create_openai_chroma_rag_index", fake_create_openai_chroma_rag_index)
@@ -53,4 +53,10 @@ def test_rag_dependency_passes_model_api_base_url_to_embedding_adapter(monkeypat
     rag_index = get_rag_index()
 
     assert rag_index is not None
-    assert captured["api_base_url"] == "https://example.test/v1"
+    assert captured == {
+        "persist_path": "./data/chroma",
+        "collection_name": "course_nexus_material_chunks",
+        "api_key": "embedding-key",
+        "embedding_model": "text-embedding-3-large",
+        "api_base_url": "https://embedding.example/v1",
+    }

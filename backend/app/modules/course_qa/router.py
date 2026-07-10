@@ -21,11 +21,13 @@ router = APIRouter(tags=["course_qa"])
 
 def get_model_provider() -> ModelProvider:
     settings = get_settings()
-    if settings.openai_api_key:
+    endpoint = settings.model_endpoint("course_qa")
+    if endpoint.api_key:
         return OpenAIModelProvider(
-            api_key=settings.openai_api_key,
-            model=settings.openai_model,
-            base_url=settings.model_api_base_url,
+            api_key=endpoint.api_key,
+            model=endpoint.model,
+            base_url=endpoint.base_url,
+            api_key_env_name="COURSE_QA_API_KEY",
         )
     return MockModelProvider()
 

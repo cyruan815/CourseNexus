@@ -52,16 +52,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = get_settings()
-    if not settings.openai_api_key:
-        print("INDEXING_FAILED: OPENAI_API_KEY is required for rebuild_rag_index", file=sys.stderr)
+    endpoint = settings.model_endpoint("embedding")
+    if not endpoint.api_key:
+        print("INDEXING_FAILED: EMBEDDING_API_KEY is required for rebuild_rag_index", file=sys.stderr)
         return 1
 
     rag_index = create_openai_chroma_rag_index(
         persist_path=settings.chroma_persist_path,
         collection_name=settings.chroma_collection,
-        api_key=settings.openai_api_key,
-        embedding_model=settings.openai_embedding_model,
-        api_base_url=settings.model_api_base_url,
+        api_key=endpoint.api_key,
+        embedding_model=endpoint.model,
+        api_base_url=endpoint.base_url,
     )
     try:
         with SessionLocal() as db:

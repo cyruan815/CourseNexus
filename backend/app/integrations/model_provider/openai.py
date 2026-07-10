@@ -18,13 +18,14 @@ class OpenAIModelProvider:
         model: str,
         base_url: str | None = None,
         client: Any | None = None,
+        api_key_env_name: str = "MODEL_API_KEY",
     ) -> None:
         if not api_key:
             raise CourseNexusError(
                 code="GENERATION_FAILED",
-                message="OpenAI API key 未配置",
+                message=f"{api_key_env_name} 未配置",
                 status_code=500,
-                details={"missing": "OPENAI_API_KEY"},
+                details={"missing": api_key_env_name},
             )
         self.model = model
         self.client = client or OpenAI(api_key=api_key, base_url=base_url)

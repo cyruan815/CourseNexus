@@ -111,7 +111,7 @@ def test_rebuild_material_skips_unparsed_material_and_deletes_stale_vectors(db: 
     assert rag_index.records == {}
 
 
-def test_rebuild_command_passes_model_api_base_url_to_embedding_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rebuild_command_passes_embedding_endpoint_to_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     class FakeSessionLocal:
@@ -143,9 +143,9 @@ def test_rebuild_command_passes_model_api_base_url_to_embedding_adapter(monkeypa
         "get_settings",
         lambda: Settings(
             _env_file=None,
-            openai_api_key="key",
-            openai_embedding_model="text-embedding-3-large",
-            model_api_base_url="https://example.test/v1",
+            embedding_api_key="embedding-key",
+            embedding_model="text-embedding-3-large",
+            embedding_base_url="https://embedding.example/v1",
         ),
     )
     monkeypatch.setattr(rebuild_command, "create_openai_chroma_rag_index", fake_create_openai_chroma_rag_index)
@@ -159,7 +159,13 @@ def test_rebuild_command_passes_model_api_base_url_to_embedding_adapter(monkeypa
     exit_code = rebuild_command.main(["--all"])
 
     assert exit_code == 0
-    assert captured["api_base_url"] == "https://example.test/v1"
+    assert captured == {
+        "persist_path": "./data/chroma",
+        "collection_name": "course_nexus_material_chunks",
+        "api_key": "embedding-key",
+        "embedding_model": "text-embedding-3-large",
+        "api_base_url": "https://embedding.example/v1",
+    }
 
 
 def _create_owner(db: Session) -> tuple[str, str]:

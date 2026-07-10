@@ -57,7 +57,8 @@ def get_retrieval_rag_index() -> RagIndex:
 
 def _create_openai_rag_index(*, missing_code: str, missing_message: str) -> RagIndex:
     settings = get_settings()
-    if not settings.openai_api_key:
+    endpoint = settings.model_endpoint("embedding")
+    if not endpoint.api_key:
         raise CourseNexusError(code=missing_code, message=missing_message, status_code=502)
 
     from app.integrations.rag.llama_index_chroma import create_openai_chroma_rag_index
@@ -65,7 +66,7 @@ def _create_openai_rag_index(*, missing_code: str, missing_message: str) -> RagI
     return create_openai_chroma_rag_index(
         persist_path=settings.chroma_persist_path,
         collection_name=settings.chroma_collection,
-        api_key=settings.openai_api_key,
-        embedding_model=settings.openai_embedding_model,
-        api_base_url=settings.model_api_base_url,
+        api_key=endpoint.api_key,
+        embedding_model=endpoint.model,
+        api_base_url=endpoint.base_url,
     )
