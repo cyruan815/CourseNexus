@@ -32,6 +32,10 @@
 - 所有核心能力必须能通过后端接口、后端测试或命令独立运行，不能依赖前端页面作为唯一验证方式。
 - 每个后端能力落地后，必须同步更新 [../api-data/frontend-integration.md](../api-data/frontend-integration.md)，写清楚请求体、响应 `data`、主要错误码和前端兜底口径。
 - 前端测试优先覆盖请求参数、响应拆包、错误码处理、路由跳转和基础状态兜底；基础设施阶段不把复杂视觉细节作为完成标准。
+- 前端 UI 基础设施采用 Mantine、Tabler Icons、TanStack Query 和 dayjs，决策见 [../architecture/adr/0004-frontend-ui-foundation.md](../architecture/adr/0004-frontend-ui-foundation.md)。
+- 前端应用级 provider 统一在 `frontend/src/app/` 装配；页面和 feature 不重复创建 Mantine、QueryClient、Notifications 或 Modals 全局实例。
+- 页面和 feature 优先使用 Mantine 组件；跨页面二次封装进入 `frontend/src/components/`，业务专用组件进入对应 `frontend/src/features/<feature>/`。
+- 后端数据请求、缓存、刷新和错误状态优先通过 TanStack Query 组织；底层 HTTP client、请求封装和响应适配仍放在 `frontend/src/api/`。
 
 ## 错误处理约定
 
