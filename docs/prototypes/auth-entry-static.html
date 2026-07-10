@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CourseNexus Auth Static Prototype</title>
+    <style>
+      :root {
+        --page: #f7fafc;
+        --surface: #ffffff;
+        --soft: #f1f5f9;
+        --text: #1f2937;
+        --secondary: #6b7280;
+        --border: #e5e7eb;
+        --brand: #2f80ed;
+        --brand-soft: #e8f2ff;
+        --mint: #14b8a6;
+        --mint-soft: #e6fffa;
+        --note: #4f46e5;
+        --note-soft: #eef2ff;
+        --orange: #f97316;
+        --plan: #7c3aed;
+        --plan-soft: #f3e8ff;
+        --success: #16a34a;
+        --warning: #f59e0b;
+        --error: #dc2626;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          linear-gradient(180deg, rgba(232, 242, 255, 0.62), rgba(247, 250, 252, 0) 320px),
+          var(--page);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .auth-shell {
+        width: min(1120px, calc(100vw - 32px));
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 32px 0;
+        display: grid;
+        align-items: center;
+      }
+
+      .auth-panel {
+        display: none;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .auth-panel:first-of-type,
+      .auth-panel:target {
+        display: grid;
+      }
+
+      .auth-shell:has(.auth-panel:target) .auth-panel:first-of-type {
+        display: none;
+      }
+
+      .auth-shell:has(#welcome:target) #welcome {
+        display: grid;
+      }
+
+      .card,
+      .status-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+      }
+
+      .brand-card {
+        min-height: 520px;
+        padding: 40px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        text-align: center;
+      }
+
+      .brand-mark {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 20px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        background: var(--brand);
+        color: white;
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 560px;
+        font-size: 36px;
+        line-height: 1.2;
+        font-weight: 750;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 28px;
+        line-height: 1.2;
+        font-weight: 700;
+      }
+
+      .lead {
+        max-width: 560px;
+        margin-top: 14px;
+        color: var(--secondary);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .button {
+        min-width: 116px;
+        min-height: 44px;
+        padding: 0 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-weight: 700;
+      }
+
+      .button.primary {
+        color: white;
+        background: var(--brand);
+      }
+
+      .button.secondary {
+        color: var(--brand);
+        background: var(--brand-soft);
+        border-color: #bfdbfe;
+      }
+
+      .button:focus-visible,
+      input:focus-visible {
+        outline: 3px solid rgba(47, 128, 237, 0.28);
+        outline-offset: 2px;
+      }
+
+      .form-card {
+        min-height: 520px;
+        padding: 32px;
+        display: grid;
+        align-content: center;
+      }
+
+      .form-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .back-link {
+        color: var(--brand);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .form-copy {
+        margin-top: 8px;
+        color: var(--secondary);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      input {
+        height: 44px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      input::placeholder {
+        color: #94a3b8;
+      }
+
+      .field-help {
+        color: var(--secondary);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .error-box {
+        padding: 12px;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        color: #991b1b;
+        background: #fef2f2;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .pending-button {
+        color: white;
+        background: var(--brand);
+        opacity: 0.78;
+      }
+
+      .status-rail {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+
+      .status-card {
+        padding: 18px;
+      }
+
+      .status-label {
+        display: inline-flex;
+        width: max-content;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .status-label.mint {
+        color: #0f766e;
+        background: var(--mint-soft);
+      }
+
+      .status-label.note {
+        color: var(--note);
+        background: var(--note-soft);
+      }
+
+      .status-label.plan {
+        color: var(--plan);
+        background: var(--plan-soft);
+      }
+
+      .status-title {
+        font-size: 16px;
+        line-height: 1.4;
+        font-weight: 700;
+      }
+
+      .status-text {
+        margin-top: 6px;
+        color: var(--secondary);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .skeleton {
+        display: grid;
+        gap: 8px;
+      }
+
+      .skeleton span {
+        display: block;
+        height: 10px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--soft), #e2e8f0, var(--soft));
+      }
+
+      .skeleton span:nth-child(2) {
+        width: 78%;
+      }
+
+      .skeleton span:nth-child(3) {
+        width: 52%;
+      }
+
+      .empty-list {
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+
+      .empty-list li {
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--soft);
+        color: var(--secondary);
+        font-size: 13px;
+      }
+
+      .footer-note {
+        margin-top: 16px;
+        color: var(--secondary);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 860px) {
+        .auth-shell {
+          padding: 16px 0;
+        }
+
+        .auth-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .brand-card,
+        .form-card {
+          min-height: auto;
+          padding: 24px;
+        }
+
+        h1 {
+          font-size: 30px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="auth-shell">
+      <section class="auth-panel" id="welcome" aria-labelledby="welcome-title">
+        <div class="card brand-card">
+          <div class="brand-mark" aria-hidden="true">CN</div>
+          <h1 id="welcome-title">CourseNexus 课枢</h1>
+          <p class="lead">
+            面向大学生的多课程学习工作台。把课程资料、问答、生成内容和学习计划组织成可追踪、可执行的学习路径。
+          </p>
+          <div class="actions">
+            <a class="button primary" href="#login">登录</a>
+            <a class="button secondary" href="#register">注册</a>
+          </div>
+          <p class="footer-note">浅色工作台视觉，保留薄荷实验室与学院笔记的轻量识别色。</p>
+        </div>
+
+        <aside class="status-rail" aria-label="系统状态">
+          <article class="status-card">
+            <span class="status-label mint">资料</span>
+            <p class="status-title">资料解析状态清楚可追踪</p>
+            <p class="status-text">上传后显示待解析、解析中、已解析或解析失败，并给出重试入口。</p>
+          </article>
+          <article class="status-card">
+            <span class="status-label note">引用</span>
+            <p class="status-title">问答结果保留来源</p>
+            <p class="status-text">回答区显示材料名和命中片段，没有来源时不展示伪引用。</p>
+          </article>
+          <article class="status-card">
+            <span class="status-label plan">计划</span>
+            <p class="status-title">学习任务连接日程</p>
+            <p class="status-text">任务、进度和时间放在同一条执行线索里。</p>
+          </article>
+        </aside>
+      </section>
+
+      <section class="auth-panel" id="login" aria-labelledby="login-title">
+        <div class="card form-card">
+          <div class="form-top">
+            <div>
+              <h2 id="login-title">登录 CourseNexus</h2>
+              <p class="form-copy">使用账号进入你的课程工作台。</p>
+            </div>
+            <a class="back-link" href="#welcome">返回入口</a>
+          </div>
+
+          <div class="error-box" role="alert">登录失败：账号或密码不正确，请检查后重试。</div>
+
+          <form aria-label="登录表单">
+            <label>
+              用户名或邮箱
+              <input autocomplete="username" name="username" placeholder="student@example.com" type="text" />
+            </label>
+            <label>
+              密码
+              <input autocomplete="current-password" name="password" placeholder="至少 8 位" type="password" />
+              <span class="field-help">空字段会提示你补全信息，不会提交到后端。</span>
+            </label>
+            <a class="button primary" href="#welcome">登录并进入首页</a>
+            <a class="button secondary" href="#register">创建新账号</a>
+          </form>
+        </div>
+
+        <aside class="status-rail" aria-label="登录状态">
+          <article class="status-card">
+            <span class="status-label mint">Loading</span>
+            <p class="status-title">正在连接认证服务</p>
+            <div class="skeleton" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </article>
+          <article class="status-card">
+            <span class="status-label note">Empty</span>
+            <p class="status-title">还没有填写账号</p>
+            <p class="status-text">输入用户名或邮箱后才允许继续登录。</p>
+          </article>
+          <article class="status-card">
+            <span class="status-label plan">Pending</span>
+            <p class="status-title">提交中按钮保持可识别</p>
+            <span class="button pending-button">正在登录...</span>
+          </article>
+        </aside>
+      </section>
+
+      <section class="auth-panel" id="register" aria-labelledby="register-title">
+        <div class="card form-card">
+          <div class="form-top">
+            <div>
+              <h2 id="register-title">注册 CourseNexus</h2>
+              <p class="form-copy">创建账号后进入系统首页，再开始创建课程。</p>
+            </div>
+            <a class="back-link" href="#welcome">返回入口</a>
+          </div>
+
+          <form aria-label="注册表单">
+            <label>
+              昵称
+              <input autocomplete="name" name="nickname" placeholder="例如：学生 A" type="text" />
+            </label>
+            <label>
+              用户名或邮箱
+              <input autocomplete="username" name="username" placeholder="student@example.com" type="text" />
+            </label>
+            <label>
+              密码
+              <input autocomplete="new-password" name="password" placeholder="至少 8 位" type="password" />
+            </label>
+            <label>
+              确认密码
+              <input autocomplete="new-password" name="confirmPassword" placeholder="再次输入密码" type="password" />
+              <span class="field-help">两次密码不一致时，页面会显示明确修复方式。</span>
+            </label>
+            <a class="button primary" href="#welcome">注册并进入首页</a>
+            <a class="button secondary" href="#login">已有账号，去登录</a>
+          </form>
+        </div>
+
+        <aside class="status-rail" aria-label="注册后的空状态">
+          <article class="status-card">
+            <span class="status-label plan">Empty</span>
+            <p class="status-title">还没有课程</p>
+            <p class="status-text">注册后首页优先引导创建第一门课程。</p>
+            <ul class="empty-list">
+              <li>创建第一门课程</li>
+              <li>上传课程资料</li>
+              <li>选择资料后开始提问</li>
+            </ul>
+          </article>
+          <article class="status-card">
+            <span class="status-label mint">Error</span>
+            <p class="status-title">用户名已被使用</p>
+            <p class="status-text">请更换用户名，或返回登录页面继续。</p>
+          </article>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
