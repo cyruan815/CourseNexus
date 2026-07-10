@@ -67,4 +67,5 @@ def _create_openai_rag_index(*, missing_code: str, missing_message: str) -> RagI
         collection_name=settings.chroma_collection,
         api_key=settings.openai_api_key,
         embedding_model=settings.openai_embedding_model,
+        api_base_url=settings.model_api_base_url,
     )

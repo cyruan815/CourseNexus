@@ -7,6 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.commands.rebuild_rag_index as rebuild_command
+from app.core.config import Settings
 from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
@@ -17,7 +19,7 @@ from app.modules.courses.service import create_course
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
-from app.commands.rebuild_rag_index import rebuild_all, rebuild_material
+from app.commands.rebuild_rag_index import RebuildRagIndexResult, rebuild_all, rebuild_material
 
 
 @pytest.fixture()
@@ -107,6 +109,57 @@ def test_rebuild_material_skips_unparsed_material_and_deletes_stale_vectors(db: 
     assert result.material_count == 0
     assert result.chunk_count == 0
     assert rag_index.records == {}
+
+
+def test_rebuild_command_passes_model_api_base_url_to_embedding_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeSessionLocal:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_create_openai_chroma_rag_index(
+        *,
+        persist_path: str,
+        collection_name: str,
+        api_key: str,
+        embedding_model: str,
+        api_base_url: str | None,
+    ):
+        captured.update(
+            persist_path=persist_path,
+            collection_name=collection_name,
+            api_key=api_key,
+            embedding_model=embedding_model,
+            api_base_url=api_base_url,
+        )
+        return FakeRagIndex()
+
+    monkeypatch.setattr(
+        rebuild_command,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            openai_api_key="key",
+            openai_embedding_model="text-embedding-3-large",
+            model_api_base_url="https://example.test/v1",
+        ),
+    )
+    monkeypatch.setattr(rebuild_command, "create_openai_chroma_rag_index", fake_create_openai_chroma_rag_index)
+    monkeypatch.setattr(rebuild_command, "SessionLocal", lambda: FakeSessionLocal())
+    monkeypatch.setattr(
+        rebuild_command,
+        "rebuild_all",
+        lambda *, db, rag_index: RebuildRagIndexResult(material_count=0, chunk_count=0),
+    )
+
+    exit_code = rebuild_command.main(["--all"])
+
+    assert exit_code == 0
+    assert captured["api_base_url"] == "https://example.test/v1"
 
 
 def _create_owner(db: Session) -> tuple[str, str]:

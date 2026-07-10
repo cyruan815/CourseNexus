@@ -13,10 +13,10 @@ class FakeConverter:
     def __init__(self, *, document: object | None = None, error: Exception | None = None) -> None:
         self.document = document if document is not None else FakeDoclingDocument()
         self.error = error
-        self.converted_path: Path | None = None
+        self.converted_source: object | None = None
 
-    def convert(self, file_path: Path):
-        self.converted_path = file_path
+    def convert(self, source: object):
+        self.converted_source = source
         if self.error is not None:
             raise self.error
         return SimpleNamespace(document=self.document)
@@ -27,7 +27,7 @@ class FakeDoclingDocument:
 
 
 class NullDocumentConverter:
-    def convert(self, file_path: Path):
+    def convert(self, source: object):
         return SimpleNamespace(document=None)
 
 
@@ -51,7 +51,7 @@ class FakeChunk:
         self.meta = SimpleNamespace(headings=headings or [], doc_items=[doc_item])
 
 
-def test_docling_parser_maps_order_heading_and_page() -> None:
+def test_docling_parser_maps_order_heading_and_page(tmp_path: Path) -> None:
     document = FakeDoclingDocument()
     converter = FakeConverter(document=document)
     chunker = FakeChunker(
@@ -61,9 +61,12 @@ def test_docling_parser_maps_order_heading_and_page() -> None:
         ]
     )
 
-    parsed = DoclingParser(converter=converter, chunker=chunker).parse(Path("slides.pdf"))
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"%PDF-1.7\ncontent")
 
-    assert converter.converted_path == Path("slides.pdf")
+    parsed = DoclingParser(converter=converter, chunker=chunker).parse(source)
+
+    assert getattr(converter.converted_source, "name") == "source.pdf"
     assert chunker.chunked_document is document
     assert [chunk.chunk_index for chunk in parsed.chunks] == [0, 1]
     assert [chunk.content_text for chunk in parsed.chunks] == ["Eigenvectors", "Diagonalization"]
@@ -72,38 +75,62 @@ def test_docling_parser_maps_order_heading_and_page() -> None:
     assert parsed.chunks[0].page_index == 2
 
 
-def test_docling_parser_discards_empty_chunks() -> None:
+def test_docling_parser_uses_ascii_document_stream_for_non_ascii_paths(tmp_path: Path) -> None:
+    source = tmp_path / "课程资料" / "Chap7 物理层.pdf"
+    source.parent.mkdir()
+    source.write_bytes(b"%PDF-1.7\ncontent")
+    converter = FakeConverter()
+    parser = DoclingParser(converter=converter, chunker=FakeChunker([FakeChunk("Kept")]))
+
+    parser.parse(source)
+
+    converted_source = converter.converted_source
+    assert getattr(converted_source, "name") == "source.pdf"
+    assert converted_source is not source
+    assert converted_source.stream.read() == b"%PDF-1.7\ncontent"
+
+
+def test_docling_parser_discards_empty_chunks(tmp_path: Path) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"%PDF-1.7\ncontent")
+
     parsed = DoclingParser(
         converter=FakeConverter(),
         chunker=FakeChunker([FakeChunk("  "), FakeChunk("Kept")]),
-    ).parse(Path("slides.pdf"))
+    ).parse(source)
 
     assert [chunk.content_text for chunk in parsed.chunks] == ["Kept"]
     assert parsed.chunks[0].chunk_index == 0
 
 
-def test_docling_parser_maps_empty_conversion_to_parse_failed() -> None:
+def test_docling_parser_maps_empty_conversion_to_parse_failed(tmp_path: Path) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"%PDF-1.7\ncontent")
     parser = DoclingParser(converter=FakeConverter(), chunker=FakeChunker([FakeChunk("  ")]))
 
     with pytest.raises(CourseNexusError) as exc_info:
-        parser.parse(Path("slides.pdf"))
+        parser.parse(source)
 
     assert exc_info.value.code == "PARSE_FAILED"
 
 
-def test_docling_parser_maps_missing_document_to_parse_failed() -> None:
+def test_docling_parser_maps_missing_document_to_parse_failed(tmp_path: Path) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"%PDF-1.7\ncontent")
     parser = DoclingParser(converter=NullDocumentConverter(), chunker=FakeChunker([]))
 
     with pytest.raises(CourseNexusError) as exc_info:
-        parser.parse(Path("slides.pdf"))
+        parser.parse(source)
 
     assert exc_info.value.code == "PARSE_FAILED"
 
 
-def test_docling_parser_maps_exceptions_to_parse_failed() -> None:
+def test_docling_parser_maps_exceptions_to_parse_failed(tmp_path: Path) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"%PDF-1.7\ncontent")
     parser = DoclingParser(converter=FakeConverter(error=RuntimeError("boom")), chunker=FakeChunker([]))
 
     with pytest.raises(CourseNexusError) as exc_info:
-        parser.parse(Path("slides.pdf"))
+        parser.parse(source)
 
     assert exc_info.value.code == "PARSE_FAILED"

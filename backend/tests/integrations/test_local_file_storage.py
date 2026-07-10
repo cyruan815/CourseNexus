@@ -37,8 +37,27 @@ def test_local_file_storage_saves_text_file_under_scoped_directory(tmp_path) -> 
 
     assert stored_file.size == 12
     assert stored_file.mime_type == "text/markdown"
-    assert stored_file.relative_path == "usr_1/crs_1/mat_1/notes.md"
+    assert stored_file.filename == "notes.md"
+    assert stored_file.relative_path == "usr_1/crs_1/mat_1/source.md"
     assert (tmp_path / stored_file.relative_path).read_text(encoding="utf-8") == "# Chapter 1\n"
+
+
+def test_local_file_storage_preserves_display_name_but_uses_ascii_internal_path(tmp_path: Path) -> None:
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+
+    saved = storage.save_file(
+        user_id="usr_1",
+        course_id="crs_1",
+        material_id="mat_1",
+        filename="Chap7 物理层.pdf",
+        stream=BytesIO(b"%PDF-1.7\n%%EOF"),
+        content_type="application/octet-stream",
+    )
+
+    assert saved.filename == "Chap7 物理层.pdf"
+    assert saved.relative_path == "usr_1/crs_1/mat_1/source.pdf"
+    assert (tmp_path / saved.relative_path).read_bytes() == b"%PDF-1.7\n%%EOF"
+    assert "物理层" not in str(tmp_path / saved.relative_path)
 
 
 def test_storage_accepts_pdf_signature(tmp_path: Path) -> None:

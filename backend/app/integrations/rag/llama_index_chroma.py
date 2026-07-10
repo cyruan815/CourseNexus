@@ -117,6 +117,7 @@ def create_openai_chroma_rag_index(
     collection_name: str,
     api_key: str,
     embedding_model: str,
+    api_base_url: str | None = None,
 ) -> LlamaIndexChromaRagIndex:
     return LlamaIndexChromaRagIndex(
         persist_path=persist_path,
@@ -124,5 +125,6 @@ def create_openai_chroma_rag_index(
         embed_model=OpenAIEmbedding(
             model=embedding_model,
             api_key=api_key,
+            api_base=api_base_url,
         ),
     )

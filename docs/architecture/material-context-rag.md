@@ -164,6 +164,7 @@ sequenceDiagram
 - 只有 SQLite chunk 和 Chroma 索引都成功后才写 `parse_status = parsed`。
 - 索引失败写 `parse_status = parse_failed` 和稳定错误 `INDEXING_FAILED`；清理本轮部分向量后允许重试。
 - 删除资料时同时软删除业务记录并按 `material_id` 删除 Chroma records。
+- 用户原始文件名只作为 `CourseMaterial.name` 展示；本地存储路径使用 ASCII `source.<ext>`。Docling adapter 通过 ASCII `DocumentStream` 读取文件内容，避免 Windows 非 ASCII 路径触发底层 PDF backend 解析失败。
 
 当前 `.txt` / `.md` parser 保留为快速路径和测试替身；`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg` 进入 Docling adapter。图片 OCR 已纳入路由和基础错误映射，但 OCR 质量、复杂版面和跨页结构回归夹具后置。
 
@@ -268,6 +269,7 @@ sequenceDiagram
 CHROMA_PERSIST_PATH=./data/chroma
 CHROMA_COLLECTION=course_nexus_material_chunks
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+MODEL_API_BASE_URL=
 RAG_SIMILARITY_TOP_K=8
 RAG_CHUNK_MAX_TOKENS=800
 GENERATION_CONTEXT_MAX_TOKENS=12000
@@ -279,7 +281,7 @@ GENERATION_CONTEXT_MAX_TOKENS=12000
 2. 使用现有命令启动 FastAPI；第一次使用 Docling 时允许其下载所需模型文件。
 3. Chroma 由后端进程通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口。
 4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`。
-5. 配置 `OPENAI_API_KEY` 后才能执行真实 embedding 和生成；单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
+5. 配置 `OPENAI_API_KEY` 后才能执行真实 embedding 和生成；如使用 OpenAI-compatible 网关，`MODEL_API_BASE_URL` 必须同时作用于生成模型 provider 和 embedding adapter。单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
 
 ## 10. 错误与一致性
 

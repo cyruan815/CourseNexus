@@ -191,7 +191,7 @@
   "name": "notes.md",
   "material_type": "markdown",
   "source_type": "file",
-  "file_url": "usr_123/crs_123/mat_123/notes.md",
+  "file_url": "usr_123/crs_123/mat_123/source.md",
   "source_url": null,
   "file_size": 7,
   "mime_type": "text/markdown",
@@ -208,6 +208,12 @@
 
 - `.md`：`material_type = "markdown"`，`mime_type = "text/markdown"`。
 - `.txt`：`material_type = "text"`，`mime_type = "text/plain"`。
+- `.pdf`：`material_type = "pdf"`，`mime_type = "application/pdf"`。
+- `.docx`：`material_type = "word"`，`mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"`。
+- `.pptx`：`material_type = "ppt"`，`mime_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"`。
+- `.png` / `.jpg` / `.jpeg`：`material_type = "image"`，`mime_type` 为对应图片类型。
+
+`name` 是用户可见的原始上传文件名，可包含中文；`file_url` 是后端内部存储路径，文件名固定为 ASCII 的 `source.<ext>`，前端不得用 `file_url` 推导展示名。
 
 当前上传大小上限由后端 `MAX_UPLOAD_FILE_SIZE_BYTES` 配置控制，默认 `52428800`，即 50 MiB。
 
@@ -239,7 +245,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `file` | File | 是 | 当前仅支持 UTF-8 `.md` / `.txt`。 |
+| `file` | File | 是 | 支持 `.md` / `.txt` / `.pdf` / `.docx` / `.pptx` / `.png` / `.jpg` / `.jpeg`。文本文件必须为 UTF-8。 |
 
 响应 `data`：`MaterialRead`，初始 `parse_status = "uploaded"`。
 

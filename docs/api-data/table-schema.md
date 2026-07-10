@@ -184,7 +184,7 @@
 | `name` | string | 否 | 无 | INDEX(`course_id`, `name`) | 展示名称，允许重名。 |
 | `material_type` | enum `material_type` | 否 | 无 | INDEX | 资料类型。 |
 | `source_type` | enum `source_type` | 否 | 无 | INDEX | 来源类型。 |
-| `file_url` | string | 是 | null |  | 文件地址；文件资料必填。 |
+| `file_url` | string | 是 | null |  | 内部文件地址；文件资料必填，文件名使用 ASCII `source.<ext>`，展示名使用 `name`。 |
 | `source_url` | string | 是 | null |  | 原始链接；链接资料必填。 |
 | `file_size` | integer | 是 | null |  | 文件大小，单位 byte。 |
 | `mime_type` | string | 是 | null |  | MIME 类型。 |

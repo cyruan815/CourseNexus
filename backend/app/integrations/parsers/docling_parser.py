@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import tiktoken
+from docling.datamodel.base_models import DocumentStream
 from docling.document_converter import DocumentConverter
 from docling_core.transforms.chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
@@ -25,7 +27,7 @@ class DoclingParser:
 
     def parse(self, file_path: Path) -> ParsedDocument:
         try:
-            conversion = self.converter.convert(file_path)
+            conversion = self.converter.convert(self._document_stream_for(file_path))
             document = getattr(conversion, "document", None)
             if document is None:
                 raise ValueError("Docling conversion did not return a document")
@@ -51,6 +53,13 @@ class DoclingParser:
             raise
         except Exception as exc:
             raise CourseNexusError(code="PARSE_FAILED", message="资料解析失败", status_code=500) from exc
+
+    def _document_stream_for(self, file_path: Path) -> DocumentStream:
+        extension = file_path.suffix.lower() or ".bin"
+        return DocumentStream(
+            name=f"source{extension}",
+            stream=BytesIO(file_path.read_bytes()),
+        )
 
     def _text_for_chunk(self, chunk: Any) -> str:
         return str(getattr(chunk, "text", "") or "").strip()

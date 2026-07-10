@@ -83,7 +83,7 @@ def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -
     assert material.file_size == 7
     assert material.mime_type == "text/markdown"
     assert material.parse_status == "uploaded"
-    assert material.file_url == f"{user.id}/{course.id}/{material.id}/notes.md"
+    assert material.file_url == f"{user.id}/{course.id}/{material.id}/source.md"
     assert (tmp_path / material.file_url).read_text(encoding="utf-8") == "# Intro"
 
 

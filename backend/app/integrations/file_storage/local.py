@@ -41,8 +41,9 @@ class LocalFileStorage:
         safe_filename = self._validate_filename(filename)
         mime_type = self._mime_type_for_filename(safe_filename)
         extension = Path(safe_filename).suffix.lower()
+        internal_filename = f"source{extension}"
         target_dir = self.root_path / user_id / course_id / material_id
-        target_path = target_dir / safe_filename
+        target_path = target_dir / internal_filename
         temp_path = target_path.with_name(f"{target_path.name}.tmp")
         total_size = 0
 
@@ -70,7 +71,7 @@ class LocalFileStorage:
             self._cleanup_failed_write(temp_path, target_dir)
             raise
 
-        relative_path = Path(user_id, course_id, material_id, safe_filename).as_posix()
+        relative_path = Path(user_id, course_id, material_id, internal_filename).as_posix()
         return StoredFile(
             filename=safe_filename,
             relative_path=relative_path,

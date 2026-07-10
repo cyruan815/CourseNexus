@@ -61,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         collection_name=settings.chroma_collection,
         api_key=settings.openai_api_key,
         embedding_model=settings.openai_embedding_model,
+        api_base_url=settings.model_api_base_url,
     )
     try:
         with SessionLocal() as db:
