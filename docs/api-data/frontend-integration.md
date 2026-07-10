@@ -297,6 +297,24 @@
 
 响应 `data`：`MaterialRead`。
 
+### 3.14.1 重命名资料
+
+`PATCH /api/v1/materials/{material_id}`
+
+要求：Bearer token。只能重命名当前用户自己的未删除资料。
+
+请求：
+
+```json
+{
+  "name": "第一章 物理层.pdf"
+}
+```
+
+响应 `data`：更新后的 `MaterialRead`。后端会去除名称首尾空格；空名称或超过 255 字符返回 `VALIDATION_ERROR`。
+
+重命名只修改用户可见的 `name` 和 `updated_at`，不修改 `file_url`、`source_url`、解析状态、chunk 或向量索引，也不回写历史 `SourceCitation.material_name`。
+
 ### 3.15 资料删除
 
 `DELETE /api/v1/materials/{material_id}`

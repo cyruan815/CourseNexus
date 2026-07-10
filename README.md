@@ -256,7 +256,7 @@ pnpm test
 - 上传安全校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`。
 - `.txt` / `.md` 走本地纯文本解析器；`.pdf` / `.docx` / `.pptx` / 图片格式走 Docling adapter。
 - 图片 OCR 已进入 adapter 路由，但 OCR 质量和版面回归夹具仍显式后置。
-- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `175 passed`。
+- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `176 passed`。
 
 ## 协作规则
 

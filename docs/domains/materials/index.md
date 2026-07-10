@@ -2,7 +2,7 @@
 
 ## 1. 业务定位
 
-`materials` 负责把用户资料绑定到课程，完成上传、一级文件夹归类、解析、切片、索引和删除，并向 Agent 消费者提供可追溯的逐文件资料范围。
+`materials` 负责把用户资料绑定到课程，完成上传、重命名、一级文件夹归类、解析、切片、索引和删除，并向 Agent 消费者提供可追溯的逐文件资料范围。
 
 一级文件夹只帮助用户整理和浏览资料，不代表 Agent 上下文。用户可以使用课程全部已解析资料，或选择一个、多个具体资料；不能选择整个文件夹。
 
@@ -40,6 +40,7 @@ flowchart LR
 
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；软删除后不可再访问。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
+- `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
 - 删除文件夹不会删除资料，所有关联资料回到未分类。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。
 - 文件夹、资料和课程必须属于当前用户；跨用户或跨课程统一返回 `NOT_FOUND`。
@@ -63,6 +64,7 @@ flowchart LR
 - 文件夹 ID 必须属于资料所在课程和当前用户。
 - 只有 `parsed` 且未删除资料可以进入 Agent 范围。
 - 文件夹操作不得隐式改变当前选中的 `material_ids`。
+- 资料重命名不得改变文件路径、解析状态、chunk、向量或历史引用快照。
 - SQLite 的 `folder_id` 与 Chroma metadata 保持一致，但检索硬范围始终使用具体 `material_ids`。
 
 ### 5.2 算法步骤
@@ -86,16 +88,23 @@ flowchart LR
 3. 将所有关联资料 `folder_id` 置空。
 4. 软删除文件夹并在同一数据库提交中保存资料变化。
 
+重命名资料：
+
+1. 按当前用户读取未删除资料，跨用户或不存在统一返回 `NOT_FOUND`。
+2. schema 去除名称首尾空格并校验长度为 1-255。
+3. 只更新 `CourseMaterial.name` 和 `updated_at`，不调用文件存储、Parser 或 RagIndex。
+4. 历史 `SourceCitation.material_name` 作为生成时快照保留原值，新问答使用重命名后的资料名。
+
 ### 5.3 复杂度与资源预算
 
-- 创建、重命名和移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
+- 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
 - 删除文件夹为 `O(n)`，`n` 是目录内资料数；每份已解析资料执行一次 metadata 更新。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 
 ## 6. 测试与验收
 
-- 文件夹 CRUD、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
+- 文件夹 CRUD、资料重命名、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
 - 基础前端归类与逐文件复选：`frontend/tests/features/materials/`。
