@@ -11,9 +11,15 @@
 ## 分支策略
 
 - 主干保持可运行。
-- 每个任务使用短生命周期分支。
-- 分支命名建议：`feature/<short-name>`、`fix/<short-name>`、`docs/<short-name>`。
-- 文档基线变更可以使用 `docs/<short-name>`。
+- 第一阶段三名开发者分别使用固定远程分支，不为 F01-F07、G01-G06、S01-S07 逐项新建远程分支：
+  - 前端开发者：`feature/frontend`。
+  - 独立生成功能开发者：`feature/generation`。
+  - 计划学习模式开发者：`feature/study-mode`。
+- 每名开发者只向自己负责的远程分支推送，不得直接向 `main` 推送。
+- 各子任务仍按可验证的小功能分别提交 commit，不能因为共用一条工作流分支而把全部改动压成一次提交。
+- 开发期间定期同步最新 `origin/main`；准备合并前必须完成冲突处理、回归测试和文档检查。
+- 工作流分支通过 PR 合并到 `main`，默认使用 Rebase and merge，避免产生额外 merge commit。
+- 第一阶段以外的临时修复或文档任务，分支命名建议为 `fix/<short-name>`、`docs/<short-name>`。
 
 ## Commit 规范
 
