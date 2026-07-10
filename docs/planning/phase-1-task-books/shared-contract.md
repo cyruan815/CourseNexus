@@ -54,6 +54,8 @@
 - 指定材料生成调用 `iter_material_context_batches()` 和 `run_material_coverage()`，目标是覆盖全部选定材料；不得用一次 Top-K 检索替代。
 - 业务模块不得直接导入 Docling、LlamaIndex、Chroma 或其具体适配器。
 - 所有模型调用必须经过 `ModelProvider`；生产模块不得直接实例化 OpenAI SDK client。
+- 模型服务按用途独立读取 `*_API_KEY`、`*_BASE_URL`、`*_MODEL`，不得复用 Embedding、问答或其他生成功能的配置。第一阶段映射固定为：Quiz=`QUIZ`、Flashcard=`FLASHCARD`、Mindmap=`MINDMAP`、Outline=`OUTLINE`、Knowledge List=`KNOWLEDGE_LIST`、计划输入解析=`STUDY_PLAN_PARSER`、计划生成=`STUDY_PLAN_GENERATOR`、讲义=`HANDOUT`、任务测试=`TASK_TEST`。
+- 各用途可以选择不同模型供应商，但必须兼容 OpenAI SDK 接口，并通过 `Settings.model_endpoint(purpose)` 与 provider 依赖注入接入。任务开发者不得恢复或新增共享 `OPENAI_*` 配置。
 
 ### 3.4 第一阶段幂等边界
 

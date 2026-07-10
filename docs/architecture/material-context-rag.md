@@ -7,10 +7,10 @@
 当前采用模式一，由 CourseNexus 自建资料上下文与 RAG 能力：
 
 ```text
-FastAPI + LlamaIndex + Docling + Chroma + OpenAI API
+FastAPI + LlamaIndex + Docling + Chroma + OpenAI-compatible APIs
 ```
 
-这套能力直接嵌入现有 FastAPI 单体，不新增 AI 微服务，不运行 Chroma Server，不使用 Docker。Docling、LlamaIndex 和 Chroma `PersistentClient` 都在后端 Python 进程内调用；SQLite、上传文件和 Chroma 索引分别持久化到本地目录。OpenAI API 负责 embedding 和生成，是当前唯一需要网络访问的 AI 能力。
+这套能力直接嵌入现有 FastAPI 单体，不新增 AI 微服务，不运行 Chroma Server，不使用 Docker。Docling、LlamaIndex 和 Chroma `PersistentClient` 都在后端 Python 进程内调用；SQLite、上传文件和 Chroma 索引分别持久化到本地目录。Embedding 和各类生成调用通过 OpenAI SDK 接口规范访问外部模型服务，不要求使用同一供应商、账号、密钥、地址或模型。
 
 现有架构无需推翻：
 
@@ -18,7 +18,7 @@ FastAPI + LlamaIndex + Docling + Chroma + OpenAI API
 - `material-context` 从“顺序读取 chunk 的基础接口”升级为资料范围校验、语义检索和全材料读取的统一入口。
 - `course-qa` 只调用问答检索接口。
 - `generation-orchestrator`、学习计划和各 generator 只调用全材料上下文接口。
-- `model-provider` 继续统一封装 OpenAI 生成调用。
+- `model-provider` 继续统一封装 OpenAI-compatible 生成调用。
 - `generated-content` 和 `SourceCitation` 继续保存结果和引用。
 
 ### 1.1 当前基础设施交付边界
@@ -57,14 +57,14 @@ flowchart LR
             DOC["Docling parser<br/>解析与结构化切片"]
             LI["LlamaIndex RAG adapter<br/>节点、embedding、retriever"]
             CH["Chroma adapter<br/>PersistentClient"]
-            MP["OpenAI model provider<br/>结构化生成"]
+            MP["OpenAI-compatible provider<br/>结构化生成"]
         end
     end
 
     SQL[("SQLite<br/>业务数据与 MaterialChunk")]
     FILES[("Local Files<br/>上传原文件")]
     VEC[("Local Chroma Path<br/>向量索引")]
-    OAI["OpenAI API<br/>Embedding / Generation"]
+    OAI["Independent model endpoints<br/>Embedding / Generation"]
 
     FE --> MAT
     MAT --> FILES
@@ -97,7 +97,7 @@ flowchart LR
 | LlamaIndex RAG adapter | 把内部 chunk 转为 node，调用 embedding，写入 Chroma，构造带 metadata filter 的 retriever。 | 不暴露 LlamaIndex 类型给业务层，不生成业务内容。 |
 | Chroma adapter | 用本地 `PersistentClient` 持久化向量，按 chunk upsert/delete/query。 | 不保存用户、课程、计划或生成记录。 |
 | `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`。 | 不调用生成模型，不保存生成结果。 |
-| `model-provider` | 调用 OpenAI 生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件。 |
+| `model-provider` | 通过 OpenAI SDK 规范调用当前业务用途配置的生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件，不复用其他用途的模型配置。 |
 | `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不直接读取资料表或向量库，不生成 Flashcard、Mindmap、Quiz 或学习计划。 |
 | `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
 | `study-plans`（后续消费者） | 后续使用全材料上下文生成计划预览。 | 本轮不实现 AI 计划算法，不改变当前计划行为。 |
@@ -141,7 +141,7 @@ sequenceDiagram
     participant DB as SQLite
     participant R as LlamaIndexRagAdapter
     participant C as Chroma PersistentClient
-    participant O as OpenAI Embeddings
+    participant O as Embedding Endpoint
 
     M->>M: parse_status = parsing
     M->>D: parse(local_file_path)
@@ -159,7 +159,7 @@ sequenceDiagram
 实现规则：
 
 - Docling 负责文档结构识别，优先使用 `HybridChunker` 生成 token-aware chunk；LlamaIndex 不再次切分这些 chunk。
-- LlamaIndex 负责 node / metadata 组织、OpenAI embedding 和 Chroma retriever 编排。
+- LlamaIndex 负责 node / metadata 组织、OpenAI-compatible embedding 和 Chroma retriever 编排。
 - chunk id 必须对同一轮解析稳定；重试解析先按 `material_id` 删除旧向量，再幂等 upsert。
 - 只有 SQLite chunk 和 Chroma 索引都成功后才写 `parse_status = parsed`。
 - 索引失败写 `parse_status = parse_failed` 和稳定错误 `INDEXING_FAILED`；清理本轮部分向量后允许重试。
@@ -263,16 +263,31 @@ sequenceDiagram
 
 ## 9. 配置与本地运行
 
-建议新增配置：
+模型配置遵循“一个业务用途一个 endpoint”原则。每个 endpoint 必须分别声明 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`；OpenAI SDK 只作为统一调用协议，不代表这些用途共用供应商或凭证。当前用途前缀如下：
+
+| 用途 | 配置前缀 |
+| --- | --- |
+| 向量化与语义检索 | `EMBEDDING` |
+| 课程智能体问答 | `COURSE_QA` |
+| Quiz / Flashcard / Mindmap | `QUIZ` / `FLASHCARD` / `MINDMAP` |
+| Outline / Knowledge List | `OUTLINE` / `KNOWLEDGE_LIST` |
+| 学习计划输入解析 / 计划生成 | `STUDY_PLAN_PARSER` / `STUDY_PLAN_GENERATOR` |
+| 任务讲义 / 任务测试 | `HANDOUT` / `TASK_TEST` |
+
+RAG 相关示例配置：
 
 ```dotenv
+EMBEDDING_API_KEY=
+EMBEDDING_BASE_URL=
+EMBEDDING_MODEL=text-embedding-3-small
+COURSE_QA_API_KEY=
+COURSE_QA_BASE_URL=
+COURSE_QA_MODEL=gpt-5.4-mini
 CHROMA_PERSIST_PATH=./data/chroma
 CHROMA_COLLECTION=course_nexus_material_chunks
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-MODEL_API_BASE_URL=
 RAG_SIMILARITY_TOP_K=8
 RAG_CHUNK_MAX_TOKENS=800
-GENERATION_CONTEXT_MAX_TOKENS=12000
+MATERIAL_BATCH_MAX_TOKENS=12000
 ```
 
 本地运行方式：
@@ -281,14 +296,14 @@ GENERATION_CONTEXT_MAX_TOKENS=12000
 2. 使用现有命令启动 FastAPI；第一次使用 Docling 时允许其下载所需模型文件。
 3. Chroma 由后端进程通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口。
 4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`。
-5. 配置 `OPENAI_API_KEY` 后才能执行真实 embedding 和生成；如使用 OpenAI-compatible 网关，`MODEL_API_BASE_URL` 必须同时作用于生成模型 provider 和 embedding adapter。单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
+5. 真实 embedding 至少配置 `EMBEDDING_API_KEY`；真实课程问答至少配置 `COURSE_QA_API_KEY`。各自的 `*_BASE_URL` 和 `*_MODEL` 只作用于对应用途。单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
 
 ## 10. 错误与一致性
 
 | 场景 | 处理 |
 | --- | --- |
 | 不支持的文件或 Docling 解析失败 | `parse_status = parse_failed`，记录 `UNSUPPORTED_FILE_TYPE` 或 `PARSE_FAILED`。 |
-| OpenAI embedding 失败 | 清理本轮部分向量，记录 `INDEXING_FAILED`，资料不可进入问答。 |
+| Embedding endpoint 调用失败 | 清理本轮部分向量，记录 `INDEXING_FAILED`，资料不可进入问答。 |
 | Chroma 目录损坏或记录缺失 | 返回 `RETRIEVAL_FAILED`；提供按 SQLite 全量重建索引命令。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
 | 问答无命中 | 返回 `answer_type = no_source`，不调用或不采信无依据回答。 |
@@ -315,7 +330,7 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 - 参考消费者记录每个选中 `material_id` 都进入 map 阶段。
 - 超长资料触发多个 batch，覆盖执行器能校验处理材料集合和引用 chunk 集合。
 - 删除和重试解析不会留下可检索的旧 chunk。
-- 无 OpenAI key 的单元测试和基础开发仍可运行。
+- 无真实模型 API key 的单元测试和基础开发仍可运行。
 - 本轮验收不包含 Flashcard、Quiz、Mindmap 或 AI 学习计划的业务正确性。
 - 图片格式已进入 Docling adapter 路由；OCR 质量、复杂版面和跨页结构回归夹具后置。
 

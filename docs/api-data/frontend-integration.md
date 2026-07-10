@@ -366,7 +366,7 @@
 
 `POST /api/v1/courses/{course_id}/qa/questions`
 
-要求：Bearer token。当前后端默认无 `OPENAI_API_KEY` 时使用 deterministic mock provider；配置真实 key 后统一通过后端 `OpenAIModelProvider` 使用 OpenAI Python SDK。
+要求：Bearer token。当前后端在无 `COURSE_QA_API_KEY` 时使用 deterministic mock provider；配置课程问答专用的 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL` 后，通过后端 `OpenAIModelProvider` 使用 OpenAI Python SDK 接口规范。该配置与 Embedding 及其他生成功能相互独立。
 
 请求：
 

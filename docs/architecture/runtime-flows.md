@@ -12,7 +12,7 @@
 
 前端在本阶段只承担最小集成验证：API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传 UI、资料范围选择 UI 和问答 UI 不属于当前基础设施主线验收条件。
 
-当前后端已使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API 实现本地 RAG。详细设计见 [material-context-rag.md](material-context-rag.md)。
+当前后端已使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI-compatible APIs 实现本地 RAG，各模型用途独立配置服务 endpoint。详细设计见 [material-context-rag.md](material-context-rag.md)。
 
 ## 1. 资料上传与解析链路
 

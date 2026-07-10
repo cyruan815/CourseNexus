@@ -53,6 +53,8 @@ python -m alembic upgrade head
 
 后端读取仓库根目录 `.env`，示例见 `../.env.example`。API Key、`SECRET_KEY`、模型服务地址、文件存储路径等服务端配置只放在根目录 `.env`，不要放入前端 `VITE_` 变量。
 
+每个模型用途必须独立配置 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`，由 `Settings.model_endpoint(purpose)` 统一读取。Embedding、课程问答、各资料生成器和计划学习子系统不得隐式共用密钥或服务地址；供应商可以不同，但都必须兼容 OpenAI SDK 接口。完整用途前缀和中文说明以根目录 `.env.example` 为准。
+
 ## 数据库
 
 默认数据库为当前目录下的 SQLite 文件：

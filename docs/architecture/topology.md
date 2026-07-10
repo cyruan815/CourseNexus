@@ -15,7 +15,7 @@ v0.1 是本地 POC，采用前后端分离部署：
 | Document Parsing | Docling | FastAPI 进程内的 Python adapter | 本地解析复杂文档并输出结构化 chunk。 |
 | RAG Orchestration | LlamaIndex | FastAPI 进程内的 Python adapter | 组织 node、embedding、Chroma 写入和 retriever。 |
 | Vector Index | Chroma `PersistentClient` | 后端进程内调用，本地目录持久化 | chunk 向量和 metadata filter；可从 SQLite 重建。 |
-| Model / Embedding | OpenAI API | 通过后端 integration / provider 访问 | embedding、问答和结构化生成。 |
+| Model / Embedding | OpenAI-compatible APIs | 通过后端 integration / provider 访问，各用途独立配置 | embedding、问答和结构化生成。 |
 | Export Adapter | Python 适配层 | 后端内调用 | PDF 导出。 |
 
 当前不引入 Docker、Redis、独立队列、微服务、Kubernetes、Chroma Server 或复杂发布体系。

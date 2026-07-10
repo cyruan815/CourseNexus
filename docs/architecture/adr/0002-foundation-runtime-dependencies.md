@@ -33,7 +33,7 @@ v0.1 基础设施阶段选择：
 
 真实 LLM 调用只能通过 `backend/app/integrations/model_provider/` 下的 provider 适配层完成。业务 service、generator、planner 和 router 不直接 import `openai`，也不直接拼 HTTP 请求调用模型。
 
-本地测试和无 API key 场景默认使用 deterministic mock provider，不依赖外部网络或真实 OpenAI API key。
+本地测试和无对应业务用途 API key 的场景默认使用 deterministic mock provider，不依赖外部网络或真实模型 API key。
 
 ## Reasons
 
@@ -47,7 +47,7 @@ v0.1 基础设施阶段选择：
 
 - `backend/pyproject.toml` 必须声明 `python-multipart` 和 `openai`。
 - `frontend/package.json` 必须声明 `react-router-dom`，并保持 Vite 7 兼容范围。
-- 根目录 `.env.example` 必须声明后端专用的 `OPENAI_MODEL`，并继续禁止把 API key 暴露为 `VITE_` 变量。
+- 根目录 `.env.example` 必须为每个模型用途分别声明 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`，并继续禁止把 API key 暴露为 `VITE_` 变量。OpenAI SDK 是接口规范，不要求各用途使用同一供应商。
 - 新增真实模型能力时，应复用 `OpenAIModelProvider` 或扩展 provider 协议，不应在业务模块中直接创建 OpenAI client。
-- 单元测试应优先使用 mock provider；需要真实 OpenAI API 的验证必须作为单独的集成验证，并显式依赖本地环境变量。
-- 如果后续升级 Vite 主版本、替换模型 SDK、引入非 OpenAI 模型供应商或增加后台任务队列，必须新增或更新 ADR。
+- 单元测试应优先使用 mock provider；需要真实模型 API 的验证必须作为单独的集成验证，并显式依赖对应用途的本地环境变量。
+- 如果后续升级 Vite 主版本、替换 OpenAI SDK 接口规范或增加后台任务队列，必须新增或更新 ADR；切换到其他 OpenAI-compatible 供应商只需修改对应用途配置。

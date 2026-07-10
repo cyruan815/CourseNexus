@@ -4,7 +4,7 @@
 
 本目录记录 CourseNexus v0.1 的产品架构、技术架构、功能模块拓扑、模块边界和关键运行链路。它的目标是让项目负责人、后端、前端和 Agent 接手后，能快速理解系统为什么这样拆、组件之间怎么连、哪些地方必须保持解耦。
 
-当前架构口径是：前后端分离、本地 POC、FastAPI 单体后端按业务能力分包、SQLite 当前存储并保留 PostgreSQL 迁移空间、不引入缓存、不做多角色权限。资料上下文与 RAG 在 FastAPI 进程内采用 LlamaIndex + Docling + Chroma `PersistentClient`，不使用 Docker；OpenAI API 提供 embedding 和生成。问答使用范围过滤后的 Top-K 检索，指定材料生成功能按顺序覆盖全部选中资料。RAGFlow 仅作为 future 方案。
+当前架构口径是：前后端分离、本地 POC、FastAPI 单体后端按业务能力分包、SQLite 当前存储并保留 PostgreSQL 迁移空间、不引入缓存、不做多角色权限。资料上下文与 RAG 在 FastAPI 进程内采用 LlamaIndex + Docling + Chroma `PersistentClient`，不使用 Docker；embedding 和各类生成通过用途级独立的 OpenAI-compatible endpoint 提供。问答使用范围过滤后的 Top-K 检索，指定材料生成功能按顺序覆盖全部选中资料。RAGFlow 仅作为 future 方案。
 
 ## 文档清单
 

@@ -10,7 +10,7 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - `backend/`：FastAPI 后端基础设施，包含鉴权、课程、资料上传 / 解析、资料上下文、课程问答、生成编排和学习计划基础接口。
 - `docs/`：PRD、架构、API / 数据契约、工程规范、阶段状态和路线图入口。
 - SQLite baseline migration 可创建 PRD v0.1 的核心业务表。
-- 本地资料上下文 RAG 基础设施已接入 Docling、LlamaIndex、Chroma `PersistentClient` 和 OpenAI embedding 配置；Chroma 索引是可从 SQLite `MaterialChunk` 重建的派生存储。
+- 本地资料上下文 RAG 基础设施已接入 Docling、LlamaIndex、Chroma `PersistentClient` 和 OpenAI-compatible embedding 配置；Chroma 索引是可从 SQLite `MaterialChunk` 重建的派生存储。
 
 当前基础设施阶段不实现完整产品前端。资料上传面板、资料范围选择器和课程问答面板已后置为独立前端任务；Flashcard / Quiz / Mindmap 等真实业务提示词、AI 学习计划算法、计划执行页、今日待办、大日历和 PDF 导出仍未实现。
 
@@ -84,6 +84,8 @@ Copy-Item .env.example .env
 
 本仓库按长期 monorepo 管理，环境变量示例统一放在根目录 [.env.example](./.env.example)。真实 `.env` 只放在根目录且不得提交。后端会读取根目录 `.env`；前端 Vite 也配置为读取根目录 `.env`，但只有 `VITE_` 开头的变量会进入浏览器。API Key、密钥、模型服务地址等敏感配置不要写成 `VITE_` 变量。
 
+模型服务按业务用途独立配置，每个用途都有自己的 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`。当前固定前缀为 `EMBEDDING`、`COURSE_QA`、`QUIZ`、`FLASHCARD`、`MINDMAP`、`OUTLINE`、`KNOWLEDGE_LIST`、`STUDY_PLAN_PARSER`、`STUDY_PLAN_GENERATOR`、`HANDOUT` 和 `TASK_TEST`。这些服务可以来自不同供应商，只需兼容 OpenAI SDK 接口；新功能不得复用旧的 `OPENAI_*` 共享配置。
+
 ## 常用命令
 
 从仓库根目录运行：
@@ -153,7 +155,7 @@ pnpm test
 - 上传安全校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`。
 - `.txt` / `.md` 走本地纯文本解析器；`.pdf` / `.docx` / `.pptx` / 图片格式走 Docling adapter。
 - 图片 OCR 已进入 adapter 路由，但 OCR 质量和版面回归夹具仍显式后置。
-- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `155 passed`。
+- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `171 passed`。
 
 ## 协作规则
 

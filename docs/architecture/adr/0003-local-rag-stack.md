@@ -13,11 +13,11 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 1. 选定材料范围内的 RAG 问答，需要范围硬过滤、相关性检索和真实引用。
 2. 指定材料生成，包括学习计划、Flashcard、Quiz、Mindmap、提纲、知识点清单、今日讲义和任务测试题，需要覆盖全部选中资料并输出结构化内容。
 
-当前目标是小团队、本地 POC、易于开发和获得较好效果。所有基础设施在开发机本地运行，不使用 Docker；可以调用 OpenAI API。
+当前目标是小团队、本地 POC、易于开发和获得较好效果。所有基础设施在开发机本地运行，不使用 Docker；可以调用 OpenAI-compatible 模型服务。
 
 ## Options
 
-1. 在 FastAPI 单体内采用 LlamaIndex + Docling + Chroma + OpenAI API，自建资料上下文与 RAG。
+1. 在 FastAPI 单体内采用 LlamaIndex + Docling + Chroma + OpenAI-compatible API，自建资料上下文与 RAG。
 2. 在 FastAPI 单体内手写解析、切片、embedding、检索和生成编排算法。
 3. 部署 RAGFlow，把解析、索引和检索交给外部 RAG 平台。
 4. 使用 Qdrant 替代 Chroma，并运行独立向量数据库服务。
@@ -30,7 +30,7 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 - Docling 负责复杂文档解析和结构化、token-aware 切片。
 - LlamaIndex 负责 node / metadata 组织、embedding 和 retriever 编排。
 - Chroma 通过 Python `PersistentClient` 嵌入后端进程，将向量持久化到本地目录，不启动 Chroma Server。
-- OpenAI API 提供 embedding 和生成模型；调用必须位于 integration / provider 边界。
+- OpenAI SDK 接口规范承载 embedding 和生成调用；调用必须位于 integration / provider 边界，每个业务用途使用独立 endpoint 配置。
 - SQLite 的 `CourseMaterial` / `MaterialChunk` 是权威业务数据，Chroma 是可重建的派生检索索引。
 - 问答使用带 `user_id`、`course_id` 和 `material_scope` metadata filter 的 Top-K 语义检索。
 - 指定材料生成从 SQLite 顺序读取全部选中 chunk，使用分批 map-reduce，不使用普通 Top-K 检索替代材料覆盖。
@@ -52,7 +52,7 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 - Docling 能在本地解析 PDF、DOCX、PPTX、图片等格式，并保留布局、页码、标题和表格信息，明显优于继续扩展纯文本 parser。
 - LlamaIndex 提供成熟 ingestion、node、embedding 和 retriever 组件，减少手写 RAG 算法与胶水代码。
 - Chroma `PersistentClient` 满足本地 POC 的持久化和 metadata filter 需求，不需要 Docker、独立端口或额外服务运维。
-- OpenAI embedding 和生成模型能减少本地模型环境与硬件要求，适合当前效果优先的选择。
+- 外部 embedding 和生成模型能减少本地模型环境与硬件要求；统一 OpenAI SDK 接口规范同时允许按用途选择不同供应商。
 - 两条上下文接口分别优化相关性和覆盖率，避免“一次 Top-K 检索”遗漏指定材料生成所需内容。
 - 保留内部 DTO 和 integration 边界能让现有业务、权限、生成记录及引用模型继续工作，这一边界主要服务当前正确性和可测试性，而不是为技术替换做过度设计。
 
@@ -64,7 +64,7 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 - Chroma metadata 必须包含 `user_id`、`course_id`、`material_id`、`chunk_id`、顺序和引用定位字段。
 - 业务模块不得直接 import LlamaIndex、Docling、Chroma 或 OpenAI SDK；这些依赖限定在 `app/integrations/`。
 - 模型输出必须转换为项目内部 DTO，并对指定生成能力执行 Pydantic 结构校验。
-- 本地开发首次运行 Docling 可能下载模型文件，embedding 和真实生成需要 `OPENAI_API_KEY` 和网络。
+- 本地开发首次运行 Docling 可能下载模型文件；embedding 和真实生成需要网络，并分别配置对应用途的 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`。
 - Chroma 目录需要加入 `.gitignore`，并提供从 SQLite 重建索引的维护命令。
 - FastAPI 同步进程承担解析和索引时会有较长请求；当前用状态字段和重试表达，不在本 ADR 中引入队列。
 - 如果未来改用 RAGFlow、Qdrant Server 或其他外部检索服务，必须新增 ADR，并保持 `material-context` 的业务接口和权限语义。
