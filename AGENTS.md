@@ -23,7 +23,7 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - 每完成一个可验证的小功能、小修复或小文档规范变更，都要单独提交一次 git；不要把多个小功能攒到一个完整大功能结束后再合并成一次提交。
 - git message 使用 Angular / Conventional Commits 结构；`feat`、`fix`、`docs`、`test` 等模板字段保持英文，说明性内容使用中文。
 - 第一阶段开发者只向各自固定分支 `feature/frontend`、`feature/generation`、`feature/study-mode` 推送，不得直接推送 `main`。
-- 分支负责人创建并维护到 `main` 的阶段性 PR；项目负责人或其授权审查 Agent 审计，普通改动通过后可 Rebase and merge，数据库、公共 API/schema 或架构变更须负责人确认。
+- 开发者只负责代码、测试、commit、push 和完成报告；授权集成审查 Agent 负责同步 `main`、处理 PR 与合并，数据库、公共 API/schema 或架构变更须项目负责人确认。
 - 提交前必须运行与本次小改动匹配的验证命令；如果只是文档变更，应至少说明未运行测试的原因。
 - 不要把长期决策只留在聊天记录里。
 - 不要不读 docs 就直接修改代码。
