@@ -401,8 +401,8 @@
 
 `answer_type` 规则：
 
-- `grounded`：当前资料范围存在 parsed chunk，回答引用来自真实 `MaterialChunk`。
-- `no_source`：当前资料范围没有可用 parsed chunk，`source_citations = []`，前端不得展示伪引用。
+- `grounded`：当前资料范围存在检索命中，回答基于检索到的真实 `MaterialChunk`。
+- `no_source`：当前资料范围没有可用 parsed chunk，或存在 parsed chunk 但本次问题没有相关检索命中；`source_citations = []`，前端不得展示伪引用。
 
 追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
 

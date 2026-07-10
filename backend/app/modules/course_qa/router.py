@@ -3,13 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_required_user
+from app.api.dependencies import get_required_user, get_retrieval_rag_index
 from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.model_provider.mock import MockModelProvider
 from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.rag.base import RagIndex
 from app.modules.course_qa.schemas import ConversationRead, CourseQuestionCreate, MessageRead
 from app.modules.course_qa.service import ask_course_question, list_conversation_messages, list_course_conversations
 from app.modules.users.models import User
@@ -61,12 +62,16 @@ def ask_question_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     model_provider: ModelProvider = Depends(get_model_provider),
+    rag_index: RagIndex = Depends(get_retrieval_rag_index),
 ) -> dict[str, object]:
+    settings = get_settings()
     answer = ask_course_question(
         db,
         user_id=current_user.id,
         course_id=course_id,
         payload=payload,
         model_provider=model_provider,
+        rag_index=rag_index,
+        top_k=settings.rag_similarity_top_k,
     )
     return success_response(answer.model_dump(mode="json"), request_id=get_request_id(request))

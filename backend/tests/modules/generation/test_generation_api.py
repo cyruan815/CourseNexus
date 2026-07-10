@@ -26,6 +26,7 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
     )
     Base.metadata.create_all(engine)
     testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    rag_index = FakeRagIndex()
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session()
@@ -39,7 +40,7 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         root_path=tmp_path,
         max_file_size_bytes=1024,
     )
-    app.dependency_overrides[get_rag_index] = FakeRagIndex
+    app.dependency_overrides[get_rag_index] = lambda: rag_index
     try:
         yield TestClient(app)
     finally:

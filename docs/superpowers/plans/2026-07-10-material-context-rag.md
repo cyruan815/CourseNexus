@@ -4,6 +4,8 @@
 
 **Goal:** Build a no-Docker local material parsing, indexing, retrieval, and complete-coverage context infrastructure that later CourseNexus feature teams can consume without implementing Flashcard, Quiz, Mindmap, AI study-plan, or other learning business features in this phase.
 
+**Follow-up status:** This document is the historical infrastructure execution plan. After the plan was completed, `course-qa` was migrated to consume `retrieve_relevant_context()` in production; the scope notes below have been updated to distinguish original plan scope from current implementation state.
+
 **Architecture:** SQLite remains authoritative for `CourseMaterial` and `MaterialChunk`; an in-process Chroma `PersistentClient` stores a rebuildable vector index. Docling parses complex files, LlamaIndex owns embedding/index/retrieval integration, and `material-context` exposes separate relevant-retrieval and complete-material batch contracts. Infrastructure acceptance uses fake providers and reference consumers rather than production business modules.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy, SQLite, Docling, LlamaIndex Core, LlamaIndex Chroma integration, LlamaIndex OpenAI embeddings, Chroma PersistentClient, OpenAI Responses API, Pydantic, pytest, Conda.
@@ -19,7 +21,7 @@
 - Expose `retrieve_relevant_context()` for query-dependent Top-K retrieval.
 - Expose `iter_material_context_batches()` for complete selected-material coverage; never replace it with one Top-K query.
 - Provide generic structured-provider and coverage-runner contracts, test doubles, reference-consumer tests, and an integration guide.
-- Do not migrate production `course-qa`, `generation`, or `study_plans` services in this plan.
+- Historical scope note: this infrastructure plan did not include production migration. Follow-up work has since migrated `course-qa` to `retrieve_relevant_context()`; `generation` and `study_plans` remain outside this plan's production migration scope.
 - Do not implement feature-specific prompts, schemas, endpoints, persistence flows, or frontend pages.
 - Do not implement Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, Task Test, or AI study-plan behavior.
 - Implement every task test-first and commit it separately.
@@ -945,7 +947,7 @@ git commit -m "test(rag): 验证本地 RAG 基础设施闭环"
 - [ ] The generic coverage runner detects missing materials and exposes processed material and citation ids.
 - [ ] Reference Q&A and selected-material consumers pass contract tests without becoming production business code.
 - [ ] Feature-team integration documentation includes exact imports, call sequences, errors, citations, and test overrides.
-- [ ] Production `course-qa`, feature generator, study-plan, and frontend behavior are unchanged by this plan.
+- [ ] Historical note: production `course-qa` was migrated after this infrastructure plan completed; feature generator, study-plan, and frontend production migration remain outside this plan.
 - [ ] No Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, Task Test, or AI study-plan implementation is added.
 - [ ] Business modules do not import Docling, LlamaIndex, Chroma, or OpenAI SDK types.
 - [ ] The derived Chroma index can be rebuilt from authoritative SQLite chunks.

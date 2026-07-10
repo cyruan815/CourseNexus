@@ -12,8 +12,10 @@ from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.model_provider.mock import MockModelProvider
 from app.integrations.rag.fake import FakeRagIndex
 from app.main import app
+from app.modules.course_qa.router import get_model_provider, get_retrieval_rag_index
 from app.modules.materials.router import get_material_storage, get_rag_index
 
 
@@ -26,6 +28,7 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
     )
     Base.metadata.create_all(engine)
     testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    rag_index = FakeRagIndex()
 
     def override_get_db() -> Generator[Session, None, None]:
         db = testing_session()
@@ -39,7 +42,9 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         root_path=tmp_path,
         max_file_size_bytes=1024,
     )
-    app.dependency_overrides[get_rag_index] = FakeRagIndex
+    app.dependency_overrides[get_rag_index] = lambda: rag_index
+    app.dependency_overrides[get_retrieval_rag_index] = lambda: rag_index
+    app.dependency_overrides[get_model_provider] = lambda: MockModelProvider()
     try:
         yield TestClient(app)
     finally:

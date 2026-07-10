@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from time import time_ns
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
+from app.integrations.rag.base import RagIndex
 from app.modules.course_qa.models import Conversation, Message, SourceCitation
 from app.modules.course_qa.repository import (
     get_active_conversation_by_id_for_user,
@@ -20,7 +22,7 @@ from app.modules.course_qa.repository import (
 from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate, SourceCitationRead
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
-from app.modules.material_context.service import resolve_context
+from app.modules.material_context.service import retrieve_relevant_context
 
 
 def _new_conversation_id() -> str:
@@ -28,7 +30,7 @@ def _new_conversation_id() -> str:
 
 
 def _new_message_id() -> str:
-    return f"msg_{uuid4().hex}"
+    return f"msg_{time_ns()}_{uuid4().hex}"
 
 
 def _new_citation_id() -> str:
@@ -42,6 +44,8 @@ def ask_course_question(
     course_id: str,
     payload: CourseQuestionCreate,
     model_provider: ModelProvider,
+    rag_index: RagIndex,
+    top_k: int = 8,
 ) -> CourseAnswerRead:
     assert_course_owner(db, user_id, course_id)
     conversation = _get_or_create_conversation(db, user_id=user_id, course_id=course_id, payload=payload)
@@ -58,9 +62,22 @@ def ask_course_question(
             created_at=datetime.now(timezone.utc),
         ),
     )
-    context = resolve_context(db, user_id, course_id, payload.material_scope)
+    context = retrieve_relevant_context(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        query=payload.question,
+        material_scope=payload.material_scope,
+        rag_index=rag_index,
+        top_k=top_k,
+    )
 
-    if context.no_parsed_material:
+    if context.no_parsed_material or not context.chunks:
+        answer_text = (
+            "当前资料范围内没有已解析资料，无法基于课程资料回答。"
+            if context.no_parsed_material
+            else "当前资料范围内没有检索到相关内容，无法基于课程资料回答。"
+        )
         assistant_message = save_message(
             db,
             Message(
@@ -68,7 +85,7 @@ def ask_course_question(
                 conversation_id=conversation.id,
                 course_id=course_id,
                 role="assistant",
-                content="当前资料范围内没有已解析资料，无法基于课程资料回答。",
+                content=answer_text,
                 answer_type="no_source",
                 generation_status="success",
                 material_scope_json=material_scope_json,
@@ -179,8 +196,7 @@ def _get_or_create_conversation(
 
 def _select_citation_chunks(chunks: list[ContextChunk], citation_chunk_ids: list[str]) -> list[ContextChunk]:
     chunk_by_id = {chunk.chunk_id: chunk for chunk in chunks}
-    selected = [chunk_by_id[chunk_id] for chunk_id in citation_chunk_ids if chunk_id in chunk_by_id]
-    return selected or chunks[:1]
+    return [chunk_by_id[chunk_id] for chunk_id in citation_chunk_ids if chunk_id in chunk_by_id]
 
 
 def _build_citations(message_id: str, chunks: list[ContextChunk]) -> list[SourceCitation]:

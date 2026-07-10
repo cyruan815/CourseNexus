@@ -10,6 +10,7 @@ from app.integrations.rag.base import RagIndex, RagScopeFilter
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.repository import (
     has_parsed_context_chunks,
+    list_active_scope_material_ids,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
     list_parsed_context_chunks,
@@ -157,6 +158,18 @@ def _resolve_scope(
         if not material_ids and not folder_ids:
             return _ResolvedScope(material_ids=(), folder_ids=(), eligible_material_ids=(), empty_selection=True)
 
+    active_material_ids = tuple(
+        list_active_scope_material_ids(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=list(material_ids) or None,
+            folder_ids=list(folder_ids) or None,
+        )
+    )
+    if material_ids and not set(material_ids).issubset(active_material_ids):
+        raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
+
     eligible_material_ids = tuple(
         list_eligible_material_ids(
             db,
@@ -166,9 +179,6 @@ def _resolve_scope(
             folder_ids=list(folder_ids) or None,
         )
     )
-    if material_ids and not set(material_ids).issubset(eligible_material_ids):
-        raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
-
     return _ResolvedScope(
         material_ids=material_ids,
         folder_ids=folder_ids,

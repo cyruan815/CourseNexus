@@ -4,6 +4,8 @@
 
 2026-07-09
 
+> 2026-07-10 后续更新：本地 RAG 基础设施已落地，课程问答生产路径已从 `resolve_context()` 迁移到 `retrieve_relevant_context()`；最新状态以 [current-state.md](current-state.md) 为准。
+
 ## 目的
 
 本文记录本轮基础设施执行实际完成了什么、哪些边界被调整、哪些文档被修改，以及当前可交给后续任务分发的基础能力。
@@ -15,7 +17,7 @@
 已确认并执行的当前主线：
 
 ```text
-注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> resolve_context() -> ask_question() -> 保存回答和引用
+注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> Chroma 索引 -> retrieve_relevant_context() -> ask_question() -> 保存回答和引用
 ```
 
 当前前端范围收窄为：
@@ -82,9 +84,9 @@
 
 ### 6. 资料上下文层
 
-- 新增 `material_context.resolve_context()`。
+- 新增 `material_context.resolve_context()`，并在 2026-07-10 进一步拆分出 `retrieve_relevant_context()` 和 `iter_material_context_batches()`。
 - 统一处理课程归属、资料范围、文件夹范围、已解析过滤和 chunk 返回。
-- 问答、生成和学习计划都通过该上下文入口获取资料，不直接拼接资料表或 chunk 表。
+- 问答通过相关性检索获取资料上下文；指定材料生成和学习计划通过全材料批次入口获取资料，不直接拼接资料表或 chunk 表。
 
 ### 7. 课程问答基础链路
 

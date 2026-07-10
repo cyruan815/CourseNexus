@@ -16,7 +16,8 @@
 ## 模块间契约基线
 
 - 资料模块只把 `parse_status = parsed` 的资料暴露给检索和 Agent。
-- 问答、生成和学习计划不得直接读取资料表或 chunk 表，必须通过 `material_context.resolve_context()` 获取资料上下文。
+- 问答不得直接读取资料表或 chunk 表，必须通过 `material_context.retrieve_relevant_context()` 获取相关资料上下文。
+- 指定材料生成和学习计划不得直接读取资料表或 chunk 表，必须通过 `material_context.iter_material_context_batches()` 获取全材料批次。
 - Agent 模块不得跨课程混用上下文。
 - 无资料命中时，Agent 必须返回 `answer_type = no_source`，并禁止伪引用。
 - AI 生成内容统一写入 `AIGeneratedContent`，通过 `content_type` 区分用途。
@@ -53,21 +54,25 @@
 - 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、已解析且未删除；否则返回 `NOT_FOUND`。
 - 未解析、解析失败和已删除资料不得进入上下文结果。
 
-`resolve_context()` 返回的 `ContextChunk` 最小字段：
+`retrieve_relevant_context()` 和 `iter_material_context_batches()` 返回的 `ContextChunk` 最小字段：
 
 ```json
 {
   "material_id": "mat_123",
   "chunk_id": "chk_123",
+  "chunk_index": 0,
   "material_name": "notes.md",
   "page": null,
   "page_index": null,
   "heading": "Intro",
-  "content_text": "Alpha"
+  "content_text": "Alpha",
+  "score": 0.82
 }
 ```
 
-当前范围没有可用 parsed chunk 时，返回 `no_parsed_material = true`，调用方应进入 no source 或无资料兜底流程。
+问答检索没有可用 parsed chunk 时返回 `no_parsed_material = true`；有 parsed chunk 但没有相关命中时返回空 `chunks`。两种情况调用方都应进入 `no_source` 兜底流程，不能调用模型生成无依据回答或保存伪引用。
+
+`score` 只表示问答相关性检索的相似度；全材料批次读取可以返回 `null`。
 
 ## 请求 / 响应示例格式
 

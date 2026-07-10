@@ -4,6 +4,8 @@
 
 Approved infrastructure-only revision, documented 2026-07-10.
 
+Follow-up status: after this infrastructure-only design was completed, `course-qa` was migrated to consume `retrieve_relevant_context()` in production. The non-goal below is retained as historical scope for the original infrastructure plan, not the current implementation state.
+
 The selected approach is mode 1: CourseNexus owns material parsing, indexing, retrieval, context assembly, citations, and generation orchestration. RAGFlow is a future option only.
 
 ## Goals
@@ -27,7 +29,7 @@ The selected approach is mode 1: CourseNexus owns material parsing, indexing, re
 - Production Flashcard, Quiz, Mindmap, Outline, Knowledge List, Handout, or Task Test generation.
 - AI study-plan algorithms or changes to current study-plan behavior.
 - Feature-specific prompts, Pydantic output schemas, API endpoints, persistence flows, or frontend pages.
-- Migrating existing `course-qa`, generator, or `study-plans` services to the new contracts in this infrastructure phase.
+- Migrating existing generator or `study-plans` services to the new contracts in this infrastructure phase. `course-qa` was migrated later as follow-up work.
 
 ## Chosen Architecture
 

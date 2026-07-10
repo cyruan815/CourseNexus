@@ -21,17 +21,18 @@
 
 ## 问答类接入
 
-问答、解释、追问等 query-dependent 功能应调用 `retrieve_relevant_context()`。调用方必须传入当前用户、课程、问题文本、材料范围、`RagIndex` 和 `top_k`。
+问答、解释、追问等 query-dependent 功能应调用 `retrieve_relevant_context()`。`course-qa` 已按该方式接入生产问答路径；后续同类功能必须传入当前用户、课程、问题文本、材料范围、`RagIndex` 和 `top_k`。
 
-检索结果只返回命中的 `ContextChunk`。业务保存引用时只能使用 `context.chunks` 中的 `chunk_id`；模型返回的引用 id 必须与允许集合取交集，不能保存未检索到、已删除、跨用户或伪造的 chunk id。
+检索结果只返回命中的 `ContextChunk`。业务保存引用时只能使用 `context.chunks` 中的 `chunk_id`；模型返回的引用 id 必须与允许集合取交集，不能保存未检索到、已删除、跨用户或伪造的 chunk id，也不能在交集为空时回退保存第一个检索 chunk。
 
 推荐顺序：
 
 1. 业务模块先完成自己的权限和参数校验。
 2. 调用 `retrieve_relevant_context()` 获取硬过滤后的上下文。
-3. 调用 `ModelProvider` 或功能自有模型适配器。
-4. 将模型引用限制到 `{chunk.chunk_id for chunk in context.chunks}`。
-5. 按业务模块自己的表结构保存回答和引用。
+3. 如果没有可用资料或没有检索命中，直接返回 `no_source`。
+4. 调用 `ModelProvider` 或功能自有模型适配器。
+5. 将模型引用限制到 `{chunk.chunk_id for chunk in context.chunks}`。
+6. 按业务模块自己的表结构保存回答和引用。
 
 ## 指定材料生成类接入
 

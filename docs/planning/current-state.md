@@ -44,11 +44,11 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 上传校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`；图片 OCR 质量验证后置。
 
 5. 资料上下文和问答基础
-   - 已实现 `material_context.resolve_context()`，统一处理课程范围、资料范围、已解析过滤和引用候选。
+   - 已保留 `material_context.resolve_context()` 兼容入口；生产课程问答已改用 `retrieve_relevant_context()`。
    - 已实现 `retrieve_relevant_context()` 问答 Top-K 检索接口，基于 user/course/material/folder 硬过滤并回查 SQLite 权威 chunk。
    - 已实现 `iter_material_context_batches()` 指定材料全覆盖接口和 `run_material_coverage()` 覆盖执行器。
    - 已实现 LlamaIndex + Chroma `PersistentClient` 本地向量索引、fake index、OpenAI embedding factory 和重建命令 `python -m app.commands.rebuild_rag_index --all` / `--material-id <id>`。
-   - 已实现课程问答接口、会话列表、消息列表、回答保存和 `SourceCitation` 保存。
+   - 已实现课程问答接口、会话列表、消息列表、回答保存和 `SourceCitation` 保存；生产问答路径已接入 `retrieve_relevant_context()`，无检索命中返回 `no_source`，引用只保存模型返回 id 与检索命中 id 的交集。
    - 模型调用统一通过 OpenAI SDK provider 边界；已支持调用方自定义 Pydantic schema 的结构化输出；测试和本地无 key 场景使用 mock provider。
    - 本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。
 
@@ -94,7 +94,7 @@ conda run -n course-nexus python -m pytest tests/integrations/test_llama_index_c
 
 最近一次后端完整验证：
 
-- `pnpm backend:test`：`155 passed in 27.07s`。
+- `pnpm backend:test`：`161 passed in 25.46s`。
 - `pnpm backend:migrate`：Alembic `upgrade head` 成功。
 - Chroma persistence smoke：`1 passed in 3.82s`。
 
@@ -114,7 +114,7 @@ pnpm test
 ## 下一步重点
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
-2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将课程问答和具体生成能力分批迁移到新上下文接口。
+2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
 3. 为 Flashcard、Mindmap、Quiz 和学习计划分别设计业务 schema、prompt、质量验收和保存流程。
 4. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
 5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。

@@ -24,7 +24,7 @@
 - 前端 API client、token 管理和路由壳。
 - 极简课程列表和课程详情空工作台，用于验证课程选择和页面挂载区域。
 - 后端接口、service、repository、测试和文档契约。
-- 后端链路：注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 `MaterialChunk` -> `resolve_context()` -> `ask_question()` -> 保存回答和引用。
+- 后端链路：注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 `MaterialChunk` -> Chroma 索引 -> `retrieve_relevant_context()` -> `ask_question()` -> 保存回答和引用。
 
 当前主线暂缓：
 
@@ -38,8 +38,8 @@
 - 阶段 0 已完成：项目骨架、文档知识库、Conda 环境、数据库 baseline 和基础测试已建立。
 - 阶段 1 已完成：统一响应 / 错误 / 请求 ID、本地鉴权、课程 API、前端 API client、登录态、路由壳、课程列表和课程详情空工作台已落地。
 - 阶段 2 已完成基础版：课程资料上传、链接记录、本地文件存储安全校验、解析状态、`.txt` / `.md` 解析、`MaterialChunk` 写入和重试解析已落地。
-- 阶段 3 已完成基础版：`material_context.resolve_context()` 已作为问答、生成和计划共用上下文入口。
-- 阶段 4 已完成基础版：课程问答、会话、消息、回答保存和引用保存已落地。
+- 阶段 3 已完成 RAG 基础版：`material_context.retrieve_relevant_context()`、`iter_material_context_batches()` 和本地 Chroma 索引已落地。
+- 阶段 4 已完成基础版：课程问答、会话、消息、回答保存和引用保存已落地，并已接入 Chroma Top-K 相关性检索。
 - 阶段 5 已完成基础编排：`generation-orchestrator`、生成内容存储、引用保存和占位生成器已落地；真实 LLM 结构化生成质量属于后续分发任务。
 - 阶段 6 已完成计划基础：单课程学习计划预览、保存、列表和详情已落地；计划执行页、今日待办、大日历和打卡同步仍未实现。
 - 阶段 7 未开始：导出、质量闭环和生产化验收仍属后续阶段。

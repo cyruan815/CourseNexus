@@ -36,9 +36,9 @@ FastAPI + LlamaIndex + Docling + Chroma + OpenAI API
 
 - Flashcard、Quiz、Mindmap、Outline、Knowledge List、Handout、Task Test 的真实提示词、输出 schema、API 和页面；
 - AI 学习计划算法或现有学习计划业务迁移；
-- 现有 `course-qa` 和生成模块向新接口的生产迁移。
+- 现有生成模块向新接口的生产迁移。
 
-下文中的问答和指定材料生成链路用于定义未来消费者如何接入，不表示这些业务功能属于本轮基础设施交付。
+`course-qa` 已作为首个生产消费者接入 `retrieve_relevant_context()`；下文中的指定材料生成链路仍用于定义未来消费者如何接入，不表示这些生成业务功能属于本轮基础设施交付。
 
 ## 2. 组件拓扑
 
@@ -98,7 +98,7 @@ flowchart LR
 | Chroma adapter | 用本地 `PersistentClient` 持久化向量，按 chunk upsert/delete/query。 | 不保存用户、课程、计划或生成记录。 |
 | `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`。 | 不调用生成模型，不保存生成结果。 |
 | `model-provider` | 调用 OpenAI 生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件。 |
-| `course-qa`（后续消费者） | 后续调用相关性检索，生成并保存回答、会话和引用。 | 本轮不迁移其生产实现。 |
+| `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不直接读取资料表或向量库，不生成 Flashcard、Mindmap、Quiz 或学习计划。 |
 | `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
 | `study-plans`（后续消费者） | 后续使用全材料上下文生成计划预览。 | 本轮不实现 AI 计划算法，不改变当前计划行为。 |
 
@@ -191,11 +191,11 @@ def iter_material_context_batches(
 ) -> Iterator[MaterialContextBatch]: ...
 ```
 
-二者都返回项目内部 `ContextChunk`，并统一执行权限、解析状态和材料范围校验。`resolve_context()` 在迁移期间可保留为兼容入口，调用方迁移完成后删除。
+二者都返回项目内部 `ContextChunk`，并统一执行权限、解析状态和材料范围校验。`resolve_context()` 在迁移期间可保留为兼容入口，供尚未迁移的旧消费者使用。
 
 ## 7. 问答类链路：相关性检索
 
-本节是后续问答模块的接入契约。当前基础设施通过参考消费者和契约测试验证检索、范围过滤和引用限制，不修改现有 `course-qa` 生产流程。
+本节是问答模块的接入契约。`course-qa` 生产流程已按该链路接入：问题文本作为检索 query，`material_scope` 转为硬过滤，模型只接收本次检索命中的 chunk。
 
 ```mermaid
 sequenceDiagram
@@ -217,7 +217,7 @@ sequenceDiagram
     QA->>DB: save Message + SourceCitation
 ```
 
-问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。模型只能引用本次返回的 chunk id；无可用资料、无检索命中或模型没有依据时返回 `no_source`。
+问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。模型引用必须与本次返回的 chunk id 取交集；模型返回未检索到或伪造的 chunk id 时不保存 fallback 引用。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
 
 ## 8. 指定材料生成链路：全材料覆盖
 

@@ -211,3 +211,39 @@ def test_relevant_context_does_not_call_rag_when_scope_has_no_chunks(db: Session
 
     assert result.chunks == []
     assert result.no_parsed_material is True
+
+
+def test_relevant_context_treats_selected_unparsed_material_as_no_parsed(
+    db: Session,
+    tmp_path,
+    context_seed,
+) -> None:
+    uploaded_material = upload_file_material(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        filename="uploaded.txt",
+        stream=BytesIO(b"not parsed yet"),
+        content_type="text/plain",
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=4096),
+    )
+
+    class FailingRagIndex:
+        def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
+            raise AssertionError("RAG retrieval should not run without parsed chunks")
+
+    result = retrieve_relevant_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        query="anything",
+        material_scope=MaterialScope(
+            include_all_parsed_materials=False,
+            material_ids=[uploaded_material.id],
+        ),
+        rag_index=FailingRagIndex(),
+        top_k=4,
+    )
+
+    assert result.chunks == []
+    assert result.no_parsed_material is True

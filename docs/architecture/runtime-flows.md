@@ -7,12 +7,12 @@
 当前已落地的 POC 基础链路以稳定后端接口为主：
 
 ```text
-注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> resolve_context() -> ask_question() -> 保存回答和引用
+注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> Chroma 索引 -> retrieve_relevant_context() -> ask_question() -> 保存回答和引用
 ```
 
 前端在本阶段只承担最小集成验证：API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传 UI、资料范围选择 UI 和问答 UI 不属于当前基础设施主线验收条件。
 
-下一阶段已确定使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API，把当前顺序读取 chunk 的基础链路升级为真实本地 RAG。详细设计见 [material-context-rag.md](material-context-rag.md)。
+当前后端已使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API 实现本地 RAG。详细设计见 [material-context-rag.md](material-context-rag.md)。
 
 ## 1. 资料上传与解析链路
 
