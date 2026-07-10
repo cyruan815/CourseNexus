@@ -27,6 +27,49 @@
 - 任务完成状态更新后必须同步一级任务状态和 `CheckinRecord`。
 - 首页今日待办和首页大日历是只读聚合入口，不提供创建、编辑或重新生成计划能力。
 
+## 计划学习模式 S01 子系统契约
+
+S01 只固定计划学习模式的子系统契约和数据库审计结论，不实现新的业务 API，也不创建 migration。当前已落地的计划接口仍只有：
+
+| 方法与路径 | 状态 | 说明 |
+| --- | --- | --- |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 当前为确定性占位计划，S02 替换为真实全材料生成。 |
+| `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存计划、一级任务和二级任务结构，S02 继续扩展确认后的任务树保存。 |
+| `GET /api/v1/courses/{course_id}/study-plans` | 已实现 | 查询课程下未删除计划列表。 |
+| `GET /api/v1/study-plans/{plan_id}` | 已实现 | 查询单个计划及任务结构。 |
+
+S02-S07 的候选接口在对应任务合并前均视为未实现契约，前端不得提前调用或自行拼接路径：
+
+| 任务 | 方法与路径 | 用途 |
+| --- | --- | --- |
+| S02 | `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 自然语言配置回填。 |
+| S02 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 基于已保存计划生成不落库的新预览。 |
+| S02 | `PUT /api/v1/study-plans/{plan_id}` | 原子替换计划配置和任务结构。 |
+| S02 | `DELETE /api/v1/study-plans/{plan_id}` | 软删除计划。 |
+| S03 | `GET /api/v1/todos/today?date=YYYY-MM-DD` | 当前用户多课程今日待办。 |
+| S03 | `GET /api/v1/calendar/month?month=YYYY-MM` | 全局月历日期摘要。 |
+| S03 | `GET /api/v1/calendar/days/{date}/todos` | 全局当日待办，按课程分组。 |
+| S03 | `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM` | 单课程月历。 |
+| S03 | `GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 单课程当日任务。 |
+| S04 | `GET /api/v1/study-subtasks/{subtask_id}/execution-context` | 执行页当日上下文。 |
+| S04 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 幂等完成或取消完成。 |
+| S05 | `GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` | 个人中心打卡日期范围。 |
+| S05 | `GET /api/v1/checkins/{date}` | 单日打卡；无任务也返回稳定零值。 |
+| S06 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 为学习/复习任务按需生成讲义。 |
+| S06 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 为测试/小测任务按需生成任务测试题。 |
+| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 流式导出成功的讲义或任务测试题。 |
+
+计划学习模式统一遵守以下边界：
+
+- `StudyPlan` 本期只绑定一个 `course_id` 和当前 `user_id`。
+- `StudyTask.course_id` 必须等于所属计划课程；`StudySubTask.plan_id/course_id` 必须与父任务和计划一致。
+- `StudySubTask.related_material_ids_json` 固定保存字符串 ID 数组，所有 ID 必须属于同一课程。
+- 计划状态只使用 `draft`、`active`、`completed`、`deleted`；任务状态只使用 `not_started`、`in_progress`、`completed`。
+- 一级任务状态由二级任务汇总，客户端不得直接写一级任务完成状态。
+- 完成或取消完成二级任务、一级任务汇总、计划完成态汇总和当日打卡重算必须处于一个数据库事务。
+- 自然日按服务配置的 `Asia/Shanghai` 业务时区解释，API 日期仍传 `YYYY-MM-DD`。
+
+S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests`、`export_records` 独立业务表；这些能力由现有表查询投影、统一生成内容表或请求派生文件承载。
 ## 跨模块数据引用原则
 
 - 跨模块引用 ID 时，必须同时保证当前用户有权访问被引用资源。

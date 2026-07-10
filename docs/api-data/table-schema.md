@@ -34,6 +34,16 @@
 | `study_subtasks` | `StudySubTask` | `study-plans` / `learning-execution` | 二级学习任务。 |
 | `checkin_records` | `CheckinRecord` | `checkins` | 每日学习完成记录。 |
 
+## S01 计划学习模式表结构审计
+
+S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 对计划学习模式依赖的 13 张核心表做 metadata 契约测试。审计结论：
+
+- 当前表集合必须严格等于 `users`、`courses`、`material_folders`、`course_materials`、`material_chunks`、`conversations`、`messages`、`source_citations`、`ai_generated_contents`、`study_plans`、`study_tasks`、`study_subtasks`、`checkin_records`。
+- S01 不新增 Alembic migration，不修改 `backend/migrations/versions/20260709_0001_create_core_tables.py`。
+- `checkin_records` 必须保留 `(user_id, checkin_date)` 唯一约束，支持每用户每日一条打卡记录。
+- `ai_generated_contents.content_type` 必须支持 `handout` 和 `task_test`，并通过 `study_subtask_id` 绑定二级任务。
+- `study_plans.status`、`study_tasks.status`、`study_subtasks.subtask_type` 必须由数据库约束拒绝非法枚举值。
+- schema 中不得出现 `todos`、`calendar_events`、`handouts`、`task_tests`、`export_records` 独立业务表。
 ## PRD 数据对象落库状态
 
 本节依据 PRD 第 13 章“数据对象清单”和“字段字典”整理。当前已在 `backend/` 创建 SQLAlchemy models 和 Alembic baseline migration，并已可通过 SQLite 建出以下 v0.1 核心业务表。这里的状态只表示数据表结构状态，不代表对应业务 API、service、repository 已完成。

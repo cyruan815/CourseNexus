@@ -57,6 +57,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 已提供 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的占位生成器，用于验证模块边界和存储契约。
    - 已实现单课程学习计划预览、保存、列表和详情接口。
    - 学习计划当前只生成计划 / 任务结构，不提前生成今日讲义、任务测试题或执行页内容。
+   - 已完成 S01 计划学习模式表结构契约测试，确认现有 13 张核心表可支撑第一阶段计划、任务、打卡、生成内容和导出闭环；S01 不新增业务表、不创建 migration。
 
 7. 前端最小集成工作台
    - 已建立前端 API client、鉴权 token 管理和路由壳。
@@ -73,7 +74,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
 - 图片 OCR 质量验收和复杂版面回归夹具。
-- 学习计划执行页、今日待办、大日历、打卡同步和 PDF 导出。
+- S01 文档同步后的后续 S02-S07 业务实现：真实学习计划生成 / 编辑 / 删除、今日待办、大日历、执行页、打卡同步、今日讲义、任务测试题和 PDF 导出。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
 
 ## 当前验证命令
@@ -97,6 +98,12 @@ conda run -n course-nexus python -m pytest tests/integrations/test_llama_index_c
 - `pnpm backend:test`：`161 passed in 25.46s`。
 - `pnpm backend:migrate`：Alembic `upgrade head` 成功。
 - Chroma persistence smoke：`1 passed in 3.82s`。
+
+S01 计划学习模式契约验证：
+
+- `uv run python -m pytest tests/modules/study_mode/test_subsystem_schema_contract.py -q`：`8 passed in 0.53s`。
+- `uv run python -m pytest tests/test_schema_metadata.py -q --tb=short`：`2 passed in 0.40s`。
+- `uv run python -m alembic upgrade head`：成功，未产生新 revision。
 
 前端验证：
 

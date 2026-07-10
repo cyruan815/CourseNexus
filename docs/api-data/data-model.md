@@ -22,6 +22,27 @@
 
 `AIGeneratedContent` 统一承载 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`、`note`、`handout` 和 `task_test`。结构化内容可先保存在 `content_json`，后续复杂度上升后再拆独立表。
 
+## 计划学习模式 S01 数据审计结论
+
+S01 已确认计划学习模式第一阶段复用当前 13 张核心表，不新增业务表，不修改 baseline migration：
+
+- 计划主记录复用 `study_plans`，用户确认配置、偏好、材料范围和自然语言解析结果写入 `parsed_config_json`。
+- 日期级一级任务复用 `study_tasks`，日历和今日待办从 `task_date`、`status`、`sort_order` 只读聚合。
+- 二级执行任务复用 `study_subtasks`，完成事实、任务类型和关联资料 ID 都以该表为准。
+- 今日讲义和任务测试题复用 `ai_generated_contents`，通过 `content_type = handout|task_test` 和 `study_subtask_id` 绑定二级任务。
+- 引用快照复用 `source_citations`，必须保留真实资料 ID、资料名快照、页码或页序号和命中文本。
+- 学习打卡复用 `checkin_records`，每个用户自然日最多一条记录，由二级任务完成比例派生。
+
+以下对象在 S01 结论中不建独立表：
+
+| 能力 | 禁止新增的独立表 | 当前表达方式 |
+| --- | --- | --- |
+| 今日待办 / 日历 | `todos`、`calendar_events` | 从 `study_tasks` 和 `study_subtasks` 按日期只读聚合。 |
+| 今日讲义 | `handouts` | `ai_generated_contents.content_type = handout`，关联 `study_subtask_id`。 |
+| 任务测试题 | `task_tests` | `ai_generated_contents.content_type = task_test`，题目写入 `content_json`。 |
+| PDF 导出 | `export_records` | 基于已生成内容请求时流式导出，不保存导出历史。 |
+
+只有现有列无法表达且通过共享契约评审的持久化需求，才允许创建后续兼容 migration；不得修改 `20260709_0001_create_core_tables.py` baseline migration。
 ## 实体关系草案
 
 ```mermaid
