@@ -10,9 +10,11 @@ from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
 from app.integrations.model_provider.base import ModelProvider
 from app.modules.courses.service import assert_course_owner
+from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import ContextChunk
-from app.modules.material_context.service import resolve_context
+from app.modules.material_context.service import iter_material_context_batches
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
+from app.modules.study_plans.planner import map_material_batch, make_coverage, reduce_plan_batches, validate_preview
 from app.modules.study_plans.repository import (
     StudyPlanBundle,
     get_active_study_plan_for_user,
@@ -68,9 +70,51 @@ def preview_study_plan(
     user_id: str,
     course_id: str,
     payload: StudyPlanBuildRequest,
+    model_provider: ModelProvider,
+    max_tokens: int,
 ) -> StudyPlanPreview:
     started_at = perf_counter()
-    preview = _build_study_plan_preview(db, user_id=user_id, course_id=course_id, payload=payload)
+    assert_course_owner(db, user_id, course_id)
+    batches = list(
+        iter_material_context_batches(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_scope=payload.material_scope,
+            max_tokens=max_tokens,
+        )
+    )
+    if not batches:
+        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
+
+    expected_material_ids = {material_id for batch in batches for material_id in batch.material_ids}
+    coverage_result = run_material_coverage(
+        batches=batches,
+        expected_material_ids=expected_material_ids,
+        map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
+        reduce_results=lambda mapped_batches: reduce_plan_batches(
+            mapped_batches=mapped_batches,
+            payload=payload,
+            expected_material_ids=expected_material_ids,
+            model_provider=model_provider,
+        ),
+    )
+    preview = StudyPlanPreview(
+        course_id=course_id,
+        title=coverage_result.value.title,
+        goal_text=payload.goal_text,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        daily_available_minutes=payload.daily_available_minutes,
+        material_scope=payload.material_scope,
+        coverage=make_coverage(
+            expected_material_ids=expected_material_ids,
+            processed_material_ids=coverage_result.processed_material_ids,
+            batch_count=len(batches),
+        ),
+        tasks=coverage_result.value.tasks,
+    )
+    validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
     logger.info(
         "计划预览成功 | course=%s tasks=%d subtasks=%d cost_ms=%.2f",
         course_id,
@@ -81,39 +125,24 @@ def preview_study_plan(
     return preview
 
 
-def _build_study_plan_preview(
-    db: Session,
-    *,
-    user_id: str,
-    course_id: str,
-    payload: StudyPlanBuildRequest,
-) -> StudyPlanPreview:
-    course = assert_course_owner(db, user_id, course_id)
-    context = resolve_context(db, user_id, course_id, payload.material_scope)
-    if context.no_parsed_material:
-        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
-
-    return StudyPlanPreview(
-        course_id=course_id,
-        title=f"{course.name} 学习计划",
-        goal_text=payload.goal_text,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        daily_available_minutes=payload.daily_available_minutes,
-        material_scope=payload.material_scope,
-        tasks=_build_task_previews(payload.start_date, payload.end_date, context.chunks),
-    )
-
-
 def save_study_plan(
     db: Session,
     *,
     user_id: str,
     course_id: str,
     payload: StudyPlanBuildRequest,
+    model_provider: ModelProvider,
+    max_tokens: int,
 ) -> StudyPlanBundle:
     started_at = perf_counter()
-    preview = _build_study_plan_preview(db, user_id=user_id, course_id=course_id, payload=payload)
+    preview = preview_study_plan(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        payload=payload,
+        model_provider=model_provider,
+        max_tokens=max_tokens,
+    )
     plan_id = _new_plan_id()
     plan = StudyPlan(
         id=plan_id,
@@ -124,6 +153,7 @@ def save_study_plan(
         parsed_config_json={
             "material_scope": payload.material_scope.model_dump(mode="json"),
             "daily_available_minutes": payload.daily_available_minutes,
+            "coverage": preview.coverage.model_dump(mode="json"),
         },
         start_date=payload.start_date,
         end_date=payload.end_date,
