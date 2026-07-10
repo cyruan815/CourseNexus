@@ -91,6 +91,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - 建议提交：`feat(mindmap): 实现全材料知识导图生成`、`test(mindmap): 覆盖图结构引用和失败路径`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/mindmap.md`：记录生成器分层和代码入口、nodes/edges schema 与图结构不变量、prompt 职责、分批节点抽取、跨批次实体归一、稳定 ID、边合并、环路/孤立节点处理、覆盖和引用算法及伪代码，并说明图算法复杂度、资源预算、失败策略和测试证据。
 - 更新 `docs/api-data/contracts.md` 的参数和 nodes / edges。
 - 核对 table-schema；字段不变不修改，变更交唯一负责人。
 - 更新 `runtime-flows.md`、`current-state.md`，只标 Mindmap 完成。

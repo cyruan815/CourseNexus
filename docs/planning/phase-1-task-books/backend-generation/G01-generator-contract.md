@@ -117,6 +117,7 @@ conda run -n course-nexus pytest tests/modules/material_context tests/contracts/
 - 建议提交：`feat(generation): 建立公共批处理与引用契约`、`test(generation): 覆盖公共边界`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/index.md` 和 `docs/domains/generated-content/architecture.md`：按领域模板记录 orchestrator、registry、generator、material-context 与存储的分层架构和代码入口；画出请求、全材料分批、模型调用、schema 校验、引用映射和持久化数据流；说明扩展协议、事务边界、覆盖算法、批次/token/内存预算、复杂度、模型失败与补偿策略、公共测试夹具及测试证据。
 - 更新 `docs/architecture/module-boundaries.md`、`runtime-flows.md`。
 - 更新 `docs/api-data/contracts.md`；向前端负责人提交 `frontend-integration.md` 最小 patch。
 - 更新 `docs/planning/current-state.md`，只标公共链路完成。

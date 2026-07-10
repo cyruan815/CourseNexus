@@ -92,6 +92,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - 建议提交：`feat(knowledge-list): 实现全材料知识点清单生成`、`test(knowledge-list): 覆盖去重引用和失败路径`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/knowledge-list.md`：记录生成器分层和代码入口、items schema 与不变量、prompt 职责、分批知识点抽取、名称标准化、跨批次去重排序、重要度计算、覆盖和引用映射算法及伪代码，并说明复杂度、批次/token 预算、失败策略和测试证据。
 - 更新 `docs/api-data/contracts.md` 的参数和 items 示例。
 - 核对 table-schema，严格使用既有字段；字段不变不修改。
 - 更新 `runtime-flows.md`、`current-state.md`，只标 Knowledge List 完成。

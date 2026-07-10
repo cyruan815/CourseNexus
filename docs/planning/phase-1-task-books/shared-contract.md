@@ -14,6 +14,7 @@
 4. `docs/api-data/api-conventions.md`、`contracts.md`、`data-model.md`、`table-schema.md`。
 5. `docs/engineering/development-conventions.md`、`definition-of-done.md`、`collaboration.md`。
 6. `docs/engineering/rag-consumer-guide.md`，适用于所有问答和材料生成功能。
+7. `docs/domains/index.md` 和 `docs/domains/implementation-template.md`，用于记录本任务实际落地的领域架构、算法和代码入口。
 
 当前代码中的 Pydantic schema 和已注册 router 是“当前已实现接口”的事实来源；长期目标和缺口以 docs 为准。两者不一致时不得静默选一边，必须先在任务提交中同步修正文档或契约。
 
@@ -140,6 +141,16 @@
 | 表、列、约束、索引、枚举 | `docs/api-data/data-model.md`、`table-schema.md`、Alembic migration |
 | 当前完成状态或技术债 | `docs/planning/current-state.md`、`tech-debt-tracker.md` |
 | 开发命令、测试或协作方式 | `docs/engineering/` 对应文档 |
+| 功能实现、代码入口、领域内架构或算法 | `docs/domains/<domain>/` 下对应任务文档 |
+
+### 7.1 领域实现文档是代码交付物
+
+- 每份任务书必须写明唯一的 `docs/domains/` 交付路径。开发者从实现开始就同步维护该文档，不得等功能“稳定后”再补。
+- 前端领域文档至少记录页面和组件边界、用户流程、状态矩阵、API 数据流、错误降级、测试入口及已知限制。
+- 后端领域文档至少记录模块分层和依赖方向、代码入口、请求到持久化的数据流、事务与幂等边界、核心算法步骤或伪代码、输入输出和不变量、复杂度与 token/批次/内存等资源预算、失败重试或补偿策略、测试证据及已知限制。
+- 调用模型的后端功能还必须记录 prompt 职责、结构化 schema、map/reduce 或覆盖策略、去重与引用映射算法、模型输出校验和降级路径；不得只写“调用大模型生成”。
+- `docs/domains/` 只解释领域内部实现，不复制全局 API、表结构或 PRD。全局契约通过链接引用，变化仍按本节矩阵更新权威文档。
+- 代码、测试和领域文档必须在同一任务分支共同演进。领域文档缺失、与实现不符或无法说明关键算法时，代码评审和任务验收不得通过。
 
 ## 8. 严禁事项
 
@@ -159,5 +170,6 @@
 - 核对本任务实际修改文件全部位于所有权范围。
 - 核对新增 API 和字段已进入文档并有前端可消费示例。
 - 核对 migration 可升级，必要时可降级，并通过 schema metadata 测试。
+- 核对任务书指定的 `docs/domains/` 文档存在，代码入口、架构、算法、失败策略和测试证据与当前实现一致。
 - 核对 `git diff --check`、目标测试和受影响模块回归测试均通过。
 - 在任务书验收表逐项记录证据；失败项不得标记完成。

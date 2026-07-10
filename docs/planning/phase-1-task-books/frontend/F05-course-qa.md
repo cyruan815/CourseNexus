@@ -71,6 +71,7 @@
 - 建议按 API/会话、提问/引用、占位/测试小提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/course-qa/frontend.md`，记录会话、提问、追问和引用组件边界，loading/grounded/partial/no_source/error 状态，API 数据流、防御性渲染、降级路径和测试入口。
 - 更新 frontend-integration：三接口、当前引用与历史引用缺口、note/preview 未接。
 - 更新 current-state；不修改 PRD 的长期 note/预览目标。
 

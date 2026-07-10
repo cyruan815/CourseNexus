@@ -90,6 +90,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - 建议提交：`feat(outline): 实现全材料复习提纲生成`、`test(outline): 覆盖章节引用和失败路径`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/outline.md`：记录生成器分层和代码入口、sections schema 与层级不变量、prompt 职责、分批章节识别、跨批次层级归并、重点提取、覆盖核算和引用映射算法及伪代码，并说明复杂度、批次/token 预算、失败与降级策略和测试证据。
 - 更新 `docs/api-data/contracts.md` 的参数和 sections 示例。
 - 核对 table-schema，严格使用既有字段；字段不变不修改。
 - 更新 `runtime-flows.md`、`current-state.md`，只标 Outline 完成。

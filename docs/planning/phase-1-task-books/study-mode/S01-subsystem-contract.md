@@ -186,6 +186,7 @@ conda run -n course-nexus python -m alembic upgrade head
 
 ## 7. 文档同步
 
+- 新建或更新 `docs/domains/study-mode/index.md` 和 `docs/domains/study-mode/architecture.md`：记录计划、待办日历、执行、打卡、任务内容和导出的组件分层架构、代码归属、依赖方向、状态与数据流、事务所有权和公开接口；建立计划生成、排程、聚合、状态重算、打卡重算、内容生成和导出的算法目录，并标出复杂度/资源预算、失败补偿责任及公共契约测试证据。
 - API、错误码和事务边界：更新 `docs/api-data/contracts.md`。
 - 表、字段、唯一约束和无新增表结论：更新 `docs/api-data/data-model.md`、`docs/api-data/table-schema.md`。
 - 模块依赖和只读聚合边界：必要时更新 `docs/architecture/module-boundaries.md`。

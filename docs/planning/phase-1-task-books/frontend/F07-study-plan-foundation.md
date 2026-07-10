@@ -75,6 +75,7 @@
 - 建议按 preview、save、list/detail、占位/测试小提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/study-mode/frontend-foundation.md`，记录计划预览、保存、列表和详情组件，编辑前状态、API 数据流、错误降级、执行模式占位边界和测试入口。
 - 更新 frontend-integration：四接口、request snapshot、确定性基础规则与未实现入口。
 - 更新 current-state；计划团队新增 API 后先更新 contracts 再替换占位。
 

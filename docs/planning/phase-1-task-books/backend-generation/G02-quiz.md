@@ -89,6 +89,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - 建议提交：`feat(quiz): 实现全材料课程自测生成`、`test(quiz): 覆盖结构引用和失败路径`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/quiz.md`：记录生成器分层和代码入口、Quiz 输入输出不变量、prompt 与 schema 职责、全材料 map/reduce、题型配额、覆盖核算、去重过滤、稳定引用映射算法及伪代码，并说明时间/空间复杂度、批次/token 预算、模型或校验失败策略和测试证据。
 - 更新 `docs/api-data/contracts.md` 的 Quiz parameters 和响应示例。
 - 核对现有 `table-schema.md` questions 契约；字段不变不修改。
 - 更新 `runtime-flows.md`、`current-state.md`，只标 Quiz 完成。

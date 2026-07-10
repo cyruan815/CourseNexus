@@ -255,6 +255,7 @@ conda run -n course-nexus python -m pytest tests/modules/todos_calendar tests/mo
 
 ## 7. 文档同步
 
+- 新建或更新 `docs/domains/study-mode/learning-execution.md`：记录执行模块分层和代码入口、今日任务查询与完成写入数据流、期望状态幂等算法、二级到一级再到计划的状态聚合算法及伪代码、同事务打卡联动顺序、并发/回滚/补偿策略、复杂度和测试证据。
 - 更新 `docs/architecture/module-boundaries.md`、`runtime-flows.md`：learning execution 写入范围和事务顺序。
 - 更新 `docs/api-data/contracts.md`、`api-conventions.md`：两个接口、幂等、错误码和时间语义。
 - 更新 `docs/api-data/data-model.md`：一级任务/计划派生状态规则；表结构不变。

@@ -72,6 +72,7 @@
 - 建议按入口、历史详情、渲染器、测试小提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/frontend.md`，记录五类生成入口、历史和详情组件，生成状态矩阵、API 数据流、`content_json` 防御性渲染、未知 schema 降级、占位边界和测试入口。
 - 更新 frontend-integration：五类型、placeholder 状态、content_json 防御策略、缺失 API。
 - 生成团队稳定结构后同步 contracts/table-schema；前端不得单方面改契约；更新 current-state。
 

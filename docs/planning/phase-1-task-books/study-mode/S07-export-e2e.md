@@ -122,6 +122,7 @@ pnpm backend:test
 - 建议提交：`build(pdf): 引入 ReportLab 导出依赖`；`feat(exports): 支持任务内容 PDF 导出`；`test(study-mode): 覆盖计划学习完整闭环`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/study-mode/exports.md`：记录导出模块分层和代码入口、授权查询到 HTML/模板再到 PDF 响应的数据流、渲染与分页算法、时间/空间复杂度、字体/图片/临时资源管理、时间和内存预算、输入安全、失败清理与降级策略、端到端测试证据及已知限制。
 - 更新 `docs/architecture/runtime-flows.md`、ADR index 与新 ADR。
 - 更新 `docs/api-data/contracts.md`、`api-conventions.md`：二进制例外、headers、错误码。
 - 更新 `docs/engineering/development-conventions.md`：PDF 测试命令和依赖。

@@ -120,6 +120,7 @@ conda run -n course-nexus python -m pytest tests/integration/test_task_content_g
 - 建议提交：`feat(handout): 接入任务讲义生成器`；`feat(task-test): 接入任务测试题生成器`；`feat(execution): 新增任务内容按需生成接口`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/study-mode/task-content.md`：记录 Handout/Task Test 生成器分层和代码入口、任务上下文构造与统一存储数据流、prompt/schema、全材料 map/reduce 与覆盖算法、内容去重和引用映射、输出校验、复杂度与批次/token 预算、模型失败/重试/补偿策略和测试证据。
 - 更新 `docs/architecture/module-boundaries.md`、`runtime-flows.md`。
 - 更新 `docs/api-data/contracts.md`、`table-schema.md` 的两类 content_json 契约。
 - 更新 `docs/planning/current-state.md`；不改 PRD原意。

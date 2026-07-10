@@ -71,6 +71,7 @@
 - 建议小提交：`feat(auth): 完成注册登录与会话恢复`、`fix(auth): 统一处理登录失效`、`test(auth): 覆盖认证边界`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/auth/frontend.md`，记录认证页面与组件边界、会话状态机、路由保护和恢复流程、API 数据流、401/403 降级、测试入口及已知限制。
 - 更新 `docs/api-data/frontend-integration.md`：认证路由、恢复、token key、401/403。
 - 完成后更新 `docs/planning/current-state.md`；产品/架构未变化，不改 PRD/ADR。
 

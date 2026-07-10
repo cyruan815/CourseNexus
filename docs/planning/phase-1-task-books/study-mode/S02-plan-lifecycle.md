@@ -331,6 +331,7 @@ conda run -n course-nexus python -m pytest tests/modules/study_plans tests/integ
 
 ## 7. 文档同步
 
+- 新建或更新 `docs/domains/study-mode/plan-lifecycle.md`：记录 router/service/repository/provider 分层和代码入口、目标解析与全材料计划生成数据流、prompt/schema、map/reduce 覆盖、任务排程算法及伪代码、预览到保存的幂等策略、编辑/重生成替换事务、不变量、复杂度与批次/token 预算、失败补偿和测试证据。
 - 产品行为没有改变，不改 PRD 原意；若最终偏好枚举经产品调整，再同步对应 PRD 字段章节。
 - 更新 `docs/architecture/runtime-flows.md`：真实全材料计划生成、确认后保存和替换事务。
 - 更新 `docs/api-data/contracts.md`、`api-conventions.md`：新增路径、请求、响应、幂等和错误码。

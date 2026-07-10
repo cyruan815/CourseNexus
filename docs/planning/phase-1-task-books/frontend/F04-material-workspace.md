@@ -71,6 +71,7 @@
 - 人工记录 F04；建议按列表、mutation、scope、测试小提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/materials/frontend.md`，记录上传、链接、状态轮询/刷新、重试和删除的组件边界、状态矩阵、API 数据流、错误降级、预览占位边界和测试入口。
 - 更新 frontend-integration：六接口、同步解析、状态映射、预览/目录缺口。
 - 更新 current-state；不改 PRD 长期预览要求或 ADR。
 

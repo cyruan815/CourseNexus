@@ -71,6 +71,7 @@
 - 建议小提交：课程创建/list、编辑删除、初始资料、测试分别提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/courses/frontend.md`，记录首页和课程组件边界、课程 CRUD 与初始资料串行流程、partial success 状态矩阵、API 数据流、错误恢复和测试入口。
 - 更新 `docs/api-data/frontend-integration.md`：CRUD、null、串行/partial success。
 - 更新 `docs/planning/current-state.md`；既有产品/架构口径不变。
 

@@ -122,6 +122,7 @@ conda run -n course-nexus python -m pytest tests/modules/learning_execution test
 - 建议提交：`feat(checkins): 幂等重算每日学习完成记录`；`feat(checkins): 新增打卡查询接口`；`fix(checkins): 同步计划生命周期与打卡`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/study-mode/checkins.md`：记录打卡模块分层和代码入口、按用户日期重算的数据流、完成比例与颜色等级算法及伪代码、Decimal 舍入不变量、upsert 与并发一致性、查询/写入复杂度、失败补偿和测试证据。
 - 更新 `docs/api-data/contracts.md`、`api-conventions.md`：接口、Decimal 和颜色映射。
 - 更新 `docs/api-data/data-model.md`、`table-schema.md`：明确现有字段语义，无 schema 变化。
 - 更新 `docs/architecture/runtime-flows.md` 和 `docs/planning/current-state.md`。

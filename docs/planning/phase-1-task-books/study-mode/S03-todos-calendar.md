@@ -265,6 +265,7 @@ conda run -n course-nexus python -m pytest tests/modules/study_plans tests/modul
 
 ## 7. 文档同步
 
+- 新建或更新 `docs/domains/study-mode/todos-calendar.md`：记录只读聚合模块分层和代码入口、五类查询的数据流、用户/课程过滤、日期边界、分组与排序算法及伪代码、空集合不变量、SQL/索引使用、查询次数与时间/空间复杂度、失败策略和测试证据。
 - 更新 `docs/architecture/module-boundaries.md`、`runtime-flows.md`：明确 `todos-calendar` 零写模型。
 - 更新 `docs/api-data/contracts.md`、`api-conventions.md`：五个 GET 路径、日期格式、空集合和错误码。
 - `table-schema.md` 只补充查询索引使用说明，不新增表或列。

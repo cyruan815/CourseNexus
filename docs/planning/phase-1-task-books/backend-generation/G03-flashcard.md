@@ -91,6 +91,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - 建议提交：`feat(flashcard): 实现全材料卡片生成`、`test(flashcard): 覆盖结构引用和失败路径`。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/generated-content/flashcard.md`：记录生成器分层和代码入口、卡片 schema 与不变量、prompt 职责、分批抽取、术语标准化、跨批次合并去重、覆盖和引用映射算法及伪代码，并说明复杂度、批次/token 预算、校验失败与降级策略和测试证据。
 - 更新 `docs/api-data/contracts.md` 的参数、cards 和 mastery 初始语义。
 - 核对 table-schema；字段未变不修改。
 - 更新 `runtime-flows.md`、`current-state.md`，只标 Flashcard 完成。

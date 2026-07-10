@@ -65,6 +65,7 @@
 - 建议小提交：三栏、scope、隔离测试分别提交。
 
 ## 7. 文档同步
+- 新建或更新 `docs/domains/course-workspace/frontend.md`，记录三栏工作台组件结构、共享 `material_scope` 状态、局部状态隔离、消费者 API 数据流、窄屏降级和测试入口。
 - 更新 `docs/api-data/frontend-integration.md`：唯一 scope、默认值、显式空禁用、消费者。
 - 更新 current-state；既有 PRD 三栏和架构未变化。
 
