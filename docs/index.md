@@ -25,7 +25,7 @@
 | [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-07-10 |
 | [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-07-09 |
 | [engineering/index.md](engineering/index.md) | 项目骨架、开发约定和轻量协作规范入口。 | 2026-07-09 |
-| [planning/index.md](planning/index.md) | 当前状态、实现路线图、技术债和信息处理优化计划入口。 | 2026-07-09 |
+| [planning/index.md](planning/index.md) | 当前状态、实现路线图、技术债、第一阶段并行任务书和信息处理优化计划入口。 | 2026-07-10 |
 | [domains/index.md](domains/index.md) | 未来功能模块知识库入口，当前不展开具体模块。 | 2026-07-09 |
 
 ## 相关链接
