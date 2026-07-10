@@ -14,16 +14,20 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
 import app.modules.materials.service as materials_service
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.schemas import MaterialLinkCreate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate
 from app.modules.materials.service import (
+    create_material_folder,
     create_link_material,
+    delete_material_folder,
     delete_material,
     get_material_detail,
     list_course_materials,
+    move_material_to_folder,
     upload_file_material,
 )
 from app.modules.users.schemas import UserCreate
@@ -203,3 +207,59 @@ def test_delete_material_soft_deletes_and_hides_from_list(db: Session, tmp_path)
     assert deleted.parse_status == "deleted"
     assert deleted.deleted_at is not None
     assert list_course_materials(db, user.id, course.id) == []
+
+
+def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Session, tmp_path) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material = upload_file_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        filename="notes.txt",
+        stream=BytesIO(b"matrix notes"),
+        content_type="text/plain",
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
+    material.parse_status = "parsed"
+    db.commit()
+    folder = create_material_folder(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=MaterialFolderCreate(name="Week 1"),
+    )
+    rag_index = FakeRagIndex.from_chunks(
+        [
+            RagChunk(
+                chunk_id="chunk-1",
+                user_id=user.id,
+                course_id=course.id,
+                material_id=material.id,
+                folder_id=None,
+                chunk_index=0,
+                text="matrix notes",
+                page=None,
+                page_index=None,
+                heading=None,
+            )
+        ]
+    )
+
+    moved = move_material_to_folder(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        folder_id=folder.id,
+        rag_index=rag_index,
+    )
+
+    assert moved.folder_id == folder.id
+    assert rag_index.records["chunk-1"].folder_id == folder.id
+
+    deleted_folder = delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+
+    assert deleted_folder.deleted_at is not None
+    db.refresh(material)
+    assert material.folder_id is None
+    assert rag_index.records["chunk-1"].folder_id is None

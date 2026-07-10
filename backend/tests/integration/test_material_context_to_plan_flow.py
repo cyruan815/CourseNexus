@@ -74,7 +74,6 @@ def test_material_context_to_study_plan_flow(client: TestClient) -> None:
         "daily_available_minutes": 60,
         "material_scope": {
             "include_all_parsed_materials": True,
-            "folder_ids": [],
             "material_ids": [],
         },
     }

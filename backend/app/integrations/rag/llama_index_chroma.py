@@ -59,6 +59,20 @@ class LlamaIndexChromaRagIndex:
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引删除失败", status_code=502) from exc
 
+    def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
+        try:
+            stored = self.collection.get(where={"material_id": material_id}, include=["metadatas"])
+            ids = stored.get("ids") or []
+            metadatas = stored.get("metadatas") or []
+            if not ids:
+                return
+            self.collection.update(
+                ids=ids,
+                metadatas=[{**metadata, "folder_id": folder_id or ""} for metadata in metadatas],
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="资料目录索引更新失败", status_code=502) from exc
+
     def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
         if top_k <= 0:
             return []
@@ -106,8 +120,6 @@ class LlamaIndexChromaRagIndex:
             filters.append(
                 MetadataFilter(key="material_id", value=list(scope.material_ids), operator=FilterOperator.IN)
             )
-        if scope.folder_ids:
-            filters.append(MetadataFilter(key="folder_id", value=list(scope.folder_ids), operator=FilterOperator.IN))
         return MetadataFilters(filters=filters, condition=FilterCondition.AND)
 
 

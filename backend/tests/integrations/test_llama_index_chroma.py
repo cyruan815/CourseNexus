@@ -89,7 +89,7 @@ def test_chroma_persists_and_filters_course(tmp_path: Path) -> None:
     assert [hit.chunk_id for hit in hits] == ["math-c1"]
 
 
-def test_chroma_filters_user_material_and_folder(tmp_path: Path) -> None:
+def test_chroma_filters_user_and_material(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
     rag_index.index_chunks(
         [
@@ -101,7 +101,7 @@ def test_chroma_filters_user_material_and_folder(tmp_path: Path) -> None:
 
     hits = rag_index.retrieve(
         query="matrix",
-        scope=RagScopeFilter(user_id="u1", course_id="math", material_ids=("m2",), folder_ids=("f2",)),
+        scope=RagScopeFilter(user_id="u1", course_id="math", material_ids=("m2",)),
         top_k=8,
     )
 
@@ -148,6 +148,18 @@ def test_chroma_delete_material_removes_vectors(tmp_path: Path) -> None:
     )
 
     assert [hit.chunk_id for hit in hits] == ["c2"]
+
+
+def test_chroma_updates_material_folder_without_reembedding(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks([rag_chunk("c1", material_id="m1", folder_id="old")])
+
+    rag_index.update_material_folder("m1", "new")
+
+    stored = rag_index.collection.get(ids=["c1"], include=["metadatas"])
+
+    assert stored["metadatas"] is not None
+    assert stored["metadatas"][0]["folder_id"] == "new"
 
 
 def test_chroma_clear_only_removes_configured_collection(tmp_path: Path) -> None:

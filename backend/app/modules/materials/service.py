@@ -12,19 +12,28 @@ from app.integrations.file_storage.base import FileStorage, material_type_for_fi
 from app.integrations.parsers.base import Parser
 from app.integrations.rag.base import RagChunk, RagIndex
 from app.modules.courses.service import assert_course_owner
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
 from app.modules.materials.repository import (
+    get_active_material_folder_for_user,
     get_active_material_for_user,
+    list_active_material_folders_for_course,
     list_active_materials_for_course,
+    list_materials_for_folder,
+    next_material_folder_sort_order,
     replace_material_chunks,
     replace_material_chunks_in_session,
     save_material,
+    save_material_folder,
 )
-from app.modules.materials.schemas import MaterialLinkCreate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate
 
 
 def _new_material_id() -> str:
     return f"mat_{uuid4().hex}"
+
+
+def _new_material_folder_id() -> str:
+    return f"fld_{uuid4().hex}"
 
 
 def _chunk_id(material_id: str, chunk_index: int) -> str:
@@ -44,8 +53,10 @@ def upload_file_material(
     stream: BinaryIO,
     content_type: str | None,
     storage: FileStorage,
+    folder_id: str | None = None,
 ) -> CourseMaterial:
     assert_course_owner(db, user_id, course_id)
+    _assert_folder_in_course(db, user_id=user_id, course_id=course_id, folder_id=folder_id)
     material_id = _new_material_id()
     stored_file = storage.save_file(
         user_id=user_id,
@@ -59,6 +70,7 @@ def upload_file_material(
         id=material_id,
         course_id=course_id,
         user_id=user_id,
+        folder_id=folder_id,
         name=stored_file.filename,
         material_type=_material_type_for_filename(stored_file.filename),
         source_type="file",
@@ -78,10 +90,12 @@ def create_link_material(
     payload: MaterialLinkCreate,
 ) -> CourseMaterial:
     assert_course_owner(db, user_id, course_id)
+    _assert_folder_in_course(db, user_id=user_id, course_id=course_id, folder_id=payload.folder_id)
     material = CourseMaterial(
         id=_new_material_id(),
         course_id=course_id,
         user_id=user_id,
+        folder_id=payload.folder_id,
         name=payload.name,
         material_type="link",
         source_type="url",
@@ -101,6 +115,111 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     if material is None:
         raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
     return material
+
+
+def create_material_folder(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: MaterialFolderCreate,
+) -> MaterialFolder:
+    assert_course_owner(db, user_id, course_id)
+    folder = MaterialFolder(
+        id=_new_material_folder_id(),
+        user_id=user_id,
+        course_id=course_id,
+        name=payload.name,
+        sort_order=payload.sort_order or next_material_folder_sort_order(db, user_id, course_id),
+    )
+    return save_material_folder(db, folder)
+
+
+def list_material_folders(db: Session, user_id: str, course_id: str) -> list[MaterialFolder]:
+    assert_course_owner(db, user_id, course_id)
+    return list_active_material_folders_for_course(db, user_id, course_id)
+
+
+def get_material_folder(db: Session, user_id: str, folder_id: str) -> MaterialFolder:
+    folder = get_active_material_folder_for_user(db, user_id, folder_id)
+    if folder is None:
+        raise CourseNexusError(code="NOT_FOUND", message="资料目录不存在", status_code=404)
+    return folder
+
+
+def update_material_folder(
+    db: Session,
+    *,
+    user_id: str,
+    folder_id: str,
+    payload: MaterialFolderUpdate,
+) -> MaterialFolder:
+    folder = get_material_folder(db, user_id, folder_id)
+    if payload.name is not None:
+        folder.name = payload.name
+    if payload.sort_order is not None:
+        folder.sort_order = payload.sort_order
+    folder.updated_at = datetime.now(timezone.utc)
+    return save_material_folder(db, folder)
+
+
+def delete_material_folder(
+    db: Session,
+    *,
+    user_id: str,
+    folder_id: str,
+    rag_index: RagIndex,
+) -> MaterialFolder:
+    folder = get_material_folder(db, user_id, folder_id)
+    materials = list_materials_for_folder(db, user_id, folder_id)
+    for material in materials:
+        if material.parse_status == "parsed" and material.deleted_at is None:
+            rag_index.update_material_folder(material.id, None)
+
+    now = datetime.now(timezone.utc)
+    for material in materials:
+        material.folder_id = None
+        material.updated_at = now
+        db.add(material)
+    folder.deleted_at = now
+    folder.updated_at = now
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder
+
+
+def move_material_to_folder(
+    db: Session,
+    *,
+    user_id: str,
+    material_id: str,
+    folder_id: str | None,
+    rag_index: RagIndex,
+) -> CourseMaterial:
+    material = get_material_detail(db, user_id, material_id)
+    _assert_folder_in_course(db, user_id=user_id, course_id=material.course_id, folder_id=folder_id)
+    if material.folder_id == folder_id:
+        return material
+    if material.parse_status == "parsed":
+        rag_index.update_material_folder(material.id, folder_id)
+    material.folder_id = folder_id
+    material.updated_at = datetime.now(timezone.utc)
+    return save_material(db, material)
+
+
+def _assert_folder_in_course(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    folder_id: str | None,
+) -> None:
+    if folder_id is None:
+        return
+    folder = get_material_folder(db, user_id, folder_id)
+    if folder.course_id != course_id:
+        raise CourseNexusError(code="NOT_FOUND", message="资料目录不存在", status_code=404)
 
 
 def delete_material(

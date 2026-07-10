@@ -1,9 +1,70 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
+
+
+def save_material_folder(db: Session, folder: MaterialFolder) -> MaterialFolder:
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder
+
+
+def get_active_material_folder_for_user(db: Session, user_id: str, folder_id: str) -> MaterialFolder | None:
+    return db.execute(
+        select(MaterialFolder).where(
+            MaterialFolder.id == folder_id,
+            MaterialFolder.user_id == user_id,
+            MaterialFolder.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+
+
+def list_active_material_folders_for_course(
+    db: Session,
+    user_id: str,
+    course_id: str,
+) -> list[MaterialFolder]:
+    return list(
+        db.execute(
+            select(MaterialFolder)
+            .where(
+                MaterialFolder.user_id == user_id,
+                MaterialFolder.course_id == course_id,
+                MaterialFolder.deleted_at.is_(None),
+            )
+            .order_by(
+                func.coalesce(MaterialFolder.sort_order, 2_147_483_647),
+                MaterialFolder.created_at,
+                MaterialFolder.id,
+            )
+        ).scalars()
+    )
+
+
+def next_material_folder_sort_order(db: Session, user_id: str, course_id: str) -> int:
+    current_max = db.execute(
+        select(func.max(MaterialFolder.sort_order)).where(
+            MaterialFolder.user_id == user_id,
+            MaterialFolder.course_id == course_id,
+            MaterialFolder.deleted_at.is_(None),
+        )
+    ).scalar_one()
+    return (current_max or 0) + 1
+
+
+def list_materials_for_folder(db: Session, user_id: str, folder_id: str) -> list[CourseMaterial]:
+    return list(
+        db.execute(
+            select(CourseMaterial).where(
+                CourseMaterial.user_id == user_id,
+                CourseMaterial.folder_id == folder_id,
+            )
+        ).scalars()
+    )
 
 
 def save_material(db: Session, material: CourseMaterial) -> CourseMaterial:

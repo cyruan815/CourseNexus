@@ -23,7 +23,6 @@ class RagScopeFilter:
     user_id: str
     course_id: str
     material_ids: tuple[str, ...] = ()
-    folder_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -41,6 +40,9 @@ class RagIndex(Protocol):
 
     def delete_material(self, material_id: str) -> None:
         """Remove all derived records for one material."""
+
+    def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
+        """Update folder metadata without recomputing embeddings."""
 
     def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
         """Retrieve scored chunk ids inside a hard scope filter."""

@@ -92,7 +92,6 @@ def test_course_qa_api_answers_with_citations(client: TestClient) -> None:
             "question": "What is Alpha?",
             "material_scope": {
                 "include_all_parsed_materials": True,
-                "folder_ids": [],
                 "material_ids": [],
             },
             "source_page": "course_detail",
@@ -105,3 +104,24 @@ def test_course_qa_api_answers_with_citations(client: TestClient) -> None:
     assert data["answer_text"]
     assert len(data["source_citations"]) == 1
     assert data["source_citations"][0]["material_name"] == "notes.md"
+
+
+def test_course_qa_api_rejects_folder_scope(client: TestClient) -> None:
+    token = register_and_token(client, "alice")
+    course_id = create_course(client, token)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/qa/questions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "question": "What is Alpha?",
+            "material_scope": {
+                "include_all_parsed_materials": False,
+                "folder_ids": ["fld_1"],
+                "material_ids": [],
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MaterialScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     include_all_parsed_materials: bool = True
-    folder_ids: list[str] = Field(default_factory=list)
     material_ids: list[str] = Field(default_factory=list)
 
 

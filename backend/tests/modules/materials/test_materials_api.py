@@ -167,3 +167,95 @@ def test_upload_rejects_unsafe_filename(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_material_folder_crud_and_material_move_flow(client: TestClient) -> None:
+    token = register_and_token(client, "alice")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    week_one_response = client.post(
+        f"/api/v1/courses/{course_id}/material-folders",
+        headers=headers,
+        json={"name": "第一周"},
+    )
+    week_two_response = client.post(
+        f"/api/v1/courses/{course_id}/material-folders",
+        headers=headers,
+        json={"name": "第二周"},
+    )
+
+    assert week_one_response.status_code == 200
+    assert week_two_response.status_code == 200
+    week_one = week_one_response.json()["data"]
+    week_two = week_two_response.json()["data"]
+    assert week_one["sort_order"] == 1
+    assert week_two["sort_order"] == 2
+
+    update_response = client.patch(
+        f"/api/v1/material-folders/{week_two['id']}",
+        headers=headers,
+        json={"name": "考试重点", "sort_order": 1},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["data"]["name"] == "考试重点"
+
+    list_response = client.get(f"/api/v1/courses/{course_id}/material-folders", headers=headers)
+    assert list_response.status_code == 200
+    assert {folder["id"] for folder in list_response.json()["data"]} == {week_one["id"], week_two["id"]}
+
+    upload_response = client.post(
+        f"/api/v1/courses/{course_id}/materials",
+        headers=headers,
+        files={"file": ("notes.md", b"# Intro", "text/markdown")},
+    )
+    material_id = upload_response.json()["data"]["id"]
+
+    move_response = client.patch(
+        f"/api/v1/materials/{material_id}/folder",
+        headers=headers,
+        json={"folder_id": week_one["id"]},
+    )
+    assert move_response.status_code == 200
+    assert move_response.json()["data"]["folder_id"] == week_one["id"]
+
+    delete_response = client.delete(f"/api/v1/material-folders/{week_one['id']}", headers=headers)
+    assert delete_response.status_code == 200
+    assert delete_response.json()["data"]["deleted_at"] is not None
+
+    material_response = client.get(f"/api/v1/materials/{material_id}", headers=headers)
+    assert material_response.json()["data"]["folder_id"] is None
+
+
+def test_material_folder_endpoints_do_not_cross_user_boundary(client: TestClient) -> None:
+    alice_token = register_and_token(client, "alice")
+    bob_token = register_and_token(client, "bob")
+    alice_course_id = create_course(client, alice_token, "Linear Algebra")
+    bob_course_id = create_course(client, bob_token, "Databases")
+    alice_headers = {"Authorization": f"Bearer {alice_token}"}
+    bob_headers = {"Authorization": f"Bearer {bob_token}"}
+
+    bob_folder = client.post(
+        f"/api/v1/courses/{bob_course_id}/material-folders",
+        headers=bob_headers,
+        json={"name": "Bob Folder"},
+    ).json()["data"]
+    alice_material = client.post(
+        f"/api/v1/courses/{alice_course_id}/materials",
+        headers=alice_headers,
+        files={"file": ("notes.md", b"# Intro", "text/markdown")},
+    ).json()["data"]
+
+    update_response = client.patch(
+        f"/api/v1/material-folders/{bob_folder['id']}",
+        headers=alice_headers,
+        json={"name": "Stolen"},
+    )
+    move_response = client.patch(
+        f"/api/v1/materials/{alice_material['id']}/folder",
+        headers=alice_headers,
+        json={"folder_id": bob_folder["id"]},
+    )
+
+    assert update_response.status_code == 404
+    assert move_response.status_code == 404

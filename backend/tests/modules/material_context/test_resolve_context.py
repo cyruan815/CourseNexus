@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -19,7 +20,6 @@ from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
 from app.modules.material_context.service import resolve_context
-from app.modules.materials.models import MaterialFolder
 from app.modules.materials.service import delete_material, parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
@@ -130,25 +130,9 @@ def test_material_ids_scope_returns_requested_parsed_material(db: Session, tmp_p
     assert result.no_parsed_material is False
 
 
-def test_folder_ids_scope_returns_folder_material_chunks(db: Session, tmp_path: Path) -> None:
-    user = register_user(db, UserCreate(username="alice", password="password123"))
-    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
-    folder = MaterialFolder(id="fld_1", user_id=user.id, course_id=course.id, name="Week 1")
-    db.add(folder)
-    db.commit()
-    material = create_material(db, tmp_path, user_id=user.id, course_id=course.id, filename="folder.txt", content=b"folder")
-    material.folder_id = folder.id
-    db.commit()
-    parse_uploaded_material(db, tmp_path, user.id, material.id)
-
-    result = resolve_context(
-        db,
-        user.id,
-        course.id,
-        MaterialScope(include_all_parsed_materials=False, folder_ids=[folder.id]),
-    )
-
-    assert [chunk.material_id for chunk in result.chunks] == [material.id]
+def test_material_scope_rejects_folder_selection() -> None:
+    with pytest.raises(ValidationError):
+        MaterialScope(include_all_parsed_materials=False, folder_ids=["fld_1"])
 
 
 def test_cross_user_material_id_is_rejected(db: Session, tmp_path: Path) -> None:

@@ -80,7 +80,6 @@ def test_course_workspace_material_qa_flow(client: TestClient) -> None:
             "question": "What is Alpha?",
             "material_scope": {
                 "include_all_parsed_materials": True,
-                "folder_ids": [],
                 "material_ids": [],
             },
             "source_page": "course_detail",

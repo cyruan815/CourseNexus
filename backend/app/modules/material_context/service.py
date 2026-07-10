@@ -28,7 +28,6 @@ from app.modules.materials.models import MaterialChunk
 @dataclass(frozen=True)
 class _ResolvedScope:
     material_ids: tuple[str, ...]
-    folder_ids: tuple[str, ...]
     eligible_material_ids: tuple[str, ...]
     empty_selection: bool = False
 
@@ -49,7 +48,6 @@ def resolve_context(
         user_id=user_id,
         course_id=course_id,
         material_ids=list(resolved_scope.material_ids) or None,
-        folder_ids=list(resolved_scope.folder_ids) or None,
         limit=limit,
     )
     chunks = [_to_context_chunk(chunk, material_name) for chunk, material_name in rows]
@@ -71,13 +69,11 @@ def retrieve_relevant_context(
         return MaterialContextResult(chunks=[], no_parsed_material=True)
 
     material_ids = list(resolved_scope.material_ids) or None
-    folder_ids = list(resolved_scope.folder_ids) or None
     if not resolved_scope.eligible_material_ids or not has_parsed_context_chunks(
         db,
         user_id=user_id,
         course_id=course_id,
         material_ids=material_ids,
-        folder_ids=folder_ids,
     ):
         return MaterialContextResult(chunks=[], no_parsed_material=True)
 
@@ -94,7 +90,6 @@ def retrieve_relevant_context(
             course_id=course_id,
             chunk_ids=[hit.chunk_id for hit in hits],
             material_ids=material_ids,
-            folder_ids=folder_ids,
         )
     }
     chunks = []
@@ -125,7 +120,6 @@ def iter_material_context_batches(
         user_id=user_id,
         course_id=course_id,
         material_ids=list(resolved_scope.material_ids) or None,
-        folder_ids=list(resolved_scope.folder_ids) or None,
     )
     chunks = [_to_context_chunk(chunk, material_name) for chunk, material_name in rows]
     represented_material_ids = {chunk.material_id for chunk in chunks}
@@ -151,12 +145,10 @@ def _resolve_scope(
 
     if scope.include_all_parsed_materials:
         material_ids: tuple[str, ...] = ()
-        folder_ids: tuple[str, ...] = ()
     else:
         material_ids = _unique_tuple(scope.material_ids)
-        folder_ids = _unique_tuple(scope.folder_ids)
-        if not material_ids and not folder_ids:
-            return _ResolvedScope(material_ids=(), folder_ids=(), eligible_material_ids=(), empty_selection=True)
+        if not material_ids:
+            return _ResolvedScope(material_ids=(), eligible_material_ids=(), empty_selection=True)
 
     active_material_ids = tuple(
         list_active_scope_material_ids(
@@ -164,7 +156,6 @@ def _resolve_scope(
             user_id=user_id,
             course_id=course_id,
             material_ids=list(material_ids) or None,
-            folder_ids=list(folder_ids) or None,
         )
     )
     if material_ids and not set(material_ids).issubset(active_material_ids):
@@ -176,18 +167,16 @@ def _resolve_scope(
             user_id=user_id,
             course_id=course_id,
             material_ids=list(material_ids) or None,
-            folder_ids=list(folder_ids) or None,
         )
     )
     return _ResolvedScope(
         material_ids=material_ids,
-        folder_ids=folder_ids,
         eligible_material_ids=eligible_material_ids,
     )
 
 
 def _rag_scope_filter(*, user_id: str, course_id: str, resolved_scope: _ResolvedScope) -> RagScopeFilter:
-    if resolved_scope.material_ids or resolved_scope.folder_ids:
+    if resolved_scope.material_ids:
         return RagScopeFilter(
             user_id=user_id,
             course_id=course_id,

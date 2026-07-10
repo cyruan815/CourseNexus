@@ -54,7 +54,7 @@ def test_relevant_context_preserves_hit_order_scope_and_score(db: Session, conte
     )
 
 
-def test_relevant_context_uses_union_scope_for_material_and_folder(db: Session, context_seed) -> None:
+def test_relevant_context_uses_selected_material_ids(db: Session, context_seed) -> None:
     class RecordingRagIndex(FakeRagIndex):
         def __init__(self) -> None:
             super().__init__()
@@ -73,8 +73,7 @@ def test_relevant_context_uses_union_scope_for_material_and_folder(db: Session, 
         query="eigenvalue",
         material_scope=MaterialScope(
             include_all_parsed_materials=False,
-            material_ids=[context_seed.math_material.id],
-            folder_ids=[context_seed.folder.id],
+            material_ids=[context_seed.math_material.id, context_seed.folder_material.id],
         ),
         rag_index=rag_index,
         top_k=8,
@@ -91,7 +90,6 @@ def test_relevant_context_uses_union_scope_for_material_and_folder(db: Session, 
         context_seed.math_material.id,
         context_seed.folder_material.id,
     }
-    assert rag_index.seen_scope.folder_ids == ()
 
 
 def test_relevant_context_rejects_cross_user_material_id(db: Session, tmp_path, context_seed) -> None:

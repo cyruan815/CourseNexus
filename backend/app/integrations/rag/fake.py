@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import re
 from typing import Sequence
 
@@ -33,6 +34,12 @@ class FakeRagIndex:
             if chunk.material_id != material_id
         }
 
+    def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
+        self.records = {
+            chunk_id: replace(chunk, folder_id=folder_id) if chunk.material_id == material_id else chunk
+            for chunk_id, chunk in self.records.items()
+        }
+
     def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
         query_tokens = self._tokens(query)
         if not query_tokens or top_k <= 0:
@@ -54,8 +61,6 @@ class FakeRagIndex:
         if chunk.user_id != scope.user_id or chunk.course_id != scope.course_id:
             return False
         if scope.material_ids and chunk.material_id not in scope.material_ids:
-            return False
-        if scope.folder_ids and chunk.folder_id not in scope.folder_ids:
             return False
         return True
 

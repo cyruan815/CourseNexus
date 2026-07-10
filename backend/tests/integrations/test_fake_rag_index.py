@@ -99,23 +99,6 @@ def test_fake_rag_index_applies_selected_material_filter() -> None:
     assert [hit.chunk_id for hit in hits] == ["c2"]
 
 
-def test_fake_rag_index_applies_selected_folder_filter() -> None:
-    index = FakeRagIndex.from_chunks(
-        [
-            rag_chunk("c1", folder_id="f1"),
-            rag_chunk("c2", folder_id="f2"),
-        ]
-    )
-
-    hits = index.retrieve(
-        query="matrix",
-        scope=RagScopeFilter(user_id="u1", course_id="math", folder_ids=("f2",)),
-        top_k=8,
-    )
-
-    assert [hit.chunk_id for hit in hits] == ["c2"]
-
-
 def test_fake_rag_index_isolates_users() -> None:
     index = FakeRagIndex.from_chunks(
         [
