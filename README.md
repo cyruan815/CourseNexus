@@ -39,6 +39,107 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - Backend：Python、FastAPI、SQLAlchemy、Alembic、pytest。
 - Database：SQLite，本地 POC 使用；模型和 migration 保留 PostgreSQL 迁移空间。
 
+## 首次启动 Quick Start
+
+以下步骤面向 Windows PowerShell，适用于新开发者从零克隆并启动本地开发环境。如果仓库已经克隆，从仓库根目录开始执行即可。
+
+### 1. 克隆仓库并安装前端依赖
+
+```powershell
+git clone https://github.com/cyruan815/CourseNexus.git
+Set-Location CourseNexus
+corepack enable
+corepack prepare pnpm@11.7.0 --activate
+pnpm install
+```
+
+如果本机已经安装兼容的 pnpm 11，可以跳过两个 `corepack` 命令。
+
+### 2. 创建后端 Conda 环境
+
+```powershell
+Set-Location backend
+conda env create -f environment.yml
+Set-Location ..
+```
+
+该命令会创建名为 `course-nexus` 的 Python 3.12 环境，并安装后端运行与测试依赖。环境已经存在时不要重复创建，按后文“环境准备”中的更新命令同步依赖。
+
+### 3. 创建本地配置
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+首次启动至少确认：
+
+- `SECRET_KEY` 已替换为本地开发值。
+- `VITE_API_BASE_URL=http://localhost:8000`，末尾不要再添加 `/api/v1`，业务请求路径已经包含该前缀。
+- 仅体验账号、课程和基础页面时，可以暂时不填写模型密钥。
+- 要进行真实资料解析、向量索引和检索，需填写 `EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL` 和 `EMBEDDING_MODEL`。
+- 要进行真实课程资料问答，还需填写 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL`。
+
+真实 `.env` 不得提交到 Git，也不要把任何密钥写入 `VITE_` 开头的变量。
+
+### 4. 初始化数据库
+
+从仓库根目录执行：
+
+```powershell
+pnpm backend:migrate
+```
+
+执行成功后会在 `backend/course_nexus.db` 创建或升级本地 SQLite 数据库。
+
+### 5. 启动后端和前端
+
+打开两个 PowerShell 终端，并确保二者当前目录都是仓库根目录。
+
+终端 1：
+
+```powershell
+pnpm backend:dev
+```
+
+终端 2：
+
+```powershell
+pnpm frontend:dev
+```
+
+启动后访问：
+
+- 前端页面：<http://localhost:5173>
+- 后端 OpenAPI：<http://localhost:8000/docs>
+- 后端健康检查：<http://localhost:8000/api/v1/health>
+
+也可以在第三个 PowerShell 终端验证健康检查：
+
+```powershell
+Invoke-RestMethod http://localhost:8000/api/v1/health | ConvertTo-Json -Depth 5
+```
+
+响应中的 `data.status` 应为 `ok`。
+
+### 6. 验证前端构建
+
+```powershell
+pnpm frontend:build
+Set-Location frontend
+pnpm preview
+```
+
+构建预览默认位于 <http://localhost:4173>。预览期间后端仍需保持运行；完成后按 `Ctrl+C` 停止服务并返回仓库根目录。
+
+### 7. 开始开发前阅读
+
+开始领取任务前，依次阅读：
+
+- [AGENTS.md](./AGENTS.md)：仓库协作和提交约束。
+- [docs/index.md](./docs/index.md)：产品、架构、API 和工程文档入口。
+- [第一阶段并行开发任务书](./docs/planning/phase-1-task-books/README.md)：当前任务清单、业务范围和三人并行规则。
+
 ## 环境准备
 
 前置工具：
