@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
+from app.integrations.model_provider.base import ModelProvider
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
 from app.modules.material_context.service import resolve_context
@@ -22,6 +23,8 @@ from app.modules.study_plans.repository import (
 )
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
+    StudyPlanConfigParseRequest,
+    StudyPlanParsedConfig,
     StudyPlanPreview,
     StudySubTaskPreview,
     StudyTaskPreview,
@@ -41,6 +44,22 @@ def _new_task_id() -> str:
 
 def _new_subtask_id() -> str:
     return f"sub_{uuid4().hex}"
+
+
+def parse_study_plan_config(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanConfigParseRequest,
+    model_provider: ModelProvider,
+) -> StudyPlanParsedConfig:
+    course = assert_course_owner(db, user_id, course_id)
+    parsed = model_provider.generate_structured(
+        prompt=_build_config_parse_prompt(course_name=course.name, payload=payload),
+        output_schema=StudyPlanParsedConfig,
+    )
+    return parsed.model_copy(update={"material_scope": payload.material_scope})
 
 
 def preview_study_plan(
@@ -166,6 +185,19 @@ def get_study_plan_detail(db: Session, *, user_id: str, plan_id: str) -> StudyPl
         plan=plan,
         tasks=list_tasks_for_plan(db, plan_id=plan_id),
         subtasks=list_subtasks_for_plan(db, plan_id=plan_id),
+    )
+
+
+def _build_config_parse_prompt(*, course_name: str, payload: StudyPlanConfigParseRequest) -> str:
+    return "\n".join(
+        [
+            "你是 CourseNexus 的学习计划配置解析器。",
+            "只从用户目标中提取可编辑的学习计划字段，不创建计划，不编造无法确定的信息。",
+            "无法可靠确定的字段填 null，并把字段名加入 unresolved_fields。",
+            f"课程名称：{course_name}",
+            f"用户目标：{payload.goal_text}",
+            f"资料范围：{payload.material_scope.model_dump(mode='json')}",
+        ]
     )
 
 
