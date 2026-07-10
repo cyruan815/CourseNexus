@@ -41,6 +41,7 @@
 - 三名开发者分别使用固定远程分支：前端使用 `feature/frontend`，独立生成功能使用 `feature/generation`，计划学习模式使用 `feature/study-mode`；F、G、S 子任务不再分别创建远程分支。
 - 每名开发者只向自己的工作流分支推送，不得直接向 `main` 推送；子任务通过独立 commit 保留实现和验证边界。
 - 开发者负责代码、测试、领域文档、commit、push、提交 PR 和完成报告；不直接推送 `main`，同步 `main` 时使用 rebase，不用普通 merge 产生 merge commit。
+- 使用 Codex 开发时，Agent 可以在完成一个可验证小改动并检查差异、敏感文件和验证结果后自动 commit；push、`git push --force-with-lease`、创建 PR 必须由开发者明确下达指令后再执行。
 - 不必等待 F01-F07、G01-G06 或 S01-S07 全部完成；每完成一个完整、可验证且不破坏主干的任务书或阶段，开发者从自己的工作流分支向 `main` 提交 PR，并写明任务编号、commit、测试结果、文档更新和已知问题。
 - PR 未合并前，对应固定远程分支只追加 Review 修复；确需提前做下一任务时，开发者另建本地临时分支，避免把下一任务提交带入当前 PR。
 - 项目负责人负责审查 PR，并使用 rebase merge 合并到 `main`；数据库、公共 API/schema、架构边界、核心依赖或共享文件变更必须先由项目负责人确认。

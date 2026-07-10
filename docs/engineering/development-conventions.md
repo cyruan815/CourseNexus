@@ -83,6 +83,8 @@
 - 不要把多个小功能、跨模块改动或多轮需求攒到一个完整大功能结束后再做一次大提交。
 - 一次提交应包含该小改动所需的代码、测试和文档，避免只提交半成品。
 - 提交前运行与本次改动匹配的验证命令；文档-only 变更可不跑完整测试，但最终说明中必须写明未运行测试。
+- 提交前必须检查 `git status`、`git diff` / `git diff --staged` 和待提交文件清单，确认只包含当前任务相关改动。
+- 提交前必须确认没有真实 `.env`、API Key、`SECRET_KEY`、密码、用户资料正文、完整用户问题正文或其他敏感内容进入暂存区。
 - 如果后续需要整理提交历史，应优先在合并前通过 review 或 rebase 处理，不在开发过程中牺牲小步提交记录。
 - 提交信息使用 Angular / Conventional Commits 结构：`<type>(<scope>): <subject>`。
 - `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
