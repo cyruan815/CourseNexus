@@ -16,8 +16,8 @@
 
 ## 2. 实现范围
 1. 先测试 scope 纯函数/Provider、三栏、窄屏和栏级隔离。
-2. 默认 scope 为 all=true 且两个数组为空；切 all 时立即清空 IDs。
-3. 显式范围 ID 去重保序；两个数组空时标记不可提交。
+2. 默认 scope 为 all=true 且 `material_ids` 为空；切 all 时立即清空 IDs。
+3. 显式资料 ID 去重保序；数组为空时标记不可提交。
 4. 桌面固定左资料、中问答、右工具；右栏内含工具/生成历史/计划入口。
 5. `>=1024px` Grid：`minmax(240px,.8fr) minmax(360px,1.5fr) minmax(280px,1fr)`。
 6. 窄屏用“资料/问答/工具”分段切换；三个 slot 保持挂载，避免丢输入。
@@ -36,12 +36,12 @@
 ### 当前已实现 API
 - F03 只调用 `GET /api/v1/courses/{course_id}` -> `CourseRead`。
 ### 固定前端接口
-- `MaterialScope`：`include_all_parsed_materials:boolean, folder_ids:string[], material_ids:string[]`。
-- all=true 时两个数组必须空；all=false 时二者按并集，显式空范围禁止提交。
-- Context：`scope,has_explicit_selection,useAllParsedMaterials,useExplicitMaterials,toggleMaterial,toggleFolder,removeMaterial,resetScope`。
-- `toggleFolder` 仅保留契约；无真实 folder API 时 UI 不制造 folder ID。
+- `MaterialScope`：`include_all_parsed_materials:boolean, material_ids:string[]`。
+- all=true 时数组必须空；all=false 时只能选择具体资料，显式空范围禁止提交。
+- Context：`scope,has_explicit_selection,useAllParsedMaterials,useExplicitMaterials,toggleMaterial,removeMaterial,resetScope`。
+- 文件夹仅用于 F04 的资料归类和列表过滤，不属于共享资料范围，Provider 不提供 `toggleFolder`。
 ### 本任务新增 API / 后端未实现仅占位
-- 不新增 API；MaterialFolder 与资料预览无 router，slot 仅占位、不发请求。
+- 不新增 API；资料预览无 router，slot 仅占位、不发请求。MaterialFolder API 由 F04 接入。
 
 ## 4. 测试计划
 - `material-scope.test.ts`：默认值、all 清空、去重、移除幂等、显式空。

@@ -113,7 +113,6 @@
   "preference": "mastery",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   }
 }
@@ -132,7 +131,6 @@
   "preference": "mastery",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "coverage": {
@@ -190,7 +188,6 @@
   "goal_text": "从 2026-07-11 到 2026-07-24，每天 60 分钟精通传输层",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   }
 }
@@ -207,7 +204,6 @@
   "preference": "mastery",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "unresolved_fields": []
@@ -235,7 +231,6 @@
   "preference": "fast_track",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "tasks": []

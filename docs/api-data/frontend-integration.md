@@ -227,6 +227,18 @@
 | `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
 | `deleted` | 已软删除，不进入列表和上下文。 |
 
+### 3.10.1 资料一级文件夹
+
+文件夹仅用于资料归类、排序和列表过滤，不能作为 Agent 资料范围。`MaterialScope` 只接受具体 `material_ids`。
+
+- `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
+- `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
+- `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
+- `DELETE /api/v1/material-folders/{folder_id}`：软删除文件夹，其中资料保留并自动回到未分类。
+- `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
+
+文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。
+
 ### 3.11 课程资料列表
 
 `GET /api/v1/courses/{course_id}/materials`
@@ -246,6 +258,7 @@
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `file` | File | 是 | 支持 `.md` / `.txt` / `.pdf` / `.docx` / `.pptx` / `.png` / `.jpg` / `.jpeg`。文本文件必须为 UTF-8。 |
+| `folder_id` | string | 否 | 上传后所属一级文件夹；省略时进入未分类。 |
 
 响应 `data`：`MaterialRead`，初始 `parse_status = "uploaded"`。
 
@@ -269,7 +282,8 @@
 ```json
 {
   "name": "Course Site",
-  "source_url": "https://example.com/course"
+  "source_url": "https://example.com/course",
+  "folder_id": "fld_123"
 }
 ```
 
@@ -355,7 +369,6 @@
   "error_code": null,
   "material_scope_json": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "created_at": "2026-07-09T12:00:00+00:00"
@@ -376,7 +389,6 @@
   "question": "What is Alpha?",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "source_page": "course_detail"
@@ -432,7 +444,6 @@
   "generation_status": "success",
   "material_scope_json": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "error_code": null,
@@ -481,7 +492,6 @@
   "content_type": "outline",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "parameters": {}
@@ -515,7 +525,6 @@
   "daily_available_minutes": 60,
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   }
 }
@@ -533,7 +542,6 @@
   "daily_available_minutes": 60,
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "tasks": [

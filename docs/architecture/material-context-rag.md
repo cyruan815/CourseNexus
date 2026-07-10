@@ -124,13 +124,13 @@ Chroma 不替代 SQLite，不能成为业务记录的唯一来源。删除、重
 | `user_id` | 强制用户隔离。 |
 | `course_id` | 强制单课程范围。 |
 | `material_id` | 指定资料过滤、删除和重建。 |
-| `folder_id` | 指定目录过滤。 |
+| `folder_id` | 保留资料归类元数据；移动或删除目录时同步更新，但不作为 Agent 范围选择条件。 |
 | `chunk_id` | 回查 SQLite 和保存引用。 |
 | `chunk_index` | 恢复资料内顺序。 |
 | `page` / `page_index` | 引用定位。 |
 | `heading` | 检索上下文和引用展示。 |
 
-查询过滤条件必须始终包含 `user_id` 和 `course_id`，再叠加 `material_scope` 中的 `material_id` / `folder_id`。材料范围是硬过滤，不是 prompt 提示。
+查询过滤条件必须始终包含 `user_id` 和 `course_id`，显式范围只叠加 `material_scope.material_ids`。文件夹只负责归类，不能转换为批量资料选择。材料范围是硬过滤，不是 prompt 提示。
 
 ## 5. 资料摄取链路
 

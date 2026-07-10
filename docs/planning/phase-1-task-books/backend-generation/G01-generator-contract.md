@@ -75,7 +75,7 @@ class Generator(Protocol):
 ## 3. 字段与接口
 请求复用：
 ```json
-{"content_type":"quiz","material_scope":{"include_all_parsed_materials":true,"folder_ids":[],"material_ids":[]},"parameters":{}}
+{"content_type":"quiz","material_scope":{"include_all_parsed_materials":true,"material_ids":[]},"parameters":{}}
 ```
 响应新增字段：
 ```json

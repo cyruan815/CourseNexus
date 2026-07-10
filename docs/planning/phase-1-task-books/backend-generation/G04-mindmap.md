@@ -56,7 +56,7 @@ class MindmapParameters(BaseModel):
 ## 3. 字段与接口
 请求：
 ```json
-{"content_type":"mindmap","material_scope":{"include_all_parsed_materials":true,"folder_ids":[],"material_ids":[]},"parameters":{"center_topic":"内存管理","max_depth":5,"max_nodes":100,"include_cross_links":true}}
+{"content_type":"mindmap","material_scope":{"include_all_parsed_materials":true,"material_ids":[]},"parameters":{"center_topic":"内存管理","max_depth":5,"max_nodes":100,"include_cross_links":true}}
 ```
 - 成功 HTTP 200：root / nodes / edges 符合不变量，node citation 可在顶层 citations 解析，不返回坐标 / HTML。
 - 参数非法 422 且不落库；无资料 400；他人资源 404。

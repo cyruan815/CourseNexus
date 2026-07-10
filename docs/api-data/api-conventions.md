@@ -22,7 +22,6 @@
   "course_id": "crs_...",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   }
 }

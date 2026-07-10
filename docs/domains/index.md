@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | [index.md](index.md) | 领域知识库入口、创建触发条件、目录结构和交付要求。 | 2026-07-10 |
 | [implementation-template.md](implementation-template.md) | 前后端领域实现文档模板，后端包含架构与算法强制章节。 | 2026-07-10 |
+| [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
 
 ## 相关链接
 
@@ -56,7 +57,7 @@
 | `auth/` | 账号、登录态和前端认证接入。 |
 | `courses/` | 课程管理和首页课程工作台。 |
 | `course-workspace/` | 课程详情布局和共享资料范围。 |
-| `materials/` | 资料上传、解析、索引、范围选择和前端资料工作区。 |
+| `materials/` | 资料上传、一级文件夹归类、解析、索引、逐文件范围选择和前端资料工作区。 |
 | `course-qa/` | 课程资料问答、会话、消息和引用。 |
 | `generated-content/` | 公共生成编排及 Quiz、Flashcard、Mindmap、Outline、Knowledge List。 |
 | `study-mode/` | 计划生成、日历聚合、任务执行、打卡、任务内容和 PDF 导出。 |

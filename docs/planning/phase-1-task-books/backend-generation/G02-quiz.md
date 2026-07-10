@@ -55,7 +55,7 @@ class QuizParameters(BaseModel):
 ## 3. 字段与接口
 请求：
 ```json
-{"content_type":"quiz","material_scope":{"include_all_parsed_materials":false,"folder_ids":[],"material_ids":["mat_1","mat_2"]},"parameters":{"question_count":8,"question_types":["single_choice","multiple_choice","short_answer"],"difficulty":"mixed","focus":"特征值"}}
+{"content_type":"quiz","material_scope":{"include_all_parsed_materials":false,"material_ids":["mat_1","mat_2"]},"parameters":{"question_count":8,"question_types":["single_choice","multiple_choice","short_answer"],"difficulty":"mixed","focus":"特征值"}}
 ```
 - 成功 HTTP 200：`generation_status=success`，questions 符合上述结构，每个 citation ID 可在顶层 citations 解析。
 - 参数非法：422 `VALIDATION_ERROR` 且不落库；无资料：400 `NO_PARSED_MATERIAL`；跨用户：404 `NOT_FOUND`。

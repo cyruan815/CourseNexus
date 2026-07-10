@@ -56,7 +56,7 @@ class KnowledgeListParameters(BaseModel):
 ## 3. 字段与接口
 请求：
 ```json
-{"content_type":"knowledge_list","material_scope":{"include_all_parsed_materials":false,"folder_ids":["folder_1"],"material_ids":[]},"parameters":{"item_count":80,"extraction_focus":"pitfalls","minimum_importance":"medium","focus":"期末范围"}}
+{"content_type":"knowledge_list","material_scope":{"include_all_parsed_materials":false,"material_ids":["mat_1","mat_2"]},"parameters":{"item_count":80,"extraction_focus":"pitfalls","minimum_importance":"medium","focus":"期末范围"}}
 ```
 - 成功 HTTP 200：items 非空、字段固定、importance 合法、逐项 citation 可在顶层 citations 解析。
 - 参数非法 422 且不落库；无资料 400；他人资源 404。

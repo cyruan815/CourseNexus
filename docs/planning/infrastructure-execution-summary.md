@@ -85,7 +85,7 @@
 ### 6. 资料上下文层
 
 - 新增 `material_context.resolve_context()`，并在 2026-07-10 进一步拆分出 `retrieve_relevant_context()` 和 `iter_material_context_batches()`。
-- 统一处理课程归属、资料范围、文件夹范围、已解析过滤和 chunk 返回。
+- 统一处理课程归属、逐文件资料范围、已解析过滤和 chunk 返回；文件夹只用于归类。
 - 问答通过相关性检索获取资料上下文；指定材料生成和学习计划通过全材料批次入口获取资料，不直接拼接资料表或 chunk 表。
 
 ### 7. 课程问答基础链路

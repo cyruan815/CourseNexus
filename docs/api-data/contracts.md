@@ -42,7 +42,6 @@
 ```json
 {
   "include_all_parsed_materials": true,
-  "folder_ids": [],
   "material_ids": []
 }
 ```
@@ -50,7 +49,8 @@
 规则：
 
 - 默认 `include_all_parsed_materials = true`，返回当前课程下全部 `parsed` 且未删除资料的 chunk。
-- 当 `include_all_parsed_materials = false` 时，`material_ids` 和 `folder_ids` 表示显式选择范围。
+- 当 `include_all_parsed_materials = false` 时，只能通过 `material_ids` 显式选择一个或多个具体资料。
+- `MaterialFolder` 只用于资料归类和列表浏览，不能作为 Agent 上下文选择范围，`MaterialScope` 不接受 `folder_ids`。
 - 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、已解析且未删除；否则返回 `NOT_FOUND`。
 - 未解析、解析失败和已删除资料不得进入上下文结果。
 
@@ -85,7 +85,6 @@ Agent 提问请求示例：
   "question": "这份课件的核心概念是什么？",
   "material_scope": {
     "include_all_parsed_materials": true,
-    "folder_ids": [],
     "material_ids": []
   },
   "source_page": "course_detail"

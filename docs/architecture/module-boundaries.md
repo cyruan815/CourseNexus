@@ -110,7 +110,7 @@ flowchart TB
 | --- | --- | --- | --- | --- |
 | `users` | 注册、登录、退出、修改密码、当前用户识别。 | `User`、登录态。 | 当前用户上下文、登录状态。 | 不查询课程、资料、计划等业务对象。 |
 | `courses` | 课程创建、编辑、删除、列表、详情、课程归属校验。 | `Course`。 | 可访问课程、课程基础信息、课程归属判断。 | 不解析资料，不生成内容，不处理任务状态。 |
-| `materials` | 文件 / 链接资料、一级目录、上传状态、Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`；触发可重建向量索引。 | 已解析且已索引资料、资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划。 |
+| `materials` | 文件 / 链接资料、一级目录归类、上传状态、Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`；触发可重建向量索引。 | 已解析且已索引资料、逐文件资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划；文件夹不作为 Agent 资料范围。 |
 | `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为指定材料生成按顺序提供全量分批上下文。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`iter_material_context_batches()`、`ContextChunk`、引用候选。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |
 | `generation-orchestrator` | 接收生成请求、校验权限、校验资料范围、处理幂等、维护生成状态、调用具体生成模块。 | 生成请求状态，可复用 `AIGeneratedContent.generation_status`。 | 生成任务状态、错误码、生成模块调用结果。 | 不写具体业务算法，不直接渲染结果。 |
 | `course-qa` | 基于课程资料问答，保存对话消息和引用来源。 | `Conversation`、`Message`、`SourceCitation`。 | `answer_text`、`answer_type`、引用列表。 | 不生成 Flashcard、Mindmap 或学习计划。 |

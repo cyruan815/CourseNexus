@@ -19,7 +19,7 @@
 - `HandoutGenerator`、`TaskTestGenerator` 只实现 G01 公开 `Generator` 协议，输出 `GeneratorOutput`。
 - 通过 G01 的扩展注册入口注册 `handout`、`task_test`；不得直接编辑默认五类生成器列表。若 G01 未暴露外部注册函数，先提交最小契约提案，由 G01 负责人合并。
 - 调用方传 `user_id`、`course_id`、`study_subtask_id`、严格 `MaterialScope` 和参数。
-- 材料范围固定来自 `StudySubTask.related_material_ids_json`，转换为 `include_all_parsed_materials=false`、空 `folder_ids`、对应 `material_ids`；空数组返回 `NO_PARSED_MATERIAL`。
+- 材料范围固定来自 `StudySubTask.related_material_ids_json`，转换为 `include_all_parsed_materials=false` 和对应 `material_ids`；空数组返回 `NO_PARSED_MATERIAL`。文件夹不参与范围转换。
 - 生成使用 `iter_material_context_batches()` + `run_material_coverage()`；不能使用 Top-K 或 `resolve_context()`。
 - `learn|review` 允许生成 handout；`quiz|test` 允许生成 task_test；类型不符返回 `STATE_CONFLICT`。
 - 成功/失败都保存 `AIGeneratedContent`，绑定当前用户、课程和 `study_subtask_id`；失败记录保存稳定 `error_code`。

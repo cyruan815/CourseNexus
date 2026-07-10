@@ -37,15 +37,15 @@
 ```json
 {
   "include_all_parsed_materials": true,
-  "folder_ids": [],
   "material_ids": []
 }
 ```
 
 语义固定如下：
 
-- `include_all_parsed_materials = true`：使用当前课程全部已解析且未删除资料；此时 `folder_ids` 和 `material_ids` 必须为空。
-- `include_all_parsed_materials = false`：使用 `folder_ids` 与 `material_ids` 的并集；两者都为空时返回 `NO_PARSED_MATERIAL`。
+- `include_all_parsed_materials = true`：使用当前课程全部已解析且未删除资料；此时 `material_ids` 必须为空。
+- `include_all_parsed_materials = false`：只使用 `material_ids` 指定的具体资料；数组为空时返回 `NO_PARSED_MATERIAL`。
+- 文件夹只负责资料归类、筛选和排序，任何前后端功能都不得把文件夹 ID 转换为批量资料选择，不得在 `MaterialScope` 中恢复 `folder_ids`。
 - 材料范围是硬过滤条件，任何功能不得检索、生成或引用范围外资料。
 - 只有 `parse_status = parsed` 且未软删除的资料可进入上下文。
 

@@ -55,7 +55,7 @@ class OutlineParameters(BaseModel):
 ## 3. 字段与接口
 请求：
 ```json
-{"content_type":"outline","material_scope":{"include_all_parsed_materials":false,"folder_ids":[],"material_ids":["mat_1","mat_2"]},"parameters":{"organization":"review_path","section_count":10,"review_goal":"两周内完成期末复习","detail_level":"standard"}}
+{"content_type":"outline","material_scope":{"include_all_parsed_materials":false,"material_ids":["mat_1","mat_2"]},"parameters":{"organization":"review_path","section_count":10,"review_goal":"两周内完成期末复习","detail_level":"standard"}}
 ```
 - 成功 HTTP 200：sections 非空、结构固定，每节 citation 可在顶层 citations 解析，scope 原样持久化。
 - 参数非法 422 且不落库；无资料 400；他人资源 404。

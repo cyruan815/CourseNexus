@@ -25,7 +25,7 @@
 | --- | --- | --- | --- |
 | `users` | `id`、`username`、`password_hash`、`nickname`、`avatar_url`、`status`、`created_at`、`updated_at`、`deleted_at` | `user_id` 权限根与打卡归属。 | 复用，无新增字段。 |
 | `courses` | `id`、`user_id`、`name`、`description`、`teacher`、`term`、`status`、`created_at`、`updated_at`、`deleted_at` | 单课程计划归属；删除课程后子系统查询必须隐藏。 | 复用，无新增字段。 |
-| `material_folders` | `id`、`user_id`、`course_id`、`name`、`sort_order`、`created_at`、`updated_at`、`deleted_at` | `material_scope.folder_ids` 的范围来源。 | 复用，无新增字段。 |
+| `material_folders` | `id`、`user_id`、`course_id`、`name`、`sort_order`、`created_at`、`updated_at`、`deleted_at` | 仅用于资料归类和工作台浏览，不进入计划资料范围。 | 复用，无新增字段。 |
 | `course_materials` | `id`、`course_id`、`user_id`、`folder_id`、`name`、`material_type`、`source_type`、`file_url`、`source_url`、`file_size`、`mime_type`、`parse_status`、`parse_error`、`page_count`、`created_at`、`updated_at`、`deleted_at` | 计划、讲义、任务测试题的材料边界；只允许 `parsed` 且未删除资料。 | 复用，无新增字段。 |
 | `material_chunks` | `id`、`material_id`、`course_id`、`chunk_index`、`page`、`page_index`、`heading`、`content_text`、`embedding_id`、`created_at` | 全材料批次、引用快照的权威来源。 | 复用，无新增字段。 |
 | `conversations` | `id`、`user_id`、`course_id`、`title`、`source_page`、`status`、`created_at`、`updated_at`、`deleted_at` | 执行页任务问答可复用，`source_page = task_execution`。 | 复用，无新增字段。 |

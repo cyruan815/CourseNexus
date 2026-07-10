@@ -44,7 +44,7 @@
 | --- | --- | --- | --- | --- |
 | `User` | `users` | 已建表 | `users` | 还需实现注册、登录、密码哈希、当前用户识别和权限依赖。 |
 | `Course` | `courses` | 已建表 | `courses` | 还需实现课程 CRUD、归属校验和软删除隐藏规则。 |
-| `MaterialFolder` | `material_folders` | 已建表 | `materials` | 还需实现一级目录创建、重命名、排序和删除后资料回到未分类。 |
+| `MaterialFolder` | `material_folders` | 已建表并已接入 API | `materials` | 已实现一级目录创建、列表、重命名、排序、删除回未分类和资料移动。 |
 | `CourseMaterial` | `course_materials` | 已建表 | `materials` | 还需实现上传、链接保存、解析状态流转、重试和资料预览。 |
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
@@ -172,6 +172,7 @@
 - v0.1 只支持一级目录，不设置 `parent_id`。
 - 目录必须归属于一门课程，且课程必须属于当前用户。
 - 删除目录时不删除目录下资料，应将 `course_materials.folder_id` 置空，资料回到未分类。
+- 目录只用于资料归类和列表浏览，不属于 Agent `MaterialScope`；资料范围只能使用具体 `material_ids`。
 
 ## course_materials
 
