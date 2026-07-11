@@ -188,3 +188,18 @@ Agent 回答响应示例：
 - 枚举新增时，前端必须展示兜底状态。
 - 错误码新增时，前端默认按通用错误处理。
 - 字段类型变化、枚举语义变化、权限语义变化视为破坏性变更，必须单独评审。
+
+## 计划学习模式 S02 生命周期契约
+
+S02 已实现以下接口，前端可在契约评审后接入：
+
+| 方法与路径 | 状态 | 说明 |
+| --- | --- | --- |
+| `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 已实现 | 自然语言配置回填；不写数据库。 |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料生成 preview，返回 `coverage`。 |
+| `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；支持旧客户端省略 `tasks` 时先生成 preview。 |
+| `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 已实现 | 生成新 preview，不写数据库。 |
+| `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |
+| `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
+
+保存接口支持 `Idempotency-Key`：同键同请求返回同一 plan bundle；同键不同请求返回 `IDEMPOTENCY_CONFLICT`。替换接口在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`。S02 不新增表、不修改 migration，不在保存阶段生成讲义或任务测试题。

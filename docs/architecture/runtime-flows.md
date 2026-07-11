@@ -231,3 +231,32 @@ sequenceDiagram
 - 只导出已生成内容。
 - 导出失败不影响内容查看。
 - 导出失败返回稳定错误码并允许重试。
+
+## 4.1 S02 学习计划生命周期补充
+
+S02 已把学习计划从占位轮转升级为真实全材料生成：
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant SP as study-plans
+    participant CTX as material-context
+    participant Planner as planner map/reduce
+    participant MP as ModelProvider
+    participant DB as DB
+
+    FE->>SP: parse config(goal_text)
+    SP->>MP: generate_structured(StudyPlanParsedConfig)
+    SP-->>FE: editable config, no DB write
+    FE->>SP: preview(course_id, config, material_scope)
+    SP->>CTX: iter_material_context_batches()
+    SP->>Planner: map every batch
+    Planner->>MP: generate_structured(PlanBatchExtraction)
+    SP->>Planner: reduce all batches
+    Planner->>MP: generate_structured(StudyPlanReduction)
+    SP-->>FE: StudyPlanPreview + coverage
+    FE->>SP: save confirmed task tree + Idempotency-Key
+    SP->>DB: one transaction inserts StudyPlan/StudyTask/StudySubTask
+```
+
+替换计划使用 `PUT /study-plans/{plan_id}`，先校验 `expected_updated_at`、无进度和无绑定生成内容，再在一次事务中替换任务树。重生成预览只返回 preview，不写数据库。删除计划写软删除状态，默认聚合查询隐藏。

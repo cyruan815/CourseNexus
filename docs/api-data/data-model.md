@@ -116,3 +116,29 @@ erDiagram
 - 枚举新增要同步前后端兜底；枚举删除或语义变化视为破坏性变更。
 - migration 不承载业务生成逻辑；资料重切片、索引刷新等应设计为可重试后台任务。
 - 模型设计避免依赖 SQLite 专有能力，保留迁移 PostgreSQL 的空间。
+
+## S02 学习计划生命周期落库规则
+
+S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增表、不新增列、不修改 baseline migration。
+
+`StudyPlan.parsed_config_json` 在 S02 中保存以下结构化信息：
+
+```json
+{
+  "material_scope": {"include_all_parsed_materials": true, "material_ids": []},
+  "daily_available_minutes": 60,
+  "preference": "fast_track",
+  "tasks_source": "confirmed",
+  "coverage": {
+    "expected_material_ids": ["mat_1"],
+    "processed_material_ids": ["mat_1"],
+    "batch_count": 1
+  },
+  "idempotency": {
+    "key_hash": "sha256(...) ",
+    "request_hash": "sha256(...)"
+  }
+}
+```
+
+保存计划只创建计划、一级任务和二级任务结构。重生成 preview 不落库；替换计划会在一次事务中删除旧任务树并写入新任务树；删除计划写 `status = deleted` 和 `deleted_at`。

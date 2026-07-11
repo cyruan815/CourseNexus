@@ -125,3 +125,11 @@
 - 新增可选字段属于兼容变更。
 - 删除字段、重命名字段、改变字段类型、改变枚举语义、改变权限规则属于破坏性变更。
 - 破坏性变更必须提供迁移期兼容方案或进入新的 API 版本。
+
+### S02 学习计划幂等规则
+
+- `POST /api/v1/courses/{course_id}/study-plans` 读取 `Idempotency-Key`。
+- 后端保存 `key_hash` 和请求体 canonical `request_hash` 到 `study_plans.parsed_config_json.idempotency`。
+- 同一用户、同一课程、同一 key 且同一请求体：返回既有计划 bundle，不重复创建计划。
+- 同一用户、同一课程、同一 key 但请求体不同：返回 `409 IDEMPOTENCY_CONFLICT`。
+- 未携带 `Idempotency-Key` 的旧客户端请求仍可保存，但不具备重复提交保护。
