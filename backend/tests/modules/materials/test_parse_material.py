@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from io import BytesIO
+import logging
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,13 @@ from app.modules.materials.models import MaterialChunk
 from app.modules.materials.service import delete_material, parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 @pytest.fixture()
@@ -64,18 +72,22 @@ def material_chunks(db: Session, material_id: str) -> list[MaterialChunk]:
     )
 
 
-def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Path) -> None:
+def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Path, caplog) -> None:
+    logger = capture_course_logs(caplog)
     user, course, material = create_uploaded_material(db, tmp_path)
     rag_index = FakeRagIndex()
 
-    parsed = parse_material(
-        db,
-        user_id=user.id,
-        material_id=material.id,
-        parser=PlainTextParser(),
-        rag_index=rag_index,
-        storage_root=tmp_path,
-    )
+    try:
+        parsed = parse_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            parser=PlainTextParser(),
+            rag_index=rag_index,
+            storage_root=tmp_path,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     chunks = material_chunks(db, material.id)
     assert parsed.parse_status == "parsed"
@@ -90,27 +102,40 @@ def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Pa
     assert {record.material_id for record in rag_index.records.values()} == {material.id}
     assert {record.course_id for record in rag_index.records.values()} == {course.id}
     assert {record.user_id for record in rag_index.records.values()} == {user.id}
+    record = next(record for record in caplog.records if record.name.endswith("materials.parse"))
+    assert "解析成功" in record.getMessage()
+    assert f"material={material.id}" in record.getMessage()
+    assert "chunks=1" in record.getMessage()
+    assert "cost_ms=" in record.getMessage()
 
 
-def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path) -> None:
+def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path, caplog) -> None:
     class FailingParser:
         def parse(self, file_path: Path):
-            raise CourseNexusError(code="PARSE_FAILED", message="解析失败")
+            raise ValueError("broken pdf")
 
+    logger = capture_course_logs(caplog)
     user, _, material = create_uploaded_material(db, tmp_path)
 
-    parsed = parse_material(
-        db,
-        user_id=user.id,
-        material_id=material.id,
-        parser=FailingParser(),
-        rag_index=FakeRagIndex(),
-        storage_root=tmp_path,
-    )
+    try:
+        parsed = parse_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            parser=FailingParser(),
+            rag_index=FakeRagIndex(),
+            storage_root=tmp_path,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert parsed.parse_status == "parse_failed"
     assert parsed.parse_error == "PARSE_FAILED"
     assert material_chunks(db, material.id) == []
+    record = next(record for record in caplog.records if record.name.endswith("materials.parse"))
+    assert "解析失败：文件内容无法识别" in record.getMessage()
+    assert "code=PARSE_FAILED" in record.getMessage()
+    assert isinstance(record.exc_info[1], ValueError)
 
 
 def test_reparse_material_replaces_old_chunks(db: Session, tmp_path: Path) -> None:
@@ -253,24 +278,32 @@ def test_parse_material_index_failure_marks_failed_and_clears_chunks(db: Session
     assert rag_index.records == {}
 
 
-def test_parse_material_normalizes_index_errors_to_indexing_failed(db: Session, tmp_path: Path) -> None:
+def test_parse_material_normalizes_index_errors_to_indexing_failed(db: Session, tmp_path: Path, caplog) -> None:
     class UnexpectedRagIndex(FakeRagIndex):
         def index_chunks(self, chunks):
-            raise CourseNexusError(code="RETRIEVAL_FAILED", message="wrong layer", status_code=502)
+            raise ValueError("broken vector store")
 
+    logger = capture_course_logs(caplog)
     user, _, material = create_uploaded_material(db, tmp_path)
 
-    parsed = parse_material(
-        db,
-        user_id=user.id,
-        material_id=material.id,
-        parser=PlainTextParser(),
-        rag_index=UnexpectedRagIndex(),
-        storage_root=tmp_path,
-    )
+    try:
+        parsed = parse_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            parser=PlainTextParser(),
+            rag_index=UnexpectedRagIndex(),
+            storage_root=tmp_path,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert parsed.parse_status == "parse_failed"
     assert parsed.parse_error == "INDEXING_FAILED"
+    record = next(record for record in caplog.records if record.name.endswith("rag.index"))
+    assert "索引失败" in record.getMessage()
+    assert "code=INDEXING_FAILED" in record.getMessage()
+    assert isinstance(record.exc_info[1], ValueError)
 
 
 def test_parse_material_index_failure_still_marks_failed_when_cleanup_raises(db: Session, tmp_path: Path) -> None:

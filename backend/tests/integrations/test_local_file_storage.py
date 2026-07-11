@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import logging
 from pathlib import Path
 import zipfile
 
@@ -9,6 +10,13 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import CourseNexusError
 from app.integrations.file_storage.local import LocalFileStorage
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def office_stream(member_name: str) -> BytesIO:
@@ -40,6 +48,28 @@ def test_local_file_storage_saves_text_file_under_scoped_directory(tmp_path) -> 
     assert stored_file.filename == "notes.md"
     assert stored_file.relative_path == "usr_1/crs_1/mat_1/source.md"
     assert (tmp_path / stored_file.relative_path).read_text(encoding="utf-8") == "# Chapter 1\n"
+
+
+def test_save_file_logs_success_without_file_content(tmp_path: Path, caplog) -> None:
+    logger = capture_course_logs(caplog)
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+    secret_content = b"private course notes"
+    try:
+        stored = storage.save_file(
+            user_id="user_1",
+            course_id="course_1",
+            material_id="mat_1",
+            filename="notes.txt",
+            stream=BytesIO(secret_content),
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
+
+    record = next(record for record in caplog.records if record.name.endswith("materials.upload"))
+    assert "上传成功" in record.getMessage()
+    assert "material=mat_1" in record.getMessage()
+    assert f"size={stored.size}" in record.getMessage()
+    assert "private course notes" not in record.getMessage()
 
 
 def test_local_file_storage_preserves_display_name_but_uses_ascii_internal_path(tmp_path: Path) -> None:
@@ -145,21 +175,28 @@ def test_local_file_storage_rejects_unsafe_filename(tmp_path, filename: str) -> 
     assert exc_info.value.code == "VALIDATION_ERROR"
 
 
-def test_local_file_storage_rejects_large_file_and_cleans_temp_file(tmp_path) -> None:
+def test_local_file_storage_rejects_large_file_and_cleans_temp_file(tmp_path, caplog) -> None:
+    logger = capture_course_logs(caplog)
     storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=4)
 
-    with pytest.raises(CourseNexusError) as exc_info:
-        storage.save_file(
-            user_id="usr_1",
-            course_id="crs_1",
-            material_id="mat_1",
-            filename="notes.txt",
-            stream=BytesIO(b"12345"),
-            content_type="text/plain",
-        )
+    try:
+        with pytest.raises(CourseNexusError) as exc_info:
+            storage.save_file(
+                user_id="usr_1",
+                course_id="crs_1",
+                material_id="mat_1",
+                filename="notes.txt",
+                stream=BytesIO(b"12345"),
+                content_type="text/plain",
+            )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert exc_info.value.code == "FILE_TOO_LARGE"
     assert list(tmp_path.rglob("*")) == []
+    record = next(record for record in caplog.records if record.name.endswith("materials.upload"))
+    assert "上传被拒绝：文件过大" in record.getMessage()
+    assert "code=FILE_TOO_LARGE" in record.getMessage()
 
 
 @pytest.mark.parametrize(

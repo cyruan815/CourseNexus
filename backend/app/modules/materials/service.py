@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import BinaryIO
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.integrations.file_storage.base import FileStorage, material_type_for_filename
 from app.integrations.parsers.base import Parser
 from app.integrations.rag.base import RagChunk, RagIndex
@@ -26,6 +28,10 @@ from app.modules.materials.repository import (
     save_material_folder,
 )
 from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate, MaterialUpdate
+
+
+parse_logger = get_logger("materials.parse")
+index_logger = get_logger("rag.index")
 
 
 def _new_material_id() -> str:
@@ -260,6 +266,7 @@ def parse_material(
     rag_index: RagIndex,
     storage_root: str | Path,
 ) -> CourseMaterial:
+    started_at = perf_counter()
     material = get_material_detail(db, user_id, material_id)
     material.parse_status = "parsing"
     material.parse_error = None
@@ -267,13 +274,32 @@ def parse_material(
     save_material(db, material)
 
     if material.source_type != "file" or material.file_url is None:
+        parse_logger.warning(
+            "解析失败：不支持的资料类型 | code=UNSUPPORTED_FILE_TYPE material=%s cost_ms=%.2f",
+            material.id,
+            (perf_counter() - started_at) * 1000,
+        )
         return _mark_parse_failed(db, material, "UNSUPPORTED_FILE_TYPE", rag_index=rag_index)
 
     try:
         parsed_document = parser.parse(Path(storage_root) / material.file_url)
     except CourseNexusError as exc:
+        cause = exc.__cause__
+        parse_logger.error(
+            "解析失败：文件内容无法识别 | code=%s material=%s cost_ms=%.2f",
+            exc.code,
+            material.id,
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
+        )
         return _mark_parse_failed(db, material, exc.code, rag_index=rag_index)
-    except Exception:
+    except Exception as exc:
+        parse_logger.error(
+            "解析失败：文件内容无法识别 | code=PARSE_FAILED material=%s cost_ms=%.2f",
+            material.id,
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return _mark_parse_failed(db, material, "PARSE_FAILED", rag_index=rag_index)
 
     chunks = [
@@ -296,10 +322,25 @@ def parse_material(
     try:
         rag_index.delete_material(material.id)
         rag_index.index_chunks(_rag_chunks_for_material(material, chunks))
-    except CourseNexusError:
+    except CourseNexusError as exc:
+        cause = exc.__cause__
+        index_logger.error(
+            "索引失败 | code=INDEXING_FAILED material=%s chunks=%d cost_ms=%.2f",
+            material.id,
+            len(chunks),
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
+        )
         _try_delete_material_vectors(rag_index, material.id)
         return _mark_parse_failed(db, material, "INDEXING_FAILED")
-    except Exception:
+    except Exception as exc:
+        index_logger.error(
+            "索引失败 | code=INDEXING_FAILED material=%s chunks=%d cost_ms=%.2f",
+            material.id,
+            len(chunks),
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         _try_delete_material_vectors(rag_index, material.id)
         return _mark_parse_failed(db, material, "INDEXING_FAILED")
 
@@ -312,6 +353,14 @@ def parse_material(
     db.add(material)
     db.commit()
     db.refresh(material)
+    page_count = len({chunk.page_index for chunk in chunks if chunk.page_index is not None})
+    parse_logger.info(
+        "解析成功 | material=%s pages=%d chunks=%d cost_ms=%.2f",
+        material.id,
+        page_count,
+        len(chunks),
+        (perf_counter() - started_at) * 1000,
+    )
     return material
 
 

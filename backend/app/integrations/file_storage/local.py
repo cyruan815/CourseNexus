@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter
 from typing import BinaryIO
 import zipfile
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.integrations.file_storage.base import StoredFile, mime_type_for_filename
 
 
@@ -21,6 +23,7 @@ RESERVED_WINDOWS_NAMES = {
     *(f"LPT{index}" for index in range(1, 10)),
 }
 CHUNK_SIZE_BYTES = 1024 * 1024
+logger = get_logger("materials.upload")
 
 
 class LocalFileStorage:
@@ -38,47 +41,83 @@ class LocalFileStorage:
         stream: BinaryIO,
         content_type: str | None = None,
     ) -> StoredFile:
-        safe_filename = self._validate_filename(filename)
-        mime_type = self._mime_type_for_filename(safe_filename)
-        extension = Path(safe_filename).suffix.lower()
-        internal_filename = f"source{extension}"
-        target_dir = self.root_path / user_id / course_id / material_id
-        target_path = target_dir / internal_filename
-        temp_path = target_path.with_name(f"{target_path.name}.tmp")
-        total_size = 0
-
+        started_at = perf_counter()
+        display_filename = filename.replace("\\", "/").rsplit("/", 1)[-1] or "-"
         try:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            with temp_path.open("wb") as output:
-                while True:
-                    chunk = stream.read(CHUNK_SIZE_BYTES)
-                    if not chunk:
-                        break
-                    total_size += len(chunk)
-                    if total_size > self.max_file_size_bytes:
-                        raise CourseNexusError(
-                            code="FILE_TOO_LARGE",
-                            message="文件超过大小限制",
-                            status_code=413,
-                            details={"max_upload_file_size_bytes": self.max_file_size_bytes},
-                        )
-                    output.write(chunk)
+            safe_filename = self._validate_filename(filename)
+            mime_type = self._mime_type_for_filename(safe_filename)
+            extension = Path(safe_filename).suffix.lower()
+            internal_filename = f"source{extension}"
+            target_dir = self.root_path / user_id / course_id / material_id
+            target_path = target_dir / internal_filename
+            temp_path = target_path.with_name(f"{target_path.name}.tmp")
+            total_size = 0
 
-            self._validate_file_content(temp_path, extension)
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                with temp_path.open("wb") as output:
+                    while True:
+                        chunk = stream.read(CHUNK_SIZE_BYTES)
+                        if not chunk:
+                            break
+                        total_size += len(chunk)
+                        if total_size > self.max_file_size_bytes:
+                            raise CourseNexusError(
+                                code="FILE_TOO_LARGE",
+                                message="文件超过大小限制",
+                                status_code=413,
+                                details={"max_upload_file_size_bytes": self.max_file_size_bytes},
+                            )
+                        output.write(chunk)
 
-            temp_path.replace(target_path)
+                self._validate_file_content(temp_path, extension)
+                temp_path.replace(target_path)
+            except Exception:
+                self._cleanup_failed_write(temp_path, target_dir)
+                raise
+        except CourseNexusError as exc:
+            conclusion = {
+                "FILE_TOO_LARGE": "文件过大",
+                "VALIDATION_ERROR": "文件名不合法",
+                "UNSUPPORTED_FILE_TYPE": "不支持的文件类型",
+            }.get(exc.code, "文件校验失败")
+            logger.warning(
+                "上传被拒绝：%s | code=%s material=%s course=%s file=%s cost_ms=%.2f",
+                conclusion,
+                exc.code,
+                material_id,
+                course_id,
+                display_filename,
+                (perf_counter() - started_at) * 1000,
+            )
+            raise
         except Exception:
-            self._cleanup_failed_write(temp_path, target_dir)
+            logger.exception(
+                "上传失败：文件保存异常 | material=%s course=%s file=%s cost_ms=%.2f",
+                material_id,
+                course_id,
+                display_filename,
+                (perf_counter() - started_at) * 1000,
+            )
             raise
 
         relative_path = Path(user_id, course_id, material_id, internal_filename).as_posix()
-        return StoredFile(
+        stored_file = StoredFile(
             filename=safe_filename,
             relative_path=relative_path,
             absolute_path=target_path,
             size=total_size,
             mime_type=mime_type,
         )
+        logger.info(
+            "上传成功 | material=%s course=%s file=%s size=%d cost_ms=%.2f",
+            material_id,
+            course_id,
+            safe_filename,
+            total_size,
+            (perf_counter() - started_at) * 1000,
+        )
+        return stored_file
 
     def _validate_filename(self, filename: str) -> str:
         safe_filename = filename.strip()
