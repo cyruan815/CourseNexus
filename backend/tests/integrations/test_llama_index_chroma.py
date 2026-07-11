@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,13 @@ from llama_index.core.embeddings import BaseEmbedding
 from app.core.errors import CourseNexusError
 from app.integrations.rag.base import RagChunk, RagScopeFilter
 from app.integrations.rag.llama_index_chroma import LlamaIndexChromaRagIndex
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 class KeywordEmbedding(BaseEmbedding):
@@ -75,18 +83,30 @@ def index(tmp_path: Path) -> LlamaIndexChromaRagIndex:
     )
 
 
-def test_chroma_persists_and_filters_course(tmp_path: Path) -> None:
+def test_chroma_persists_and_filters_course(tmp_path: Path, caplog) -> None:
+    logger = capture_course_logs(caplog)
     first = index(tmp_path)
-    first.index_chunks([math_chunk(), history_chunk()])
+    try:
+        first.index_chunks([math_chunk(), history_chunk()])
 
-    reopened = index(tmp_path)
-    hits = reopened.retrieve(
-        query="matrix",
-        scope=RagScopeFilter(user_id="u1", course_id="math"),
-        top_k=8,
-    )
+        reopened = index(tmp_path)
+        hits = reopened.retrieve(
+            query="matrix",
+            scope=RagScopeFilter(user_id="u1", course_id="math"),
+            top_k=8,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert [hit.chunk_id for hit in hits] == ["math-c1"]
+    index_record = next(record for record in caplog.records if record.name.endswith("rag.index"))
+    retrieve_record = next(record for record in caplog.records if record.name.endswith("rag.retrieve"))
+    assert "索引成功" in index_record.getMessage()
+    assert "chunks=2" in index_record.getMessage()
+    assert "检索完成" in retrieve_record.getMessage()
+    assert "hits=1" in retrieve_record.getMessage()
+    assert "matrix eigenvalue" not in index_record.getMessage()
+    assert "query=matrix" not in retrieve_record.getMessage()
 
 
 def test_chroma_filters_user_and_material(tmp_path: Path) -> None:
@@ -197,6 +217,7 @@ def test_chroma_maps_indexing_errors(tmp_path: Path) -> None:
 
     assert exc_info.value.code == "INDEXING_FAILED"
     assert exc_info.value.status_code == 502
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 def test_chroma_maps_retrieval_errors(tmp_path: Path) -> None:
@@ -217,3 +238,4 @@ def test_chroma_maps_retrieval_errors(tmp_path: Path) -> None:
 
     assert exc_info.value.code == "RETRIEVAL_FAILED"
     assert exc_info.value.status_code == 502
+    assert isinstance(exc_info.value.__cause__, RuntimeError)

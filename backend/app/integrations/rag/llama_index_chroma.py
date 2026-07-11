@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter
 from typing import Sequence
 
 import chromadb
@@ -18,7 +19,12 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.integrations.rag.base import RagChunk, RagScopeFilter, RetrievalHit
+
+
+index_logger = get_logger("rag.index")
+retrieve_logger = get_logger("rag.retrieve")
 
 
 class LlamaIndexChromaRagIndex:
@@ -32,17 +38,24 @@ class LlamaIndexChromaRagIndex:
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
     def clear(self) -> None:
+        started_at = perf_counter()
         try:
             self.client.delete_collection(self.collection_name)
             self.collection = self.client.get_or_create_collection(self.collection_name)
             self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
             self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+            index_logger.info(
+                "索引清理成功 | collection=%s cost_ms=%.2f",
+                self.collection_name,
+                (perf_counter() - started_at) * 1000,
+            )
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引清理失败", status_code=502) from exc
 
     def index_chunks(self, chunks: Sequence[RagChunk]) -> None:
         if not chunks:
             return
+        started_at = perf_counter()
         try:
             nodes = [self._node_for_chunk(chunk) for chunk in chunks]
             embeddings = self.embed_model.get_text_embedding_batch([node.text for node in nodes])
@@ -50,16 +63,30 @@ class LlamaIndexChromaRagIndex:
                 node.embedding = embedding
             self.collection.delete(ids=[node.node_id for node in nodes])
             self.vector_store.add(nodes)
+            index_logger.info(
+                "索引成功 | collection=%s chunks=%d cost_ms=%.2f",
+                self.collection_name,
+                len(chunks),
+                (perf_counter() - started_at) * 1000,
+            )
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引失败", status_code=502) from exc
 
     def delete_material(self, material_id: str) -> None:
+        started_at = perf_counter()
         try:
             self.collection.delete(where={"material_id": material_id})
+            index_logger.info(
+                "索引删除成功 | collection=%s material=%s cost_ms=%.2f",
+                self.collection_name,
+                material_id,
+                (perf_counter() - started_at) * 1000,
+            )
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引删除失败", status_code=502) from exc
 
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
+        started_at = perf_counter()
         try:
             stored = self.collection.get(where={"material_id": material_id}, include=["metadatas"])
             ids = stored.get("ids") or []
@@ -70,12 +97,20 @@ class LlamaIndexChromaRagIndex:
                 ids=ids,
                 metadatas=[{**metadata, "folder_id": folder_id or ""} for metadata in metadatas],
             )
+            index_logger.info(
+                "索引目录更新成功 | collection=%s material=%s vectors=%d cost_ms=%.2f",
+                self.collection_name,
+                material_id,
+                len(ids),
+                (perf_counter() - started_at) * 1000,
+            )
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料目录索引更新失败", status_code=502) from exc
 
     def retrieve(self, *, query: str, scope: RagScopeFilter, top_k: int) -> list[RetrievalHit]:
         if top_k <= 0:
             return []
+        started_at = perf_counter()
         try:
             query_embedding = self.embed_model.get_query_embedding(query)
             result = self.vector_store.query(
@@ -87,10 +122,18 @@ class LlamaIndexChromaRagIndex:
             )
             ids = result.ids or []
             similarities = result.similarities or []
-            return [
+            hits = [
                 RetrievalHit(chunk_id=chunk_id, score=float(similarity))
                 for chunk_id, similarity in zip(ids, similarities, strict=False)
             ]
+            retrieve_logger.info(
+                "检索完成 | course=%s top_k=%d hits=%d cost_ms=%.2f",
+                scope.course_id,
+                top_k,
+                len(hits),
+                (perf_counter() - started_at) * 1000,
+            )
+            return hits
         except Exception as exc:
             raise CourseNexusError(code="RETRIEVAL_FAILED", message="资料检索失败", status_code=502) from exc
 

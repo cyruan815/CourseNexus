@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import pytest
 
 from app.core.errors import CourseNexusError
@@ -21,6 +22,13 @@ class FakeClient:
         self.responses = FakeResponses()
 
 
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
 def test_openai_model_provider_requires_api_key() -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         OpenAIModelProvider(
@@ -33,7 +41,8 @@ def test_openai_model_provider_requires_api_key() -> None:
     assert exc_info.value.details == {"missing": "COURSE_QA_API_KEY"}
 
 
-def test_openai_model_provider_uses_sdk_client() -> None:
+def test_openai_model_provider_uses_sdk_client(caplog) -> None:
+    logger = capture_course_logs(caplog)
     fake_client = FakeClient()
     chunk = ContextChunk(
         material_id="mat_1",
@@ -46,8 +55,18 @@ def test_openai_model_provider_uses_sdk_client() -> None:
     )
 
     provider = OpenAIModelProvider(api_key="test-key", model="gpt-test", client=fake_client)
-    answer = provider.answer_question(question="What is Alpha?", context_chunks=[chunk])
+    try:
+        answer = provider.answer_question(question="What is Alpha?", context_chunks=[chunk])
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert answer.answer_text == "OpenAI answer"
     assert answer.citation_chunk_ids == ["chk_1"]
     assert fake_client.responses.calls[0]["model"] == "gpt-test"
+    record = next(record for record in caplog.records if record.name.endswith("model.generate"))
+    assert "模型调用成功" in record.getMessage()
+    assert "operation=answer_question" in record.getMessage()
+    assert "model=gpt-test" in record.getMessage()
+    assert "chunks=1" in record.getMessage()
+    assert "What is Alpha?" not in record.getMessage()
+    assert "OpenAI answer" not in record.getMessage()

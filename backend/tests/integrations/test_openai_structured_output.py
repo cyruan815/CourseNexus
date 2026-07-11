@@ -65,6 +65,7 @@ def test_openai_provider_maps_sdk_error_to_generation_failed() -> None:
         provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
 
     assert exc_info.value.code == "GENERATION_FAILED"
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 def test_openai_provider_maps_sdk_parse_validation_error_to_schema_invalid() -> None:
