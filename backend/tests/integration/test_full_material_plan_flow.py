@@ -64,9 +64,18 @@ class PlanPreviewProvider:
                                     "subtask_type": "learn",
                                     "description": "学习可靠传输",
                                     "related_material_ids": material_ids,
-                                    "estimated_minutes": 60,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_api"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "传输层综合自测",
+                                    "subtask_type": "test",
+                                    "description": "检查核心概念掌握情况",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_api"],
+                                    "sort_order": 2,
                                 }
                             ],
                         }
