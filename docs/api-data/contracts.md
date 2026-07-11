@@ -127,6 +127,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `POST /api/v1/courses/{course_id}/generations`、`GET /api/v1/courses/{course_id}/generated-contents` 和 `GET /api/v1/generated-contents/{generated_content_id}` 路径保持不变。
 - 生成服务只使用`iter_material_context_batches()`，每份选定parsed资料必须进入至少一个batch。
 - 注册类型固定为`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；G01完成公共链路，具体真实生成由G02-G06分别完成。
+- `mindmap` 成功记录的 `content_json` 包含 `schema_version`、`renderer`、`root_node_id`、`nodes`、`edges` 和 `markmap_markdown`；Markdown 固定保存于 `content_json.markmap_markdown`，不对应本地文件路径。
 - 每个最终业务条目使用稳定`id`；具体生成器返回“条目ID到chunk ID候选”，公共层过滤越界ID并回填`source_citation_ids`。
 - 生成POST、历史和详情的`GeneratedContentRead`统一包含`source_citations`；无引用固定返回`[]`。
 - 成功内容和引用处于同一数据库事务。模型、schema和覆盖失败保存failed记录，不保存部分JSON或引用。

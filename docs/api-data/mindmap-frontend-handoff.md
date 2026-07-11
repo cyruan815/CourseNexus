@@ -71,7 +71,7 @@ Authorization: Bearer <token>
     "content_type": "mindmap",
     "title": "知识导图：操作系统",
     "content": null,
-    "generation_status": "completed",
+    "generation_status": "success",
     "content_json": {
       "schema_version": "1.0",
       "renderer": "markmap",
@@ -123,7 +123,7 @@ Authorization: Bearer <token>
 
 ## 前端渲染步骤
 
-1. 确认 `generation_status === "completed"`。
+1. 确认 `generation_status === "success"`。
 2. 确认 `content_json.schema_version === "1.0"`。
 3. 读取 `content_json.markmap_markdown`。
 4. 使用 `markmap-lib` 的 `Transformer` 转换 Markdown。
@@ -166,7 +166,7 @@ Markmap 的标准树形渲染不会展示 `related` 边。第一阶段前端可�
 
 ## 状态和错误处理
 
-- `completed`: 可以渲染。
+- `success`: 可以渲染。
 - `failed`: 不渲染，展示生成失败状态。
 - `content_json === null`: 不渲染。
 - `GENERATION_FAILED`: 模型或生成过程失败。
@@ -190,7 +190,7 @@ Markmap 的标准树形渲染不会展示 `related` 边。第一阶段前端可�
 
 ## 后端代码落点
 
-计划中的 Mindmap 实现位于：
+Mindmap 实现位于：
 
 ```text
 backend/app/modules/generation/generators/mindmap/schemas.py
