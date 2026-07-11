@@ -19,7 +19,7 @@ describe("HomePage", () => {
   it("renders the static course workbench from the homepage prototype", () => {
     renderHomePage();
 
-    expect(screen.getByRole("heading", { name: "课程学习助手 Agent 平台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课枢 CourseNexus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "今日待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "日历" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();

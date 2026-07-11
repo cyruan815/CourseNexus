@@ -35,7 +35,7 @@ describe("AppRouter", () => {
 
     renderRouter();
 
-    expect(screen.getByRole("heading", { name: "课程学习助手 Agent 平台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课枢 CourseNexus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/computer-network");
   });

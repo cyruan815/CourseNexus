@@ -14,7 +14,6 @@ import {
   Title,
 } from "@mantine/core";
 import {
-  IconCalendarEvent,
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
@@ -36,6 +35,7 @@ interface HomeCourse {
   term: string;
   materialCount: number;
   todayTaskCount: number;
+  tone: "blue" | "mint" | "indigo" | "violet";
 }
 
 const homeCourses: HomeCourse[] = [
@@ -46,6 +46,7 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 12,
     todayTaskCount: 1,
+    tone: "blue",
   },
   {
     id: "advanced-math",
@@ -54,6 +55,7 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 8,
     todayTaskCount: 0,
+    tone: "indigo",
   },
   {
     id: "large-programming",
@@ -62,6 +64,7 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 5,
     todayTaskCount: 0,
+    tone: "mint",
   },
   {
     id: "college-physics",
@@ -70,6 +73,7 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 6,
     todayTaskCount: 0,
+    tone: "violet",
   },
 ];
 
@@ -80,22 +84,24 @@ function Header() {
     <Paper className="home-header" component="header" radius={0}>
       <Group justify="space-between" wrap="nowrap">
         <Group gap="lg" wrap="nowrap">
-          <Box aria-hidden className="home-brand-mark" />
+          <Box aria-hidden className="home-brand-mark">
+            课
+          </Box>
           <Title className="home-brand-title" order={1}>
-            课程学习助手 Agent 平台
+            课枢 CourseNexus
           </Title>
         </Group>
 
-        <Group gap="xl" wrap="nowrap">
+        <Group gap="md" wrap="nowrap">
           <Group className="home-theme-toggle" gap={4} wrap="nowrap">
-            <ActionIcon aria-label="切换为日间模式" color="gray" radius="sm" size="lg" variant="subtle">
+            <ActionIcon aria-label="切换为日间模式" className="home-theme-button home-theme-button-active" radius="sm" size="lg" variant="subtle">
               <IconSun size={22} stroke={1.8} />
             </ActionIcon>
-            <ActionIcon aria-label="切换为夜间模式" color="gray" radius="sm" size="lg" variant="subtle">
+            <ActionIcon aria-label="切换为夜间模式" className="home-theme-button" radius="sm" size="lg" variant="subtle">
               <IconMoon size={22} stroke={1.8} />
             </ActionIcon>
           </Group>
-          <ActionIcon aria-label="打开个人中心" className="home-user-button" radius="xl" size={52} variant="default">
+          <ActionIcon aria-label="打开个人中心" className="home-user-button" radius="xl" size={48} variant="default">
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
         </Group>
@@ -115,13 +121,9 @@ function TodayTodoPanel() {
           <Text c="dimmed" ta="center">
             生成计划后，这里显示今天要学的任务
           </Text>
-          <Button className="home-outline-button" component={Link} to="/" variant="outline">
+          <Button className="home-plan-button" component={Link} to="/" variant="filled">
             生成一个计划吧
           </Button>
-          <Divider className="home-dashed-divider" />
-          <Text c="dimmed" ta="center">
-            点击 CTA → 计划生成页
-          </Text>
         </Stack>
       </Paper>
     </Stack>
@@ -161,10 +163,6 @@ function CalendarPanel() {
             <Text fw={600}>无计划</Text>
           </Paper>
         </Box>
-
-        <Text c="dimmed" ta="center">
-          无计划时点击日历区域 → 计划生成页
-        </Text>
       </Paper>
     </Stack>
   );
@@ -172,7 +170,7 @@ function CalendarPanel() {
 
 function CourseCard({ course }: { course: HomeCourse }) {
   return (
-    <Card className="home-course-card" padding="xl" radius="md" withBorder>
+    <Card className={`home-course-card home-course-card-${course.tone}`} padding="xl" radius="md" withBorder>
       <Group align="flex-start" justify="space-between" wrap="nowrap">
         <Stack gap="md">
           <Title order={3}>
@@ -186,7 +184,7 @@ function CourseCard({ course }: { course: HomeCourse }) {
             资料 {course.materialCount} · 今日任务 {course.todayTaskCount}
           </Text>
         </Stack>
-        <ActionIcon aria-label={`${course.name} 更多操作`} color="gray" variant="subtle">
+        <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
           <IconDotsVertical size={24} />
         </ActionIcon>
       </Group>
@@ -229,7 +227,7 @@ function CourseOverview() {
         />
       </Group>
 
-      <Grid gap="xl">
+      <Grid gap="lg">
         {homeCourses.map((course) => (
           <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
             <CourseCard course={course} />
@@ -239,16 +237,6 @@ function CourseOverview() {
           <AddCourseCard />
         </Grid.Col>
       </Grid>
-
-      <Paper className="home-interaction-note" radius="sm" withBorder>
-        <Group gap="sm" wrap="nowrap">
-          <IconCalendarEvent aria-hidden size={20} stroke={1.7} />
-          <Text size="sm">
-            交互说明：课程卡片 → 课程详情页；卡片更多操作 → 编辑/删除；今日待办/日历无计划状态 → 计划生成页；有计划时日历 →
-            大日历页。
-          </Text>
-        </Group>
-      </Paper>
     </Paper>
   );
 }
