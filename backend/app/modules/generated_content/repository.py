@@ -3,7 +3,19 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.course_qa.models import SourceCitation
 from app.modules.generated_content.models import AIGeneratedContent
+
+
+def add_generated_content(db: Session, content: AIGeneratedContent) -> AIGeneratedContent:
+    db.add(content)
+    db.flush()
+    return content
+
+
+def add_generated_content_citations(db: Session, citations: list[SourceCitation]) -> None:
+    db.add_all(citations)
+    db.flush()
 
 
 def save_generated_content(db: Session, content: AIGeneratedContent) -> AIGeneratedContent:
