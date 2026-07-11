@@ -9,6 +9,7 @@
 ## 2. 接入基线
 
 - API 前缀固定为 `/api/v1`。
+- 本地 Vite 开发服务器通过 `frontend/vite.config.ts` 将 `/api` 代理到 `http://127.0.0.1:8000`；浏览器侧仍使用相对路径请求后端，避免手动配置 `VITE_API_BASE_URL` 才能注册、登录或读取课程。
 - JSON 字段统一使用 `snake_case`。
 - 成功响应统一为 `{ "data": ..., "meta": ... }`，前端业务代码只消费 `data`。
 - 错误响应统一为 `{ "error": { "code": "...", "message": "...", "details": ... }, "meta": ... }`。
