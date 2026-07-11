@@ -12,6 +12,8 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
+from app.core.config import get_settings
+from app.integrations.model_provider.openai import OpenAIModelProvider
 from app.main import app
 from app.modules.study_plans import router as study_plan_router
 
@@ -54,7 +56,8 @@ def api_context() -> Generator[tuple[TestClient, ConfigParseProvider], None, Non
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[study_plan_router.get_model_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_parser_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
     try:
         yield TestClient(app), provider
     finally:
@@ -76,6 +79,27 @@ def create_course(client: TestClient, token: str) -> str:
     assert response.status_code == 200
     return response.json()["data"]["id"]
 
+
+def test_model_provider_dependencies_use_distinct_parser_and_generator_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("STUDY_PLAN_PARSER_API_KEY", "parser-key")
+    monkeypatch.setenv("STUDY_PLAN_PARSER_BASE_URL", "https://parser.example/v1")
+    monkeypatch.setenv("STUDY_PLAN_PARSER_MODEL", "parser-model")
+    monkeypatch.setenv("STUDY_PLAN_GENERATOR_API_KEY", "generator-key")
+    monkeypatch.setenv("STUDY_PLAN_GENERATOR_BASE_URL", "https://generator.example/v1")
+    monkeypatch.setenv("STUDY_PLAN_GENERATOR_MODEL", "generator-model")
+    get_settings.cache_clear()
+    try:
+        parser_provider = study_plan_router.get_plan_parser_provider()
+        generator_provider = study_plan_router.get_plan_generator_provider()
+    finally:
+        get_settings.cache_clear()
+
+    assert isinstance(parser_provider, OpenAIModelProvider)
+    assert isinstance(generator_provider, OpenAIModelProvider)
+    assert parser_provider.model == "parser-model"
+    assert generator_provider.model == "generator-model"
 
 def test_config_parse_endpoint_returns_success_envelope(
     api_context: tuple[TestClient, ConfigParseProvider],
