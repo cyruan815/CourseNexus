@@ -14,7 +14,7 @@ from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.model_provider.mock import MockModelProvider
 from app.integrations.model_provider.openai import OpenAIModelProvider
-from app.modules.generated_content.schemas import GeneratedContentRead
+from app.modules.generated_content.service import build_generated_content_read
 from app.modules.generation.orchestrator.contracts import GenerateContentRequest
 from app.modules.generation.orchestrator.registry import GeneratorRegistry, default_generator_registry
 from app.modules.generation.orchestrator.service import generate_content
@@ -82,5 +82,5 @@ def generate_content_endpoint(
         model_provider=model_provider,
         max_batch_tokens=settings.material_batch_max_tokens,
     )
-    data = GeneratedContentRead.model_validate(content).model_dump(mode="json")
+    data = build_generated_content_read(db, content).model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))
