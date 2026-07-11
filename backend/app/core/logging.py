@@ -16,7 +16,8 @@ _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = _request_id.get() or "-"
+        if not hasattr(record, "request_id"):
+            record.request_id = _request_id.get() or "-"
         prefix = "course_nexus."
         record.event_name = record.name[len(prefix) :] if record.name.startswith(prefix) else record.name
         return True
