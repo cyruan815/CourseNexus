@@ -18,15 +18,20 @@ from app.modules.study_plans.schemas import (
     StudyPlanConfigParseResponse,
     StudyPlanRead,
     StudyPlanPreview,
+    StudyPlanRegenerationPreviewRequest,
+    StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
     StudySubTaskRead,
     StudyTaskRead,
 )
 from app.modules.study_plans.service import (
+    delete_study_plan,
     get_study_plan_detail,
     list_study_plans,
     parse_study_plan_config,
     preview_study_plan,
+    preview_study_plan_regeneration,
+    replace_study_plan,
     save_study_plan,
 )
 from app.modules.users.models import User
@@ -119,6 +124,52 @@ def save_study_plan_endpoint(
         idempotency_key=idempotency_key,
     )
     return success_response(_bundle_data(bundle), request_id=get_request_id(request))
+
+
+@router.post("/study-plans/{plan_id}/regeneration-previews")
+def regenerate_study_plan_preview_endpoint(
+    plan_id: str,
+    payload: StudyPlanRegenerationPreviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_model_provider),
+) -> dict[str, object]:
+    settings = get_settings()
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=current_user.id,
+        plan_id=plan_id,
+        payload=payload,
+        model_provider=model_provider,
+        max_tokens=settings.material_batch_max_tokens,
+    )
+    data = StudyPlanPreview.model_validate(preview).model_dump(mode="json")
+    return success_response(data, request_id=get_request_id(request))
+
+
+@router.put("/study-plans/{plan_id}")
+def replace_study_plan_endpoint(
+    plan_id: str,
+    payload: StudyPlanReplaceRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    bundle = replace_study_plan(db, user_id=current_user.id, plan_id=plan_id, payload=payload)
+    return success_response(_bundle_data(bundle), request_id=get_request_id(request))
+
+
+@router.delete("/study-plans/{plan_id}")
+def delete_study_plan_endpoint(
+    plan_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    plan = delete_study_plan(db, user_id=current_user.id, plan_id=plan_id)
+    data = StudyPlanRead.model_validate(plan).model_dump(mode="json")
+    return success_response(data, request_id=get_request_id(request))
 
 
 @router.get("/courses/{course_id}/study-plans")

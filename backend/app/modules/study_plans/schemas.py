@@ -107,6 +107,20 @@ class StudyPlanSaveRequest(StudyPlanBuildRequest):
     tasks: list[StudyTaskPreview] | None = None
 
 
+class StudyPlanRegenerationPreviewRequest(BaseModel):
+    goal_text: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    daily_available_minutes: int | None = Field(default=None, gt=0)
+    preference: PlanPreference | None = None
+    material_scope: MaterialScope | None = None
+
+    @model_validator(mode="after")
+    def validate_optional_date_range(self) -> "StudyPlanRegenerationPreviewRequest":
+        if self.start_date is not None and self.end_date is not None and self.end_date < self.start_date:
+            raise ValueError("end_date must be greater than or equal to start_date")
+        return self
+
 class StudyPlanReplaceRequest(StudyPlanSaveRequest):
     expected_updated_at: datetime
     title: str
