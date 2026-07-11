@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
 from app.integrations.model_provider.base import ModelProvider
+from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import ContextChunk
@@ -186,6 +187,7 @@ def save_study_plan(
     tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=course_id, task_previews=tasks_preview)
     try:
         study_plan_repository.add_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
+        _recalculate_checkins_for_dates(db, user_id=user_id, dates=_task_dates(tasks))
         db.commit()
     except Exception:
         db.rollback()
@@ -251,6 +253,7 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
     _assert_replace_allowed(db, plan_id=plan_id)
+    old_dates = _task_dates(study_plan_repository.list_tasks_for_plan(db, plan_id=plan_id))
     try:
         study_plan_repository.delete_tasks_for_plan(db, plan_id=plan_id)
         plan.title = payload.title
@@ -265,6 +268,8 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         db.add(plan)
         db.add_all(tasks)
         db.add_all(subtasks)
+        db.flush()
+        _recalculate_checkins_for_dates(db, user_id=user_id, dates=old_dates | _task_dates(tasks))
         db.commit()
     except Exception:
         db.rollback()
@@ -275,14 +280,25 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
 
 def delete_study_plan(db: Session, *, user_id: str, plan_id: str) -> StudyPlan:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
+    dates = _task_dates(study_plan_repository.list_tasks_for_plan(db, plan_id=plan_id))
     now = datetime.now(timezone.utc)
     plan.status = "deleted"
     plan.deleted_at = now
     plan.updated_at = now
     db.add(plan)
+    db.flush()
+    _recalculate_checkins_for_dates(db, user_id=user_id, dates=dates)
     db.commit()
     db.refresh(plan)
     return plan
+
+def _task_dates(tasks: list[StudyTask]) -> set[date]:
+    return {task.task_date for task in tasks}
+
+
+def _recalculate_checkins_for_dates(db: Session, *, user_id: str, dates: set[date]) -> None:
+    for checkin_date in sorted(dates):
+        recalculate_checkin(db, user_id=user_id, checkin_date=checkin_date, flush_only=True)
 
 def _coerce_save_request(payload: StudyPlanBuildRequest | StudyPlanSaveRequest) -> StudyPlanSaveRequest:
     if isinstance(payload, StudyPlanSaveRequest):
