@@ -1,64 +1,27 @@
 from __future__ import annotations
 
-from collections.abc import Generator
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 import app.modules.generation.orchestrator.router as generation_router
 from app.core.config import ModelEndpointConfig
-from app.db.base import Base
-from app.db.session import get_db
-import app.db.models  # noqa: F401
-from app.integrations.file_storage.local import LocalFileStorage
+from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.model_provider.mock import MockModelProvider
-from app.integrations.rag.fake import FakeRagIndex
 from app.main import app
+from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.placeholder_generators import PlaceholderGenerator
+from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.generation.orchestrator.registry import GeneratorRegistry
-from app.modules.materials.router import get_material_storage, get_rag_index
 
 
 SUPPORTED_CONTENT_TYPES = ("flashcard", "knowledge_list", "mindmap", "outline", "quiz")
-
-
-@pytest.fixture()
-def client(tmp_path) -> Generator[TestClient, None, None]:
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    rag_index = FakeRagIndex()
-
-    def override_get_db() -> Generator[Session, None, None]:
-        db = testing_session()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_material_storage] = lambda: LocalFileStorage(
-        root_path=tmp_path,
-        max_file_size_bytes=1024,
-    )
-    app.dependency_overrides[get_rag_index] = lambda: rag_index
-    app.dependency_overrides[generation_router.get_generation_model_provider_factory] = (
-        lambda: lambda content_type: MockModelProvider()
-    )
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
 
 
 def register_and_token(client: TestClient, username: str) -> str:
@@ -417,3 +380,172 @@ def test_generation_api_rejects_unknown_content_type(client: TestClient) -> None
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_generation_api_requires_authentication(client: TestClient) -> None:
+    response = client.post("/api/v1/courses/course-id/generations", json={"content_type": "outline"})
+
+    assert response.status_code == 401
+
+
+def test_generation_api_hides_other_users_course(
+    client: TestClient,
+    alice_api,
+    bob_api,
+    api_course_factory,
+    api_material_factory,
+) -> None:
+    course_id = api_course_factory(alice_api)
+    material_id = api_material_factory(alice_api, course_id)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers=bob_api.headers,
+        json={
+            "content_type": "outline",
+            "material_scope": {"include_all_parsed_materials": False, "material_ids": [material_id]},
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_generation_api_hides_other_users_explicit_material_scope(
+    client: TestClient,
+    alice_api,
+    bob_api,
+    api_course_factory,
+    api_material_factory,
+) -> None:
+    alice_course_id = api_course_factory(alice_api)
+    alice_material_id = api_material_factory(alice_api, alice_course_id)
+    bob_course_id = api_course_factory(bob_api, name="Databases")
+
+    response = client.post(
+        f"/api/v1/courses/{bob_course_id}/generations",
+        headers=bob_api.headers,
+        json={
+            "content_type": "outline",
+            "material_scope": {
+                "include_all_parsed_materials": False,
+                "material_ids": [alice_material_id],
+            },
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+
+
+@pytest.mark.parametrize(
+    "material_scope",
+    [None, {"include_all_parsed_materials": False, "material_ids": []}],
+)
+def test_generation_api_rejects_no_parsed_material_and_explicit_empty_scope(
+    client: TestClient,
+    alice_api,
+    api_course_factory,
+    material_scope: dict[str, object] | None,
+) -> None:
+    course_id = api_course_factory(alice_api)
+    payload: dict[str, object] = {"content_type": "outline"}
+    if material_scope is not None:
+        payload["material_scope"] = material_scope
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/generations", headers=alice_api.headers, json=payload
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "NO_PARSED_MATERIAL"
+
+
+def test_generator_validation_error_does_not_persist_record(
+    client: TestClient,
+    sqlite_engine: Engine,
+    alice_api,
+    api_course_factory,
+    api_material_factory,
+) -> None:
+    course_id = api_course_factory(alice_api)
+    api_material_factory(alice_api, course_id)
+
+    class ValidationGenerator:
+        content_type = "outline"
+
+        def generate(self, *, batches, expected_material_ids, parameters) -> GeneratorOutput:
+            raise CourseNexusError(code="VALIDATION_ERROR", message="Bad parameters", status_code=422)
+
+    registry = GeneratorRegistry()
+    registry.register("outline", lambda provider: ValidationGenerator())
+    app.dependency_overrides[generation_router.get_generator_registry] = lambda: registry
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers=alice_api.headers,
+        json={"content_type": "outline"},
+    )
+
+    assert response.status_code == 422
+    with Session(sqlite_engine) as session:
+        assert list(session.execute(select(AIGeneratedContent)).scalars()) == []
+
+
+def test_failed_generation_can_be_listed_and_read_without_content_or_citations(
+    client: TestClient,
+    alice_api,
+    api_course_factory,
+    api_material_factory,
+) -> None:
+    course_id = api_course_factory(alice_api)
+    api_material_factory(alice_api, course_id)
+
+    class FailingGenerator:
+        content_type = "outline"
+
+        def generate(self, *, batches, expected_material_ids, parameters) -> GeneratorOutput:
+            raise CourseNexusError(
+                code="GENERATION_FAILED", message="Stable generator failure", status_code=500
+            )
+
+    registry = GeneratorRegistry()
+    registry.register("outline", lambda provider: FailingGenerator())
+    app.dependency_overrides[generation_router.get_generator_registry] = lambda: registry
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers=alice_api.headers,
+        json={"content_type": "outline"},
+    )
+
+    assert response.status_code == 200
+    failed = response.json()["data"]
+    assert failed["generation_status"] == "failed"
+    assert failed["error_code"] == "GENERATION_FAILED"
+    assert failed["content_json"] is None
+    assert failed["source_citations"] == []
+
+    listed = client.get(f"/api/v1/courses/{course_id}/generated-contents", headers=alice_api.headers)
+    detail = client.get(f"/api/v1/generated-contents/{failed['id']}", headers=alice_api.headers)
+    assert listed.status_code == detail.status_code == 200
+    assert listed.json()["data"][0]["id"] == failed["id"]
+    assert detail.json()["data"]["content_json"] is None
+    assert detail.json()["data"]["source_citations"] == []
+
+
+def test_repeated_equivalent_generation_requests_create_distinct_records(
+    client: TestClient,
+    alice_api,
+    api_course_factory,
+    api_material_factory,
+) -> None:
+    course_id = api_course_factory(alice_api)
+    api_material_factory(alice_api, course_id)
+    url = f"/api/v1/courses/{course_id}/generations"
+    payload = {"content_type": "outline"}
+
+    first = client.post(url, headers=alice_api.headers, json=payload)
+    second = client.post(url, headers=alice_api.headers, json=payload)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["data"]["id"] != second.json()["data"]["id"]
