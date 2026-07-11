@@ -35,3 +35,21 @@ def test_generator_maps_all_batches_and_builds_markdown() -> None:
     assert output.content_json["markmap_markdown"] == "- Operating Systems\n  - Processes\n  - Memory"
     assert output.item_citation_chunk_ids["node_002"] == ["c1"]
     assert output.item_citation_chunk_ids["node_003"] == ["c2"]
+
+
+def test_local_keys_are_scoped_to_each_batch() -> None:
+    provider = RecordingStructuredModelProvider(
+        {"concepts": [
+            {"local_key": "root", "label": "Course", "summary": "", "parent_local_key": None, "source_chunk_ids": ["c1"]},
+            {"local_key": "item", "label": "First", "summary": "", "parent_local_key": "root", "source_chunk_ids": ["c1"]},
+        ], "relations": []},
+        {"concepts": [
+            {"local_key": "root", "label": "Course", "summary": "", "parent_local_key": None, "source_chunk_ids": ["c2"]},
+            {"local_key": "item", "label": "Second", "summary": "", "parent_local_key": "root", "source_chunk_ids": ["c2"]},
+        ], "relations": []},
+    )
+    output = MindmapGenerator(model_provider=provider).generate(
+        batches=(_batch("m1", "c1", "First"), _batch("m2", "c2", "Second")),
+        expected_material_ids=frozenset({"m1", "m2"}), parameters={"center_topic": "Course"},
+    )
+    assert output.content_json["markmap_markdown"] == "- Course\n  - First\n  - Second"
