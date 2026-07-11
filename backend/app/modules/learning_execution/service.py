@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
+from app.modules.checkins.service import recalculate_checkin
 from app.modules.learning_execution import repository
 from app.modules.learning_execution.schemas import (
+    CompletionPlanRead,
+    CompletionSubTaskRead,
+    CompletionTaskRead,
     ExecutionContextRead,
     ExecutionCourseRead,
     ExecutionMaterialRead,
     ExecutionPlanRead,
     ExecutionSubTaskRead,
     ExecutionTaskRead,
+    SubTaskCompletionResult,
 )
 from app.modules.study_plans.models import StudySubTask
 
@@ -113,3 +119,54 @@ def _related_materials(db: Session, *, user_id: str, course_id: str, subtask: St
             )
         )
     return reads
+
+
+def set_subtask_completion(db: Session, *, user_id: str, subtask_id: str, completed: bool) -> SubTaskCompletionResult:
+    target = repository.get_completion_target(db, user_id=user_id, subtask_id=subtask_id)
+    expected_status = "completed" if completed else "not_started"
+    changed = target.subtask.status != expected_status
+    try:
+        if changed:
+            target.subtask.status = expected_status
+            target.subtask.completed_at = datetime.now(timezone.utc) if completed else None
+            db.add(target.subtask)
+        db.flush()
+
+        sibling_subtasks = repository.list_subtasks_for_task(db, task_id=target.task.id)
+        target.task.status = derive_task_status([item.status for item in sibling_subtasks])
+        target.task.updated_at = datetime.now(timezone.utc)
+        db.add(target.task)
+        db.flush()
+
+        plan_tasks = repository.list_tasks_for_plan(db, plan_id=target.plan.id)
+        target.plan.status = derive_plan_status([item.status for item in plan_tasks])
+        target.plan.updated_at = datetime.now(timezone.utc)
+        db.add(target.plan)
+        db.flush()
+
+        checkin = recalculate_checkin(db, user_id=user_id, checkin_date=target.task.task_date, flush_only=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(target.subtask)
+    db.refresh(target.task)
+    db.refresh(target.plan)
+    sibling_subtasks = repository.list_subtasks_for_task(db, task_id=target.task.id)
+    return SubTaskCompletionResult(
+        changed=changed,
+        subtask=CompletionSubTaskRead(
+            subtask_id=target.subtask.id,
+            status=target.subtask.status,
+            completed_at=target.subtask.completed_at,
+        ),
+        task=CompletionTaskRead(
+            task_id=target.task.id,
+            status=target.task.status,
+            completed_subtask_count=sum(1 for item in sibling_subtasks if item.status == "completed"),
+            total_subtask_count=len(sibling_subtasks),
+        ),
+        plan=CompletionPlanRead(plan_id=target.plan.id, status=target.plan.status),
+        checkin=checkin,
+    )

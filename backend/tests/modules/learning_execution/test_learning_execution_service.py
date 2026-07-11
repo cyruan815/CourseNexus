@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
@@ -13,7 +13,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.modules.courses.models import Course
-from app.modules.learning_execution.service import get_execution_context
+from app.modules.learning_execution.service import get_execution_context, set_subtask_completion
 from app.modules.materials.models import CourseMaterial
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -166,3 +166,63 @@ def test_execution_context_marks_missing_material_as_deleted(db: Session) -> Non
 
     assert context.related_materials[0].material_id == "mat_missing"
     assert context.related_materials[0].availability == "deleted"
+
+def test_complete_subtask_updates_subtask_parent_task_plan_and_checkin(db: Session) -> None:
+    _seed_base(db)
+    fixture = _seed_plan(db)
+    db.add(
+        StudySubTask(
+            id="sub_sibling",
+            task_id="task_today_1",
+            plan_id="sp_exec",
+            course_id="crs_a",
+            title="补充练习",
+            subtask_type="review",
+            description="复习",
+            related_material_ids_json=[],
+            status="not_started",
+            sort_order=2,
+        )
+    )
+    db.commit()
+
+    result = set_subtask_completion(db, user_id="usr_a", subtask_id=fixture.today_subtask_id, completed=True)
+
+    assert result.changed is True
+    assert result.subtask.status == "completed"
+    assert result.subtask.completed_at is not None
+    assert result.task.status == "in_progress"
+    assert result.task.completed_subtask_count == 1
+    assert result.task.total_subtask_count == 2
+    assert result.plan.status == "active"
+    assert result.checkin.total_subtask_count == 3
+    assert result.checkin.completed_subtask_count == 1
+
+
+def test_repeated_complete_is_idempotent_but_recalculates_checkin(db: Session) -> None:
+    _seed_base(db)
+    fixture = _seed_plan(db)
+    db.commit()
+
+    first = set_subtask_completion(db, user_id="usr_a", subtask_id=fixture.today_subtask_id, completed=True)
+    second = set_subtask_completion(db, user_id="usr_a", subtask_id=fixture.today_subtask_id, completed=True)
+
+    assert first.changed is True
+    assert second.changed is False
+    assert second.subtask.status == "completed"
+    assert second.subtask.completed_at == first.subtask.completed_at
+    assert second.checkin.completed_subtask_count == first.checkin.completed_subtask_count
+
+
+def test_cancel_completion_returns_subtask_to_not_started(db: Session) -> None:
+    _seed_base(db)
+    fixture = _seed_plan(db)
+    db.commit()
+    set_subtask_completion(db, user_id="usr_a", subtask_id=fixture.today_subtask_id, completed=True)
+
+    result = set_subtask_completion(db, user_id="usr_a", subtask_id=fixture.today_subtask_id, completed=False)
+
+    assert result.changed is True
+    assert result.subtask.status == "not_started"
+    assert result.subtask.completed_at is None
+    assert result.checkin.completed_subtask_count == 0
