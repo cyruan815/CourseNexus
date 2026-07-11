@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
@@ -18,6 +18,7 @@ from app.modules.study_plans.schemas import (
     StudyPlanConfigParseResponse,
     StudyPlanRead,
     StudyPlanPreview,
+    StudyPlanSaveRequest,
     StudySubTaskRead,
     StudyTaskRead,
 )
@@ -100,11 +101,12 @@ def preview_study_plan_endpoint(
 @router.post("/courses/{course_id}/study-plans")
 def save_study_plan_endpoint(
     course_id: str,
-    payload: StudyPlanBuildRequest,
+    payload: StudyPlanSaveRequest,
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     model_provider: ModelProvider = Depends(get_model_provider),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, object]:
     settings = get_settings()
     bundle = save_study_plan(
@@ -114,6 +116,7 @@ def save_study_plan_endpoint(
         payload=payload,
         model_provider=model_provider,
         max_tokens=settings.material_batch_max_tokens,
+        idempotency_key=idempotency_key,
     )
     return success_response(_bundle_data(bundle), request_id=get_request_id(request))
 
