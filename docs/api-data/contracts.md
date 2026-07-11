@@ -3,7 +3,7 @@
 ## 前后端契约基线
 
 - 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
-- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans 和 Todos Calendar。
+- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans、Todos Calendar、Learning Execution 和 Checkins。
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
@@ -30,7 +30,7 @@
 
 ## 计划学习模式 S01 子系统契约
 
-S01 只固定计划学习模式的子系统契约和数据库审计结论，不实现新的业务 API，也不创建 migration。当前已落地的计划接口仍只有：
+S01 只固定计划学习模式的子系统契约和数据库审计结论，不实现新的业务 API，也不创建 migration。当前已落地的基础计划接口包括：
 
 | 方法与路径 | 状态 | 说明 |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ S01 只固定计划学习模式的子系统契约和数据库审计结论，不�
 | `GET /api/v1/courses/{course_id}/study-plans` | 已实现 | 查询课程下未删除计划列表。 |
 | `GET /api/v1/study-plans/{plan_id}` | 已实现 | 查询单个计划及任务结构。 |
 
-S02-S07 的候选接口在对应任务合并前均视为未实现契约，前端不得提前调用或自行拼接路径：
+S02-S05 已实现接口和 S06-S07 候选接口如下；候选接口在对应任务合并前仍视为未实现契约，前端不得提前调用或自行拼接路径：
 
 | 任务 | 方法与路径 | 用途 |
 | --- | --- | --- |

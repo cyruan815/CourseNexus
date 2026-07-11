@@ -61,10 +61,10 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
 | `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 问答与G01生成链路已实现真实引用、快照保存和未知位置降级；G02-G06继续提供逐条目引用。 |
 | `AIGeneratedContent` | `ai_generated_contents` | 已建表 | `generated-content` | 还需实现生成编排、内容保存、历史列表、详情查询和 PDF 导出入口。 |
-| `StudyPlan` | `study_plans` | 已建表 | `study-plans` | 还需实现自然语言配置回填、计划预览、保存和删除。 |
-| `StudyTask` | `study_tasks` | 已建表 | `study-plans` | 还需实现保存计划时生成一级任务和任务状态汇总。 |
-| `StudySubTask` | `study_subtasks` | 已建表 | `study-plans` / `learning-execution` | 还需实现二级任务生成、完成状态幂等更新和关联资料校验。 |
-| `CheckinRecord` | `checkin_records` | 已建表 | `checkins` | 还需实现按二级任务完成比例幂等更新打卡记录。 |
+| `StudyPlan` | `study_plans` | 已建表并已接入 API | `study-plans` | 已实现自然语言配置回填、计划预览、保存、替换、删除和计划状态汇总。 |
+| `StudyTask` | `study_tasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现保存计划时生成一级任务，并由二级任务完成状态汇总一级任务状态。 |
+| `StudySubTask` | `study_subtasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现二级任务生成、执行上下文查询、完成状态幂等更新和关联资料校验。 |
+| `CheckinRecord` | `checkin_records` | 已建表并已接入 API | `checkins` | 已实现按二级任务完成比例幂等重算打卡记录、单日查询、范围查询和 streak summary。 |
 
 实现要求：
 
