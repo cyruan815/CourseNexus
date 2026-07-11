@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 日期：2026-07-11
+- 日期：2026-07-12
 - 状态：已实现并通过自动化验证。
 - 范围：单课程学习计划生成、配置解析、确认保存、幂等、重生成预览、原子替换和软删除。
 
@@ -26,6 +26,12 @@
 6. 重生成：`POST /study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
 7. 删除：`DELETE /study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
 
+## 模型调用兼容性
+
+- 学习计划配置解析和计划生成仍统一依赖 `ModelProvider.generate_structured()`，业务层不直接关心具体模型供应商。
+- `OpenAIModelProvider.generate_structured()` 优先使用 OpenAI Responses API 的结构化解析；当兼容模型服务对 `responses.parse` 返回 404 时，会回退到 Chat Completions，并通过 JSON Schema 提示词和 `response_format={"type":"json_object"}` 获取 JSON，再交给原 Pydantic schema 校验。
+- 回退只处理“接口形态不存在”的 404；普通网络、鉴权或服务端错误仍返回 `GENERATION_FAILED`，JSON 解析或 schema 校验失败仍返回 `GENERATION_SCHEMA_INVALID`。
+
 ## 不变量
 
 - S02 不新增表、不新增列、不修改 migration。
@@ -39,3 +45,5 @@
 - `uv run python -m alembic upgrade head`：通过。
 - `uv run python -m pytest tests/modules/study_plans tests/modules/material_context tests/integration/test_full_material_plan_flow.py tests/integration/test_material_context_to_plan_flow.py -q`：`49 passed in 16.80s`。
 - `uv run python -m pytest tests/modules/study_plans tests/integration/test_full_material_plan_flow.py tests/integration/test_material_context_to_plan_flow.py -q`：`27 passed in 15.91s`，覆盖 parser / generator provider 拆分。
+- `uv run python -m pytest tests/integrations/test_openai_structured_output.py tests/integrations/test_openai_model_provider.py -q`：`7 passed in 1.31s`，覆盖 Responses API 结构化输出和 Chat Completions JSON fallback。
+- `uv run python %TEMP%\course_nexus_os12_report.py`：通过，使用真实 `study_plan_parser` / `study_plan_generator` 配置生成 `docs/planning/phase-1-validation/os-ch12-real-model-preview-2026-07-12.md` 验收报告。

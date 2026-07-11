@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from time import perf_counter
 from typing import Any
 
@@ -76,20 +77,13 @@ class OpenAIModelProvider:
                 status_code=502,
             ) from exc
         except Exception as exc:
-            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+            if not _is_not_found_error(exc):
+                raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+            result = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
+        else:
+            parsed = getattr(response, "output_parsed", None)
+            result = self._validate_structured_output(parsed=parsed, output_schema=output_schema)
 
-        parsed = getattr(response, "output_parsed", None)
-        try:
-            if isinstance(parsed, BaseModel):
-                result = output_schema.model_validate(parsed.model_dump())
-            else:
-                result = output_schema.model_validate(parsed)
-        except (TypeError, ValueError, ValidationError) as exc:
-            raise CourseNexusError(
-                code="GENERATION_SCHEMA_INVALID",
-                message="模型结构化输出不符合约定",
-                status_code=502,
-            ) from exc
         logger.info(
             "模型调用成功 | operation=generate_structured model=%s schema=%s cost_ms=%.2f",
             self.model,
@@ -97,6 +91,59 @@ class OpenAIModelProvider:
             (perf_counter() - started_at) * 1000,
         )
         return result
+
+    def _generate_structured_with_chat(
+        self,
+        *,
+        prompt: str,
+        output_schema: type[StructuredOutputT],
+    ) -> StructuredOutputT:
+        schema_json = json.dumps(output_schema.model_json_schema(), ensure_ascii=False)
+        fallback_prompt = "\n\n".join(
+            [
+                prompt,
+                "请只输出一个合法 JSON 对象，不要输出 Markdown、解释文字或代码块。",
+                f"JSON Schema:\n{schema_json}",
+            ]
+        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You generate valid JSON only."},
+                    {"role": "user", "content": fallback_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+
+        try:
+            parsed = json.loads(_first_chat_content(response))
+        except (TypeError, ValueError) as exc:
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="模型结构化输出不符合约定",
+                status_code=502,
+            ) from exc
+        return self._validate_structured_output(parsed=parsed, output_schema=output_schema)
+
+    def _validate_structured_output(
+        self,
+        *,
+        parsed: object,
+        output_schema: type[StructuredOutputT],
+    ) -> StructuredOutputT:
+        try:
+            if isinstance(parsed, BaseModel):
+                return output_schema.model_validate(parsed.model_dump())
+            return output_schema.model_validate(parsed)
+        except (TypeError, ValueError, ValidationError) as exc:
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="模型结构化输出不符合约定",
+                status_code=502,
+            ) from exc
 
     def _build_prompt(self, question: str, context_chunks: list[ContextChunk]) -> str:
         context_text = "\n\n".join(
@@ -108,3 +155,19 @@ class OpenAIModelProvider:
             "Answer using only the provided context.\n\n"
             f"Context:\n{context_text}\n\nQuestion:\n{question}"
         )
+
+
+def _is_not_found_error(exc: Exception) -> bool:
+    status_code = getattr(exc, "status_code", None)
+    response = getattr(exc, "response", None)
+    response_status_code = getattr(response, "status_code", None)
+    return status_code == 404 or response_status_code == 404
+
+
+def _first_chat_content(response: object) -> str:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return ""
+    message = getattr(choices[0], "message", None)
+    content = getattr(message, "content", None)
+    return content if isinstance(content, str) else ""

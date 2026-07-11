@@ -25,9 +25,31 @@ class FakeResponses:
         return type("ParsedResponse", (), {"output_parsed": self.parsed})()
 
 
+class FakeChatCompletions:
+    def __init__(self, *, content: str) -> None:
+        self.content = content
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = type("Message", (), {"content": self.content})()
+        choice = type("Choice", (), {"message": message})()
+        return type("ChatCompletion", (), {"choices": [choice]})()
+
+
+class FakeChat:
+    def __init__(self, completions: FakeChatCompletions) -> None:
+        self.completions = completions
+
+
 class FakeClient:
-    def __init__(self, responses: FakeResponses) -> None:
+    def __init__(self, responses: FakeResponses, *, chat: FakeChat | None = None) -> None:
         self.responses = responses
+        self.chat = chat
+
+
+class FakeResponsesApiNotFoundError(Exception):
+    status_code = 404
 
 
 def test_openai_provider_returns_project_schema() -> None:
@@ -52,6 +74,25 @@ def test_openai_provider_returns_project_schema() -> None:
             "text_format": ReferenceExtraction,
         }
     ]
+
+
+def test_openai_provider_falls_back_to_chat_completions_when_responses_api_is_not_found() -> None:
+    responses = FakeResponses(error=FakeResponsesApiNotFoundError("not found"))
+    chat_completions = FakeChatCompletions(content='{"facts":["A"],"citation_chunk_ids":["c1"]}')
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="test-model",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    result = provider.generate_structured(
+        prompt="reference extraction",
+        output_schema=ReferenceExtraction,
+    )
+
+    assert result == ReferenceExtraction(facts=["A"], citation_chunk_ids=["c1"])
+    assert chat_completions.calls[0]["model"] == "test-model"
+    assert chat_completions.calls[0]["response_format"] == {"type": "json_object"}
 
 
 def test_openai_provider_maps_sdk_error_to_generation_failed() -> None:
