@@ -75,14 +75,12 @@ class MindmapGenerator:
         allowed_chunk_ids = {chunk.chunk_id for batch in batches for chunk in batch.chunks}
         material_by_chunk = {chunk.chunk_id: chunk.material_id for batch in batches for chunk in batch.chunks}
         concepts: dict[str, _Concept] = {}
-        key_to_label: dict[str, str] = {}
         relations: list[tuple[str, str, str]] = []
         for map_result in mapped:
             local: dict[str, str] = {}
             for candidate in map_result.concepts:
                 label_key = _normalized(candidate.label)
                 local[candidate.local_key] = label_key
-                key_to_label[candidate.local_key] = label_key
                 concept = concepts.setdefault(label_key, _Concept(candidate.label.strip(), candidate.summary.strip()))
                 if not concept.summary and candidate.summary.strip():
                     concept.summary = candidate.summary.strip()
@@ -90,10 +88,17 @@ class MindmapGenerator:
                     if chunk_id in allowed_chunk_ids and chunk_id not in concept.chunk_ids:
                         concept.chunk_ids.append(chunk_id)
                         concept.material_ids.add(material_by_chunk[chunk_id])
-                if candidate.parent_local_key:
-                    concept.parent_labels.append(candidate.parent_local_key)
             for relation in map_result.relations:
-                relations.append((relation.from_local_key, relation.to_local_key, relation.relation))
+                source = local.get(relation.from_local_key)
+                target = local.get(relation.to_local_key)
+                if source is not None and target is not None:
+                    relations.append((source, target, relation.relation))
+            for candidate in map_result.concepts:
+                if candidate.parent_local_key:
+                    child = local[candidate.local_key]
+                    parent = local.get(candidate.parent_local_key)
+                    if parent is not None:
+                        concepts[child].parent_labels.append(parent)
 
         if not concepts:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Mindmap contains no concepts")
@@ -102,8 +107,7 @@ class MindmapGenerator:
         for child_key, concept in concepts.items():
             if child_key == root_key:
                 continue
-            for parent_local_key in concept.parent_labels:
-                parent_key = key_to_label.get(parent_local_key)
+            for parent_key in concept.parent_labels:
                 if parent_key in concepts and parent_key != child_key:
                     parent_by_child[child_key] = parent_key
                     break
@@ -145,8 +149,8 @@ class MindmapGenerator:
             for source_local, target_local, relation in relations:
                 if relation != "related":
                     continue
-                source = key_to_label.get(source_local)
-                target = key_to_label.get(target_local)
+                source = source_local
+                target = target_local
                 if source in id_by_key and target in id_by_key and source != target:
                     key = (id_by_key[source], id_by_key[target], "related")
                     if key not in seen:
