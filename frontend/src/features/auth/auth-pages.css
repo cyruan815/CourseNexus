@@ -38,6 +38,11 @@
   text-decoration: none;
 }
 
+.auth-wordmark:hover,
+.auth-wordmark:focus-visible {
+  text-decoration: none;
+}
+
 .auth-wordmark span {
   color: #2f80ed;
 }
