@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from inspect import Parameter, signature
 from io import BytesIO
@@ -36,6 +37,13 @@ from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 def create_parsed_material(
@@ -140,7 +148,12 @@ def test_generate_content_rejects_inaccessible_courses_before_generator_factory(
     assert factory_calls == []
 
 
-def test_generate_content_writes_success_content_with_bound_citation(db: Session, tmp_path: Path) -> None:
+def test_generate_content_writes_success_content_with_bound_citation(
+    db: Session,
+    tmp_path: Path,
+    caplog,
+) -> None:
+    logger = capture_course_logs(caplog)
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     material = create_parsed_material(db, tmp_path, user.id, course.id)
@@ -148,15 +161,18 @@ def test_generate_content_writes_success_content_with_bound_citation(db: Session
     chunk.page = "1"
     db.commit()
 
-    content = generate_content(
-        db,
-        user_id=user.id,
-        course_id=course.id,
-        payload=GenerateContentRequest(content_type="outline", material_scope=MaterialScope()),
-        registry=registry_with(placeholder_factory),
-        model_provider=MockModelProvider(),
-        max_batch_tokens=100,
-    )
+    try:
+        content = generate_content(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=GenerateContentRequest(content_type="outline", material_scope=MaterialScope()),
+            registry=registry_with(placeholder_factory),
+            model_provider=MockModelProvider(),
+            max_batch_tokens=100,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert content.content_type == "outline"
     assert content.generation_status == "success"
@@ -168,6 +184,10 @@ def test_generate_content_writes_success_content_with_bound_citation(db: Session
     )
     assert len(citations) == 1
     assert content.content_json["items"][0]["source_citation_ids"] == [citations[0].id]
+    record = next(record for record in caplog.records if record.name.endswith("generation.content"))
+    assert "内容生成成功" in record.getMessage()
+    assert "content_type=outline" in record.getMessage()
+    assert "citations=1" in record.getMessage()
 
 
 class RecordingGenerator:
@@ -388,25 +408,35 @@ def test_generate_content_reraises_generator_validation_error_without_record(
 def test_generate_content_maps_unexpected_generator_exception_to_failed_record(
     db: Session,
     tmp_path: Path,
+    caplog,
 ) -> None:
+    logger = capture_course_logs(caplog)
     user = register_user(db, UserCreate(username="unexpected-error", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     create_parsed_material(db, tmp_path, user.id, course.id)
 
-    content = generate_content(
-        db,
-        user_id=user.id,
-        course_id=course.id,
-        payload=GenerateContentRequest(content_type="outline"),
-        registry=registry_with(lambda provider: UnexpectedErrorGenerator()),
-        model_provider=MockModelProvider(),
-        max_batch_tokens=100,
-    )
+    try:
+        content = generate_content(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=GenerateContentRequest(content_type="outline"),
+            registry=registry_with(lambda provider: UnexpectedErrorGenerator()),
+            model_provider=MockModelProvider(),
+            max_batch_tokens=100,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert content.generation_status == "failed"
     assert content.error_code == "GENERATION_FAILED"
     assert content.content is None
     assert content.content_json is None
+    record = next(record for record in caplog.records if record.name.endswith("generation.content"))
+    assert record.levelno == logging.ERROR
+    assert "内容生成失败" in record.getMessage()
+    assert "code=GENERATION_FAILED" in record.getMessage()
+    assert isinstance(record.exc_info[1], RuntimeError)
 
 
 def _material_chunks(db: Session, material_id: str) -> list[MaterialChunk]:

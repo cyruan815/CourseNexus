@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from time import time_ns
+from time import perf_counter, time_ns
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.rag.base import RagIndex
 from app.modules.course_qa.models import Conversation, Message, SourceCitation
@@ -23,6 +24,9 @@ from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
 from app.modules.material_context.service import retrieve_relevant_context
+
+
+logger = get_logger("course_qa.answer")
 
 
 def _new_conversation_id() -> str:
@@ -47,6 +51,7 @@ def ask_course_question(
     rag_index: RagIndex,
     top_k: int = 8,
 ) -> CourseAnswerRead:
+    started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
     conversation = _get_or_create_conversation(db, user_id=user_id, course_id=course_id, payload=payload)
     material_scope_json = payload.material_scope.model_dump(mode="json")
@@ -93,6 +98,13 @@ def ask_course_question(
             ),
         )
         _touch_conversation(db, conversation)
+        logger.info(
+            "问答结束：没有可用资料 | course=%s conversation=%s reason=%s cost_ms=%.2f",
+            course_id,
+            conversation.id,
+            "no_parsed_material" if context.no_parsed_material else "no_retrieval_hits",
+            (perf_counter() - started_at) * 1000,
+        )
         return CourseAnswerRead(
             conversation_id=conversation.id,
             user_message_id=user_message.id,
@@ -104,7 +116,7 @@ def ask_course_question(
 
     try:
         model_answer = model_provider.answer_question(question=payload.question, context_chunks=context.chunks)
-    except CourseNexusError:
+    except CourseNexusError as exc:
         assistant_message = save_message(
             db,
             Message(
@@ -121,6 +133,13 @@ def ask_course_question(
             ),
         )
         _touch_conversation(db, conversation)
+        logger.error(
+            "问答失败：模型调用失败 | code=%s course=%s conversation=%s cost_ms=%.2f",
+            exc.code,
+            course_id,
+            conversation.id,
+            (perf_counter() - started_at) * 1000,
+        )
         raise
 
     assistant_message = save_message(
@@ -140,6 +159,14 @@ def ask_course_question(
     selected_chunks = _select_citation_chunks(context.chunks, model_answer.citation_chunk_ids)
     citations = save_citations(db, _build_citations(assistant_message.id, selected_chunks))
     _touch_conversation(db, conversation)
+
+    logger.info(
+        "问答完成 | course=%s conversation=%s citations=%d cost_ms=%.2f",
+        course_id,
+        conversation.id,
+        len(citations),
+        (perf_counter() - started_at) * 1000,
+    )
 
     return CourseAnswerRead(
         conversation_id=conversation.id,

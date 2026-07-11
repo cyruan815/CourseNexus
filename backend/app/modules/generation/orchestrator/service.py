@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.integrations.model_provider.base import ModelProvider
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.service import assert_course_owner
@@ -18,6 +20,9 @@ from app.modules.generation.orchestrator.contracts import GenerateContentRequest
 from app.modules.generation.orchestrator.registry import GeneratorRegistry
 from app.modules.material_context.schemas import ContextChunk
 from app.modules.material_context.service import iter_material_context_batches
+
+
+logger = get_logger("generation.content")
 
 
 def _new_generated_content_id() -> str:
@@ -166,6 +171,7 @@ def generate_content(
     model_provider: ModelProvider,
     max_batch_tokens: int,
 ) -> AIGeneratedContent:
+    started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
     generator = registry.create(payload.content_type, model_provider)
     content_id = _new_generated_content_id()
@@ -183,7 +189,7 @@ def generate_content(
     except CourseNexusError as exc:
         if exc.code != "MATERIAL_COVERAGE_INCOMPLETE":
             raise
-        return _persist_failed_content(
+        content = _persist_failed_content(
             db,
             AIGeneratedContent(
                 id=content_id,
@@ -196,6 +202,14 @@ def generate_content(
                 error_code=exc.code,
             ),
         )
+        _log_generation_failure(
+            content=content,
+            course_id=course_id,
+            error_code=exc.code,
+            started_at=started_at,
+            exc=exc,
+        )
+        return content
     if not batches:
         raise CourseNexusError(
             code="NO_PARSED_MATERIAL",
@@ -215,7 +229,7 @@ def generate_content(
     except CourseNexusError as exc:
         if exc.code == "VALIDATION_ERROR":
             raise
-        return _persist_failed_content(
+        content = _persist_failed_content(
             db,
             AIGeneratedContent(
                 id=content_id,
@@ -228,8 +242,16 @@ def generate_content(
                 error_code=exc.code,
             ),
         )
-    except Exception:
-        return _persist_failed_content(
+        _log_generation_failure(
+            content=content,
+            course_id=course_id,
+            error_code=exc.code,
+            started_at=started_at,
+            exc=exc,
+        )
+        return content
+    except Exception as exc:
+        content = _persist_failed_content(
             db,
             AIGeneratedContent(
                 id=content_id,
@@ -242,6 +264,14 @@ def generate_content(
                 error_code="GENERATION_FAILED",
             ),
         )
+        _log_generation_failure(
+            content=content,
+            course_id=course_id,
+            error_code="GENERATION_FAILED",
+            started_at=started_at,
+            exc=exc,
+        )
+        return content
 
     delivered_chunks = [chunk for batch in batches for chunk in batch.chunks]
     bound_content_json, citations = _prepare_citations(
@@ -250,7 +280,7 @@ def generate_content(
         item_citation_chunk_ids=output.item_citation_chunk_ids,
         delivered_chunks=delivered_chunks,
     )
-    return _persist_generated_content(
+    content = _persist_generated_content(
         db,
         AIGeneratedContent(
             id=content_id,
@@ -264,4 +294,33 @@ def generate_content(
             material_scope_json=material_scope_json,
         ),
         citations,
+    )
+    logger.info(
+        "内容生成成功 | content_type=%s content=%s course=%s citations=%d cost_ms=%.2f",
+        payload.content_type,
+        content.id,
+        course_id,
+        len(citations),
+        (perf_counter() - started_at) * 1000,
+    )
+    return content
+
+
+def _log_generation_failure(
+    *,
+    content: AIGeneratedContent,
+    course_id: str,
+    error_code: str,
+    started_at: float,
+    exc: BaseException,
+) -> None:
+    cause = exc.__cause__ or exc
+    logger.error(
+        "内容生成失败 | code=%s content_type=%s content=%s course=%s cost_ms=%.2f",
+        error_code,
+        content.content_type,
+        content.id,
+        course_id,
+        (perf_counter() - started_at) * 1000,
+        exc_info=(type(cause), cause, cause.__traceback__),
     )

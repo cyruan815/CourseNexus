@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from io import BytesIO
 from pathlib import Path
@@ -27,6 +28,13 @@ from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 @pytest.fixture()
@@ -104,20 +112,24 @@ def material_chunks(db: Session, material_id: str) -> list[MaterialChunk]:
     )
 
 
-def test_ask_course_question_creates_messages_and_citations(db: Session, tmp_path: Path) -> None:
+def test_ask_course_question_creates_messages_and_citations(db: Session, tmp_path: Path, caplog) -> None:
+    logger = capture_course_logs(caplog)
     rag_index = FakeRagIndex()
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     create_parsed_material(db, tmp_path, user.id, course.id, rag_index=rag_index)
 
-    answer = ask_course_question(
-        db,
-        user_id=user.id,
-        course_id=course.id,
-        payload=CourseQuestionCreate(question="What is Alpha?", material_scope=MaterialScope()),
-        model_provider=MockModelProvider(),
-        rag_index=rag_index,
-    )
+    try:
+        answer = ask_course_question(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=CourseQuestionCreate(question="What is Alpha?", material_scope=MaterialScope()),
+            model_provider=MockModelProvider(),
+            rag_index=rag_index,
+        )
+    finally:
+        logger.removeHandler(caplog.handler)
 
     saved_messages = messages(db)
     saved_citations = citations(db)
@@ -128,6 +140,11 @@ def test_ask_course_question_creates_messages_and_citations(db: Session, tmp_pat
     assert saved_citations[0].message_id == saved_messages[1].id
     assert saved_citations[0].material_name == "notes.md"
     assert saved_citations[0].chunk_id is not None
+    record = next(record for record in caplog.records if record.name.endswith("course_qa.answer"))
+    assert "问答完成" in record.getMessage()
+    assert f"course={course.id}" in record.getMessage()
+    assert "citations=1" in record.getMessage()
+    assert "What is Alpha?" not in record.getMessage()
 
 
 def test_ask_course_question_uses_retrieved_chunks_for_model_and_citations(

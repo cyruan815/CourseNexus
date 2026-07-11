@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import date
 from io import BytesIO
+import logging
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,13 @@ from app.modules.study_plans.service import (
 )
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+def capture_course_logs(caplog) -> logging.Logger:
+    logger = logging.getLogger("course_nexus")
+    logger.addHandler(caplog.handler)
+    logger.setLevel(logging.INFO)
+    return logger
 
 
 @pytest.fixture()
@@ -102,12 +110,16 @@ def test_preview_study_plan_requires_parsed_material(db: Session) -> None:
     assert exc_info.value.code == "NO_PARSED_MATERIAL"
 
 
-def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: Path) -> None:
+def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: Path, caplog) -> None:
+    logger = capture_course_logs(caplog)
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
 
-    saved = save_study_plan(db, user_id=user.id, course_id=course.id, payload=build_request())
+    try:
+        saved = save_study_plan(db, user_id=user.id, course_id=course.id, payload=build_request())
+    finally:
+        logger.removeHandler(caplog.handler)
 
     assert saved.plan.course_id == course.id
     assert len(saved.tasks) == 3
@@ -116,6 +128,11 @@ def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: P
     assert saved.subtasks[0].related_material_ids_json == [material_id]
     assert list_study_plans(db, user_id=user.id, course_id=course.id)[0].id == saved.plan.id
     assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).plan.id == saved.plan.id
+    record = next(record for record in caplog.records if record.name.endswith("study_plan.build"))
+    assert "计划保存成功" in record.getMessage()
+    assert "tasks=3" in record.getMessage()
+    assert f"plan={saved.plan.id}" in record.getMessage()
+    assert build_request().goal_text not in record.getMessage()
 
 
 def test_study_plan_scope_rejects_cross_user_material_id(db: Session, tmp_path: Path) -> None:

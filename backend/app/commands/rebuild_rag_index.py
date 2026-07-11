@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from dataclasses import dataclass
+from time import perf_counter
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import CourseNexusError
+from app.core.logging import configure_logging, get_logger
 from app.db.session import SessionLocal
 from app.integrations.rag.base import RagChunk, RagIndex
 from app.integrations.rag.llama_index_chroma import create_openai_chroma_rag_index
 from app.modules.materials.models import CourseMaterial, MaterialChunk
+
+
+logger = get_logger("command.rebuild_rag")
 
 
 @dataclass(frozen=True)
@@ -52,9 +56,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = get_settings()
+    configure_logging(settings)
+    started_at = perf_counter()
     endpoint = settings.model_endpoint("embedding")
     if not endpoint.api_key:
-        print("INDEXING_FAILED: EMBEDDING_API_KEY is required for rebuild_rag_index", file=sys.stderr)
+        logger.error("索引重建失败：Embedding 配置缺失 | code=INDEXING_FAILED")
         return 1
 
     rag_index = create_openai_chroma_rag_index(
@@ -71,13 +77,28 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 result = rebuild_material(db=db, rag_index=rag_index, material_id=args.material_id)
     except CourseNexusError as exc:
-        print(f"{exc.code}: {exc.message}", file=sys.stderr)
+        cause = exc.__cause__
+        logger.error(
+            "索引重建失败 | code=%s cost_ms=%.2f",
+            exc.code,
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
+        )
         return 1
     except Exception as exc:
-        print(f"INDEXING_FAILED: {exc}", file=sys.stderr)
+        logger.error(
+            "索引重建失败 | code=INDEXING_FAILED cost_ms=%.2f",
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return 1
 
-    print(f"Rebuilt RAG index: materials={result.material_count} chunks={result.chunk_count}")
+    logger.info(
+        "索引重建成功 | materials=%d chunks=%d cost_ms=%.2f",
+        result.material_count,
+        result.chunk_count,
+        (perf_counter() - started_at) * 1000,
+    )
     return 0
 
 

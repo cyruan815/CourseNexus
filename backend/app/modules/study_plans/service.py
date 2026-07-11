@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from time import perf_counter
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
+from app.core.logging import get_logger
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
 from app.modules.material_context.service import resolve_context
@@ -26,6 +28,9 @@ from app.modules.study_plans.schemas import (
 )
 
 
+logger = get_logger("study_plan.build")
+
+
 def _new_plan_id() -> str:
     return f"sp_{uuid4().hex}"
 
@@ -39,6 +44,25 @@ def _new_subtask_id() -> str:
 
 
 def preview_study_plan(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanBuildRequest,
+) -> StudyPlanPreview:
+    started_at = perf_counter()
+    preview = _build_study_plan_preview(db, user_id=user_id, course_id=course_id, payload=payload)
+    logger.info(
+        "计划预览成功 | course=%s tasks=%d subtasks=%d cost_ms=%.2f",
+        course_id,
+        len(preview.tasks),
+        sum(len(task.subtasks) for task in preview.tasks),
+        (perf_counter() - started_at) * 1000,
+    )
+    return preview
+
+
+def _build_study_plan_preview(
     db: Session,
     *,
     user_id: str,
@@ -69,7 +93,8 @@ def save_study_plan(
     course_id: str,
     payload: StudyPlanBuildRequest,
 ) -> StudyPlanBundle:
-    preview = preview_study_plan(db, user_id=user_id, course_id=course_id, payload=payload)
+    started_at = perf_counter()
+    preview = _build_study_plan_preview(db, user_id=user_id, course_id=course_id, payload=payload)
     plan_id = _new_plan_id()
     plan = StudyPlan(
         id=plan_id,
@@ -116,7 +141,16 @@ def save_study_plan(
                     sort_order=subtask_preview.sort_order,
                 )
             )
-    return save_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
+    bundle = save_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
+    logger.info(
+        "计划保存成功 | plan=%s course=%s tasks=%d subtasks=%d cost_ms=%.2f",
+        plan_id,
+        course_id,
+        len(tasks),
+        len(subtasks),
+        (perf_counter() - started_at) * 1000,
+    )
+    return bundle
 
 
 def list_study_plans(db: Session, *, user_id: str, course_id: str) -> list[StudyPlan]:
