@@ -240,35 +240,35 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.92;
+  opacity: 0.82;
   background:
     radial-gradient(circle at 0 0, var(--course-glow), transparent 320px),
     radial-gradient(circle at 11% 7%, var(--course-core), transparent 250px);
 }
 
 .home-course-card-blue {
-  --course-glow: rgba(47, 128, 237, 0.2);
-  --course-core: rgba(47, 128, 237, 0.28);
+  --course-glow: rgba(47, 128, 237, 0.11);
+  --course-core: rgba(47, 128, 237, 0.16);
 }
 
 .home-course-card-mint {
-  --course-glow: rgba(20, 184, 166, 0.2);
-  --course-core: rgba(20, 184, 166, 0.28);
+  --course-glow: rgba(20, 184, 166, 0.11);
+  --course-core: rgba(20, 184, 166, 0.16);
 }
 
 .home-course-card-indigo {
-  --course-glow: rgba(79, 70, 229, 0.18);
-  --course-core: rgba(79, 70, 229, 0.24);
+  --course-glow: rgba(79, 70, 229, 0.1);
+  --course-core: rgba(79, 70, 229, 0.14);
 }
 
 .home-course-card-violet {
-  --course-glow: rgba(124, 58, 237, 0.18);
-  --course-core: rgba(124, 58, 237, 0.24);
+  --course-glow: rgba(124, 58, 237, 0.1);
+  --course-core: rgba(124, 58, 237, 0.14);
 }
 
 .home-course-card-orange {
-  --course-glow: rgba(249, 115, 22, 0.18);
-  --course-core: rgba(249, 115, 22, 0.24);
+  --course-glow: rgba(249, 115, 22, 0.1);
+  --course-core: rgba(249, 115, 22, 0.14);
 }
 
 .home-course-card h3 {
@@ -332,6 +332,24 @@
 .home-add-course:hover {
   border-color: #2f80ed;
   background: #e8f2ff;
+}
+
+.home-course-state-card {
+  min-height: 184px;
+  display: flex;
+  align-items: center;
+  border-color: #d6e0eb;
+  background: #fbfdff;
+  padding: 24px;
+}
+
+.home-course-state-card h3 {
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.home-course-alert {
+  border: 1px solid #fecaca;
 }
 
 @media (max-width: 1100px) {
