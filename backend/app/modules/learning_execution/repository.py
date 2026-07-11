@@ -72,3 +72,20 @@ def list_materials_by_ids(db: Session, *, material_ids: list[str]) -> list[Cours
     if not material_ids:
         return []
     return list(db.execute(select(CourseMaterial).where(CourseMaterial.id.in_(material_ids))).scalars())
+
+def get_completion_target(db: Session, *, user_id: str, subtask_id: str) -> ExecutionTarget:
+    return get_execution_target(db, user_id=user_id, subtask_id=subtask_id)
+
+
+def list_subtasks_for_task(db: Session, *, task_id: str) -> list[StudySubTask]:
+    return list(
+        db.execute(
+            select(StudySubTask).where(StudySubTask.task_id == task_id).order_by(StudySubTask.sort_order, StudySubTask.id)
+        ).scalars()
+    )
+
+
+def list_tasks_for_plan(db: Session, *, plan_id: str) -> list[StudyTask]:
+    return list(
+        db.execute(select(StudyTask).where(StudyTask.plan_id == plan_id).order_by(StudyTask.task_date, StudyTask.sort_order, StudyTask.id)).scalars()
+    )

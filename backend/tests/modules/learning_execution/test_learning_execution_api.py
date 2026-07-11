@@ -100,3 +100,26 @@ def test_get_execution_context_api_requires_auth(api: ApiHarness) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+def test_update_subtask_completion_api_returns_envelope(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_execution_plan(api.db, user_id=user_id)
+
+    response = api.client.put(f"/api/v1/study-subtasks/{subtask_id}/completion", headers=headers, json={"completed": True})
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["changed"] is True
+    assert data["subtask"]["subtask_id"] == subtask_id
+    assert data["subtask"]["status"] == "completed"
+    assert data["task"]["status"] == "completed"
+    assert data["checkin"]["completed_subtask_count"] == 1
+
+
+def test_update_subtask_completion_api_requires_auth(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_execution_plan(api.db, user_id=user_id)
+
+    response = api.client.put(f"/api/v1/study-subtasks/{subtask_id}/completion", json={"completed": True})
+
+    assert response.status_code == 401

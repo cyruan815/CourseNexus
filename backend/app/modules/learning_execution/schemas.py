@@ -54,3 +54,34 @@ class ExecutionContextRead(BaseModel):
     related_materials: list[ExecutionMaterialRead]
     handout_content_id: str | None
     task_test_content_id: str | None
+from app.modules.checkins.schemas import CheckinRead
+
+
+class SubTaskCompletionUpdate(BaseModel):
+    completed: bool
+
+
+class CompletionSubTaskRead(BaseModel):
+    subtask_id: str
+    status: str
+    completed_at: datetime | None
+
+
+class CompletionTaskRead(BaseModel):
+    task_id: str
+    status: str
+    completed_subtask_count: int
+    total_subtask_count: int
+
+
+class CompletionPlanRead(BaseModel):
+    plan_id: str
+    status: str
+
+
+class SubTaskCompletionResult(BaseModel):
+    changed: bool
+    subtask: CompletionSubTaskRead
+    task: CompletionTaskRead
+    plan: CompletionPlanRead
+    checkin: CheckinRead
