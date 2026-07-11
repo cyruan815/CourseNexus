@@ -8,6 +8,8 @@
 
 ## 文档清单
 
+- [mindmap-frontend-handoff.md](mindmap-frontend-handoff.md)：G04 Mindmap 的数据库 JSON 路径、生成/历史/详情接口、Markmap 渲染输入、引用关联和联调验收。
+
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
 | [api-conventions.md](api-conventions.md) | API 风格、请求响应、错误码、分页、鉴权、幂等、时间 / ID / 状态字段和版本策略。 | 2026-07-09 |
