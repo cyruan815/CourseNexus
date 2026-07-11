@@ -142,3 +142,10 @@
 - 月历日期格最多返回 3 条 `task_summaries`，超出数量使用 `hidden_task_count`。
 - 跨用户、已删除或不存在的课程返回 `NOT_FOUND`，不泄露目标课程信息。
 - 所有 S03 查询必须零写入，不调用 `flush` 或 `commit`。
+## S04/S05 API 约定补充
+
+- completion 接口使用期望状态字段 `completed`，不得实现为 toggle。
+- `completed_at` 使用 UTC datetime；打卡日期使用父一级任务的业务日期 `task_date`。
+- `completion_ratio` 以字符串形式序列化 Decimal 四位小数，例如 `0.4000`。
+- `color_level=0` 和 `color_level=1` 是不同语义状态：0 表示无任务，1 表示有任务但未开始。当前 UI 可以映射为同一颜色，但 API 不合并状态。
+- checkins GET 接口只读，不因查询创建记录。

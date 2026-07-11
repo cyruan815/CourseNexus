@@ -218,3 +218,20 @@ S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
 `TaskTodoRead` 最小字段：`task_id`、`plan_id`、`course_id`、`course_name`、`title`、`task_date`、`status`、`derived_status`、`completed_subtask_count`、`total_subtask_count`、`first_incomplete_subtask_id`、`subtasks`。`SubTaskTodoRead` 返回 `subtask_id`、`title`、`subtask_type`、`description`、`status`、`sort_order`、`execution_url`；当前 `execution_url` 可为 `null`，前端可用 `subtask_id` 拼接 S04 执行页。
 
 计划详情按钮复用 S02 `GET /api/v1/study-plans/{plan_id}`，S03 不新增计划详情接口。S03 不提供任何 POST/PATCH/PUT/DELETE 待办或日历接口，不创建 `todos` 或 `calendar_events` 写模型。
+## S04/S05 学习执行与打卡契约
+
+### 执行上下文
+
+`GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回当前二级任务所在业务日期的执行上下文。响应 `data` 包含 `course`、`plan`、`execution_date`、当天 `tasks`、`current_subtask_id`、`related_materials`、`handout_content_id` 和 `task_test_content_id`。S06 前两个 generated content id 固定为 `null`。
+
+### 二级任务完成
+
+`PUT /api/v1/study-subtasks/{subtask_id}/completion` 请求体固定为 `{ "completed": boolean }`，表示期望状态，不是 toggle。重复提交同一状态返回 200 和 `changed=false`。取消完成会把二级任务状态改回 `not_started` 并清空 `completed_at`。
+
+### 打卡查询
+
+`GET /api/v1/checkins/{target_date}` 返回单日打卡 DTO；如果持久化记录不存在，后端只读计算当前事实并返回，不写入 `checkin_records`。
+
+`GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 返回闭区间内已有持久化记录和 summary。summary 中 `current_streak_days` / `longest_streak_days` 按“当天有任务且完成过任意二级任务”计算。
+
+错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`。

@@ -213,3 +213,11 @@ sequenceDiagram
 2. 再确认该模块涉及的 API、数据对象、状态枚举和验收标准。
 3. 如果模块需要长期独立维护，按 [../domains/index.md](../domains/index.md) 的规则创建模块文档。
 4. 模块开发任务只能细化本模块职责，不应把其他模块内部实现写入自己的任务范围。
+
+## S04/S05 模块边界补充
+
+`learning_execution` 负责学习执行页上下文和二级任务 completion 写事务。它可以读取 `study_plans`、`materials`、`courses`，并在 completion 事务中调用 `checkins.service.recalculate_checkin(..., flush_only=True)`。
+
+`checkins` 负责打卡颜色、比例和 streak 规则。其他模块不得复制颜色阈值或 streak 算法。
+
+`todos_calendar` 保持只读派生查询，不被 S04 调用，也不维护缓存。S04 完成状态变化后，S03 下一次查询自然从 `study_tasks` / `study_subtasks` 读取最新状态。

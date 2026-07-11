@@ -142,3 +142,12 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增表
 ```
 
 保存计划只创建计划、一级任务和二级任务结构。重生成 preview 不落库；替换计划会在一次事务中删除旧任务树并写入新任务树；删除计划写 `status = deleted` 和 `deleted_at`。
+## S04/S05 派生状态规则
+
+`study_subtasks.status` 是学习执行的事实来源。S04 completion 只写 `completed` 或 `not_started`，不直接写二级任务 `in_progress`。
+
+`study_tasks.status` 由同一父任务下二级任务派生：全部完成为 `completed`，全部未开始为 `not_started`，其他组合为 `in_progress`。
+
+`study_plans.status` 由计划下一级任务派生：全部一级任务完成为 `completed`，否则为 `active`；`deleted` 计划不可操作。
+
+`checkin_records` 是按用户和日期从未删除课程、未删除计划下的二级任务状态重算得到的派生记录。同一用户同一天只保留一行，不做增量累计。
