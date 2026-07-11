@@ -84,3 +84,79 @@ def test_task_test_generator_rejects_choice_question_without_options() -> None:
         TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("question_type", "correct_answer"),
+    [
+        ("single_choice", ""),
+        ("single_choice", "   "),
+        ("short_answer", ""),
+        ("short_answer", "   "),
+    ],
+)
+def test_task_test_generator_rejects_blank_string_correct_answer(
+    question_type: str,
+    correct_answer: str,
+) -> None:
+    question = {
+        "id": "q_1",
+        "question_type": question_type,
+        "question_text": "What is a primary key?",
+        "options": [{"id": "A", "text": "Uniquely identifies a row"}] if question_type == "single_choice" else [],
+        "correct_answer": correct_answer,
+        "explanation": "A primary key uniquely identifies one row.",
+        "source_citation_ids": ["chunk_1"],
+        "sort_order": 1,
+    }
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "Answer these questions.",
+                "questions": [question],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    "correct_answer",
+    [
+        [],
+        [""],
+        ["   "],
+        ["A", "   "],
+    ],
+)
+def test_task_test_generator_rejects_invalid_multiple_choice_correct_answer_list(
+    correct_answer: list[str],
+) -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "Answer these questions.",
+                "questions": [
+                    {
+                        "id": "q_1",
+                        "question_type": "multiple_choice",
+                        "question_text": "What is a primary key?",
+                        "options": [{"id": "A", "text": "Uniquely identifies a row"}, {"id": "B", "text": "Stores images"}],
+                        "correct_answer": correct_answer,
+                        "explanation": "A primary key uniquely identifies one row.",
+                        "source_citation_ids": ["chunk_1"],
+                        "sort_order": 1,
+                    }
+                ],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
