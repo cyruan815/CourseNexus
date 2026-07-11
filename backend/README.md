@@ -75,6 +75,27 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 
 提交前运行与改动匹配的测试；涉及共享契约、数据库、RAG 或跨模块行为时运行完整 `pnpm backend:test`。
 
+## 日志
+
+应用统一使用 Python 标准库 `logging`。`StreamHandler` 在终端输出单行摘要，`RotatingFileHandler` 将完整日志和异常 traceback 写入 `logs/course-nexus.log`。
+
+```dotenv
+LOG_LEVEL=INFO
+LOG_DIR=./logs
+LOG_MAX_BYTES=20971520
+LOG_BACKUP_COUNT=20
+SLOW_REQUEST_MS=3000
+```
+
+默认日志容量上限约 `420 MiB`。在 `backend/` 目录查询错误或请求链路：
+
+```powershell
+Select-String -Path logs/course-nexus.log -Pattern 'ERROR'
+Select-String -Path logs/course-nexus.log -Pattern 'req_具体请求ID'
+```
+
+终端日志不显示 traceback；文件日志会保留。禁止记录密码、Authorization、Token、Cookie、API Key、完整资料内容、完整用户问题、prompt、模型响应或向量。
+
 ## 配置
 
 后端读取仓库根目录 `.env`，示例和中文说明见 [../.env.example](../.env.example)。真实 `.env` 不得提交，服务端密钥不得放入任何 `VITE_` 变量。

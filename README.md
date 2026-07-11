@@ -122,6 +122,29 @@ Invoke-RestMethod http://localhost:8000/api/v1/health | ConvertTo-Json -Depth 5
 
 响应中的 `data.status` 应为 `ok`。
 
+### 后端日志
+
+后端使用 Python 标准库 `logging`。终端显示单行可读摘要，完整日志写入 `backend/logs/course-nexus.log`；异常在文件中保留 traceback。日志文件默认每个 `20 MiB`，保留 `20` 个备份，总上限约 `420 MiB`。
+
+可在根目录 `.env` 调整：
+
+```dotenv
+LOG_LEVEL=INFO
+LOG_DIR=./logs
+LOG_MAX_BYTES=20971520
+LOG_BACKUP_COUNT=20
+SLOW_REQUEST_MS=3000
+```
+
+从仓库根目录按错误级别或请求 ID 查询：
+
+```powershell
+Select-String -Path backend/logs/course-nexus.log -Pattern 'ERROR'
+Select-String -Path backend/logs/course-nexus.log -Pattern 'req_具体请求ID'
+```
+
+日志不得包含密码、Token、API Key、完整资料、完整问题、prompt 或模型响应。正式长期留存应接入外部日志平台，本地轮转文件用于近期排查。
+
 ### 6. 验证前端构建
 
 ```powershell
@@ -256,7 +279,7 @@ pnpm test
 - 上传安全校验支持 `.txt`、`.md`、`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg`。
 - `.txt` / `.md` 走本地纯文本解析器；`.pdf` / `.docx` / `.pptx` / 图片格式走 Docling adapter。
 - 图片 OCR 已进入 adapter 路由，但 OCR 质量和版面回归夹具仍显式后置。
-- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `176 passed`。
+- 当前后端验证基线为 `pnpm backend:test`，最近一次记录为 `192 passed`。
 
 ## 协作规则
 
