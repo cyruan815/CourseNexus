@@ -1,12 +1,14 @@
 .home-workbench {
   min-height: 100vh;
-  background: #f7fafc;
+  background:
+    linear-gradient(180deg, #eef6ff 0, #f7fafc 220px),
+    #f7fafc;
   color: #1f2937;
 }
 
 .home-header {
   border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
   padding: 16px 28px;
 }
 
@@ -31,72 +33,92 @@
   line-height: 1.2;
 }
 
-.home-theme-toggle {
-  min-width: 104px;
-  min-height: 44px;
-  border: 1px solid #d6e0eb;
-  border-radius: 8px;
-  padding: 4px;
-  background: #f1f5f9;
-}
-
-.home-theme-button {
-  color: #64748b;
-}
-
-.home-theme-button-active {
-  background: #ffffff;
-  color: #2f80ed;
-  border: 1px solid #dbeafe;
-}
-
+.home-theme-single-button,
 .home-user-button {
   border-color: #d6e0eb;
-  color: #2f80ed;
   background: #ffffff;
+  color: #2f80ed;
+}
+
+.home-theme-single-button:hover,
+.home-user-button:hover {
+  background: #e8f2ff;
 }
 
 .home-shell {
   width: 100%;
   max-width: none;
-  padding: 18px 24px 28px;
+  padding: 20px 24px 28px;
 }
 
-.home-side-panel,
-.home-main-panel {
-  min-height: calc(100vh - 112px);
-  border-color: #d6e0eb;
-  background: #ffffff;
-  padding: 24px;
+.home-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 30vw) minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - 116px);
 }
 
 .home-side-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 18px;
 }
 
-.home-side-panel h2,
+.home-focus-panel,
+.home-calendar-panel,
+.home-main-panel {
+  border-color: #d6e0eb;
+  background: #ffffff;
+}
+
+.home-focus-panel,
+.home-calendar-panel {
+  min-height: 0;
+  padding: 24px;
+}
+
+.home-main-panel {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px;
+}
+
+.home-focus-panel h2,
+.home-calendar-panel h2,
 .home-main-panel h2 {
   font-size: 22px;
   font-weight: 750;
   line-height: 1.25;
 }
 
-.home-empty-card {
-  min-height: 252px;
-  border-color: #d6e0eb;
-  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
-  padding: 24px;
+.home-urgent-badge {
+  background: #e8f2ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.home-plan-empty {
+  flex: 1;
+  justify-content: center;
+  min-height: 158px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(232, 242, 255, 0.9), rgba(230, 255, 250, 0.72)),
+    #f8fbff;
+  padding: 22px;
 }
 
 .home-empty-icon {
   color: #2563eb;
 }
 
-.home-empty-card h3 {
+.home-plan-empty h3 {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 .home-plan-button {
@@ -106,10 +128,27 @@
   box-shadow: none;
 }
 
+.home-plan-button:hover {
+  background: #1d4ed8;
+}
+
+.home-next-task {
+  border-color: #dbeafe;
+  background: #f8fbff;
+  color: #1f2937;
+  padding: 14px 16px;
+}
+
+.home-next-task svg {
+  color: #7c3aed;
+}
+
 .home-calendar-card {
+  flex: 1;
+  min-height: 0;
   border-color: #d6e0eb;
   background: #fbfdff;
-  padding: 12px 12px 18px;
+  padding: 12px 12px 16px;
 }
 
 .home-calendar-weekdays,
@@ -119,42 +158,60 @@
 }
 
 .home-calendar-weekdays {
-  gap: 0;
   padding: 8px 0;
 }
 
 .home-calendar-grid {
   position: relative;
-  min-height: 166px;
+  min-height: 252px;
   border-left: 1px solid #e5e7eb;
   border-top: 1px solid #e5e7eb;
 }
 
 .home-calendar-cell {
-  min-height: 42px;
+  position: relative;
+  min-height: 50px;
   border-right: 1px solid #e5e7eb;
   border-bottom: 1px solid #e5e7eb;
   background: #ffffff;
 }
 
+.home-calendar-today {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.home-calendar-dot {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #7c3aed;
+}
+
 .home-calendar-empty {
   position: absolute;
-  left: 30%;
+  left: 28%;
   top: 38%;
-  width: 38%;
+  width: 44%;
   min-height: 58px;
   display: grid;
   place-items: center;
-  border-style: dashed;
   border-color: #93c5fd;
   background: #e8f2ff;
   color: #2563eb;
-}
-
-.home-main-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
 }
 
 .home-term-select {
@@ -163,7 +220,7 @@
 
 .home-course-card,
 .home-add-course {
-  min-height: 190px;
+  min-height: 184px;
   height: 100%;
   border-color: #d6e0eb;
   color: #1f2937;
@@ -171,8 +228,6 @@
 }
 
 .home-course-card {
-  position: relative;
-  overflow: hidden;
   background: #ffffff;
   transition:
     border-color 160ms ease,
@@ -180,49 +235,9 @@
     transform 160ms ease;
 }
 
-.home-course-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 4px;
-  background: #2f80ed;
-}
-
-.home-course-card-blue::before {
-  background: #2f80ed;
-}
-
-.home-course-card-mint::before {
-  background: #14b8a6;
-}
-
-.home-course-card-indigo::before {
-  background: #4f46e5;
-}
-
-.home-course-card-violet::before {
-  background: #7c3aed;
-}
-
-.home-course-card-blue {
-  background: #f8fbff;
-}
-
-.home-course-card-mint {
-  background: #f7fffd;
-}
-
-.home-course-card-indigo {
-  background: #fafaff;
-}
-
-.home-course-card-violet {
-  background: #fbf9ff;
-}
-
 .home-course-card:hover {
   border-color: #2f80ed;
-  background: #ffffff;
+  background: #fbfdff;
   transform: translateY(-1px);
 }
 
@@ -244,12 +259,33 @@
   color: #64748b;
 }
 
+.home-course-activity {
+  min-height: 24px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.home-material-badge {
+  background: #e6fffa;
+  color: #0f766e;
+}
+
+.home-task-badge {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.home-task-badge-active {
+  background: #e8f2ff;
+  color: #2563eb;
+}
+
 .home-add-course {
   display: grid;
   place-items: center;
   border: 1px dashed #93c5fd;
   background: #f8fbff;
-  color: #1f2937;
   padding: 24px;
   transition:
     border-color 160ms ease,
@@ -261,7 +297,17 @@
   background: #e8f2ff;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .home-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .home-side-panel {
+    grid-template-rows: auto auto;
+  }
+}
+
+@media (max-width: 720px) {
   .home-header {
     padding: 16px;
   }
@@ -280,10 +326,14 @@
     font-size: 22px;
   }
 
-  .home-side-panel,
+  .home-shell {
+    padding: 14px;
+  }
+
+  .home-focus-panel,
+  .home-calendar-panel,
   .home-main-panel {
-    min-height: auto;
-    padding: 20px 16px;
+    padding: 18px 16px;
   }
 
   .home-term-select {

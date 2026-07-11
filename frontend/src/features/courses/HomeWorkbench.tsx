@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Card,
@@ -14,10 +15,12 @@ import {
   Title,
 } from "@mantine/core";
 import {
+  IconAlertCircle,
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
   IconClipboardList,
+  IconClock,
   IconDotsVertical,
   IconMoon,
   IconPlus,
@@ -35,6 +38,8 @@ interface HomeCourse {
   term: string;
   materialCount: number;
   todayTaskCount: number;
+  recentActivity: string;
+  progress: string;
   tone: "blue" | "mint" | "indigo" | "violet";
 }
 
@@ -46,6 +51,8 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 12,
     todayTaskCount: 1,
+    recentActivity: "课件 12 已归档",
+    progress: "本周待整理",
     tone: "blue",
   },
   {
@@ -55,6 +62,8 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 8,
     todayTaskCount: 0,
+    recentActivity: "极限章节已复习",
+    progress: "进度稳定",
     tone: "indigo",
   },
   {
@@ -64,6 +73,8 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 5,
     todayTaskCount: 0,
+    recentActivity: "项目说明已上传",
+    progress: "等待拆解",
     tone: "mint",
   },
   {
@@ -73,13 +84,19 @@ const homeCourses: HomeCourse[] = [
     term: "2025-2026 春",
     materialCount: 6,
     todayTaskCount: 0,
+    recentActivity: "实验报告待补充",
+    progress: "资料完整",
     tone: "violet",
   },
 ];
 
 const calendarDays = Array.from({ length: 35 }, (_, index) => index + 1);
+const isDarkMode = false;
 
 function Header() {
+  const ThemeIcon = isDarkMode ? IconSun : IconMoon;
+  const themeLabel = isDarkMode ? "切换为日间模式" : "切换为夜间模式";
+
   return (
     <Paper className="home-header" component="header" radius={0}>
       <Group justify="space-between" wrap="nowrap">
@@ -93,14 +110,9 @@ function Header() {
         </Group>
 
         <Group gap="md" wrap="nowrap">
-          <Group className="home-theme-toggle" gap={4} wrap="nowrap">
-            <ActionIcon aria-label="切换为日间模式" className="home-theme-button home-theme-button-active" radius="sm" size="lg" variant="subtle">
-              <IconSun size={22} stroke={1.8} />
-            </ActionIcon>
-            <ActionIcon aria-label="切换为夜间模式" className="home-theme-button" radius="sm" size="lg" variant="subtle">
-              <IconMoon size={22} stroke={1.8} />
-            </ActionIcon>
-          </Group>
+          <ActionIcon aria-label={themeLabel} className="home-theme-single-button" radius="md" size={44} variant="default">
+            <ThemeIcon size={22} stroke={1.8} />
+          </ActionIcon>
           <ActionIcon aria-label="打开个人中心" className="home-user-button" radius="xl" size={48} variant="default">
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
@@ -112,82 +124,132 @@ function Header() {
 
 function TodayTodoPanel() {
   return (
-    <Stack gap="md">
-      <Title order={2}>今日待办</Title>
-      <Paper className="home-empty-card" radius="md" withBorder>
-        <Stack align="center" gap="sm">
-          <IconClipboardList aria-hidden className="home-empty-icon" size={54} stroke={1.4} />
-          <Title order={3}>还没有学习计划</Title>
-          <Text c="dimmed" ta="center">
-            生成计划后，这里显示今天要学的任务
-          </Text>
-          <Button className="home-plan-button" component={Link} to="/" variant="filled">
-            生成一个计划吧
+    <Paper className="home-focus-panel" radius="md" withBorder>
+      <Stack gap="lg" h="100%" justify="space-between">
+        <Group justify="space-between">
+          <Stack gap={2}>
+            <Title order={2}>今日待办</Title>
+            <Text c="dimmed" size="sm">
+              把今天要紧的学习动作先排出来
+            </Text>
+          </Stack>
+          <Badge className="home-urgent-badge" leftSection={<IconAlertCircle size={14} />}>
+            1 项待安排
+          </Badge>
+        </Group>
+
+        <Stack align="center" className="home-plan-empty" gap="md">
+          <IconClipboardList aria-hidden className="home-empty-icon" size={48} stroke={1.6} />
+          <Stack gap={4}>
+            <Title order={3}>今天还没有学习计划</Title>
+            <Text c="dimmed" ta="center">
+              先把计算机网络的 1 项任务排进今天
+            </Text>
+          </Stack>
+          <Button className="home-plan-button" component={Link} leftSection={<IconPlus size={16} />} to="/" variant="filled">
+            生成今日计划
           </Button>
         </Stack>
-      </Paper>
-    </Stack>
+
+        <Paper className="home-next-task" radius="md" withBorder>
+          <Group gap="sm" wrap="nowrap">
+            <IconClock aria-hidden size={20} />
+            <Stack gap={0}>
+              <Text fw={700}>建议优先处理</Text>
+              <Text c="dimmed" size="sm">
+                计算机网络 · 今日任务 1
+              </Text>
+            </Stack>
+          </Group>
+        </Paper>
+      </Stack>
+    </Paper>
   );
 }
 
 function CalendarPanel() {
   return (
-    <Stack gap="md">
-      <Title order={2}>日历</Title>
-      <Paper className="home-calendar-card" radius="md" withBorder>
+    <Paper className="home-calendar-panel" radius="md" withBorder>
+      <Stack gap="md" h="100%">
         <Group justify="space-between">
-          <ActionIcon aria-label="上个月" variant="subtle">
-            <IconChevronLeft size={22} />
-          </ActionIcon>
-          <Text fw={600}>2026 年 7 月</Text>
-          <ActionIcon aria-label="下个月" variant="subtle">
-            <IconChevronRight size={22} />
-          </ActionIcon>
+          <Title order={2}>日历</Title>
+          <Badge color="blue" variant="light">
+            7 月
+          </Badge>
         </Group>
 
-        <Divider />
+        <Paper className="home-calendar-card" radius="md" withBorder>
+          <Group justify="space-between">
+            <ActionIcon aria-label="上个月" variant="subtle">
+              <IconChevronLeft size={22} />
+            </ActionIcon>
+            <Text fw={700}>2026 年 7 月</Text>
+            <ActionIcon aria-label="下个月" variant="subtle">
+              <IconChevronRight size={22} />
+            </ActionIcon>
+          </Group>
 
-        <Box className="home-calendar-weekdays" aria-hidden>
-          {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
-            <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
-              {day}
-            </Text>
-          ))}
-        </Box>
+          <Divider />
 
-        <Box aria-label="月历，无学习计划" className="home-calendar-grid" role="grid">
-          {calendarDays.map((day) => (
-            <Box className="home-calendar-cell" key={day} role="gridcell" />
-          ))}
-          <Paper className="home-calendar-empty" radius="md" withBorder>
-            <Text fw={600}>无计划</Text>
-          </Paper>
-        </Box>
-      </Paper>
-    </Stack>
+          <Box className="home-calendar-weekdays" aria-hidden>
+            {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
+              <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
+                {day}
+              </Text>
+            ))}
+          </Box>
+
+          <Box aria-label="月历，无学习计划" className="home-calendar-grid" role="grid">
+            {calendarDays.map((day) => (
+              <Box className="home-calendar-cell" key={day} role="gridcell">
+                {day === 17 ? <span className="home-calendar-today">今</span> : null}
+                {day === 18 ? <span className="home-calendar-dot" /> : null}
+              </Box>
+            ))}
+            <Paper className="home-calendar-empty" radius="md" withBorder>
+              <Text fw={700}>待排计划</Text>
+            </Paper>
+          </Box>
+        </Paper>
+      </Stack>
+    </Paper>
   );
 }
 
 function CourseCard({ course }: { course: HomeCourse }) {
   return (
-    <Card className={`home-course-card home-course-card-${course.tone}`} padding="xl" radius="md" withBorder>
-      <Group align="flex-start" justify="space-between" wrap="nowrap">
-        <Stack gap="md">
-          <Title order={3}>
-            <Link className="home-course-link" to={`/courses/${course.id}`}>
-              {course.name}
-            </Link>
-          </Title>
-          <Text>教师： {course.teacher}</Text>
-          <Text>学期： {course.term}</Text>
-          <Text>
-            资料 {course.materialCount} · 今日任务 {course.todayTaskCount}
+    <Card className="home-course-card" padding="lg" radius="md" withBorder>
+      <Stack gap="lg" h="100%" justify="space-between">
+        <Group align="flex-start" justify="space-between" wrap="nowrap">
+          <Stack gap="xs">
+            <Title order={3}>
+              <Link className="home-course-link" to={`/courses/${course.id}`}>
+                {course.name}
+              </Link>
+            </Title>
+            <Text c="dimmed" size="sm">
+              {course.teacher} · {course.term}
+            </Text>
+          </Stack>
+          <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
+            <IconDotsVertical size={22} />
+          </ActionIcon>
+        </Group>
+
+        <Text className="home-course-activity">{course.recentActivity}</Text>
+
+        <Group gap="sm">
+          <Badge className="home-material-badge" variant="light">
+            资料 {course.materialCount}
+          </Badge>
+          <Badge className={course.todayTaskCount > 0 ? "home-task-badge-active" : "home-task-badge"} variant="light">
+            今日任务 {course.todayTaskCount}
+          </Badge>
+          <Text c="dimmed" ml="auto" size="sm">
+            {course.progress}
           </Text>
-        </Stack>
-        <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
-          <IconDotsVertical size={24} />
-        </ActionIcon>
-      </Group>
+        </Group>
+      </Stack>
     </Card>
   );
 }
@@ -216,7 +278,9 @@ function CourseOverview() {
       <Group align="flex-start" justify="space-between">
         <Stack gap={4}>
           <Title order={2}>课程概览</Title>
-          <Text fw={600}>我的课程</Text>
+          <Text c="dimmed" size="sm">
+            本学期 4 门课程 · 32 份资料
+          </Text>
         </Stack>
         <Select
           aria-label="选择学期"
@@ -246,17 +310,13 @@ export function HomeWorkbench() {
     <Box className="home-workbench">
       <Header />
       <Container className="home-shell" fluid>
-        <Grid gap="lg">
-          <Grid.Col span={{ base: 12, lg: 4 }}>
-            <Paper className="home-side-panel" radius="md" withBorder>
-              <TodayTodoPanel />
-              <CalendarPanel />
-            </Paper>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, lg: 8 }}>
-            <CourseOverview />
-          </Grid.Col>
-        </Grid>
+        <Box className="home-layout">
+          <Box className="home-side-panel">
+            <TodayTodoPanel />
+            <CalendarPanel />
+          </Box>
+          <CourseOverview />
+        </Box>
       </Container>
     </Box>
   );

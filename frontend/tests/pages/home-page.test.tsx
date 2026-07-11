@@ -24,7 +24,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "日历" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/computer-network");
-    expect(screen.getByText("还没有学习计划")).toBeInTheDocument();
+    expect(screen.getByText("今天还没有学习计划")).toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
   });
 });
