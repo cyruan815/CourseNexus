@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timezone, timedelta
 from time import perf_counter
 from uuid import uuid4
 
@@ -24,6 +24,8 @@ from app.modules.study_plans.schemas import (
     StudyPlanConfigParseRequest,
     StudyPlanParsedConfig,
     StudyPlanPreview,
+    StudyPlanRegenerationPreviewRequest,
+    StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
     StudySubTaskPreview,
     StudyTaskPreview,
@@ -212,6 +214,76 @@ def get_study_plan_detail(db: Session, *, user_id: str, plan_id: str) -> StudyPl
     return _bundle_for_plan(db, plan)
 
 
+
+
+def preview_study_plan_regeneration(
+    db: Session,
+    *,
+    user_id: str,
+    plan_id: str,
+    payload: StudyPlanRegenerationPreviewRequest,
+    model_provider: ModelProvider,
+    max_tokens: int,
+) -> StudyPlanPreview:
+    plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
+    _assert_replace_allowed(db, plan_id=plan_id)
+    config = plan.parsed_config_json if isinstance(plan.parsed_config_json, dict) else {}
+    material_scope = payload.material_scope or _material_scope_from_config(config)
+    build_payload = StudyPlanBuildRequest(
+        goal_text=payload.goal_text or plan.goal_text,
+        start_date=payload.start_date or plan.start_date,
+        end_date=payload.end_date or plan.end_date,
+        daily_available_minutes=payload.daily_available_minutes or plan.daily_available_minutes,
+        material_scope=material_scope,
+    )
+    preview = preview_study_plan(
+        db,
+        user_id=user_id,
+        course_id=plan.course_id,
+        payload=build_payload,
+        model_provider=model_provider,
+        max_tokens=max_tokens,
+    )
+    return preview.model_copy(update={"preference": payload.preference or config.get("preference", "balanced")})
+
+
+def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: StudyPlanReplaceRequest) -> StudyPlanBundle:
+    plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
+    _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
+    _assert_replace_allowed(db, plan_id=plan_id)
+    try:
+        study_plan_repository.delete_tasks_for_plan(db, plan_id=plan_id)
+        plan.title = payload.title
+        plan.goal_text = payload.goal_text
+        plan.start_date = payload.start_date
+        plan.end_date = payload.end_date
+        plan.daily_available_minutes = payload.daily_available_minutes
+        plan.status = "active"
+        plan.updated_at = datetime.now(timezone.utc)
+        plan.parsed_config_json = _saved_config(payload, coverage=None, key_hash=None, request_hash=_hash_request(payload))
+        tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=plan.course_id, task_previews=payload.tasks)
+        db.add(plan)
+        db.add_all(tasks)
+        db.add_all(subtasks)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(plan)
+    return _bundle_for_plan(db, plan)
+
+
+def delete_study_plan(db: Session, *, user_id: str, plan_id: str) -> StudyPlan:
+    plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
+    now = datetime.now(timezone.utc)
+    plan.status = "deleted"
+    plan.deleted_at = now
+    plan.updated_at = now
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
 def _coerce_save_request(payload: StudyPlanBuildRequest | StudyPlanSaveRequest) -> StudyPlanSaveRequest:
     if isinstance(payload, StudyPlanSaveRequest):
         return payload
@@ -293,6 +365,35 @@ def _bundle_for_plan(db: Session, plan: StudyPlan) -> StudyPlanBundle:
         subtasks=study_plan_repository.list_subtasks_for_plan(db, plan_id=plan.id),
     )
 
+
+
+
+def _get_active_plan_or_404(db: Session, *, user_id: str, plan_id: str) -> StudyPlan:
+    plan = study_plan_repository.get_active_study_plan_for_user(db, user_id=user_id, plan_id=plan_id)
+    if plan is None:
+        raise CourseNexusError(code="NOT_FOUND", message="学习计划不存在", status_code=404)
+    return plan
+
+
+def _assert_replace_allowed(db: Session, *, plan_id: str) -> None:
+    if study_plan_repository.has_started_subtasks(db, plan_id=plan_id):
+        raise CourseNexusError(code="STATE_CONFLICT", message="已有学习进度，不能替换计划", status_code=409)
+    if study_plan_repository.has_bound_generated_content(db, plan_id=plan_id):
+        raise CourseNexusError(code="STATE_CONFLICT", message="已有绑定生成内容，不能替换计划", status_code=409)
+
+
+def _assert_expected_updated_at(actual: datetime, expected: datetime) -> None:
+    actual_value = actual.replace(tzinfo=timezone.utc) if actual.tzinfo is None else actual.astimezone(timezone.utc)
+    expected_value = expected.replace(tzinfo=timezone.utc) if expected.tzinfo is None else expected.astimezone(timezone.utc)
+    if actual_value != expected_value:
+        raise CourseNexusError(code="STATE_CONFLICT", message="学习计划已被更新", status_code=409)
+
+
+def _material_scope_from_config(config: dict[str, object]) -> object:
+    material_scope = config.get("material_scope")
+    if isinstance(material_scope, dict):
+        return material_scope
+    return {"include_all_parsed_materials": True, "material_ids": []}
 
 def _build_config_parse_prompt(*, course_name: str, payload: StudyPlanConfigParseRequest) -> str:
     return "\n".join(

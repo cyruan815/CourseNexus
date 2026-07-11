@@ -15,6 +15,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.modules.generated_content.models import AIGeneratedContent
 from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
@@ -26,11 +27,12 @@ from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
     StudyPlanParsedConfig,
+    StudyPlanRegenerationPreviewRequest,
     StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
     StudySubTaskPreview,
 )
-from app.modules.study_plans.service import list_study_plans, parse_study_plan_config, preview_study_plan, save_study_plan
+from app.modules.study_plans.service import delete_study_plan, get_study_plan_detail, list_study_plans, parse_study_plan_config, preview_study_plan, preview_study_plan_regeneration, replace_study_plan, save_study_plan
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -422,3 +424,163 @@ def test_save_study_plan_rolls_back_when_subtask_flush_fails(db: Session, tmp_pa
         )
 
     assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0
+
+def test_regeneration_preview_does_not_write_db(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen.txt", b"Reliable transport")
+    provider = RecordingPlanProvider([material_id])
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="regen-save-key",
+    )
+    before_count = db.scalar(select(func.count()).select_from(StudyPlan))
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest(goal_text="重新掌握传输层"),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.goal_text == "重新掌握传输层"
+    assert db.scalar(select(func.count()).select_from(StudyPlan)) == before_count
+
+
+def test_replace_study_plan_replaces_task_tree_atomically(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="gina", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-replace.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="replace-save-key",
+    )
+    replace_payload = StudyPlanReplaceRequest.model_validate(
+        _save_request([material_id]).model_dump(mode="json")
+        | {
+            "expected_updated_at": saved.plan.updated_at.isoformat(),
+            "title": "替换后的传输层计划",
+            "tasks": [
+                {
+                    "title": "替换后的任务",
+                    "task_date": "2026-07-11",
+                    "sort_order": 1,
+                    "subtasks": [
+                        {
+                            "title": "替换后的测试",
+                            "subtask_type": "test",
+                            "description": "确认掌握情况",
+                            "related_material_ids": [material_id],
+                            "estimated_minutes": 60,
+                            "citation_chunk_ids": ["chk_replace"],
+                            "sort_order": 1,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    replaced = replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=replace_payload)
+
+    assert replaced.plan.title == "替换后的传输层计划"
+    assert [task.title for task in replaced.tasks] == ["替换后的任务"]
+    assert [subtask.title for subtask in replaced.subtasks] == ["替换后的测试"]
+
+
+def test_replace_study_plan_rejects_progress_and_generated_content(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="hank", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-state.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="state-save-key",
+    )
+    saved.subtasks[0].status = "completed"
+    db.add(saved.subtasks[0])
+    db.commit()
+    replace_payload = StudyPlanReplaceRequest.model_validate(
+        _save_request([material_id]).model_dump(mode="json") | {"expected_updated_at": saved.plan.updated_at.isoformat(), "title": "冲突计划"}
+    )
+
+    with pytest.raises(CourseNexusError) as progress_exc:
+        replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=replace_payload)
+
+    assert progress_exc.value.code == "STATE_CONFLICT"
+
+
+def test_delete_study_plan_soft_deletes_and_hides_plan(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="ivy", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-delete.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="delete-save-key",
+    )
+
+    deleted = delete_study_plan(db, user_id=user.id, plan_id=saved.plan.id)
+
+    assert deleted.status == "deleted"
+    assert deleted.deleted_at is not None
+    assert list_study_plans(db, user_id=user.id, course_id=course.id) == []
+    with pytest.raises(CourseNexusError) as exc_info:
+        get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id)
+    assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_replace_study_plan_rejects_bound_generated_content(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="jane", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-bound.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="bound-save-key",
+    )
+    db.add(
+        AIGeneratedContent(
+            id="gen_bound_handout",
+            user_id=user.id,
+            course_id=course.id,
+            study_subtask_id=saved.subtasks[0].id,
+            content_type="handout",
+            title="讲义",
+            content="content",
+            generation_status="success",
+        )
+    )
+    db.commit()
+    replace_payload = StudyPlanReplaceRequest.model_validate(
+        _save_request([material_id]).model_dump(mode="json") | {"expected_updated_at": saved.plan.updated_at.isoformat(), "title": "绑定冲突计划"}
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=replace_payload)
+
+    assert exc_info.value.code == "STATE_CONFLICT"

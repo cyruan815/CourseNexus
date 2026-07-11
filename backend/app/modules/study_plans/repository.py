@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 
 
@@ -108,3 +109,26 @@ def delete_tasks_for_plan(db: Session, *, plan_id: str) -> None:
     db.execute(delete(StudySubTask).where(StudySubTask.plan_id == plan_id))
     db.execute(delete(StudyTask).where(StudyTask.plan_id == plan_id))
     db.flush()
+
+def has_started_subtasks(db: Session, *, plan_id: str) -> bool:
+    return bool(
+        db.scalar(
+            select(func.count())
+            .select_from(StudySubTask)
+            .where(StudySubTask.plan_id == plan_id, StudySubTask.status != "not_started")
+        )
+    )
+
+
+def has_bound_generated_content(db: Session, *, plan_id: str) -> bool:
+    return bool(
+        db.scalar(
+            select(func.count())
+            .select_from(AIGeneratedContent)
+            .join(StudySubTask, AIGeneratedContent.study_subtask_id == StudySubTask.id)
+            .where(
+                StudySubTask.plan_id == plan_id,
+                AIGeneratedContent.deleted_at.is_(None),
+            )
+        )
+    )
