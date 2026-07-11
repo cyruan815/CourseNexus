@@ -59,8 +59,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
-| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 问答与G01生成链路已实现真实引用、快照保存和未知位置降级；G02-G06继续提供逐条目引用。 |
-| `AIGeneratedContent` | `ai_generated_contents` | 已建表 | `generated-content` | 还需实现生成编排、内容保存、历史列表、详情查询和 PDF 导出入口。 |
+| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 问答与 G01 生成链路已实现真实引用、快照保存和未知位置降级；S06 任务内容生成通过 `generated_content_id` 绑定引用来源。 |
+| `AIGeneratedContent` | `ai_generated_contents` | 已建表并已接入 S06 | `generated-content` | 已支持任务讲义和任务测试题按需生成落库；历史列表、详情查询和 PDF 导出入口仍需后续完善。 |
 | `StudyPlan` | `study_plans` | 已建表并已接入 API | `study-plans` | 已实现自然语言配置回填、计划预览、保存、替换、删除和计划状态汇总。 |
 | `StudyTask` | `study_tasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现保存计划时生成一级任务，并由二级任务完成状态汇总一级任务状态。 |
 | `StudySubTask` | `study_subtasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现二级任务生成、执行上下文查询、完成状态幂等更新和关联资料校验。 |
@@ -339,7 +339,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `id` | string | 否 | 后端生成 | PK | 生成内容 ID。 |
 | `user_id` | string | 否 | 无 | FK -> `users.id`, INDEX | 所属用户。 |
 | `course_id` | string | 否 | 无 | FK -> `courses.id`, INDEX | 所属课程。 |
-| `study_subtask_id` | string | 是 | null | FK -> `study_subtasks.id`, INDEX | 关联二级任务，任务讲义 / 测试使用。 |
+| `study_subtask_id` | string | 是 | null | FK -> `study_subtasks.id`, INDEX | 关联二级任务；S06 `handout` / `task_test` 记录必须填写。 |
 | `source_message_id` | string | 是 | null | FK -> `messages.id`, INDEX | 来源消息，保存为笔记时可用。 |
 | `content_type` | enum `content_type` | 否 | 无 | INDEX(`course_id`, `content_type`) | 内容类型。 |
 | `title` | string | 否 | 无 |  | 标题，可自动生成。 |
@@ -357,6 +357,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 保存为笔记统一使用 `content_type = note`，不新增 Note 表。
 - 今日讲义使用 `content_type = handout`，并关联 `study_subtask_id`。
 - 计划执行中的任务测试题使用 `content_type = task_test`，并关联测试类 `study_subtask_id`。
+- S06 进入生成流程后的失败也写入本表，`generation_status = failed` 且 `error_code` 为稳定错误码。
 - 课程详情页生成的课程自测 Quiz 使用 `content_type = quiz`。
 - 引用来源统一通过 `source_citations.generated_content_id` 关联。
 
@@ -484,8 +485,64 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - `question_type` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`。
-- 课程自测和任务测试题都可复用该结构，通过 `content_type` 区分场景。
+- 课程自测使用 `content_type = quiz`；任务测试题使用独立 `task_test` 结构。
 - 每道题应尽量关联引用来源；不能生成伪引用。
+
+### handout
+
+```json
+{
+  "overview": "本次任务学习目标概览",
+  "learning_objectives": ["解释核心概念"],
+  "sections": [
+    {
+      "id": "sec_1",
+      "title": "章节标题",
+      "body": "讲义正文",
+      "key_points": ["重点 1"],
+      "source_citation_ids": ["chunk_..."],
+      "sort_order": 1
+    }
+  ],
+  "summary": "本次任务总结"
+}
+```
+
+规则：
+
+- `handout` 只绑定 `learn` / `review` 二级任务。
+- 每个 section 必须至少有一个 `source_citation_ids`，且引用必须来自本次材料上下文。
+
+### task_test
+
+```json
+{
+  "instructions": "完成下列题目。",
+  "questions": [
+    {
+      "id": "q_1",
+      "question_type": "single_choice",
+      "question_text": "题干",
+      "options": [
+        {
+          "id": "A",
+          "text": "选项"
+        }
+      ],
+      "correct_answer": "A",
+      "explanation": "答案解析",
+      "source_citation_ids": ["chunk_..."],
+      "sort_order": 1
+    }
+  ]
+}
+```
+
+规则：
+
+- `task_test` 只绑定 `quiz` / `test` 二级任务。
+- `question_type` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`。
+- 选择题必须包含 `options`；每道题必须有答案、解析和至少一个有效引用。
 
 ### flashcard
 
@@ -622,7 +679,7 @@ S02 已实现真实学习计划生命周期，但表结构结论不变：不新�
 - `study_plans.parsed_config_json` 保存偏好、材料范围、coverage、幂等 hash 和任务来源。
 - `study_tasks` 保存日期级一级任务。
 - `study_subtasks` 保存二级任务、任务类型和关联资料 ID 数组。
-- `ai_generated_contents` 只在后续 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。
+- `ai_generated_contents` 只在 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。
 ## S03 表结构结论
 
 S03 已实现今日待办与日历聚合，但表结构结论不变：不新增业务表、不新增列、不修改 baseline migration。
@@ -636,3 +693,12 @@ S03 已实现今日待办与日历聚合，但表结构结论不变：不新增�
 S05 复用现有 `checkin_records` 表，不新增 migration。`(user_id, checkin_date)` 唯一约束表示同一用户同一自然日只有一条派生打卡记录。
 
 `total_subtask_count` 与 `completed_subtask_count` 来自该用户该日期未删除课程、未删除计划下的 `study_subtasks`。`completion_ratio` 固定为四位小数。`color_level` 范围 0-5，其中 0 是无任务，1 是有任务但未完成。
+
+## S06 表结构结论
+
+S06 已实现任务讲义和任务测试题按需生成，表结构结论不变：不新增业务表、不新增列、不修改 baseline migration。
+
+- `handout` 和 `task_test` 复用 `ai_generated_contents`。
+- S06 生成记录必须写入 `study_subtask_id`，用于绑定二级任务和执行上下文最近成功内容查询。
+- `source_citations.generated_content_id` 关联生成内容引用来源，不允许没有材料来源的伪引用。
+- 不创建 `handouts`、`task_tests`、`task_test_questions` 或 `generation_jobs`。

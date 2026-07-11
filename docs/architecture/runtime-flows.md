@@ -1,4 +1,4 @@
-﻿# Runtime Flows v0.1
+# Runtime Flows v0.1
 
 > 本文记录 CourseNexus 的关键运行链路。它关注模块如何协作，不展开具体 API 字段；字段和响应格式见 [../api-data/index.md](../api-data/index.md)。
 
@@ -219,17 +219,27 @@ sequenceDiagram
 sequenceDiagram
     participant FE as Frontend
     participant LE as learning-execution
+    participant MC as material-context
     participant HO as handout-generator
     participant TT as task-test-generator
+    participant GC as generated-content
     participant CK as checkins
     participant TC as todos-calendar
 
     FE->>LE: load today task context(subtask_id)
     LE-->>FE: task + related materials + generated content status
-    FE->>HO: generate handout on demand
-    HO-->>FE: handout content_id
-    FE->>TT: enter test task and generate on demand
-    TT-->>FE: task_test content_id
+    FE->>LE: generate handout on demand
+    LE->>MC: iter_material_context_batches(related materials)
+    LE->>HO: run_material_coverage + structured generation
+    LE->>GC: save handout + citations
+    LE-->>FE: handout content_id
+
+    FE->>LE: enter test task and generate task_test
+    LE->>MC: iter_material_context_batches(related materials)
+    LE->>TT: run_material_coverage + structured generation
+    LE->>GC: save task_test + citations
+    LE-->>FE: task_test content_id
+
     FE->>LE: mark subtask completed
     LE->>LE: update StudySubTask + aggregate StudyTask
     LE->>CK: update CheckinRecord
@@ -239,7 +249,9 @@ sequenceDiagram
 规则：
 
 - 执行页左侧只展示今日任务，不展示整个计划树。
-- 讲义和任务测试题按需生成。
+- 讲义和任务测试题按需生成，并统一写入 `ai_generated_contents`。
+- S06 生成只读取二级任务 `related_material_ids_json`，不使用 Top-K 或 `resolve_context()`。
+- 生成内容不会改变任务完成状态，也不会写打卡。
 - 二级任务完成状态是用户可操作状态。
 - 一级任务状态由二级任务汇总。
 - 二级任务状态变化必须幂等，并同步打卡记录。
@@ -304,3 +316,11 @@ sequenceDiagram
 完成事务流：客户端提交 `{completed: boolean}`；后端在单事务中写二级任务、汇总父任务、汇总计划、调用 S05 重算父任务日期打卡，最后统一 commit。任一步失败都会 rollback。
 
 打卡查询流：单日查询优先读取持久化记录，记录不存在时只读计算 DTO；范围查询只返回已形成记录并派生 streak summary。
+
+### S06 任务内容生成运行流
+
+任务内容生成流：客户端对二级任务调用 handout 或 task-test endpoint；后端先校验用户和任务归属，再校验二级任务类型是否匹配内容类型。`learn` / `review` 只能生成 handout；`quiz` / `test` 只能生成 task_test。
+
+材料上下文流：后端只读取 `StudySubTask.related_material_ids_json`，构造 `MaterialScope(include_all_parsed_materials=false)`，通过 `iter_material_context_batches()` 获取全材料批次，再用 `run_material_coverage()` 确认所有关联资料都被覆盖。
+
+落库流：生成器返回结构化 `GeneratorOutput` 和引用 chunk id 后，`learning_execution` 写入 `AIGeneratedContent` 与 `SourceCitation`。成功记录的 id 会在后续 execution context 中作为最近成功 `handout_content_id` 或 `task_test_content_id` 返回。进入生成流程后的失败也会保存 `generation_status=failed` 和稳定 `error_code`。
