@@ -57,9 +57,10 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 生成POST、课程历史和详情均返回稳定`source_citations`数组；失败记录不保存部分JSON或引用。
    - 已覆盖跨用户课程/资料、无资料、非法参数、模型/schema/coverage失败、重复请求、引用去重和真实数据库回滚。
    - 已提供 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的占位生成器，用于验证模块边界和存储契约。
-   - 已实现单课程学习计划预览、保存、列表和详情接口。
+   - 已实现单课程学习计划自然语言配置回填、全材料预览、用户调整后保存、幂等、重生成预览、原子替换、软删除、列表和详情接口。
    - 学习计划当前只生成计划 / 任务结构，不提前生成今日讲义、任务测试题或执行页内容。
    - 已完成 S01 计划学习模式表结构契约测试，确认现有 13 张核心表可支撑第一阶段计划、任务、打卡、生成内容和导出闭环；S01 不新增业务表、不创建 migration。
+   - 已完成 S02 学习计划生命周期后端实现和文档同步；S02 不新增表、不新增列、不修改 migration。
 
 7. 前端最小集成工作台
    - 已建立前端 API client、鉴权 token 管理和路由壳。
@@ -76,7 +77,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
 - 图片 OCR 质量验收和复杂版面回归夹具。
-- S01 文档同步后的后续 S02-S07 业务实现：真实学习计划生成 / 编辑 / 删除、今日待办、大日历、执行页、打卡同步、今日讲义、任务测试题和 PDF 导出。
+- S03-S07 业务实现：今日待办、大日历、执行页、打卡同步、今日讲义、任务测试题和 PDF 导出。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
 
 ## 当前验证命令
@@ -108,6 +109,11 @@ S01 计划学习模式契约验证：
 - `uv run python -m pytest tests/test_schema_metadata.py -q --tb=short`：`2 passed in 0.40s`。
 - `uv run python -m alembic upgrade head`：成功，未产生新 revision。
 
+S02 学习计划生命周期验证：
+
+- `uv run python -m alembic upgrade head`：成功，未产生新 revision。
+- `uv run python -m pytest tests/modules/study_plans tests/modules/material_context tests/integration/test_full_material_plan_flow.py tests/integration/test_material_context_to_plan_flow.py -q`：`49 passed in 16.80s`。
+
 前端验证：
 
 ```powershell
@@ -125,6 +131,7 @@ pnpm test
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
-3. 为 Flashcard、Mindmap、Quiz 和学习计划分别设计业务 schema、prompt、质量验收和保存流程。
-4. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
-5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
+3. 为 Flashcard、Mindmap 和 Quiz 分别设计业务 schema、prompt、质量验收和保存流程。
+4. 推进 S03-S07：今日待办 / 大日历、执行页、打卡同步、今日讲义、任务测试题和 PDF 导出。
+5. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
+6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。

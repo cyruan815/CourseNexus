@@ -614,3 +614,12 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 枚举新增必须同步前端兜底；枚举删除、重命名或语义变化视为破坏性变更。
 - 外键删除行为由业务服务控制，默认不使用数据库级级联物理删除业务数据。
 - 所有根据 ID 查询业务资源的接口，都必须同时校验当前 `user_id` 的访问权限。
+
+## S02 表结构结论
+
+S02 已实现真实学习计划生命周期，但表结构结论不变：不新增业务表、不新增列、不修改 `backend/migrations/versions/20260709_0001_create_core_tables.py`。
+
+- `study_plans.parsed_config_json` 保存偏好、材料范围、coverage、幂等 hash 和任务来源。
+- `study_tasks` 保存日期级一级任务。
+- `study_subtasks` 保存二级任务、任务类型和关联资料 ID 数组。
+- `ai_generated_contents` 只在后续 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。
