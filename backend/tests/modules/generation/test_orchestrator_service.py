@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator as IteratorGenerator
+from collections.abc import Callable
 from inspect import Parameter, signature
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
-from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.model_provider.base import ModelProvider
@@ -38,22 +36,6 @@ from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
-
-
-@pytest.fixture()
-def db() -> IteratorGenerator[Session, None, None]:
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    session = testing_session()
-    try:
-        yield session
-    finally:
-        session.close()
 
 
 def create_parsed_material(
