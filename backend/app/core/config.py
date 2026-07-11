@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 1440
     file_storage_path: str = "./uploads"
     max_upload_file_size_bytes: int = 52_428_800
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    log_dir: str = "./logs"
+    log_max_bytes: int = 20_971_520
+    log_backup_count: int = 20
+    slow_request_ms: int = 3_000
 
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
