@@ -1,25 +1,41 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.material_context.schemas import MaterialContextResult, MaterialScope
+from app.integrations.model_provider.base import ModelProvider
+from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope
 
 
 class GenerateContentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     content_type: str = Field(min_length=1, max_length=32)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class GeneratorOutput(BaseModel):
-    title: str
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=255)
     content: str | None = None
-    content_json: dict | list | None = None
-    citation_chunk_ids: list[str] = Field(default_factory=list)
+    content_json: dict[str, Any]
+    item_citation_chunk_ids: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Generator(Protocol):
-    def generate(self, *, context: MaterialContextResult, parameters: dict[str, Any]) -> GeneratorOutput:
-        """Generate structured content from resolved material context."""
+    content_type: str
+
+    def generate(
+        self,
+        *,
+        batches: tuple[MaterialContextBatch, ...],
+        expected_material_ids: frozenset[str],
+        parameters: dict[str, Any],
+    ) -> GeneratorOutput: ...
+
+
+GeneratorFactory = Callable[[ModelProvider], Generator]

@@ -1,32 +1,100 @@
 from __future__ import annotations
 
+from typing import Any
+
+from app.integrations.model_provider.base import ModelProvider
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
-from app.modules.material_context.schemas import MaterialContextResult
+from app.modules.material_context.schemas import MaterialContextBatch
 
 
 class PlaceholderGenerator:
-    def __init__(self, *, content_type: str) -> None:
+    def __init__(self, *, content_type: str, model_provider: ModelProvider) -> None:
         self.content_type = content_type
+        self.model_provider = model_provider
 
-    def generate(self, *, context: MaterialContextResult, parameters: dict[str, object]) -> GeneratorOutput:
-        first_chunk = context.chunks[0]
-        title = self.content_type.replace("_", " ").title()
+    def generate(
+        self,
+        *,
+        batches: tuple[MaterialContextBatch, ...],
+        expected_material_ids: frozenset[str],
+        parameters: dict[str, Any],
+    ) -> GeneratorOutput:
+        first_chunk = next(chunk for batch in batches for chunk in batch.chunks)
+        content_json, item_id = self._content_json(first_chunk.content_text)
         return GeneratorOutput(
-            title=title,
+            title=self.content_type.replace("_", " ").title(),
             content=first_chunk.content_text,
-            content_json=self._content_json(first_chunk.content_text),
-            citation_chunk_ids=[first_chunk.chunk_id],
+            content_json=content_json,
+            item_citation_chunk_ids={item_id: [first_chunk.chunk_id]},
         )
 
-    def _content_json(self, content_text: str) -> dict[str, object]:
+    def _content_json(self, content_text: str) -> tuple[dict[str, Any], str]:
         if self.content_type == "outline":
-            return {"items": [content_text]}
+            item_id = "outline-item-1"
+            return {
+                "items": [
+                    {
+                        "id": item_id,
+                        "text": content_text,
+                        "source_citation_ids": [],
+                    }
+                ]
+            }, item_id
         if self.content_type == "flashcard":
-            return {"cards": [{"front": "Key point", "back": content_text}]}
+            item_id = "flashcard-1"
+            return {
+                "cards": [
+                    {
+                        "id": item_id,
+                        "front": "Key point",
+                        "back": content_text,
+                        "source_citation_ids": [],
+                    }
+                ]
+            }, item_id
         if self.content_type == "quiz":
-            return {"questions": [{"prompt": "Review this material", "answer": content_text}]}
+            item_id = "quiz-question-1"
+            return {
+                "questions": [
+                    {
+                        "id": item_id,
+                        "prompt": "Review this material",
+                        "answer": content_text,
+                        "source_citation_ids": [],
+                    }
+                ]
+            }, item_id
         if self.content_type == "mindmap":
-            return {"nodes": [{"id": "root", "label": content_text}], "edges": []}
+            item_id = "mindmap-root"
+            return {
+                "nodes": [
+                    {
+                        "id": item_id,
+                        "label": content_text,
+                        "source_citation_ids": [],
+                    }
+                ],
+                "edges": [],
+            }, item_id
         if self.content_type == "knowledge_list":
-            return {"knowledge_points": [content_text]}
-        return {"content": content_text}
+            item_id = "knowledge-point-1"
+            return {
+                "knowledge_points": [
+                    {
+                        "id": item_id,
+                        "content": content_text,
+                        "source_citation_ids": [],
+                    }
+                ]
+            }, item_id
+
+        item_id = f"{self.content_type}-item-1"
+        return {
+            "items": [
+                {
+                    "id": item_id,
+                    "text": content_text,
+                    "source_citation_ids": [],
+                }
+            ]
+        }, item_id
