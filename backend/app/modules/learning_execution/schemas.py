@@ -1,8 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.checkins.schemas import CheckinRead
+from app.modules.generation.generators.handout.schemas import HandoutGenerationParameters
+from app.modules.generation.generators.task_test.schemas import TaskTestGenerationParameters
 
 
 class ExecutionCourseRead(BaseModel):
@@ -54,7 +58,14 @@ class ExecutionContextRead(BaseModel):
     related_materials: list[ExecutionMaterialRead]
     handout_content_id: str | None
     task_test_content_id: str | None
-from app.modules.checkins.schemas import CheckinRead
+
+
+class HandoutGenerationRequest(BaseModel):
+    parameters: HandoutGenerationParameters = Field(default_factory=HandoutGenerationParameters)
+
+
+class TaskTestGenerationRequest(BaseModel):
+    parameters: TaskTestGenerationParameters = Field(default_factory=TaskTestGenerationParameters)
 
 
 class SubTaskCompletionUpdate(BaseModel):

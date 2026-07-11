@@ -1,17 +1,53 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
+from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.learning_execution.schemas import ExecutionContextRead, SubTaskCompletionResult, SubTaskCompletionUpdate
-from app.modules.learning_execution.service import get_execution_context, set_subtask_completion
+from app.integrations.model_provider.base import ModelProvider
+from app.integrations.model_provider.mock import MockModelProvider
+from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.modules.learning_execution.schemas import (
+    ExecutionContextRead,
+    HandoutGenerationRequest,
+    SubTaskCompletionResult,
+    SubTaskCompletionUpdate,
+    TaskTestGenerationRequest,
+)
+from app.modules.learning_execution.service import (
+    generate_handout_for_subtask,
+    generate_task_test_for_subtask,
+    get_execution_context,
+    set_subtask_completion,
+)
 from app.modules.users.models import User
 from app.shared.responses import success_response
 
 router = APIRouter(tags=["learning_execution"])
+
+
+def _model_provider_for_purpose(purpose: str, api_key_env_name: str) -> ModelProvider:
+    settings = get_settings()
+    endpoint = settings.model_endpoint(purpose)  # type: ignore[arg-type]
+    if endpoint.api_key:
+        return OpenAIModelProvider(
+            api_key=endpoint.api_key,
+            model=endpoint.model,
+            base_url=endpoint.base_url,
+            api_key_env_name=api_key_env_name,
+        )
+    return MockModelProvider()
+
+
+def get_handout_model_provider() -> ModelProvider:
+    return _model_provider_for_purpose("handout", "HANDOUT_API_KEY")
+
+
+def get_task_test_model_provider() -> ModelProvider:
+    return _model_provider_for_purpose("task_test", "TASK_TEST_API_KEY")
 
 
 @router.get("/study-subtasks/{subtask_id}/execution-context")
@@ -23,6 +59,48 @@ def get_execution_context_endpoint(
 ) -> dict[str, object]:
     data = get_execution_context(db, user_id=current_user.id, subtask_id=subtask_id)
     return success_response(ExecutionContextRead.model_validate(data).model_dump(mode="json"), request_id=get_request_id(request))
+
+
+@router.post("/study-subtasks/{subtask_id}/handouts")
+def generate_handout_endpoint(
+    subtask_id: str,
+    payload: HandoutGenerationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_handout_model_provider),
+) -> dict[str, object]:
+    settings = get_settings()
+    data = generate_handout_for_subtask(
+        db,
+        user_id=current_user.id,
+        subtask_id=subtask_id,
+        parameters=payload.parameters.model_dump(mode="json"),
+        model_provider=model_provider,
+        max_tokens=settings.material_batch_max_tokens,
+    )
+    return success_response(data.model_dump(mode="json"), request_id=get_request_id(request))
+
+
+@router.post("/study-subtasks/{subtask_id}/task-tests")
+def generate_task_test_endpoint(
+    subtask_id: str,
+    payload: TaskTestGenerationRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_task_test_model_provider),
+) -> dict[str, object]:
+    settings = get_settings()
+    data = generate_task_test_for_subtask(
+        db,
+        user_id=current_user.id,
+        subtask_id=subtask_id,
+        parameters=payload.parameters.model_dump(mode="json"),
+        model_provider=model_provider,
+        max_tokens=settings.material_batch_max_tokens,
+    )
+    return success_response(data.model_dump(mode="json"), request_id=get_request_id(request))
 
 
 @router.put("/study-subtasks/{subtask_id}/completion")

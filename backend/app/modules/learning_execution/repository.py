@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.modules.courses.models import Course
+from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.materials.models import CourseMaterial
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 
@@ -72,6 +73,27 @@ def list_materials_by_ids(db: Session, *, material_ids: list[str]) -> list[Cours
     if not material_ids:
         return []
     return list(db.execute(select(CourseMaterial).where(CourseMaterial.id.in_(material_ids))).scalars())
+
+
+def get_latest_successful_task_content(
+    db: Session,
+    *,
+    user_id: str,
+    subtask_id: str,
+    content_type: str,
+) -> AIGeneratedContent | None:
+    return db.execute(
+        select(AIGeneratedContent)
+        .where(
+            AIGeneratedContent.user_id == user_id,
+            AIGeneratedContent.study_subtask_id == subtask_id,
+            AIGeneratedContent.content_type == content_type,
+            AIGeneratedContent.generation_status == "success",
+            AIGeneratedContent.deleted_at.is_(None),
+        )
+        .order_by(AIGeneratedContent.created_at.desc(), AIGeneratedContent.id.desc())
+    ).scalar_one_or_none()
+
 
 def get_completion_target(db: Session, *, user_id: str, subtask_id: str) -> ExecutionTarget:
     return get_execution_target(db, user_id=user_id, subtask_id=subtask_id)
