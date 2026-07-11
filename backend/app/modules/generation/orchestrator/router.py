@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
+from app.core.config import MODEL_PURPOSES, ModelPurpose, get_settings
+from app.core.errors import CourseNexusError
 from app.core.request_id import get_request_id
 from app.db.session import get_db
+from app.integrations.model_provider.base import ModelProvider
+from app.integrations.model_provider.mock import MockModelProvider
+from app.integrations.model_provider.openai import OpenAIModelProvider
 from app.modules.generated_content.schemas import GeneratedContentRead
 from app.modules.generation.orchestrator.contracts import GenerateContentRequest
 from app.modules.generation.orchestrator.registry import GeneratorRegistry, default_generator_registry
@@ -15,9 +23,35 @@ from app.shared.responses import success_response
 
 router = APIRouter(tags=["generation"])
 
+GenerationModelProviderFactory = Callable[[str], ModelProvider]
+
 
 def get_generator_registry() -> GeneratorRegistry:
     return default_generator_registry()
+
+
+def get_generation_model_provider(content_type: str) -> ModelProvider:
+    if content_type not in MODEL_PURPOSES:
+        raise CourseNexusError(
+            code="VALIDATION_ERROR",
+            message="Generation model purpose is not configured",
+            status_code=422,
+            details={"content_type": content_type},
+        )
+    settings = get_settings()
+    endpoint = settings.model_endpoint(cast(ModelPurpose, content_type))
+    if endpoint.api_key:
+        return OpenAIModelProvider(
+            api_key=endpoint.api_key,
+            model=endpoint.model,
+            base_url=endpoint.base_url,
+            api_key_env_name=f"{content_type.upper()}_API_KEY",
+        )
+    return MockModelProvider()
+
+
+def get_generation_model_provider_factory() -> GenerationModelProviderFactory:
+    return get_generation_model_provider
 
 
 @router.post("/courses/{course_id}/generations")
@@ -28,13 +62,25 @@ def generate_content_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     registry: GeneratorRegistry = Depends(get_generator_registry),
+    provider_factory: GenerationModelProviderFactory = Depends(get_generation_model_provider_factory),
 ) -> dict[str, object]:
+    if payload.content_type not in registry.supported_content_types():
+        raise CourseNexusError(
+            code="VALIDATION_ERROR",
+            message="Generation content type is not supported",
+            status_code=422,
+            details={"content_type": payload.content_type},
+        )
+    model_provider = provider_factory(payload.content_type)
+    settings = get_settings()
     content = generate_content(
         db,
         user_id=current_user.id,
         course_id=course_id,
         payload=payload,
         registry=registry,
+        model_provider=model_provider,
+        max_batch_tokens=settings.material_batch_max_tokens,
     )
     data = GeneratedContentRead.model_validate(content).model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))
