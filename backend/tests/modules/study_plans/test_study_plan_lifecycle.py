@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
@@ -29,7 +30,7 @@ from app.modules.study_plans.schemas import (
     StudyPlanSaveRequest,
     StudySubTaskPreview,
 )
-from app.modules.study_plans.service import parse_study_plan_config, preview_study_plan
+from app.modules.study_plans.service import list_study_plans, parse_study_plan_config, preview_study_plan, save_study_plan
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -291,3 +292,133 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
     assert sum(subtask.estimated_minutes for subtask in preview.tasks[0].subtasks) == 60
     assert set(preview.tasks[0].subtasks[0].related_material_ids) == set(material_ids)
     assert db.scalar(select(func.count()).select_from(StudyPlan)) == before_count
+
+def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
+    return StudyPlanSaveRequest.model_validate(
+        {
+            "title": "传输层冲刺计划",
+            "goal_text": "掌握传输层",
+            "start_date": "2026-07-11",
+            "end_date": "2026-07-11",
+            "daily_available_minutes": 60,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            "preference": "fast_track",
+            "tasks": [
+                {
+                    "title": "用户调整后的任务",
+                    "task_date": "2026-07-11",
+                    "sort_order": 1,
+                    "subtasks": [
+                        {
+                            "title": "用户调整后的学习项",
+                            "subtask_type": "learn",
+                            "description": "按用户确认内容保存",
+                            "related_material_ids": material_ids,
+                            "estimated_minutes": 60,
+                            "citation_chunk_ids": ["chk_save"],
+                            "sort_order": 1,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+
+def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="carol", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-save.txt", b"Reliable transport")
+    payload = _save_request([material_id])
+    provider = RecordingPlanProvider([material_id])
+
+    first = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=payload,
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="stable-save-key",
+    )
+    second = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=payload,
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="stable-save-key",
+    )
+
+    assert first.plan.id == second.plan.id
+    assert first.plan.title == "传输层冲刺计划"
+    assert first.plan.parsed_config_json["preference"] == "fast_track"
+    assert first.plan.parsed_config_json["idempotency"]["key_hash"]
+    assert first.tasks[0].title == "用户调整后的任务"
+    assert first.subtasks[0].title == "用户调整后的学习项"
+    assert first.subtasks[0].related_material_ids_json == [material_id]
+    assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1
+    assert provider.batch_prompts == []
+
+
+def test_save_study_plan_rejects_same_idempotency_key_with_different_body(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="dave", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-conflict.txt", b"Reliable transport")
+    provider = RecordingPlanProvider([material_id])
+
+    save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="conflict-key",
+    )
+
+    changed_payload = _save_request([material_id]).model_copy(update={"title": "另一个计划标题"})
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=changed_payload,
+            model_provider=provider,
+            max_tokens=12_000,
+            idempotency_key="conflict-key",
+        )
+
+    assert exc_info.value.code == "IDEMPOTENCY_CONFLICT"
+
+
+def test_save_study_plan_rolls_back_when_subtask_flush_fails(db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    user = register_user(db, UserCreate(username="erin", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-rollback.txt", b"Reliable transport")
+    payload = _save_request([material_id])
+
+    from app.modules.study_plans import repository as study_plan_repository
+
+    def fail_after_add(*args: object, **kwargs: object) -> object:
+        db.add(kwargs["plan"])
+        db.add_all(kwargs["tasks"])
+        db.add_all(kwargs["subtasks"])
+        db.flush()
+        raise RuntimeError("forced flush failure")
+
+    monkeypatch.setattr(study_plan_repository, "add_study_plan_bundle", fail_after_add)
+
+    with pytest.raises(RuntimeError):
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=payload,
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="rollback-key",
+        )
+
+    assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0

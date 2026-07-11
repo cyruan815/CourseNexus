@@ -118,3 +118,65 @@ def test_config_parse_endpoint_requires_authentication(
     )
 
     assert response.status_code == 401
+
+def _save_payload(title: str = "传输层冲刺计划") -> dict[str, object]:
+    return {
+        "title": title,
+        "goal_text": "掌握传输层",
+        "start_date": "2026-07-11",
+        "end_date": "2026-07-11",
+        "daily_available_minutes": 60,
+        "preference": "fast_track",
+        "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        "tasks": [
+            {
+                "title": "用户调整后的任务",
+                "task_date": "2026-07-11",
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "title": "用户调整后的学习项",
+                        "subtask_type": "learn",
+                        "description": "按用户确认内容保存",
+                        "related_material_ids": ["mat_api"],
+                        "estimated_minutes": 60,
+                        "citation_chunk_ids": ["chk_api"],
+                        "sort_order": 1,
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_save_endpoint_replays_same_idempotency_key(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "bob")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "api-stable-key"}
+
+    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
+    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["data"]["plan"]["id"] == second.json()["data"]["plan"]["id"]
+    assert first.json()["data"]["tasks"][0]["title"] == "用户调整后的任务"
+
+
+def test_save_endpoint_rejects_same_idempotency_key_with_changed_body(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "chris")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "api-conflict-key"}
+
+    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
+    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload("另一个计划标题"))
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"

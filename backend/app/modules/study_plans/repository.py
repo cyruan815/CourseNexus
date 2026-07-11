@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
@@ -15,7 +15,7 @@ class StudyPlanBundle:
     subtasks: list[StudySubTask]
 
 
-def save_study_plan_bundle(
+def add_study_plan_bundle(
     db: Session,
     *,
     plan: StudyPlan,
@@ -25,13 +25,25 @@ def save_study_plan_bundle(
     db.add(plan)
     db.add_all(tasks)
     db.add_all(subtasks)
+    db.flush()
+    return StudyPlanBundle(plan=plan, tasks=tasks, subtasks=subtasks)
+
+
+def save_study_plan_bundle(
+    db: Session,
+    *,
+    plan: StudyPlan,
+    tasks: list[StudyTask],
+    subtasks: list[StudySubTask],
+) -> StudyPlanBundle:
+    bundle = add_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
     db.commit()
     db.refresh(plan)
     for task in tasks:
         db.refresh(task)
     for subtask in subtasks:
         db.refresh(subtask)
-    return StudyPlanBundle(plan=plan, tasks=tasks, subtasks=subtasks)
+    return bundle
 
 
 def list_active_study_plans_for_course(db: Session, *, user_id: str, course_id: str) -> list[StudyPlan]:
@@ -60,6 +72,22 @@ def get_active_study_plan_for_user(db: Session, *, user_id: str, plan_id: str) -
     ).scalar_one_or_none()
 
 
+def get_active_study_plan_for_idempotency_key(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    key_hash: str,
+) -> StudyPlan | None:
+    plans = list_active_study_plans_for_course(db, user_id=user_id, course_id=course_id)
+    for plan in plans:
+        config = plan.parsed_config_json if isinstance(plan.parsed_config_json, dict) else {}
+        idempotency = config.get("idempotency") if isinstance(config, dict) else None
+        if isinstance(idempotency, dict) and idempotency.get("key_hash") == key_hash:
+            return plan
+    return None
+
+
 def list_tasks_for_plan(db: Session, *, plan_id: str) -> list[StudyTask]:
     return list(
         db.execute(
@@ -74,3 +102,9 @@ def list_subtasks_for_plan(db: Session, *, plan_id: str) -> list[StudySubTask]:
             select(StudySubTask).where(StudySubTask.plan_id == plan_id).order_by(StudySubTask.sort_order)
         ).scalars()
     )
+
+
+def delete_tasks_for_plan(db: Session, *, plan_id: str) -> None:
+    db.execute(delete(StudySubTask).where(StudySubTask.plan_id == plan_id))
+    db.execute(delete(StudyTask).where(StudyTask.plan_id == plan_id))
+    db.flush()
