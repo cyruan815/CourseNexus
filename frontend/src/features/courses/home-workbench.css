@@ -1,0 +1,232 @@
+.home-workbench {
+  min-height: 100vh;
+  background: #f7fafc;
+  color: #1f2937;
+}
+
+.home-header {
+  border-bottom: 1px solid #d8dee8;
+  background: #ffffff;
+  padding: 20px 28px;
+}
+
+.home-brand-mark {
+  width: 54px;
+  height: 54px;
+  border: 1.5px solid #1f2937;
+  border-radius: 999px;
+  background: #ffffff;
+  flex: 0 0 auto;
+}
+
+.home-brand-title {
+  font-size: clamp(24px, 2vw, 30px);
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.home-theme-toggle {
+  min-width: 116px;
+  min-height: 52px;
+  border: 1px solid #6b7280;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #ffffff;
+}
+
+.home-user-button {
+  border-color: #6b7280;
+}
+
+.home-shell {
+  max-width: 1440px;
+  padding: 16px 20px 24px;
+}
+
+.home-side-panel,
+.home-main-panel {
+  min-height: calc(100vh - 132px);
+  border-color: #9ca3af;
+  background: #ffffff;
+  padding: 28px 24px;
+}
+
+.home-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.home-side-panel h2,
+.home-main-panel h2 {
+  font-size: 26px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.home-empty-card {
+  min-height: 252px;
+  border-color: #9ca3af;
+  padding: 24px;
+}
+
+.home-empty-icon {
+  color: #6b7280;
+}
+
+.home-empty-card h3 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.home-outline-button {
+  border-color: #6b7280;
+  color: #1f2937;
+}
+
+.home-dashed-divider {
+  width: 92%;
+  border-top-style: dashed;
+  border-color: #9ca3af;
+  margin-top: 8px;
+}
+
+.home-calendar-card {
+  border-color: #9ca3af;
+  padding: 12px 12px 18px;
+}
+
+.home-calendar-weekdays,
+.home-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.home-calendar-weekdays {
+  gap: 0;
+  padding: 8px 0;
+}
+
+.home-calendar-grid {
+  position: relative;
+  min-height: 166px;
+  border-left: 1px solid #d1d5db;
+  border-top: 1px solid #d1d5db;
+}
+
+.home-calendar-cell {
+  min-height: 42px;
+  border-right: 1px solid #d1d5db;
+  border-bottom: 1px solid #d1d5db;
+  background: #ffffff;
+}
+
+.home-calendar-empty {
+  position: absolute;
+  left: 30%;
+  top: 38%;
+  width: 38%;
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  border-color: #6b7280;
+  background: #ffffff;
+}
+
+.home-main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.home-term-select {
+  width: 214px;
+}
+
+.home-course-card,
+.home-add-course {
+  min-height: 184px;
+  border-color: #9ca3af;
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.home-course-card {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.home-course-card:hover {
+  border-color: #2f80ed;
+  box-shadow: 0 10px 26px rgba(31, 41, 55, 0.08);
+  transform: translateY(-1px);
+}
+
+.home-course-card h3 {
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.home-course-link {
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.home-course-link:hover {
+  color: #2f80ed;
+}
+
+.home-add-course {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  padding: 24px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.home-add-course:hover {
+  border-color: #2f80ed;
+  background: #e8f2ff;
+}
+
+.home-interaction-note {
+  margin-top: auto;
+  border-color: #6b7280;
+  padding: 14px 22px;
+}
+
+@media (max-width: 900px) {
+  .home-header {
+    padding: 16px;
+  }
+
+  .home-header > .mantine-Group-root {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-brand-mark {
+    width: 44px;
+    height: 44px;
+  }
+
+  .home-brand-title {
+    font-size: 22px;
+  }
+
+  .home-side-panel,
+  .home-main-panel {
+    min-height: auto;
+    padding: 20px 16px;
+  }
+
+  .home-term-select {
+    width: 100%;
+  }
+}

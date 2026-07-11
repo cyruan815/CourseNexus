@@ -10,9 +10,10 @@
 
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
-| [index.md](index.md) | 领域知识库入口、创建触发条件、目录结构和交付要求。 | 2026-07-10 |
+| [index.md](index.md) | 领域知识库入口、创建触发条件、目录结构和交付要求。 | 2026-07-11 |
 | [implementation-template.md](implementation-template.md) | 前后端领域实现文档模板，后端包含架构与算法强制章节。 | 2026-07-10 |
 | [auth/index.md](auth/index.md) | 注册、登录、登录态和前端认证入口实现。 | 2026-07-11 |
+| [courses/index.md](courses/index.md) | 课程首页工作台和后续课程管理实现。 | 2026-07-11 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
 
 ## 相关链接
