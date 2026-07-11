@@ -86,7 +86,7 @@ sequenceDiagram
 
 适用于 Quiz、Flashcard、Mindmap、复习提纲、知识点清单。
 
-当前基础设施阶段已落地统一编排、统一存储和占位生成器，用于验证模块边界。真实 LLM 提示词、结构化输出质量和前端渲染体验属于后续独立任务。
+G01已落地用途模型注入、全材料批次、生成器工厂、引用allow-list与ID回填、原子存储和引用响应。五类真实LLM提示词、map/reduce业务规则和质量验收仍属于G02-G06；在对应任务完成前使用占位fallback。
 
 ```mermaid
 sequenceDiagram
@@ -104,9 +104,10 @@ sequenceDiagram
         G-->>O: intermediate result + citation chunk ids
     end
     O->>G: reduce/deduplicate into final schema
-    G-->>O: content_json/content + citation union
-    O->>Store: save AIGeneratedContent + SourceCitation
-    Store-->>FE: content_id + generation_status
+    G-->>O: content_json + item_id到chunk_id候选
+    O->>O: 过滤越界引用并回填citation ID
+    O->>Store: atomic save AIGeneratedContent + SourceCitation
+    Store-->>FE: GeneratedContentRead + source_citations
 ```
 
 解耦规则：
@@ -117,6 +118,7 @@ sequenceDiagram
 - 每个模块只关心自己的输出结构。
 - 前端渲染方式不影响后端生成模块边界。
 - 生成内容统一进入 `AIGeneratedContent`，历史列表按 `content_type` 区分。
+- 参数、权限和无资料错误不落库；模型、schema和材料覆盖错误保存无部分JSON/引用的failed记录。
 
 ## 4. 学习计划生成链路
 

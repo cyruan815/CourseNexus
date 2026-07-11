@@ -72,6 +72,8 @@ erDiagram
 - 多门课程计划通过创建多个 `StudyPlan` 实现。
 - 首页今日待办和首页大日历按日期合并展示多个单课程计划的任务。
 - `SourceCitation` 可关联 `Message` 或 `AIGeneratedContent`，并保留资料名快照。
+- 生成内容与其`SourceCitation`必须在一个事务中提交；失败记录不允许保留部分结构或引用。
+- 当前引用位置数据库约束保持不变；无分页来源使用`page_index=0`表示未知位置，API调用方不得将其解释为真实页码。
 
 ## 数据归属原则
 

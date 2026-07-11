@@ -69,7 +69,7 @@ class Generator(Protocol):
 - 空引用不得回退首 chunk；只为最终保留条目引用的 chunk 建 `SourceCitation`。
 - 同一 chunk 每个 generated content 只建一条 citation，`sort_order` 从 1 连续递增。
 - 保存真实 `material_id`、`chunk_id`、`material_name`、`page`、`page_index`、最多 500 字的 `hit_text`。
-- `page` 与 `page_index` 必须原样保存；对 Markdown、Text 等无分页来源，两者允许同时为 `null`，前端显示“页码未知”。严禁用 `page_index=0` 伪造定位。当前数据库没有“二者至少一个非空”的硬约束，不需要改表；同时更新字段文档以消除歧义。
+- 数据库保留`page is not null or page_index is not null`约束。对Markdown、Text等无分页来源兼容保存`page=null,page_index=0`；0仅表示未知位置，前端显示“页码未知”，不得解释为真实第0页。该兼容决定不修改DB model或migration。
 - 重复请求生成独立记录，符合 PRD；当前无持久化幂等字段，不得伪装支持 durable 幂等。
 
 ## 3. 字段与接口
@@ -89,7 +89,7 @@ class Generator(Protocol):
 - `conftest.py` 提供内存 SQLite、alice/bob、两份 parsed 多 chunk 资料、无效状态资料、recording/failing ModelProvider 和 TestClient。
 - `test_orchestrator_contract.py`：默认 scope、未知类型、重复 / replace 注册、provider 注入、自动发现、外部扩展注册。
 - `test_orchestrator_service.py`：多 batch 全覆盖、引用交集 / 去重 / 回填、无 fallback、成功原子写、三类失败无部分数据。
-- `test_orchestrator_service.py` 还必须断言无分页 chunk 保存后 `page=null`、`page_index=null`，不会写入虚构的第 0 页。
+- `test_orchestrator_service.py` 必须通过真实SQLite持久化断言无分页chunk保存为`page=null,page_index=0`，并确认前端契约把0作为未知位置哨兵。
 - `test_generation_api.py`：401、404、400、422、成功 POST / 列表 / 详情、failed 记录、重复请求不同 ID。
 - `test_generated_content_service.py`：用户隔离、软删除、citation 归属、空数组。
 ```powershell
@@ -121,7 +121,7 @@ conda run -n course-nexus pytest tests/modules/material_context tests/contracts/
 - 更新 `docs/architecture/module-boundaries.md`、`runtime-flows.md`。
 - 更新 `docs/api-data/contracts.md`；向前端负责人提交 `frontend-integration.md` 最小 patch。
 - 更新 `docs/planning/current-state.md`，只标公共链路完成。
-- 更新 `docs/api-data/table-schema.md` 和 `data-model.md` 的无分页引用语义；不改数据库 model 或 migration，因为表字段没有变化。
+- 更新`docs/api-data/table-schema.md`和`data-model.md`的无分页引用兼容语义；按负责人确认保留现有数据库约束，不改DB model或migration。
 
 ## 8. 冲突与注意事项
 - **冲突点**：`contracts.py`、`registry.py` 仅 G01 修改；generated-content 是共享热点；frontend-integration 由前端负责人合并。

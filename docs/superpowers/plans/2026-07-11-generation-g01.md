@@ -459,7 +459,7 @@ citation_id_by_chunk_id = {
 }
 ```
 
-Build `SourceCitation` values with `sort_order` starting at 1 and exact nullable page metadata. Never substitute a chunk when no valid binding exists.
+Build `SourceCitation` values with `sort_order` starting at 1. Preserve real page metadata; when both source location fields are null, store `page=null,page_index=0` as the user-approved compatibility sentinel. Never substitute a chunk when no valid binding exists.
 
 - [ ] **Step 4: Implement generic item-ID injection**
 
@@ -725,12 +725,12 @@ Record exact code entry points, the registry extension protocol, full-material s
 
 - [ ] **Step 2: Update shared API and citation semantics**
 
-Document `source_citations` on generation, list, and detail responses. State that `page` and `page_index` may both be null and must not be replaced with zero. Document the five supported content types as registered but still placeholder-backed until their corresponding G02-G06 commit lands.
+Document `source_citations` on generation, list, and detail responses. State that the existing location constraint is retained and unpaginated sources use `page=null,page_index=0` as an unknown-location sentinel. Document the five supported content types as registered but still placeholder-backed until their corresponding G02-G06 commit lands.
 
 - [ ] **Step 3: Run documentation consistency searches**
 
 ```powershell
-rg -n "resolve_context\(|citation_chunk_ids|page_index.*0|PlaceholderGenerator" backend/app/modules/generation docs -S
+rg -n "resolve_context\(|citation_chunk_ids|PlaceholderGenerator" backend/app/modules/generation docs -S
 rg -n "source_citations" docs/api-data docs/domains/generated-content -S
 ```
 
