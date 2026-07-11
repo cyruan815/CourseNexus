@@ -15,7 +15,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `generated-content` 是生成结果的统一存储，不负责生成逻辑。
 - `study-plans` 生成计划和任务结构，不负责日历聚合和任务执行 UI 状态。
 - `todos-calendar` 是只读聚合，不拥有写模型。
-- `learning-execution` 负责任务执行状态，不负责计划生成。
+- `learning-execution` 负责任务执行状态，并作为 S06 任务内容按需生成入口；它不负责计划生成。
 - `checkins` 只根据任务完成事实维护学习打卡记录。
 
 ## 1.1 当前已落地边界（2026-07-09）
@@ -126,7 +126,7 @@ flowchart TB
 | `generated-content` | 统一保存和查询 AI 生成内容、内容类型、生成状态、结构化 JSON 和引用。 | `AIGeneratedContent`、`SourceCitation`。 | 生成内容详情、历史记录、引用来源。 | 不决定具体生成算法，不更新任务完成状态。 |
 | `study-plans` | 自然语言配置回填、计划预览、保存单课程计划、生成一级任务和二级任务。 | `StudyPlan`、`StudyTask`、`StudySubTask`。 | 计划结构、任务结构。 | 不提前生成讲义、任务测试题或学习笔记。 |
 | `todos-calendar` | 首页今日待办、首页大日历、全局当日待办弹窗、课程详情页今日任务和课程月历查询。 | 不拥有主写模型，读取 `StudyPlan`、`StudyTask`、`StudySubTask`。 | 日期摘要、最多 3 条任务摘要、课程分组、二级任务数组、执行跳转 ID 和计划详情 `plan_id`。 | 不创建、编辑、删除或重新生成学习计划；不创建 `todos` 或 `calendar_events` 表；不实现 S04-S07。 |
-| `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态。 | `StudySubTask.status`、派生更新 `StudyTask.status`。 | 今日任务、任务完成结果、执行页上下文。 | 不生成计划，不管理资料。 |
+| `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态，并编排 S06 任务内容按需生成。 | `StudySubTask.status`、派生更新 `StudyTask.status`；S06 写入 `AIGeneratedContent(content_type=handout/task_test)` 和 `SourceCitation`。 | 今日任务、任务完成结果、执行页上下文、任务讲义和任务测试题生成结果。 | 不生成计划，不管理资料，不直接修改打卡算法。 |
 | `checkins` | 根据当日二级任务完成比例维护学习完成记录和颜色等级。 | `CheckinRecord`。 | `completion_ratio`、`color_level`。 | 不做完整统计报表，不做手动打卡。 |
 | `exports` | 将已生成讲义或任务测试题导出 PDF。 | 不拥有业务表，读取 `AIGeneratedContent` 和 `SourceCitation` 后流式返回 PDF。 | PDF 文件或下载信息。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表。 |
 
@@ -171,6 +171,7 @@ sequenceDiagram
 - `course-qa -> material-context.retrieve_relevant_context`
 - `generation-orchestrator / study-plans -> material-context.iter_material_context_batches`
 - `courses -> study-plans -> learning-execution -> checkins`
+- `learning-execution -> material-context.iter_material_context_batches -> handout-generator / task-test-generator -> generated-content`
 - `study-plans -> todos-calendar`
 - `learning-execution -> todos-calendar`
 - `generated-content -> exports`
@@ -221,3 +222,11 @@ sequenceDiagram
 `checkins` 负责打卡颜色、比例和 streak 规则。其他模块不得复制颜色阈值或 streak 算法。
 
 `todos_calendar` 保持只读派生查询，不被 S04 调用，也不维护缓存。S04 完成状态变化后，S03 下一次查询自然从 `study_tasks` / `study_subtasks` 读取最新状态。
+
+## S06 模块边界补充
+
+S06 的 public API 放在 `learning_execution`，因为入口是二级任务执行页，而不是课程级生成中心。`learning_execution` 负责校验当前用户、课程、计划、一级任务、二级任务和任务类型，再根据 `StudySubTask.related_material_ids_json` 构造严格材料范围。
+
+S06 不复用通用 `generation-orchestrator` service 的 Top-K / `resolve_context()` 路径；它只复用公共 `Generator` 协议、`GeneratorRegistry`、`ModelProvider`、`iter_material_context_batches()` 和 `run_material_coverage()`。这样可以保证任务内容覆盖二级任务绑定资料，并禁止无来源 fallback 引用。
+
+`handout-generator` 和 `task-test-generator` 只负责结构化内容和引用 chunk id，不更新 `StudySubTask.status`、不汇总 `StudyTask.status`、不写 `checkin_records`。生成成功或进入生成流程后的失败由 `learning_execution` 保存到 `AIGeneratedContent`。

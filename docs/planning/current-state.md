@@ -2,7 +2,7 @@
 
 ## 日期
 
-2026-07-11
+2026-07-12
 
 ## 当前阶段结论
 
@@ -62,6 +62,8 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 已完成 S01 计划学习模式表结构契约测试，确认现有 13 张核心表可支撑第一阶段计划、任务、打卡、生成内容和导出闭环；S01 不新增业务表、不创建 migration。
    - 已完成 S02 学习计划生命周期后端实现和文档同步；S02 不新增表、不新增列、不修改 migration。
    - 已完成 S03 今日待办与日历聚合后端实现：五个只读 GET 接口、首页嵌套待办、月历 3 条摘要、课程详情页今日任务和计划详情复用；S03 不新增表、不修改 migration、不实现 S04-S07。
+   - 已完成 S04/S05 学习执行与打卡后端实现：执行上下文、二级任务幂等完成、父任务/计划状态汇总、打卡重算、单日查询、范围查询和 streak summary。
+   - 已完成 S06 任务内容生成后端实现：为 learn/review 二级任务按需生成 handout，为 quiz/test 二级任务按需生成 task_test，复用 `ai_generated_contents` 并绑定 `study_subtask_id`。
 
 7. 前端最小集成工作台
    - 已建立前端 API client、鉴权 token 管理和路由壳。
@@ -78,7 +80,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
 - 图片 OCR 质量验收和复杂版面回归夹具。
-- S06-S07 业务实现：今日讲义、任务测试题和 PDF 导出。
+- S07 PDF 导出业务实现。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
 
 ## 当前验证命令
@@ -119,6 +121,17 @@ S02 学习计划生命周期验证：
 S03 今日待办与日历聚合验证：
 
 - `uv run python -m pytest tests/modules/todos_calendar tests/integration/test_plan_calendar_flow.py -q`：`18 passed in 3.97s`。
+
+S04/S05 学习执行与打卡验证：
+
+- `uv run python -m alembic upgrade head`：成功。
+- `uv run python -m pytest tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/modules/study_plans tests/integration/test_checkin_lifecycle_sync.py tests/integration/test_subtask_completion_transaction.py -q`：`67 passed`。
+
+S06 任务内容生成验证：
+
+- `uv run python -m pytest tests/modules/generation/test_handout_generator.py tests/modules/generation/test_task_test_generator.py -q`：`4 passed`。
+- `uv run python -m pytest tests/modules/learning_execution/test_task_content_api.py -q`：`5 passed`。
+- `uv run python -m pytest tests/integration/test_task_content_generation_flow.py tests/modules/generation/test_orchestrator_contract.py tests/modules/generation/test_orchestrator_service.py tests/modules/learning_execution tests/modules/checkins -q`：已通过。
 前端验证：
 
 ```powershell
@@ -137,12 +150,18 @@ pnpm test
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
 3. 为 Flashcard、Mindmap 和 Quiz 分别设计业务 schema、prompt、质量验收和保存流程。
-4. 推进 S06-S07：今日讲义、任务测试题和 PDF 导出。
+4. 推进 S07：基于已生成讲义和任务测试题导出 PDF。
 5. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
 6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
 
-## 2026-07-11 S04/S05 当前状态
+## 2026-07-12 S04/S05 当前状态
 
 S04 学习执行上下文和二级任务完成事务已在后端实现。S05 打卡重算、单日查询、范围查询和连续天数 summary 已实现。S04 completion 与 S05 重算处于同一事务；S02 计划保存、替换和删除也会同步重算受影响日期。
 
-未涉及前端、migration、S03 写逻辑或生成模块。S06 前执行上下文中的 `handout_content_id` 与 `task_test_content_id` 仍返回 `null`。
+未涉及前端、migration 或 S03 写逻辑。
+
+## 2026-07-12 S06 当前状态
+
+S06 任务内容生成已在后端实现。`learn` / `review` 二级任务可按需生成 `handout`，`quiz` / `test` 二级任务可按需生成 `task_test`。生成范围严格来自二级任务 `related_material_ids_json`，使用全材料分批覆盖，不走 Top-K。成功内容和进入生成流程后的失败记录均写入 `ai_generated_contents`，并通过 `study_subtask_id` 绑定二级任务。
+
+未涉及前端、migration、PDF 导出或学生作答保存。S07 继续负责 PDF 导出；学生作答保存已拆到 S08。

@@ -3,7 +3,7 @@
 ## 前后端契约基线
 
 - 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
-- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans、Todos Calendar、Learning Execution 和 Checkins。
+- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans、Todos Calendar、Learning Execution、Checkins 和 S06 Task Content。
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
@@ -39,7 +39,7 @@ S01 只固定计划学习模式的子系统契约和数据库审计结论，不�
 | `GET /api/v1/courses/{course_id}/study-plans` | 已实现 | 查询课程下未删除计划列表。 |
 | `GET /api/v1/study-plans/{plan_id}` | 已实现 | 查询单个计划及任务结构。 |
 
-S02-S05 已实现接口和 S06-S07 候选接口如下；候选接口在对应任务合并前仍视为未实现契约，前端不得提前调用或自行拼接路径：
+S02-S06 已实现接口和 S07 候选接口如下；候选接口在对应任务合并前仍视为未实现契约，前端不得提前调用或自行拼接路径：
 
 | 任务 | 方法与路径 | 用途 |
 | --- | --- | --- |
@@ -222,7 +222,7 @@ S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
 
 ### 执行上下文
 
-`GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回当前二级任务所在业务日期的执行上下文。响应 `data` 包含 `course`、`plan`、`execution_date`、当天 `tasks`、`current_subtask_id`、`related_materials`、`handout_content_id` 和 `task_test_content_id`。S06 前两个 generated content id 固定为 `null`。
+`GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回当前二级任务所在业务日期的执行上下文。响应 `data` 包含 `course`、`plan`、`execution_date`、当天 `tasks`、`current_subtask_id`、`related_materials`、`handout_content_id` 和 `task_test_content_id`。两个 generated content id 来自当前二级任务最近一次成功生成的 `handout` / `task_test`；没有成功内容时返回 `null`。
 
 ### 二级任务完成
 
@@ -235,3 +235,53 @@ S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
 `GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 返回闭区间内已有持久化记录和 summary。summary 中 `current_streak_days` / `longest_streak_days` 按“当天有任务且完成过任意二级任务”计算。
 
 错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`。
+
+## S06 任务内容生成契约
+
+S06 已实现两个按需生成接口，前端可在契约评审后接入：
+
+| 方法与路径 | 状态 | 说明 |
+| --- | --- | --- |
+| `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 已实现 | 为 `learn` / `review` 二级任务生成今日讲义。 |
+| `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 已实现 | 为 `quiz` / `test` 二级任务生成任务测试题。 |
+
+`HandoutGenerationRequest` 请求体：
+
+```json
+{
+  "parameters": {
+    "language": "zh-CN",
+    "detail_level": "standard"
+  }
+}
+```
+
+`detail_level` 支持 `brief`、`standard`、`deep`。`parameters` 可省略，后端使用默认参数。
+
+`TaskTestGenerationRequest` 请求体：
+
+```json
+{
+  "parameters": {
+    "question_count": 5,
+    "question_types": ["single_choice", "short_answer"],
+    "difficulty": "medium"
+  }
+}
+```
+
+`question_count` 范围 1-20；`question_types` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`；`difficulty` 支持 `easy`、`medium`、`hard`。
+
+成功响应统一为 `{data, meta}`，其中 `data` 是 `GeneratedContentRead`，至少包含 `id`、`course_id`、`study_subtask_id`、`content_type`、`title`、`content_json`、`generation_status`、`error_code`、`created_at` 和 `updated_at`。
+
+生成规则：
+
+- `learn` / `review` 只能调用 handout endpoint；调用 task-test endpoint 返回 `STATE_CONFLICT`。
+- `quiz` / `test` 只能调用 task-test endpoint；调用 handout endpoint 返回 `STATE_CONFLICT`。
+- 材料范围严格来自 `StudySubTask.related_material_ids_json`，接口请求体不能覆盖资料范围。
+- 后端使用 `MaterialScope(include_all_parsed_materials=false, material_ids=related_material_ids_json)`。
+- S06 使用 `iter_material_context_batches()` 和 `run_material_coverage()`，不使用 Top-K 检索或旧 `resolve_context()`。
+- 成功和进入生成流程后的失败都写入 `ai_generated_contents`；权限、任务不存在和任务类型不匹配不会创建生成记录。
+- 生成不会改变二级任务完成状态，不触发一级任务汇总，也不写 `checkin_records`。
+
+错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`；400 `NO_PARSED_MATERIAL`；409 `MATERIAL_COVERAGE_INCOMPLETE`；500 `GENERATION_SCHEMA_INVALID`；502 `GENERATION_FAILED`。
