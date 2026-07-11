@@ -77,7 +77,7 @@ def create_course(client: TestClient, token: str) -> str:
     return response.json()["data"]["id"]
 
 
-def upload_and_parse_material(client: TestClient, token: str, course_id: str) -> None:
+def upload_and_parse_material(client: TestClient, token: str, course_id: str) -> str:
     headers = {"Authorization": f"Bearer {token}"}
     upload = client.post(
         f"/api/v1/courses/{course_id}/materials",
@@ -88,6 +88,7 @@ def upload_and_parse_material(client: TestClient, token: str, course_id: str) ->
     material_id = upload.json()["data"]["id"]
     parse = client.post(f"/api/v1/materials/{material_id}/parse-retries", headers=headers)
     assert parse.status_code == 200
+    return material_id
 
 
 @pytest.mark.parametrize("content_type", SUPPORTED_CONTENT_TYPES)
@@ -311,7 +312,7 @@ def test_generation_api_creates_and_reads_generated_content(
     monkeypatch.setattr(generation_router, "OpenAIModelProvider", UnexpectedOpenAIProvider)
     token = register_and_token(client, "alice")
     course_id = create_course(client, token)
-    upload_and_parse_material(client, token, course_id)
+    material_id = upload_and_parse_material(client, token, course_id)
     headers = {"Authorization": f"Bearer {token}"}
 
     generation = client.post(
@@ -324,14 +325,84 @@ def test_generation_api_creates_and_reads_generated_content(
     generated_content = generation.json()["data"]
     assert generated_content["generation_status"] == "success"
     assert generated_content["content_type"] == "outline"
+    assert len(generated_content["source_citations"]) == 1
+    citation = generated_content["source_citations"][0]
+    assert set(citation) == {
+        "id",
+        "material_id",
+        "chunk_id",
+        "material_name",
+        "page",
+        "page_index",
+        "hit_text",
+        "sort_order",
+    }
+    assert citation["id"].startswith("cit_")
+    assert citation["material_id"] == material_id
+    assert citation["chunk_id"] == f"chk_{material_id.removeprefix('mat_')}_000000"
+    assert citation["material_name"] == "notes.md"
+    assert citation["page"] is None
+    assert citation["page_index"] == 0
+    assert "Alpha" in citation["hit_text"]
+    assert citation["sort_order"] == 1
 
     listed = client.get(f"/api/v1/courses/{course_id}/generated-contents", headers=headers)
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()["data"]] == [generated_content["id"]]
+    assert listed.json()["data"][0]["source_citations"] == [citation]
 
     detail = client.get(f"/api/v1/generated-contents/{generated_content['id']}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == generated_content["id"]
+    assert detail.json()["data"]["source_citations"] == [citation]
+
+
+def test_generation_api_returns_empty_citation_array_when_none_are_persisted(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = register_and_token(client, "no-citations")
+    course_id = create_course(client, token)
+
+    def fake_generate_content(
+        db: Session,
+        *,
+        user_id: str,
+        course_id: str,
+        payload: object,
+        registry: object,
+        model_provider: object,
+        max_batch_tokens: int,
+    ) -> SimpleNamespace:
+        now = datetime.now(timezone.utc)
+        return SimpleNamespace(
+            id="gen-no-citations",
+            user_id=user_id,
+            course_id=course_id,
+            study_subtask_id=None,
+            source_message_id=None,
+            content_type="outline",
+            title="Outline",
+            content="Body",
+            content_json={"items": []},
+            generation_status="success",
+            material_scope_json={},
+            error_code=None,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+
+    monkeypatch.setattr(generation_router, "generate_content", fake_generate_content)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"content_type": "outline"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["source_citations"] == []
 
 
 def test_generation_api_rejects_unknown_content_type(client: TestClient) -> None:

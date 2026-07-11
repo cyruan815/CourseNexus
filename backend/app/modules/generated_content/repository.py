@@ -57,3 +57,22 @@ def get_active_generated_content_for_user(
             AIGeneratedContent.deleted_at.is_(None),
         )
     ).scalar_one_or_none()
+
+
+def list_generated_content_citations(
+    db: Session,
+    generated_content_ids: list[str],
+) -> list[SourceCitation]:
+    if not generated_content_ids:
+        return []
+    return list(
+        db.execute(
+            select(SourceCitation)
+            .where(SourceCitation.generated_content_id.in_(generated_content_ids))
+            .order_by(
+                SourceCitation.generated_content_id,
+                SourceCitation.sort_order.asc().nulls_last(),
+                SourceCitation.id,
+            )
+        ).scalars()
+    )

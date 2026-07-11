@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class GeneratedContentCitationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    material_id: str
+    chunk_id: str | None
+    material_name: str
+    page: str | None
+    page_index: int | None
+    hit_text: str
+    sort_order: int | None
 
 
 class GeneratedContentRead(BaseModel):
@@ -23,3 +36,4 @@ class GeneratedContentRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    source_citations: list[GeneratedContentCitationRead] = Field(default_factory=list)
