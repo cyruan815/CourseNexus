@@ -5,7 +5,7 @@
 - **业务场景**：学生面对章节多、概念关系复杂的课程资料时，需要先看清主题之间的层级和联系。
 - **用户能力**：选择资料和中心主题，生成包含根节点、知识节点和关系边的结构图，并查看主要节点对应的资料来源。
 - **业务结果**：零散知识被组织成可展开、可收起的知识结构，前端可以据此渲染真正的 Mindmap。
-- **业务边界**：本任务只生成结构化节点和关系，不决定前端使用哪种图形库，也不输出 SVG、Mermaid 或固定坐标。
+- **业务边界**：本任务生成结构化节点和关系，并额外生成由合法 child 树确定性派生的 Markmap Markdown；不输出 SVG、HTML、Mermaid 或固定坐标。
 
 ## 1. 任务信息
 - **负责人**：独立生成功能后端开发者。
@@ -37,10 +37,13 @@ class MindmapParameters(BaseModel):
 - related 边仅在 include_cross_links=true；端点存在、无自环、无同向重复。
 - 节点按 breadth-first 稳定编号 `node_001..node_N`；同父 label casefold 唯一；非根至少一条真实引用。
 
-最终 `content_json`：
+最终 `content_json` 同时保存权威图结构和派生 Markdown：
 ```json
-{"root_node_id":"node_001","nodes":[{"id":"node_001","label":"线性代数","summary":"中心主题","level":1,"source_citation_ids":[]},{"id":"node_002","label":"特征值","summary":"节点说明","level":2,"source_citation_ids":["cit_1"]}],"edges":[{"from":"node_001","to":"node_002","relation":"child"}]}
+{"schema_version":"1.0","renderer":"markmap","root_node_id":"node_001","nodes":[{"id":"node_001","label":"线性代数","summary":"中心主题","level":1,"source_citation_ids":[]},{"id":"node_002","label":"特征值","summary":"节点说明","level":2,"source_citation_ids":["cit_1"]}],"edges":[{"from":"node_001","to":"node_002","relation":"child"}],"markmap_markdown":"- 线性代数\n  - 特征值"}
 ```
+- `nodes/edges` 是权威业务数据；`markmap_markdown` 仅由最终 child 树生成，不接受模型直接输出。
+- Markdown 使用每层两个空格的嵌套无序列表，只包含 child 边；related 边仍只保存在 `edges`。
+- Markdown 不生成本地文件，固定保存到 `ai_generated_contents.content_json.markmap_markdown`。
 - nodes 目标 3..max_nodes；资料只支持 1-2 个合法节点时允许成功并在标题加 `（资料较少）`；0 节点失败。
 - edges 不直接带 citation；根引用可为空；`content=null`，标题 `知识导图：{root.label}`。
 
@@ -64,7 +67,7 @@ class MindmapParameters(BaseModel):
 
 ## 4. 测试计划
 - `test_mindmap_schemas.py`：唯一根、可达、单父、level；悬空、自环、环、多父、重复边、超深 / 超量失败；cross links 开关。
-- `test_mindmap_generator.py`：两资料多 batch、同义合并、breadth-first ID、裁剪不悬空、最终引用、伪造引用过滤、三类失败、import 独立。
+- `test_mindmap_generator.py`：两资料多 batch、同义合并、breadth-first ID、裁剪不悬空、最终引用、伪造引用过滤、Markdown 层级/转义/稳定顺序、related 边不进入 Markdown、三类失败、import 独立。
 - `test_mindmap_api.py`：401、404、400、422、成功 POST / 历史 / 详情、所有 edge 端点存在、环输出形成 failed 记录、重复请求不同 ID。
 ```powershell
 cd backend
@@ -83,7 +86,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 - [ ] 两份相关资料生成导图，主要分支能覆盖两份资料。
 - [ ] 任意 child 路径 level 连续，任意 edge 两端存在。
 - [ ] cross links=false 时只有 child；max_nodes=3 时仍连通。
-- [ ] JSON 不含 SVG、Mermaid、坐标或前端库对象。
+- [ ] JSON 不含 SVG、HTML、Mermaid、坐标或前端库对象；`markmap_markdown` 可被 Markmap 解析。
 
 ## 6. 交付物
 - Mindmap 参数、map / reduce / final schema、prompt、generator、factory。
@@ -100,7 +103,7 @@ conda run -n course-nexus pytest tests/modules/generation tests/modules/generate
 ## 8. 冲突与注意事项
 - **冲突点**：G01 文件只读；JSON 是前端热点；table-schema 由 S01 负责人维护。
 - **严格遵循**：全材料 batch + coverage、ModelProvider、后端只产结构化图、真实节点引用。
-- **一定不能做**：新增 mindmap / node / edge 表；输出 SVG / Mermaid / 坐标；调用其他 generator / 计划 / Chroma / OpenAI；悬空、环、多父、空图标 success。
+- **一定不能做**：新增 mindmap / node / edge 表；生成本地 `.md` 文件或输出 SVG / HTML / Mermaid / 坐标；调用其他 generator / 计划 / Chroma / OpenAI；悬空、环、多父、空图标 success。
 
 ## 9. 完成检查表
 - [ ] 实现、测试、人工验收、docs 全部完成。
