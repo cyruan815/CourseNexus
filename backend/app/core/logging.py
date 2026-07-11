@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from copy import copy
+from datetime import datetime
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from app.core.config import Settings
 
@@ -12,6 +14,7 @@ from app.core.config import Settings
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 _FORMAT = "%(asctime)s | %(levelname)s | %(event_name)s | %(message)s | req=%(request_id)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+_LOG_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 class RequestContextFilter(logging.Filter):
@@ -30,7 +33,13 @@ def exception_summary(exc: BaseException | None) -> str | None:
     return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
 
 
-class ExceptionSummaryFormatter(logging.Formatter):
+class TimezoneFormatter(logging.Formatter):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        timestamp = datetime.fromtimestamp(record.created, _LOG_TIMEZONE)
+        return timestamp.isoformat(sep=" ", timespec="seconds")
+
+
+class ExceptionSummaryFormatter(TimezoneFormatter):
     def format(self, record: logging.LogRecord) -> str:
         headline_record = copy(record)
         headline_record.exc_info = None

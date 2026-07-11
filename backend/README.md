@@ -77,7 +77,7 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 
 ## 日志
 
-应用统一使用 Python 标准库 `logging`。`StreamHandler` 在终端输出单行摘要，`RotatingFileHandler` 将完整日志和异常 traceback 写入 `logs/course-nexus.log`。
+应用统一使用 Python 标准库 `logging`。日志时间明确使用带 `+08:00` 偏移的北京时间；`StreamHandler` 在终端输出单行摘要，`RotatingFileHandler` 将完整日志和异常 traceback 写入 `logs/course-nexus.log`。
 
 ```dotenv
 LOG_LEVEL=INFO

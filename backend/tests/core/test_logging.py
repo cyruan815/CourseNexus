@@ -44,6 +44,7 @@ def test_configure_logging_writes_compact_console_and_detailed_file(
     file_text = (tmp_path / "course-nexus.log").read_text(encoding="utf-8")
     expected = "ERROR | materials.parse | 解析失败 | material=mat_1 | req=req_test"
     assert expected in console
+    assert "+08:00 | ERROR" in console
     assert "Traceback" not in console
     assert "error=ValueError: broken document" in console
     assert expected in file_text

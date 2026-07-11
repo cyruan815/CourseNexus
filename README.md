@@ -124,7 +124,7 @@ Invoke-RestMethod http://localhost:8000/api/v1/health | ConvertTo-Json -Depth 5
 
 ### 后端日志
 
-后端使用 Python 标准库 `logging`。终端显示单行可读摘要，完整日志写入 `backend/logs/course-nexus.log`；异常在文件中保留 traceback。日志文件默认每个 `20 MiB`，保留 `20` 个备份，总上限约 `420 MiB`。
+后端使用 Python 标准库 `logging`，时间明确使用带 `+08:00` 偏移的北京时间。终端显示单行可读摘要，完整日志写入 `backend/logs/course-nexus.log`；异常在文件中保留 traceback。日志文件默认每个 `20 MiB`，保留 `20` 个备份，总上限约 `420 MiB`。
 
 可在根目录 `.env` 调整：
 
