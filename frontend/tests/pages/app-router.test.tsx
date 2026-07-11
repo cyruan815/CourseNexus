@@ -32,12 +32,37 @@ describe("AppRouter", () => {
   it("renders home for authenticated users", async () => {
     setSessionToken("token-123");
     window.history.pushState({}, "", "/");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "crs_network",
+                user_id: "usr_123",
+                name: "计算机网络",
+                description: "网络协议复习",
+                teacher: "王老师",
+                term: "2025-2026 春",
+                status: "active",
+                created_at: "2026-07-09T12:00:00+00:00",
+                updated_at: "2026-07-09T12:00:00+00:00",
+                deleted_at: null,
+              },
+            ],
+            meta: { request_id: "req_courses" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
 
     renderRouter();
 
     expect(screen.getByRole("heading", { name: "课枢 CourseNexus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/computer-network");
+    expect(await screen.findByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/crs_network");
   });
 
   it("keeps login page public", () => {

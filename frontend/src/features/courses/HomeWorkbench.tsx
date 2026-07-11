@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
+  Alert,
   Badge,
   Box,
   Button,
@@ -10,6 +12,7 @@ import {
   Group,
   Paper,
   Select,
+  Skeleton,
   Stack,
   Text,
   Title,
@@ -28,61 +31,21 @@ import {
 } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 
+import { ApiError } from "../../api/errors";
+import type { Course } from "../../types/course";
+import { listCourses } from "./api";
 import "./home-workbench.css";
 
 interface HomeCourse {
   id: string;
   name: string;
-  teacher: string;
-  term: string;
-  materialCount: number;
-  todayTaskCount: number;
+  teacher: string | null;
+  term: string | null;
+  materialLabel: string;
+  taskLabel: string;
   recentActivity: string;
   progress: string;
 }
-
-const homeCourses: HomeCourse[] = [
-  {
-    id: "computer-network",
-    name: "计算机网络",
-    teacher: "王老师",
-    term: "2025-2026 春",
-    materialCount: 12,
-    todayTaskCount: 1,
-    recentActivity: "课件 12 已归档",
-    progress: "本周待整理",
-  },
-  {
-    id: "advanced-math",
-    name: "高等数学",
-    teacher: "李老师",
-    term: "2025-2026 春",
-    materialCount: 8,
-    todayTaskCount: 0,
-    recentActivity: "极限章节已复习",
-    progress: "进度稳定",
-  },
-  {
-    id: "large-programming",
-    name: "大型程序设计",
-    teacher: "陈老师",
-    term: "2025-2026 春",
-    materialCount: 5,
-    todayTaskCount: 0,
-    recentActivity: "项目说明已上传",
-    progress: "等待拆解",
-  },
-  {
-    id: "college-physics",
-    name: "大学物理",
-    teacher: "赵老师",
-    term: "2025-2026 春",
-    materialCount: 6,
-    todayTaskCount: 0,
-    recentActivity: "实验报告待补充",
-    progress: "资料完整",
-  },
-];
 
 const calendarDays = Array.from({ length: 35 }, (_, index) => index + 1);
 const isDarkMode = false;
@@ -90,6 +53,27 @@ const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
 
 function getCourseToneClass(index: number): string {
   return courseToneClasses[index % courseToneClasses.length];
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError || error instanceof Error) {
+    return error.message;
+  }
+
+  return "课程列表加载失败";
+}
+
+function mapCourseToHomeCourse(course: Course): HomeCourse {
+  return {
+    id: course.id,
+    name: course.name,
+    teacher: course.teacher,
+    term: course.term,
+    materialLabel: "资料待接入",
+    taskLabel: "今日任务待接入",
+    recentActivity: course.description?.trim() || "课程资料待上传",
+    progress: course.status === "active" ? "课程已创建" : course.status,
+  };
 }
 
 function Header() {
@@ -136,7 +120,7 @@ function TodayTodoPanel() {
           <Stack gap={4}>
             <Title order={3}>今天还没有学习计划</Title>
             <Text c="dimmed" ta="center">
-              先把计算机网络的 1 项任务排进今天
+              生成学习计划后，这里会展示当天任务
             </Text>
           </Stack>
           <Button className="home-plan-button" component={Link} leftSection={<IconPlus size={16} />} to="/" variant="filled">
@@ -209,7 +193,7 @@ function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: stri
               </Link>
             </Title>
             <Text c="dimmed" size="sm">
-              {course.teacher} · {course.term}
+              {course.teacher ?? "未填写教师"} · {course.term ?? "未填写学期"}
             </Text>
           </Stack>
           <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
@@ -221,10 +205,10 @@ function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: stri
 
         <Group gap="sm">
           <Badge className="home-material-badge" variant="light">
-            资料 {course.materialCount}
+            {course.materialLabel}
           </Badge>
-          <Badge className={course.todayTaskCount > 0 ? "home-task-badge-active" : "home-task-badge"} variant="light">
-            今日任务 {course.todayTaskCount}
+          <Badge className="home-task-badge" variant="light">
+            {course.taskLabel}
           </Badge>
           <Text c="dimmed" ml="auto" size="sm">
             {course.progress}
@@ -253,31 +237,111 @@ function AddCourseCard() {
   );
 }
 
-function CourseOverview() {
+function CourseLoadingCards() {
+  return (
+    <>
+      <Grid.Col span={12}>
+        <Text c="dimmed" role="status" size="sm">
+          正在加载课程...
+        </Text>
+      </Grid.Col>
+      {Array.from({ length: 3 }, (_, index) => (
+        <Grid.Col key={index} span={{ base: 12, md: 6, xl: 4 }}>
+          <Card className="home-course-card" padding="lg" radius="md" withBorder>
+            <Stack gap="lg">
+              <Skeleton height={24} width="62%" />
+              <Skeleton height={14} width="46%" />
+              <Skeleton height={42} />
+              <Group gap="sm">
+                <Skeleton height={22} width={86} />
+                <Skeleton height={22} width={112} />
+              </Group>
+            </Stack>
+          </Card>
+        </Grid.Col>
+      ))}
+    </>
+  );
+}
+
+function CourseEmptyState() {
+  return (
+    <Grid.Col span={{ base: 12, md: 6, xl: 4 }}>
+      <Paper className="home-course-state-card" radius="md" withBorder>
+        <Stack gap="sm">
+          <Title order={3}>还没有课程</Title>
+          <Text c="dimmed">创建第一门课程后，这里会展示课程资料和学习入口。</Text>
+        </Stack>
+      </Paper>
+    </Grid.Col>
+  );
+}
+
+function CourseErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Grid.Col span={{ base: 12 }}>
+      <Alert className="home-course-alert" color="red" role="alert" title="课程加载失败" variant="light">
+        <Stack align="flex-start" gap="sm">
+          <Text>{message}</Text>
+          <Button onClick={onRetry} size="xs" variant="light">
+            重试加载课程
+          </Button>
+        </Stack>
+      </Alert>
+    </Grid.Col>
+  );
+}
+
+function CourseOverview({
+  courses,
+  error,
+  isLoading,
+  onRetry,
+}: {
+  courses: HomeCourse[];
+  error: string | null;
+  isLoading: boolean;
+  onRetry: () => void;
+}) {
+  const termOptions = useMemo(() => {
+    const terms = courses
+      .map((course) => course.term)
+      .filter((term): term is string => Boolean(term));
+
+    return Array.from(new Set(terms));
+  }, [courses]);
+  const termData = termOptions.length > 0 ? termOptions : ["全部学期"];
+  const defaultTerm = termData[0];
+
   return (
     <Paper className="home-main-panel" radius="md" withBorder>
       <Group align="flex-start" justify="space-between">
         <Stack gap={4}>
           <Title order={2}>课程概览</Title>
           <Text c="dimmed" size="sm">
-            本学期 4 门课程 · 32 份资料
+            本学期 {courses.length} 门课程 · 资料统计待接入
           </Text>
         </Stack>
         <Select
           aria-label="选择学期"
           className="home-term-select"
-          data={["2025-2026 春", "2025-2026 秋", "2024-2025 春"]}
-          defaultValue="2025-2026 春"
+          data={termData}
+          defaultValue={defaultTerm}
           rightSection={<IconChevronDown size={18} />}
         />
       </Group>
 
       <Grid gap="lg">
-        {homeCourses.map((course, index) => (
-          <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
-            <CourseCard course={course} toneClass={getCourseToneClass(index)} />
-          </Grid.Col>
-        ))}
+        {isLoading ? <CourseLoadingCards /> : null}
+        {!isLoading && error ? <CourseErrorState message={error} onRetry={onRetry} /> : null}
+        {!isLoading && !error && courses.length === 0 ? <CourseEmptyState /> : null}
+        {!isLoading && !error
+          ? courses.map((course, index) => (
+              <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
+                <CourseCard course={course} toneClass={getCourseToneClass(index)} />
+              </Grid.Col>
+            ))
+          : null}
         <Grid.Col span={{ base: 12, md: 6, xl: 4 }}>
           <AddCourseCard />
         </Grid.Col>
@@ -287,6 +351,40 @@ function CourseOverview() {
 }
 
 export function HomeWorkbench() {
+  const [courses, setCourses] = useState<HomeCourse[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let ignore = false;
+
+    setIsLoading(true);
+    setError(null);
+
+    listCourses()
+      .then((nextCourses) => {
+        if (!ignore) {
+          setCourses(nextCourses.map(mapCourseToHomeCourse));
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setError(getErrorMessage(nextError));
+          setCourses([]);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [reloadKey]);
+
   return (
     <Box className="home-workbench">
       <Header />
@@ -296,7 +394,12 @@ export function HomeWorkbench() {
             <TodayTodoPanel />
             <CalendarPanel />
           </Box>
-          <CourseOverview />
+          <CourseOverview
+            courses={courses}
+            error={error}
+            isLoading={isLoading}
+            onRetry={() => setReloadKey((currentKey) => currentKey + 1)}
+          />
         </Box>
       </Container>
     </Box>
