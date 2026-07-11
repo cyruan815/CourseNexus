@@ -631,3 +631,8 @@ S03 已实现今日待办与日历聚合，但表结构结论不变：不新增�
 - 查询路径依赖 `study_tasks(course_id, task_date)`、`study_tasks(plan_id, task_date, sort_order)`、`study_subtasks(task_id, sort_order)`、`study_plans(status, deleted_at)` 和 `courses(user_id, status, deleted_at)`。
 - 不创建 `todos`、`calendar_events` 或任何日历写模型。
 - 不写 `checkin_records`，打卡仍由 S05 根据 S04 完成状态派生。
+## S05 checkin_records 语义补充
+
+S05 复用现有 `checkin_records` 表，不新增 migration。`(user_id, checkin_date)` 唯一约束表示同一用户同一自然日只有一条派生打卡记录。
+
+`total_subtask_count` 与 `completed_subtask_count` 来自该用户该日期未删除课程、未删除计划下的 `study_subtasks`。`completion_ratio` 固定为四位小数。`color_level` 范围 0-5，其中 0 是无任务，1 是有任务但未完成。
