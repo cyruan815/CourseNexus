@@ -32,21 +32,12 @@ describe("AppRouter", () => {
   it("renders home for authenticated users", async () => {
     setSessionToken("token-123");
     window.history.pushState({}, "", "/");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: [], meta: { request_id: "req_1" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
 
     renderRouter();
 
-    expect(screen.getByRole("heading", { name: "CourseNexus" })).toBeInTheDocument();
-    expect(screen.getByText("课程工作台")).toBeInTheDocument();
-    expect(await screen.findByText("还没有课程")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课程学习助手 Agent 平台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/computer-network");
   });
 
   it("keeps login page public", () => {

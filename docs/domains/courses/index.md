@@ -1,73 +1,70 @@
-# 课程领域
+# Courses Domain
 
-## 1. 业务定位
+## 概述
 
-课程是资料、问答、生成内容和学习计划的基础归属对象。当前后端支持当前用户创建、读取、更新和软删除课程。
+课程领域负责系统首页的课程工作台和后续课程管理能力。当前实现是第一阶段静态 POC：首页按照低保真原型呈现今日待办、日历空状态、课程概览、课程卡片和添加课程入口，用于先确认页面结构和视觉基线。
 
-学期是可选字段。用户只能从后端统一选项中选择，默认“未选择”并保存为 `null`，不能输入自由文本。
+## 业务目标
 
-## 2. 所有权与代码地图
+- 帮助学生进入系统后快速看到课程、今日学习任务和日历计划状态。
+- 在无学习计划时给出生成计划入口，不展示不存在的任务内容。
+- 为后续课程详情、课程创建、学习计划生成和大日历页面保留清晰入口。
 
-- 后端入口：`backend/app/modules/courses/router.py`。
-- 请求与响应 schema：`backend/app/modules/courses/schemas.py`。
-- 学期标准值目录：`backend/app/modules/courses/terms.py`。
-- 课程服务与持久化：`backend/app/modules/courses/service.py`、`repository.py`、`models.py`。
-- 后端 API 测试：`backend/tests/modules/courses/test_courses_api.py`。
+## 当前范围
 
-课程模块拥有课程基础字段，其他模块只能通过 `course_id` 引用课程并遵守用户归属与软删除边界。
+- 已实现：静态首页工作台，包含顶部品牌栏、主题切换占位、个人中心占位、今日待办空状态、日历空状态、课程卡片网格、添加课程入口和交互说明。
+- 未实现：课程创建表单、真实课程列表接口接入、计划生成页跳转、大日历页、课程卡片编辑/删除菜单。
 
-## 3. 实现架构
+## 代码入口
 
-```mermaid
-flowchart LR
-    Client["API 客户端"] -->|GET /course-terms| API["课程 Router"]
-    API --> Catalog["学期选项目录"]
-    Client -->|POST /courses| Schema["CourseCreate 校验"]
-    Schema --> Service["课程 Service"]
-    Service --> DB[("courses")]
+- 页面入口：`frontend/src/pages/HomePage.tsx`
+- 首页工作台组件：`frontend/src/features/courses/HomeWorkbench.tsx`
+- 首页样式：`frontend/src/features/courses/home-workbench.css`
+- 课程 API 适配仍保留在：`frontend/src/features/courses/api.ts`
+- 课程列表旧组件仍保留在：`frontend/src/features/courses/CourseList.tsx`
+
+## 模块边界
+
+- `HomePage` 只负责挂载课程首页工作台。
+- `features/courses/HomeWorkbench.tsx` 只承载课程首页静态 UI 和 mock 数据，不直接调用后端 API。
+- 后续真实数据接入时，应通过 `features/courses/api.ts` 或专用 adapter 获取课程数据，再把页面状态映射到组件 props。
+- 今日待办、日历和学习计划的真实状态属于 `study-mode` / `todos-calendar` 相关领域；课程首页只能展示聚合结果，不直接耦合其内部实现。
+
+## 状态流转
+
+当前静态 POC 固定展示 ready 状态：
+
+- 课程概览：展示 4 门 mock 课程和一个添加课程入口。
+- 今日待办：展示无计划 empty 状态和生成计划入口占位。
+- 日历：展示无计划 empty 状态和跳转计划生成页说明。
+
+后续接入真实接口时需要补齐：
+
+- loading：课程列表、今日任务和日历聚合加载中。
+- empty：没有课程、没有计划、当天没有任务。
+- error：课程或计划聚合加载失败，提供重试入口。
+- ready：展示真实课程和计划聚合。
+
+## 关键决策
+
+- 首页采用 Mantine 组件和局部 CSS，遵守亮色工作台规范，不做营销型 hero。
+- 静态数据放在 `HomeWorkbench.tsx` 内部，避免在尚未确认 API 聚合契约前扩大数据层变更。
+- 课程名是明确链接，卡片更多操作是独立按钮，避免交互元素嵌套。
+- 当前添加课程、生成计划、主题切换和个人中心入口只做静态占位。
+
+## 测试与验证
+
+- 页面测试：`frontend/tests/pages/home-page.test.tsx`
+- 路由测试：`frontend/tests/pages/app-router.test.tsx`
+- 验证命令：
+
+```powershell
+pnpm frontend:test
+pnpm frontend:build
 ```
 
-选项读取不访问数据库；创建和更新请求先经过 Pydantic 枚举校验，通过后才进入服务和持久化。课程写入沿用现有同步事务边界。
+## 已知限制
 
-## 4. 数据、状态与接口
-
-- `term` 数据库列为可空字符串，默认 `null`。
-- 创建和更新 API 只接受 `GET /api/v1/course-terms` 返回的 `value` 或 `null`。
-- 选项响应为 `{value, label}`；`value` 用于存储和筛选，`label` 用于展示。
-- 首批覆盖 `2024-2025` 至 `2027-2028` 学年的秋季和春季。
-- 非标准值由请求校验返回 `422 VALIDATION_ERROR`，不会写入数据库。
-- 课程状态继续使用 `active`、`archived`、`deleted`；删除为软删除。
-
-## 5. 核心算法
-
-### 5.1 输入、输出与不变量
-
-输入 `term` 为选项目录中的稳定值或 `null`。输出课程保持原值；任何新写入的非空学期都必须能在选项目录中找到。
-
-### 5.2 算法步骤
-
-1. 客户端加载后端学期选项，并把“未选择”转换成 JSON `null`。
-2. 后端 schema 校验 `term`；非法值在服务调用前失败。
-3. 服务把通过校验的值原样写入课程记录。
-
-选项读取保持声明顺序，无查询、去重、重试或补偿步骤。
-
-### 5.3 复杂度与资源预算
-
-学期选项是固定小目录，读取和序列化的时间、空间复杂度均为 `O(n)`，当前 `n = 8`。创建和更新课程仍为单条记录写入，不增加数据库查询。
-
-失败发生在数据库写入前，无部分写入和补偿需求。
-
-## 6. 测试与验收
-
-- 后端：验证选项内容、鉴权、默认 `null`、标准值写入，以及创建和更新拒绝自由文本。
-- 验证命令：`conda run -n course-nexus python -m pytest tests/modules/courses`。
-
-## 7. 决策、限制与演进
-
-- 数据库不使用原生枚举或固定 `CHECK`，避免增加学期选项时必须迁移数据库；API 是规范写入边界。
-- `CourseRead.term` 保持可空字符串，以便读取已有 POC 数据；新的创建和更新请求执行严格校验。
-- 后续增加学年、夏季或小学期时，应同步扩展后端目录和 API 契约测试；客户端应通过选项接口获取列表，不硬编码选项。
-- 本次只实现后端能力和契约文档，前端下拉框由前端任务接入。
-
-最后更新：2026-07-12。
+- 本页面仍是静态 HTML/前端 POC，不读取真实课程、计划或日历数据。
+- 主题切换按钮和个人中心按钮尚未绑定行为。
+- 课程详情链接使用 mock course id，后续接真实数据后应改为后端课程 id。
