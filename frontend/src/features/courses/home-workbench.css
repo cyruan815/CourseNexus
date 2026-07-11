@@ -43,7 +43,7 @@
 
 .home-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 30vw) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 28vw) minmax(0, 1fr);
   gap: 18px;
   min-height: calc(100vh - 116px);
 }
@@ -218,6 +218,8 @@
 }
 
 .home-course-card {
+  position: relative;
+  overflow: hidden;
   background: #ffffff;
   transition:
     border-color 160ms ease,
@@ -234,38 +236,53 @@
 .home-course-card::before {
   content: "";
   position: absolute;
-  inset: 0 auto auto 0;
-  width: 148px;
-  height: 108px;
+  inset: 0;
   pointer-events: none;
-  opacity: 0.7;
-  background: linear-gradient(135deg, rgba(47, 128, 237, 0.2), rgba(255, 255, 255, 0) 70%);
+  opacity: 0.92;
+  background:
+    radial-gradient(circle at 0 0, rgba(47, 128, 237, 0.22), transparent 250px),
+    linear-gradient(135deg, rgba(47, 128, 237, 0.12) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card-blue::before {
-  background: linear-gradient(135deg, rgba(47, 128, 237, 0.22), rgba(255, 255, 255, 0) 70%);
+  background:
+    radial-gradient(circle at 0 0, rgba(47, 128, 237, 0.24), transparent 250px),
+    linear-gradient(135deg, rgba(47, 128, 237, 0.13) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card-mint::before {
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(255, 255, 255, 0) 70%);
+  background:
+    radial-gradient(circle at 0 0, rgba(20, 184, 166, 0.24), transparent 250px),
+    linear-gradient(135deg, rgba(20, 184, 166, 0.13) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card-indigo::before {
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.18), rgba(255, 255, 255, 0) 70%);
+  background:
+    radial-gradient(circle at 0 0, rgba(79, 70, 229, 0.22), transparent 250px),
+    linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card-violet::before {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(255, 255, 255, 0) 70%);
+  background:
+    radial-gradient(circle at 0 0, rgba(124, 58, 237, 0.22), transparent 250px),
+    linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card-orange::before {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(255, 255, 255, 0) 70%);
+  background:
+    radial-gradient(circle at 0 0, rgba(249, 115, 22, 0.22), transparent 250px),
+    linear-gradient(135deg, rgba(249, 115, 22, 0.12) 0%, rgba(255, 255, 255, 0) 58%);
 }
 
 .home-course-card h3 {
   font-size: 20px;
   font-weight: 750;
   position: relative;
+}
+
+.home-course-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .home-course-link {
