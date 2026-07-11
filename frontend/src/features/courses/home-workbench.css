@@ -12,25 +12,15 @@
   padding: 16px 28px;
 }
 
-.home-brand-mark {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #b7d4f6;
-  border-radius: 999px;
-  background: #e8f2ff;
-  color: #2f80ed;
-  flex: 0 0 auto;
-  font-size: 18px;
-  font-weight: 800;
-}
-
 .home-brand-title {
   font-size: 28px;
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1.2;
+}
+
+.home-brand-title span {
+  color: #2f80ed;
 }
 
 .home-theme-single-button,
@@ -103,7 +93,7 @@
 .home-plan-empty {
   flex: 1;
   justify-content: center;
-  min-height: 158px;
+  min-height: 188px;
   border: 1px solid #bfdbfe;
   border-radius: 8px;
   background:
@@ -241,9 +231,41 @@
   transform: translateY(-1px);
 }
 
+.home-course-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 148px;
+  height: 108px;
+  pointer-events: none;
+  opacity: 0.7;
+  background: linear-gradient(135deg, rgba(47, 128, 237, 0.2), rgba(255, 255, 255, 0) 70%);
+}
+
+.home-course-card-blue::before {
+  background: linear-gradient(135deg, rgba(47, 128, 237, 0.22), rgba(255, 255, 255, 0) 70%);
+}
+
+.home-course-card-mint::before {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(255, 255, 255, 0) 70%);
+}
+
+.home-course-card-indigo::before {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.18), rgba(255, 255, 255, 0) 70%);
+}
+
+.home-course-card-violet::before {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(255, 255, 255, 0) 70%);
+}
+
+.home-course-card-orange::before {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(255, 255, 255, 0) 70%);
+}
+
 .home-course-card h3 {
   font-size: 20px;
   font-weight: 750;
+  position: relative;
 }
 
 .home-course-link {
@@ -264,6 +286,7 @@
   color: #334155;
   font-size: 14px;
   line-height: 1.6;
+  position: relative;
 }
 
 .home-material-badge {
@@ -315,11 +338,6 @@
   .home-header > .mantine-Group-root {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .home-brand-mark {
-    width: 44px;
-    height: 44px;
   }
 
   .home-brand-title {

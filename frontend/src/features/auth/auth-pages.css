@@ -57,6 +57,11 @@
   text-decoration: none;
 }
 
+.auth-welcome__nav nav a:hover,
+.auth-welcome__nav nav a:focus-visible {
+  text-decoration: none;
+}
+
 .auth-welcome__nav nav a.active {
   color: #2f80ed;
 }

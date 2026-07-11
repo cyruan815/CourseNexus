@@ -20,7 +20,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClipboardList,
-  IconClock,
   IconDotsVertical,
   IconMoon,
   IconPlus,
@@ -40,7 +39,6 @@ interface HomeCourse {
   todayTaskCount: number;
   recentActivity: string;
   progress: string;
-  tone: "blue" | "mint" | "indigo" | "violet";
 }
 
 const homeCourses: HomeCourse[] = [
@@ -53,7 +51,6 @@ const homeCourses: HomeCourse[] = [
     todayTaskCount: 1,
     recentActivity: "课件 12 已归档",
     progress: "本周待整理",
-    tone: "blue",
   },
   {
     id: "advanced-math",
@@ -64,7 +61,6 @@ const homeCourses: HomeCourse[] = [
     todayTaskCount: 0,
     recentActivity: "极限章节已复习",
     progress: "进度稳定",
-    tone: "indigo",
   },
   {
     id: "large-programming",
@@ -75,7 +71,6 @@ const homeCourses: HomeCourse[] = [
     todayTaskCount: 0,
     recentActivity: "项目说明已上传",
     progress: "等待拆解",
-    tone: "mint",
   },
   {
     id: "college-physics",
@@ -86,12 +81,16 @@ const homeCourses: HomeCourse[] = [
     todayTaskCount: 0,
     recentActivity: "实验报告待补充",
     progress: "资料完整",
-    tone: "violet",
   },
 ];
 
 const calendarDays = Array.from({ length: 35 }, (_, index) => index + 1);
 const isDarkMode = false;
+const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
+
+function getCourseToneClass(index: number): string {
+  return courseToneClasses[index % courseToneClasses.length];
+}
 
 function Header() {
   const ThemeIcon = isDarkMode ? IconSun : IconMoon;
@@ -101,11 +100,8 @@ function Header() {
     <Paper className="home-header" component="header" radius={0}>
       <Group justify="space-between" wrap="nowrap">
         <Group gap="lg" wrap="nowrap">
-          <Box aria-hidden className="home-brand-mark">
-            课
-          </Box>
           <Title className="home-brand-title" order={1}>
-            课枢 CourseNexus
+            课枢 <span>CourseNexus</span>
           </Title>
         </Group>
 
@@ -129,9 +125,6 @@ function TodayTodoPanel() {
         <Group justify="space-between">
           <Stack gap={2}>
             <Title order={2}>今日待办</Title>
-            <Text c="dimmed" size="sm">
-              把今天要紧的学习动作先排出来
-            </Text>
           </Stack>
           <Badge className="home-urgent-badge" leftSection={<IconAlertCircle size={14} />}>
             1 项待安排
@@ -150,18 +143,6 @@ function TodayTodoPanel() {
             生成今日计划
           </Button>
         </Stack>
-
-        <Paper className="home-next-task" radius="md" withBorder>
-          <Group gap="sm" wrap="nowrap">
-            <IconClock aria-hidden size={20} />
-            <Stack gap={0}>
-              <Text fw={700}>建议优先处理</Text>
-              <Text c="dimmed" size="sm">
-                计算机网络 · 今日任务 1
-              </Text>
-            </Stack>
-          </Group>
-        </Paper>
       </Stack>
     </Paper>
   );
@@ -216,9 +197,9 @@ function CalendarPanel() {
   );
 }
 
-function CourseCard({ course }: { course: HomeCourse }) {
+function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: string }) {
   return (
-    <Card className="home-course-card" padding="lg" radius="md" withBorder>
+    <Card className={`home-course-card home-course-card-${toneClass}`} padding="lg" radius="md" withBorder>
       <Stack gap="lg" h="100%" justify="space-between">
         <Group align="flex-start" justify="space-between" wrap="nowrap">
           <Stack gap="xs">
@@ -292,9 +273,9 @@ function CourseOverview() {
       </Group>
 
       <Grid gap="lg">
-        {homeCourses.map((course) => (
+        {homeCourses.map((course, index) => (
           <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
-            <CourseCard course={course} />
+            <CourseCard course={course} toneClass={getCourseToneClass(index)} />
           </Grid.Col>
         ))}
         <Grid.Col span={{ base: 12, md: 6, xl: 4 }}>
