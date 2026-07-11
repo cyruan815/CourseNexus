@@ -92,6 +92,7 @@ def get_latest_successful_task_content(
             AIGeneratedContent.deleted_at.is_(None),
         )
         .order_by(AIGeneratedContent.created_at.desc(), AIGeneratedContent.id.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
 

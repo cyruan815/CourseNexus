@@ -119,7 +119,22 @@ def test_openai_provider_maps_sdk_parse_validation_error_to_schema_invalid() -> 
     with pytest.raises(CourseNexusError) as exc_info:
         provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
 
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    _assert_schema_invalid_error(exc_info.value)
+
+
+def test_openai_provider_maps_chat_json_parse_error_to_schema_invalid() -> None:
+    responses = FakeResponses(error=FakeResponsesApiNotFoundError("not found"))
+    chat_completions = FakeChatCompletions(content="{not-json")
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="test-model",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
+
+    _assert_schema_invalid_error(exc_info.value)
 
 
 def test_openai_provider_maps_invalid_parsed_data_to_schema_invalid() -> None:
@@ -132,7 +147,12 @@ def test_openai_provider_maps_invalid_parsed_data_to_schema_invalid() -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
 
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    _assert_schema_invalid_error(exc_info.value)
+
+
+def _assert_schema_invalid_error(error: CourseNexusError) -> None:
+    assert error.code == "GENERATION_SCHEMA_INVALID"
+    assert error.status_code == 500
 
 
 def _schema_validation_error() -> Exception:

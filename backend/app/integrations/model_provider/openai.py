@@ -74,7 +74,7 @@ class OpenAIModelProvider:
             raise CourseNexusError(
                 code="GENERATION_SCHEMA_INVALID",
                 message="模型结构化输出不符合约定",
-                status_code=502,
+                status_code=500,
             ) from exc
         except Exception as exc:
             if not _is_not_found_error(exc):
@@ -124,7 +124,7 @@ class OpenAIModelProvider:
             raise CourseNexusError(
                 code="GENERATION_SCHEMA_INVALID",
                 message="模型结构化输出不符合约定",
-                status_code=502,
+                status_code=500,
             ) from exc
         return self._validate_structured_output(parsed=parsed, output_schema=output_schema)
 
@@ -142,7 +142,7 @@ class OpenAIModelProvider:
             raise CourseNexusError(
                 code="GENERATION_SCHEMA_INVALID",
                 message="模型结构化输出不符合约定",
-                status_code=502,
+                status_code=500,
             ) from exc
 
     def _build_prompt(self, question: str, context_chunks: list[ContextChunk]) -> str:

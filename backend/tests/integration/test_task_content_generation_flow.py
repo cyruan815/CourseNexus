@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +18,7 @@ from app.main import app
 from app.modules.checkins.models import CheckinRecord
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
+from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.learning_execution import router as learning_router
@@ -188,6 +189,14 @@ def _seed_plan_with_materials(db: Session, *, user_id: str) -> tuple[str, str]:
     return "sub_flow_learn", "sub_flow_quiz"
 
 
+def _set_content_created_at(db: Session, *, content_id: str, created_at: datetime) -> None:
+    content = db.get(AIGeneratedContent, content_id)
+    assert content is not None
+    content.created_at = created_at
+    db.add(content)
+    db.commit()
+
+
 def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     learn_subtask_id, quiz_subtask_id = _seed_plan_with_materials(api.db, user_id=user_id)
@@ -230,3 +239,51 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     assert quiz_subtask.status == "not_started"
     assert task.status == "not_started"
     assert api.db.execute(select(CheckinRecord)).scalars().all() == []
+
+
+def test_execution_context_returns_latest_successful_task_content_after_regeneration(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    learn_subtask_id, quiz_subtask_id = _seed_plan_with_materials(api.db, user_id=user_id)
+
+    first_handout_response = api.client.post(
+        f"/api/v1/study-subtasks/{learn_subtask_id}/handouts",
+        headers=headers,
+        json={"parameters": {}},
+    )
+    first_task_test_response = api.client.post(
+        f"/api/v1/study-subtasks/{quiz_subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 1}},
+    )
+    assert first_handout_response.status_code == 200
+    assert first_task_test_response.status_code == 200
+    first_handout = first_handout_response.json()["data"]
+    first_task_test = first_task_test_response.json()["data"]
+
+    stale_created_at = datetime(2000, 1, 1)
+    _set_content_created_at(api.db, content_id=first_handout["id"], created_at=stale_created_at)
+    _set_content_created_at(api.db, content_id=first_task_test["id"], created_at=stale_created_at)
+
+    second_handout_response = api.client.post(
+        f"/api/v1/study-subtasks/{learn_subtask_id}/handouts",
+        headers=headers,
+        json={"parameters": {}},
+    )
+    second_task_test_response = api.client.post(
+        f"/api/v1/study-subtasks/{quiz_subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 1}},
+    )
+    assert second_handout_response.status_code == 200
+    assert second_task_test_response.status_code == 200
+    second_handout = second_handout_response.json()["data"]
+    second_task_test = second_task_test_response.json()["data"]
+
+    learn_context_response = api.client.get(f"/api/v1/study-subtasks/{learn_subtask_id}/execution-context", headers=headers)
+    quiz_context_response = api.client.get(f"/api/v1/study-subtasks/{quiz_subtask_id}/execution-context", headers=headers)
+    assert learn_context_response.status_code == 200, learn_context_response.text
+    assert quiz_context_response.status_code == 200, quiz_context_response.text
+    learn_context = learn_context_response.json()["data"]
+    quiz_context = quiz_context_response.json()["data"]
+    assert learn_context["handout_content_id"] == second_handout["id"]
+    assert quiz_context["task_test_content_id"] == second_task_test["id"]

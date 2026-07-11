@@ -46,15 +46,21 @@ class TaskTestQuestion(BaseModel):
     def _validate_by_type(self) -> "TaskTestQuestion":
         if self.question_type in {"single_choice", "multiple_choice"} and not self.options:
             raise ValueError("choice questions require options")
-        if self.question_type == "single_choice" and not isinstance(self.correct_answer, str):
+        if self.question_type == "single_choice" and not (
+            isinstance(self.correct_answer, str) and self.correct_answer.strip()
+        ):
             raise ValueError("single_choice correct_answer must be a string")
         if self.question_type == "multiple_choice" and not (
-            isinstance(self.correct_answer, list) and all(isinstance(item, str) and item for item in self.correct_answer)
+            isinstance(self.correct_answer, list)
+            and self.correct_answer
+            and all(isinstance(item, str) and item.strip() for item in self.correct_answer)
         ):
             raise ValueError("multiple_choice correct_answer must be a non-empty string list")
         if self.question_type == "true_false" and not isinstance(self.correct_answer, bool):
             raise ValueError("true_false correct_answer must be boolean")
-        if self.question_type == "short_answer" and not isinstance(self.correct_answer, str):
+        if self.question_type == "short_answer" and not (
+            isinstance(self.correct_answer, str) and self.correct_answer.strip()
+        ):
             raise ValueError("short_answer correct_answer must be a string")
         return self
 

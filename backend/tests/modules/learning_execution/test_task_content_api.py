@@ -94,10 +94,14 @@ def api() -> Generator[ApiHarness, None, None]:
 
 
 def _register_and_headers(api: ApiHarness) -> tuple[str, dict[str, str]]:
-    response = api.client.post("/api/v1/auth/register", json={"username": "alice", "password": "password123"})
+    return _register_user_and_headers(api, username="alice")
+
+
+def _register_user_and_headers(api: ApiHarness, *, username: str) -> tuple[str, dict[str, str]]:
+    response = api.client.post("/api/v1/auth/register", json={"username": username, "password": "password123"})
     assert response.status_code == 200
     token = response.json()["data"]["access_token"]
-    user_id = api.db.execute(select(User).where(User.username == "alice")).scalar_one().id
+    user_id = api.db.execute(select(User).where(User.username == username)).scalar_one().id
     return user_id, {"Authorization": f"Bearer {token}"}
 
 
@@ -177,6 +181,34 @@ def _seed_task_content_plan(
     return subtask_id
 
 
+def _add_related_material_without_chunks(db: Session, *, user_id: str, subtask_id: str) -> None:
+    db.add(
+        CourseMaterial(
+            id="mat_api_content_empty",
+            user_id=user_id,
+            course_id="crs_api_content",
+            name="空资料.pdf",
+            material_type="pdf",
+            source_type="file",
+            file_url="/uploads/empty.pdf",
+            parse_status="parsed",
+        )
+    )
+    subtask = db.get(StudySubTask, subtask_id)
+    assert subtask is not None
+    subtask.related_material_ids_json = ["mat_api_content", "mat_api_content_empty"]
+    db.add(subtask)
+    db.commit()
+
+
+class BrokenModelProvider:
+    def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
+        raise AssertionError("answer_question should not be called")
+
+    def generate_structured(self, *, prompt, output_schema):
+        raise RuntimeError("model unavailable")
+
+
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
@@ -252,3 +284,105 @@ def test_generate_task_content_requires_auth(api: ApiHarness) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+def test_generate_task_content_returns_not_found_for_missing_subtask(api: ApiHarness) -> None:
+    _, headers = _register_and_headers(api)
+
+    response = api.client.post("/api/v1/study-subtasks/sub_missing/handouts", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
+
+
+def test_generate_task_content_rejects_cross_user_subtask_without_failed_record(api: ApiHarness) -> None:
+    alice_id, _ = _register_user_and_headers(api, username="alice")
+    _, bob_headers = _register_user_and_headers(api, username="bob")
+    subtask_id = _seed_task_content_plan(api.db, user_id=alice_id, subtask_type="learn")
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/handouts", headers=bob_headers, json={"parameters": {}})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
+
+
+def test_generate_task_content_rejects_invalid_request_parameters(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+
+    response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 0}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
+
+
+def test_generate_handout_schema_invalid_saves_failed_record(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
+        structured_outputs={
+            HandoutContent: {
+                "overview": "学习关系模型。",
+                "learning_objectives": ["解释主键"],
+                "sections": [
+                    {
+                        "id": "sec_1",
+                        "title": "主键",
+                        "body": "主键用于唯一标识表中的一行。",
+                        "key_points": ["唯一标识"],
+                        "source_citation_ids": ["chunk_not_in_context"],
+                        "sort_order": 1,
+                    }
+                ],
+                "summary": "完成主键概念学习。",
+            }
+        }
+    )
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/handouts", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "GENERATION_SCHEMA_INVALID"
+    content = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert content.content_type == "handout"
+    assert content.study_subtask_id == subtask_id
+    assert content.generation_status == "failed"
+    assert content.error_code == "GENERATION_SCHEMA_INVALID"
+
+
+def test_generate_task_test_model_failure_saves_failed_record(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: BrokenModelProvider()
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "GENERATION_FAILED"
+    content = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert content.content_type == "task_test"
+    assert content.study_subtask_id == subtask_id
+    assert content.generation_status == "failed"
+    assert content.error_code == "GENERATION_FAILED"
+
+
+def test_generate_handout_material_coverage_incomplete_saves_failed_record(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    _add_related_material_without_chunks(api.db, user_id=user_id, subtask_id=subtask_id)
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/handouts", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "MATERIAL_COVERAGE_INCOMPLETE"
+    content = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert content.content_type == "handout"
+    assert content.study_subtask_id == subtask_id
+    assert content.generation_status == "failed"
+    assert content.error_code == "MATERIAL_COVERAGE_INCOMPLETE"
