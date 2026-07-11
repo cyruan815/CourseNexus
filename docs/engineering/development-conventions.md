@@ -87,6 +87,7 @@
 - 提交前必须确认没有真实 `.env`、API Key、`SECRET_KEY`、密码、用户资料正文、完整用户问题正文或其他敏感内容进入暂存区。
 - 如果后续需要整理提交历史，应优先在合并前通过 review 或 rebase 处理，不在开发过程中牺牲小步提交记录。
 - 提交信息使用 Angular / Conventional Commits 结构：`<type>(<scope>): <subject>`。
+- `description` 可选，须简明扼要（不超过 50 个字符），并以动词开头。
 - `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
 - `scope` 可选，使用英文短名标识影响范围，例如 `backend`、`frontend`、`docs`、`db`、`materials`、`courses`。
 - 除模板字段和固定标识外，`subject`、正文和说明性内容使用中文。

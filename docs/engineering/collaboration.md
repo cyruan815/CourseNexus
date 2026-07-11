@@ -54,6 +54,8 @@ git push --force-with-lease origin <自己的固定分支>
 <type>(<scope>): <subject>
 ```
 
+`description` 可选，须简明扼要（不超过 50 个字符），并以动词开头。
+
 规则：
 
 - `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
