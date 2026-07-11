@@ -465,6 +465,18 @@
     "material_ids": []
   },
   "error_code": null,
+  "source_citations": [
+    {
+      "id": "cit_123",
+      "material_id": "mat_123",
+      "chunk_id": "chk_123",
+      "material_name": "notes.md",
+      "page": null,
+      "page_index": 0,
+      "hit_text": "Alpha",
+      "sort_order": 1
+    }
+  ],
   "created_at": "2026-07-09T12:00:00+00:00",
   "updated_at": "2026-07-09T12:00:00+00:00",
   "deleted_at": null
@@ -479,7 +491,9 @@
 - `outline`
 - `knowledge_list`
 
-这些类型当前只是后续功能接入点，返回 deterministic placeholder 结构，不代表最终生成质量或前端渲染协议。
+G01已稳定五类入口共用的全材料、引用和失败契约；这些类型当前仍返回deterministic placeholder业务结构，直到G02-G06分别替换，不代表最终生成质量。
+
+`source_citations`在生成POST、历史和详情中始终存在；无引用固定为`[]`。`page_index=0`且`page=null`表示来源没有可展示页码，前端显示“页码未知”，不得显示“第0页”。
 
 ### 3.21 生成内容列表
 
@@ -522,10 +536,10 @@
 
 | 错误码 | 场景 |
 | --- | --- |
-| `VALIDATION_ERROR` | `content_type` 未注册。 |
+| `VALIDATION_ERROR` | `content_type`未注册，或具体生成器参数非法；不创建历史记录。 |
 | `NO_PARSED_MATERIAL` | 当前资料范围没有可用 parsed chunk。 |
 
-生成器失败时，当前后端会保存 `generation_status = "failed"` 且 `error_code = "GENERATION_FAILED"` 的生成内容记录。
+模型、schema或材料覆盖失败会保存`generation_status="failed"`记录，`error_code`分别为`GENERATION_FAILED`、`GENERATION_SCHEMA_INVALID`或`MATERIAL_COVERAGE_INCOMPLETE`；失败记录的`content_json=null`且`source_citations=[]`。重复请求会创建不同ID，当前没有持久化幂等键或retry-by-id接口。
 
 ### 3.24 学习计划预览
 

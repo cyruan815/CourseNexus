@@ -59,7 +59,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
-| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 还需实现引用生成、快照保存和定位失败降级展示。 |
+| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 问答与G01生成链路已实现真实引用、快照保存和未知位置降级；G02-G06继续提供逐条目引用。 |
 | `AIGeneratedContent` | `ai_generated_contents` | 已建表 | `generated-content` | 还需实现生成编排、内容保存、历史列表、详情查询和 PDF 导出入口。 |
 | `StudyPlan` | `study_plans` | 已建表 | `study-plans` | 还需实现自然语言配置回填、计划预览、保存和删除。 |
 | `StudyTask` | `study_tasks` | 已建表 | `study-plans` | 还需实现保存计划时生成一级任务和任务状态汇总。 |
@@ -295,7 +295,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - `message_id` 与 `generated_content_id` 至少一个非空。
 - 不允许生成没有 `material_id` 的伪引用。
 - `material_name` 是快照字段，资料改名或删除后仍用于历史展示。
-- `page` 和 `page_index` 至少应有一个可用于定位；无法定位时前端展示“页码未知”。
+- 数据库约束保留`page`和`page_index`至少一个非空。无分页Text/Markdown引用兼容保存`page=null,page_index=0`；0是未知位置哨兵，前端展示“页码未知”，不得解释为真实第0页。
+- 生成内容引用的`sort_order`从1连续递增；历史兼容数据允许为null，读取时使用`ASC NULLS LAST`和引用ID保证SQLite/PostgreSQL顺序一致。
 
 ## ai_generated_contents
 

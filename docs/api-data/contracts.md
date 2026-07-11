@@ -117,6 +117,18 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 
 `score` 只表示问答相关性检索的相似度；全材料批次读取可以返回 `null`。
 
+## 独立生成公共契约
+
+- `POST /courses/{course_id}/generations`、课程生成历史和生成详情路径保持不变。
+- 生成服务只使用`iter_material_context_batches()`，每份选定parsed资料必须进入至少一个batch。
+- 注册类型固定为`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；G01完成公共链路，具体真实生成由G02-G06分别完成。
+- 每个最终业务条目使用稳定`id`；具体生成器返回“条目ID到chunk ID候选”，公共层过滤越界ID并回填`source_citation_ids`。
+- 生成POST、历史和详情的`GeneratedContentRead`统一包含`source_citations`；无引用固定返回`[]`。
+- 成功内容和引用处于同一数据库事务。模型、schema和覆盖失败保存failed记录，不保存部分JSON或引用。
+- 当前引用位置约束要求`page`或`page_index`至少一个非空；无分页资料兼容保存`page=null,page_index=0`，0表示未知位置而非真实第0页。
+
+稳定错误语义：参数或未知类型`422 VALIDATION_ERROR`且不落库；无可用资料`400 NO_PARSED_MATERIAL`且不落库；模型、schema和覆盖失败分别保存`GENERATION_FAILED`、`GENERATION_SCHEMA_INVALID`、`MATERIAL_COVERAGE_INCOMPLETE`记录。
+
 ## 请求 / 响应示例格式
 
 Agent 提问请求示例：

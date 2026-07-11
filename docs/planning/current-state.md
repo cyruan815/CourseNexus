@@ -2,7 +2,7 @@
 
 ## 日期
 
-2026-07-10
+2026-07-11
 
 ## 当前阶段结论
 
@@ -53,7 +53,9 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。
 
 6. 生成和计划基础
-   - 已实现 `generation-orchestrator` 基础编排、生成内容保存和引用保存。
+   - 已完成G01公共生成链路：用途模型提供器注入、生成器工厂注册、全材料批次读取、真实引用过滤和ID回填、成功内容与引用原子保存。
+   - 生成POST、课程历史和详情均返回稳定`source_citations`数组；失败记录不保存部分JSON或引用。
+   - 已覆盖跨用户课程/资料、无资料、非法参数、模型/schema/coverage失败、重复请求、引用去重和真实数据库回滚。
    - 已提供 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的占位生成器，用于验证模块边界和存储契约。
    - 已实现单课程学习计划预览、保存、列表和详情接口。
    - 学习计划当前只生成计划 / 任务结构，不提前生成今日讲义、任务测试题或执行页内容。
@@ -95,7 +97,8 @@ conda run -n course-nexus python -m pytest tests/integrations/test_llama_index_c
 
 最近一次后端完整验证：
 
-- `pnpm backend:test`：`161 passed in 25.46s`。
+- G01隔离环境后端全量：`256 passed`（2026-07-12）。
+- G01 generation + generated-content回归：`82 passed`。
 - `pnpm backend:migrate`：Alembic `upgrade head` 成功。
 - Chroma persistence smoke：`1 passed in 3.82s`。
 
