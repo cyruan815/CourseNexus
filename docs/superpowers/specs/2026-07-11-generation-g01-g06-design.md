@@ -55,7 +55,7 @@ Every concrete generator validates parameters before its first model call, maps 
 
 The orchestrator filters every requested chunk ID against the chunks in the delivered batches. It allocates one citation row per unique retained chunk in stable source order, recursively finds final objects by their `id`, and fills their `source_citation_ids`. Empty bindings remain empty and never fall back to the first chunk.
 
-The generation response, history response, and detail response include `source_citations`, with `[]` as the stable empty value. Pagination metadata remains unchanged. A source without pagination preserves both `page=null` and `page_index=null`.
+The generation response, history response, and detail response include `source_citations`, with `[]` as the stable empty value. The existing database location constraint remains in force; a source without pagination is stored as `page=null,page_index=0`, where zero is an unknown-location sentinel and not a real page.
 
 ## Provider Resolution
 
@@ -118,7 +118,7 @@ Raw provider and validation exceptions do not cross the API boundary.
 
 ## Testing Strategy
 
-G01 fixtures provide in-memory SQLite, two users, two parsed multi-chunk materials, invalid material states, a test client, and recording/failing structured providers. G01 tests cover registry discovery and replacement, provider injection, all-batch delivery, citation filtering and deduplication, null page metadata, response citations, transaction rollback, permissions, empty scope, and all stable error paths.
+G01 fixtures provide in-memory SQLite, two users, two parsed multi-chunk materials, invalid material states, a test client, and recording/failing structured providers. G01 tests cover registry discovery and replacement, provider injection, all-batch delivery, citation filtering and deduplication, the persisted unknown-location sentinel, response citations, transaction rollback, permissions, empty scope, and all stable error paths.
 
 Each concrete generator has schema, generator, and API suites. Tests cover parameter boundaries, one and multiple materials, one and multiple batches, every-batch model calls, deterministic reduce behavior, stable IDs, limits, deduplication, retained-only citations, fabricated citations, provider failure, schema failure, coverage failure, authentication, ownership, history, detail, and independent imports. No test performs a live model or RAG network request.
 
