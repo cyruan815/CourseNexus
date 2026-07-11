@@ -1,4 +1,4 @@
-# Runtime Flows v0.1
+﻿# Runtime Flows v0.1
 
 > 本文记录 CourseNexus 的关键运行链路。它关注模块如何协作，不展开具体 API 字段；字段和响应格式见 [../api-data/index.md](../api-data/index.md)。
 
@@ -176,6 +176,42 @@ flowchart LR
 - 日期格展示摘要，不展示完整任务树。
 - 点击日期后按课程分组展示当天任务。
 - 跳转执行页必须携带 `course_id`、`plan_id`、`task_id`、`subtask_id`。
+### 5.1 S03 今日待办与日历只读查询流
+
+S03 将 S02 已保存的 `StudyPlan -> StudyTask -> StudySubTask` 任务树投影为五类只读查询：
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as todos-calendar router
+    participant SVC as todos-calendar service
+    participant Repo as todos-calendar repository
+    participant DB as StudyPlan/StudyTask/StudySubTask
+
+    FE->>API: GET /todos/today?date=YYYY-MM-DD
+    FE->>API: GET /calendar/month?month=YYYY-MM
+    FE->>API: GET /calendar/days/{date}/todos
+    FE->>API: GET /courses/{course_id}/study-calendar?month=YYYY-MM
+    FE->>API: GET /courses/{course_id}/study-calendar/days/{date}
+    API->>SVC: parse date/month + current_user
+    SVC->>Repo: readonly task row query
+    Repo->>DB: join Course + StudyPlan + StudyTask + StudySubTask
+    DB-->>Repo: filtered task rows
+    Repo-->>SVC: TodoTaskRow list
+    SVC->>SVC: derive status, sort, group, summarize
+    SVC-->>API: Pydantic read model
+    API-->>FE: success envelope
+```
+
+查询规则：
+
+- repository 只读联表查询，固定过滤 `user_id`、课程归属、课程软删除、计划软删除和目标日期或月份。
+- service 只负责日期/月解析、派生状态校验、课程分组、月历摘要和稳定排序，不执行 `add`、`delete`、`flush` 或 `commit`。
+- 首页今日待办返回一级任务和嵌套二级任务，前端默认折叠；二级任务点击进入 S04 执行页。
+- 全局月历只返回日期摘要、计数、最多 3 条一级任务摘要和 `hidden_task_count`，不返回完整二级任务树。
+- 全局当日待办按课程分组；课程月历和课程当日任务只读取路径中的 `course_id`，跨用户或已删除课程返回 `NOT_FOUND`。
+- 一级任务详情不由 S03 新增接口实现；前端使用返回的 `plan_id` 复用 `GET /api/v1/study-plans/{plan_id}`。
+- S03 不创建 `todos`、`calendar_events` 或任何日历写模型，不更新任务状态，不写打卡；S04 后续提交状态后，下一次查询自然反映最新任务状态。
 
 ## 6. 计划学习执行链路
 

@@ -7,6 +7,7 @@ from app.modules.generated_content.router import router as generated_content_rou
 from app.modules.generation.orchestrator.router import router as generation_router
 from app.modules.materials.router import router as materials_router
 from app.modules.study_plans.router import router as study_plans_router
+from app.modules.todos_calendar.router import router as todos_calendar_router
 from app.modules.users.router import router as users_router
 from app.shared.responses import success_response
 
@@ -20,6 +21,7 @@ api_router.include_router(course_qa_router)
 api_router.include_router(generated_content_router)
 api_router.include_router(generation_router)
 api_router.include_router(study_plans_router)
+api_router.include_router(todos_calendar_router)
 
 
 @api_router.get("/health", tags=["system"])

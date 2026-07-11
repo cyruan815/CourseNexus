@@ -18,6 +18,7 @@
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
 | [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
 | [study-mode/plan-lifecycle.md](study-mode/plan-lifecycle.md) | S02 学习计划生命周期：配置回填、全材料预览、保存幂等、替换、重生成和软删除。 | 2026-07-11 |
+| [study-mode/todos-calendar.md](study-mode/todos-calendar.md) | S03 今日待办与日历聚合：五个只读查询、日期摘要、课程分组和零写边界。 | 2026-07-11 |
 
 ## 相关链接
 
