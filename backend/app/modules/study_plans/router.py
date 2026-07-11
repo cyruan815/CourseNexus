@@ -40,17 +40,31 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["study_plans"])
 
 
-def get_model_provider() -> ModelProvider:
+def _model_provider_for_purpose(*, purpose: str, api_key_env_name: str) -> ModelProvider:
     settings = get_settings()
-    endpoint = settings.model_endpoint("study_plan_parser")
+    endpoint = settings.model_endpoint(purpose)
     if endpoint.api_key:
         return OpenAIModelProvider(
             api_key=endpoint.api_key,
             model=endpoint.model,
             base_url=endpoint.base_url,
-            api_key_env_name="STUDY_PLAN_PARSER_API_KEY",
+            api_key_env_name=api_key_env_name,
         )
     return MockModelProvider()
+
+
+def get_plan_parser_provider() -> ModelProvider:
+    return _model_provider_for_purpose(
+        purpose="study_plan_parser",
+        api_key_env_name="STUDY_PLAN_PARSER_API_KEY",
+    )
+
+
+def get_plan_generator_provider() -> ModelProvider:
+    return _model_provider_for_purpose(
+        purpose="study_plan_generator",
+        api_key_env_name="STUDY_PLAN_GENERATOR_API_KEY",
+    )
 
 
 def _bundle_data(bundle: StudyPlanBundle) -> dict[str, object]:
@@ -69,7 +83,7 @@ def parse_study_plan_config_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
-    model_provider: ModelProvider = Depends(get_model_provider),
+    model_provider: ModelProvider = Depends(get_plan_parser_provider),
 ) -> dict[str, object]:
     parsed = parse_study_plan_config(
         db,
@@ -89,7 +103,7 @@ def preview_study_plan_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
-    model_provider: ModelProvider = Depends(get_model_provider),
+    model_provider: ModelProvider = Depends(get_plan_generator_provider),
 ) -> dict[str, object]:
     settings = get_settings()
     preview = preview_study_plan(
@@ -110,7 +124,7 @@ def save_study_plan_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
-    model_provider: ModelProvider = Depends(get_model_provider),
+    model_provider: ModelProvider = Depends(get_plan_generator_provider),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, object]:
     settings = get_settings()
@@ -133,7 +147,7 @@ def regenerate_study_plan_preview_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
-    model_provider: ModelProvider = Depends(get_model_provider),
+    model_provider: ModelProvider = Depends(get_plan_generator_provider),
 ) -> dict[str, object]:
     settings = get_settings()
     preview = preview_study_plan_regeneration(
