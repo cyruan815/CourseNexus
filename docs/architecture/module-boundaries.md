@@ -29,6 +29,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI-compatible 调用统一集中在 OpenAI SDK provider 实现中，并读取当前业务用途的独立 endpoint 配置。
 - `generation-orchestrator`：负责课程归属与注册类型校验、用途模型注入、全材料批次交付、生成器工厂调用、真实引用过滤与ID回填，以及`AIGeneratedContent`和`SourceCitation`原子保存；不包含具体题型、卡片、导图、提纲或知识点规则。
 - `study-plans`：当前只负责单课程计划预览、保存和任务结构写入，不负责执行页、日历聚合、打卡或讲义 / 任务测试题生成。
+- `todos-calendar`：已实现 S03 五个只读聚合接口，读取学习计划任务树生成首页今日待办、全局月历、全局当日待办、课程月历和课程当日任务；不拥有写模型。
 - `study-mode S01`：已固定计划学习模式第一阶段契约和无 migration 结论；S02-S07 只允许复用 13 张核心表，不得创建待办、日历、讲义、任务测试题或导出历史独立表。
 - `frontend`：当前只承担最小集成验证工作台，不承载完整资料上传 UI、资料范围选择 UI 或课程问答 UI。
 
@@ -124,7 +125,7 @@ flowchart TB
 | `task-test-generator` | 基于测试类二级任务和关联资料生成任务测试题。 | `AIGeneratedContent(content_type=task_test)`、`SourceCitation`。 | 测试题、答案、解析、引用。 | 不等同课程自测 Quiz。 |
 | `generated-content` | 统一保存和查询 AI 生成内容、内容类型、生成状态、结构化 JSON 和引用。 | `AIGeneratedContent`、`SourceCitation`。 | 生成内容详情、历史记录、引用来源。 | 不决定具体生成算法，不更新任务完成状态。 |
 | `study-plans` | 自然语言配置回填、计划预览、保存单课程计划、生成一级任务和二级任务。 | `StudyPlan`、`StudyTask`、`StudySubTask`。 | 计划结构、任务结构。 | 不提前生成讲义、任务测试题或学习笔记。 |
-| `todos-calendar` | 首页今日待办、首页大日历、全局当日待办弹窗、课程内计划学习模式日历查询。 | 不拥有主写模型，读取 `StudyPlan`、`StudyTask`、`StudySubTask`。 | 日期摘要、课程分组、任务跳转参数。 | 不创建、编辑、删除或重新生成学习计划；不创建 `todos` 或 `calendar_events` 表。 |
+| `todos-calendar` | 首页今日待办、首页大日历、全局当日待办弹窗、课程详情页今日任务和课程月历查询。 | 不拥有主写模型，读取 `StudyPlan`、`StudyTask`、`StudySubTask`。 | 日期摘要、最多 3 条任务摘要、课程分组、二级任务数组、执行跳转 ID 和计划详情 `plan_id`。 | 不创建、编辑、删除或重新生成学习计划；不创建 `todos` 或 `calendar_events` 表；不实现 S04-S07。 |
 | `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态。 | `StudySubTask.status`、派生更新 `StudyTask.status`。 | 今日任务、任务完成结果、执行页上下文。 | 不生成计划，不管理资料。 |
 | `checkins` | 根据当日二级任务完成比例维护学习完成记录和颜色等级。 | `CheckinRecord`。 | `completion_ratio`、`color_level`。 | 不做完整统计报表，不做手动打卡。 |
 | `exports` | 将已生成讲义或任务测试题导出 PDF。 | 不拥有业务表，读取 `AIGeneratedContent` 和 `SourceCitation` 后流式返回 PDF。 | PDF 文件或下载信息。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表。 |

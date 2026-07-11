@@ -623,3 +623,11 @@ S02 已实现真实学习计划生命周期，但表结构结论不变：不新�
 - `study_tasks` 保存日期级一级任务。
 - `study_subtasks` 保存二级任务、任务类型和关联资料 ID 数组。
 - `ai_generated_contents` 只在后续 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。
+## S03 表结构结论
+
+S03 已实现今日待办与日历聚合，但表结构结论不变：不新增业务表、不新增列、不修改 baseline migration。
+
+- 首页今日待办、大日历、当日待办弹窗、课程月历和课程详情页今日任务都从 `study_plans -> study_tasks -> study_subtasks` 只读派生。
+- 查询路径依赖 `study_tasks(course_id, task_date)`、`study_tasks(plan_id, task_date, sort_order)`、`study_subtasks(task_id, sort_order)`、`study_plans(status, deleted_at)` 和 `courses(user_id, status, deleted_at)`。
+- 不创建 `todos`、`calendar_events` 或任何日历写模型。
+- 不写 `checkin_records`，打卡仍由 S05 根据 S04 完成状态派生。

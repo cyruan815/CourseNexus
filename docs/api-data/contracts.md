@@ -3,7 +3,7 @@
 ## 前后端契约基线
 
 - 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
-- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation 和 Study Plans。
+- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans 和 Todos Calendar。
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
@@ -47,11 +47,11 @@ S02-S07 的候选接口在对应任务合并前均视为未实现契约，前端
 | S02 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 基于已保存计划生成不落库的新预览。 |
 | S02 | `PUT /api/v1/study-plans/{plan_id}` | 原子替换计划配置和任务结构。 |
 | S02 | `DELETE /api/v1/study-plans/{plan_id}` | 软删除计划。 |
-| S03 | `GET /api/v1/todos/today?date=YYYY-MM-DD` | 当前用户多课程今日待办。 |
-| S03 | `GET /api/v1/calendar/month?month=YYYY-MM` | 全局月历日期摘要。 |
-| S03 | `GET /api/v1/calendar/days/{date}/todos` | 全局当日待办，按课程分组。 |
+| S03 | `GET /api/v1/todos/today?date=YYYY-MM-DD` | 当前用户多课程今日待办，返回一级任务和嵌套二级任务。 |
+| S03 | `GET /api/v1/calendar/month?month=YYYY-MM` | 全局月历日期摘要，含最多 3 条一级任务摘要和 `hidden_task_count`。 |
+| S03 | `GET /api/v1/calendar/days/{date}/todos` | 全局当日待办，按课程和一级任务分组，含二级任务。 |
 | S03 | `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM` | 单课程月历。 |
-| S03 | `GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 单课程当日任务。 |
+| S03 | `GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 单课程当日任务，作为课程详情页今日任务数据源。 |
 | S04 | `GET /api/v1/study-subtasks/{subtask_id}/execution-context` | 执行页当日上下文。 |
 | S04 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 幂等完成或取消完成。 |
 | S05 | `GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` | 个人中心打卡日期范围。 |
@@ -203,3 +203,18 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
 
 保存接口支持 `Idempotency-Key`：同键同请求返回同一 plan bundle；同键不同请求返回 `IDEMPOTENCY_CONFLICT`。替换接口在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`。S02 不新增表、不修改 migration，不在保存阶段生成讲义或任务测试题。
+## 计划学习模式 S03 今日待办与日历契约
+
+S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
+
+| 方法与路径 | 状态 | 说明 |
+| --- | --- | --- |
+| `GET /api/v1/todos/today?date=YYYY-MM-DD` | 已实现 | 首页今日待办；返回当前用户多课程一级任务和嵌套二级任务，前端默认折叠二级任务。 |
+| `GET /api/v1/calendar/month?month=YYYY-MM` | 已实现 | 全局月历；每个日期返回计数、最多 3 条 `task_summaries` 和 `hidden_task_count`。 |
+| `GET /api/v1/calendar/days/{date}/todos` | 已实现 | 大日历日期弹窗；按课程分组，每组包含一级任务和二级任务。 |
+| `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM` | 已实现 | 课程月历；只返回当前课程日期摘要，日期行 `course_count = 1`。 |
+| `GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 已实现 | 课程详情页今日任务数据源；前端传今天，不在 S03 提供日期切换。 |
+
+`TaskTodoRead` 最小字段：`task_id`、`plan_id`、`course_id`、`course_name`、`title`、`task_date`、`status`、`derived_status`、`completed_subtask_count`、`total_subtask_count`、`first_incomplete_subtask_id`、`subtasks`。`SubTaskTodoRead` 返回 `subtask_id`、`title`、`subtask_type`、`description`、`status`、`sort_order`、`execution_url`；当前 `execution_url` 可为 `null`，前端可用 `subtask_id` 拼接 S04 执行页。
+
+计划详情按钮复用 S02 `GET /api/v1/study-plans/{plan_id}`，S03 不新增计划详情接口。S03 不提供任何 POST/PATCH/PUT/DELETE 待办或日历接口，不创建 `todos` 或 `calendar_events` 写模型。
