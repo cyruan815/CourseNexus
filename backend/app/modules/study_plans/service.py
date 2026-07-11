@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import date, datetime, timezone, timedelta
 from time import perf_counter
 from uuid import uuid4
@@ -61,7 +62,8 @@ def parse_study_plan_config(
         prompt=_build_config_parse_prompt(course_name=course.name, payload=payload),
         output_schema=StudyPlanParsedConfig,
     )
-    return parsed.model_copy(update={"material_scope": payload.material_scope})
+    normalized = _normalize_relative_config(parsed, goal_text=payload.goal_text)
+    return normalized.model_copy(update={"material_scope": payload.material_scope})
 
 
 def preview_study_plan(
@@ -74,7 +76,7 @@ def preview_study_plan(
     max_tokens: int,
 ) -> StudyPlanPreview:
     started_at = perf_counter()
-    assert_course_owner(db, user_id, course_id)
+    course = assert_course_owner(db, user_id, course_id)
     batches = list(
         iter_material_context_batches(
             db,
@@ -97,6 +99,7 @@ def preview_study_plan(
             payload=payload,
             expected_material_ids=expected_material_ids,
             model_provider=model_provider,
+            course_name=course.name,
         ),
     )
     preview = StudyPlanPreview(
@@ -417,12 +420,78 @@ def _build_config_parse_prompt(*, course_name: str, payload: StudyPlanConfigPars
             "你是 CourseNexus 的学习计划配置解析器。",
             "只从用户目标中提取可编辑的学习计划字段，不创建计划，不编造无法确定的信息。",
             "无法可靠确定的字段填 null，并把字段名加入 unresolved_fields。",
+            "相对日期解析规则：当用户写“今天是 YYYY年M月D日”时，可把该日期作为当前日期。",
+            "当用户写“两天学完”且给出今天日期时，start_date 为当天，end_date 为当天 + 1 天。",
+            "当用户写“N天学完/掌握/完成”且给出今天日期时，start_date 为当天，end_date 为当天 + (N - 1) 天。",
             f"课程名称：{course_name}",
             f"用户目标：{payload.goal_text}",
             f"资料范围：{payload.material_scope.model_dump(mode='json')}",
         ]
     )
 
+
+def _normalize_relative_config(parsed: StudyPlanParsedConfig, *, goal_text: str) -> StudyPlanParsedConfig:
+    explicit_today = _extract_explicit_today(goal_text)
+    duration_days = _extract_duration_days(goal_text)
+    if explicit_today is None or duration_days is None:
+        return parsed
+
+    start_date = parsed.start_date or explicit_today
+    end_date = parsed.end_date
+    if end_date is None:
+        end_date = start_date + timedelta(days=duration_days - 1)
+
+    unresolved_fields = [
+        field_name
+        for field_name in parsed.unresolved_fields
+        if field_name not in {"start_date", "end_date"}
+    ]
+    return parsed.model_copy(
+        update={
+            "start_date": start_date,
+            "end_date": end_date,
+            "unresolved_fields": unresolved_fields,
+        }
+    )
+
+
+def _extract_explicit_today(goal_text: str) -> date | None:
+    patterns = (
+        r"今天是\s*(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日",
+        r"今天\s*(?:是|为|[:：])?\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, goal_text)
+        if match:
+            year, month, day = (int(part) for part in match.groups())
+            return date(year, month, day)
+    return None
+
+
+def _extract_duration_days(goal_text: str) -> int | None:
+    match = re.search(r"([一二两三四五六七八九十\d]+)\s*天", goal_text)
+    if not match:
+        return None
+    day_count = _parse_day_count(match.group(1))
+    return day_count if day_count and day_count > 0 else None
+
+
+def _parse_day_count(raw_value: str) -> int | None:
+    if raw_value.isdigit():
+        return int(raw_value)
+    digits = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    if raw_value in digits:
+        return digits[raw_value]
+    if raw_value == "十":
+        return 10
+    if "十" in raw_value:
+        tens_raw, ones_raw = raw_value.split("十", 1)
+        tens = 1 if tens_raw == "" else digits.get(tens_raw)
+        ones = 0 if ones_raw == "" else digits.get(ones_raw)
+        if tens is None or ones is None:
+            return None
+        return tens * 10 + ones
+    return None
 
 def _build_task_previews(start_date: date, end_date: date, chunks: list[ContextChunk]) -> list[StudyTaskPreview]:
     days = _date_range(start_date, end_date)
