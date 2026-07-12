@@ -60,3 +60,10 @@ def test_material_parse_quality_is_required_with_unknown_default() -> None:
 
     assert parse_quality.nullable is False
     assert str(parse_quality.server_default.arg) == "unknown"
+
+
+def test_source_citation_can_keep_snapshot_after_material_is_deleted() -> None:
+    table = Base.metadata.tables["source_citations"]
+
+    assert table.columns["material_id"].nullable is True
+    assert table.columns["chunk_id"].nullable is True

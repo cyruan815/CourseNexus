@@ -301,7 +301,7 @@ erDiagram
 | `sort_order` | int | 否 | 展示排序 | 从 1 开始，可为空 |
 | `created_at` | datetime | 是 | 创建时间 | 系统生成 |
 | `updated_at` | datetime | 是 | 更新时间 | 系统更新 |
-| `deleted_at` | datetime | 否 | 删除时间 | 软删除 |
+| `deleted_at` | datetime | 否 | 删除时间 | 兼容字段；用户主动删除目录时物理删除记录 |
 
 规则：
 
@@ -331,7 +331,7 @@ erDiagram
 | `page_count` | int | 否 | 页数或页序号数量 | 可为空 |
 | `created_at` | datetime | 是 | 上传时间 | 系统生成 |
 | `updated_at` | datetime | 是 | 更新时间 | 系统更新 |
-| `deleted_at` | datetime | 否 | 删除时间 | 软删除 |
+| `deleted_at` | datetime | 否 | 删除时间 | 兼容字段；用户主动删除资料时物理删除记录 |
 
 规则：
 
@@ -410,8 +410,8 @@ erDiagram
 | `id` | string | 是 | 引用 ID | 主键 |
 | `message_id` | string | 否 | 关联消息 | 与生成内容至少一种关联 |
 | `generated_content_id` | string | 否 | 关联 AI 生成内容 | 与消息至少一种关联 |
-| `material_id` | string | 是 | 来源资料 | 外键 CourseMaterial |
-| `chunk_id` | string | 否 | 来源切片 | 外键 MaterialChunk |
+| `material_id` | string | 创建时是 | 来源资料 | 外键 CourseMaterial；资料物理删除后置空 |
+| `chunk_id` | string | 否 | 来源切片 | 外键 MaterialChunk；资料物理删除后置空 |
 | `material_name` | string | 是 | 资料名快照 | 防资料改名后展示丢失 |
 | `page` | string/int | 否 | 真实页码 | 可为空 |
 | `page_index` | int | 否 | 页序号 | 可为空 |
@@ -424,7 +424,7 @@ erDiagram
 1. 引用来源必须展示资料名、页码/页序号、命中文本片段。
 2. `material_name` 使用快照字段，避免资料改名后历史引用展示异常。
 3. `page` 和 `page_index` 至少应有一个可用于定位；无法定位时前端展示“页码未知”。
-4. 不允许生成没有 `material_id` 的伪引用。
+4. 不允许创建没有 `material_id` 的伪引用；资料物理删除后，历史引用允许仅保留快照字段。
 
 #### 13.3.8 AIGeneratedContent AI 生成内容
 
@@ -675,8 +675,8 @@ Mindmap 建议保存在 `AIGeneratedContent.content_json` 中。
 | 操作 | 处理规则 |
 |---|---|
 | 删除课程 | 课程软删除；资料、对话、生成内容、计划和任务对用户隐藏；是否物理删除文件由后端策略决定 |
-| 删除资料目录 | 删除目录及其全部资料；当前仅支持一级文件夹 |
-| 删除资料 | 资料软删除；对应切片从检索范围移除；历史引用保留资料名快照，但可提示资料已删除 |
+| 删除资料目录 | 不可恢复地物理删除目录及其全部资料、切片、RAG 向量和原始文件；当前仅支持一级文件夹 |
+| 删除资料 | 不可恢复地物理删除资料记录、切片、RAG 向量和原始文件；问答和生成内容保留，历史引用解除资料/切片外键并保留快照 |
 | 重新解析资料 | 新切片替换旧切片；历史引用仍指向原 chunk 时需能处理定位失败 |
 | 删除学习计划 | 计划软删除；其一级任务和二级任务从本课程计划学习模式日历、首页大日历、今日待办隐藏 |
 | 完成二级任务 | 更新二级任务状态；自动计算一级任务状态；更新今日待办和学习完成记录 |

@@ -157,7 +157,7 @@ sequenceDiagram
 - 问答必须调用 `retrieve_relevant_context(query, material_scope)`；指定材料生成必须调用 `iter_material_context_batches(material_scope)`，不能用一次 Top-K 检索代替全部材料。
 - 生成模块不能直接写其他模块状态。
 - 生成结果必须结构化保存，不能只返回临时文本。
-- 引用必须落到 `SourceCitation`，不能伪造没有资料来源的引用。
+- 新引用必须落到带真实资料来源的 `SourceCitation`；资料被用户永久删除后只清空外键，保留历史引用快照。
 - 生成失败必须保存或返回 `generation_status = failed` 和稳定错误码。
 
 ## 6. 依赖方向
@@ -166,6 +166,7 @@ sequenceDiagram
 
 - `users -> courses -> materials -> material-context -> generation-orchestrator -> generator -> generated-content`
 - `materials -> integrations/docling + integrations/rag(llama-index/chroma)`
+- `materials -> course-qa.citations.detach_material_references`（仅用于资料物理删除前解除历史引用外键，不删除问答或生成内容）
 - `course-qa -> material-context.retrieve_relevant_context`
 - `generation-orchestrator / study-plans -> material-context.iter_material_context_batches`
 - `courses -> study-plans -> learning-execution -> checkins`
@@ -190,7 +191,7 @@ sequenceDiagram
 - 今日待办和日历是查询投影，不使用 `todos` 或 `calendar_events` 写模型。
 - 今日讲义和任务测试题统一落到 `AIGeneratedContent`，不使用 `handouts` 或 `task_tests` 独立表。
 - PDF 导出是请求派生文件，不使用 `export_records` 导出历史表。
-- `SourceCitation` 必须关联真实资料，保留资料名快照、页码或页序号、命中文本片段。
+- `SourceCitation` 创建时必须关联真实资料，并保留资料名、页码或页序号、命中文本片段；来源资料永久删除后允许 `material_id`、`chunk_id` 为空。
 - 软删除数据默认不进入前端列表、检索上下文、日历聚合或今日待办。
 
 ## 8. 禁止越界事项

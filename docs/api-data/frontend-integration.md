@@ -255,7 +255,7 @@
 | `parsing` | 正在同步解析。 |
 | `parsed` | 已解析并写入 `MaterialChunk`。 |
 | `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
-| `deleted` | 已软删除，不进入列表和上下文。 |
+| `deleted` | 仅用于删除接口成功响应的最终快照；数据库中的资料记录已经物理删除。 |
 
 `parse_quality` 当前可能值：
 
@@ -274,7 +274,7 @@
 - `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
 - `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
 - `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
-- `DELETE /api/v1/material-folders/{folder_id}`：软删除文件夹及其中全部资料，并清理这些资料的 RAG 向量。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。后端在 RAG 或数据库提交失败时回滚 SQLite，并用 SQLite chunk 快照补偿恢复已清理向量；补偿也失败时返回 `502 INDEXING_FAILED`，`details.rebuild_required = true`。
+- `DELETE /api/v1/material-folders/{folder_id}`：不可恢复地物理删除文件夹、其中全部资料记录、SQLite chunk、RAG 向量和原始上传文件。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。历史问答和生成内容保留，其引用退化为不带 `material_id` / `chunk_id` 的资料名、页码和命中文本快照。
 - `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
 
 文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。
@@ -283,7 +283,7 @@
 
 `GET /api/v1/courses/{course_id}/materials`
 
-要求：Bearer token。只能列出当前用户拥有的课程资料；软删除资料不返回。
+要求：Bearer token。只能列出当前用户拥有且仍存在的课程资料；已物理删除资料不返回。
 
 响应 `data`：`MaterialRead[]`。
 
@@ -359,9 +359,9 @@
 
 `DELETE /api/v1/materials/{material_id}`
 
-要求：Bearer token。当前实现为软删除。
+要求：Bearer token。当前实现为不可恢复的物理删除。
 
-响应 `data`：`MaterialRead`，其中 `parse_status = "deleted"` 且 `deleted_at` 非空。
+响应 `data`：删除前资料的最终 `MaterialRead` 快照，其中 `parse_status = "deleted"` 且 `deleted_at` 非空；响应返回后对应数据库记录、chunk、RAG 向量和原始上传文件均已删除。
 
 ### 3.16 资料解析 / 解析重试
 
@@ -482,6 +482,8 @@
 
 - `grounded`：当前资料范围存在检索命中，回答基于检索到的真实 `MaterialChunk`。
 - `no_source`：当前资料范围没有可用 parsed chunk，或存在 parsed chunk 但本次问题没有相关检索命中；`source_citations = []`，前端不得展示伪引用。
+
+新回答的引用必须包含真实 `material_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这两个字段返回 `null`。
 
 追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
 

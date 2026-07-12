@@ -50,6 +50,30 @@ def test_local_file_storage_saves_text_file_under_scoped_directory(tmp_path) -> 
     assert (tmp_path / stored_file.relative_path).read_text(encoding="utf-8") == "# Chapter 1\n"
 
 
+def test_staged_material_deletion_can_be_restored_or_finalized(tmp_path: Path) -> None:
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+    stored = storage.save_file(
+        user_id="usr_1",
+        course_id="crs_1",
+        material_id="mat_1",
+        filename="notes.txt",
+        stream=BytesIO(b"notes"),
+    )
+    source_path = tmp_path / stored.relative_path
+
+    staged = storage.stage_material_deletion(user_id="usr_1", course_id="crs_1", material_id="mat_1")
+    assert not source_path.exists()
+    staged.restore()
+    assert source_path.read_bytes() == b"notes"
+
+    staged = storage.stage_material_deletion(user_id="usr_1", course_id="crs_1", material_id="mat_1")
+    staged.finalize()
+
+    assert not source_path.exists()
+    assert not (tmp_path / "usr_1" / "crs_1" / "mat_1").exists()
+    assert not (tmp_path / ".trash").exists()
+
+
 def test_save_file_logs_success_without_file_content(tmp_path: Path, caplog) -> None:
     logger = capture_course_logs(caplog)
     storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)

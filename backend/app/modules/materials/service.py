@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
-from app.integrations.file_storage.base import FileStorage, material_type_for_filename
+from app.integrations.file_storage.base import FileStorage, StagedFileDeletion, material_type_for_filename
 from app.integrations.parsers.base import ParseDiagnostics, Parser
 from app.integrations.rag.base import RagChunk, RagIndex
+from app.modules.course_qa.citations import detach_material_references
 from app.modules.courses.service import assert_course_owner
 from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
 from app.modules.materials.repository import (
@@ -189,52 +190,17 @@ def delete_material_folder(
     user_id: str,
     folder_id: str,
     rag_index: RagIndex,
+    storage: FileStorage,
 ) -> MaterialFolder:
     folder = get_material_folder(db, user_id, folder_id)
     materials = list_materials_for_folder(db, user_id, folder_id)
-    active_materials = [
-        material
-        for material in materials
-        if material.deleted_at is None and material.parse_status != "deleted"
-    ]
-    material_ids = [material.id for material in materials]
-    parsed_materials = {
-        material.id: material
-        for material in active_materials
-        if material.parse_status == "parsed"
-    }
-    chunks = list_material_chunks_for_material_ids(db, list(parsed_materials))
-    chunks_by_material: dict[str, list[MaterialChunk]] = {material_id: [] for material_id in parsed_materials}
-    for chunk in chunks:
-        chunks_by_material[chunk.material_id].append(chunk)
-    rag_snapshot = [
-        rag_chunk
-        for material_id, material in parsed_materials.items()
-        for rag_chunk in _rag_chunks_for_material(
-            material,
-            chunks_by_material[material_id],
-        )
-    ]
-
-    now = datetime.now(timezone.utc)
-    for material in active_materials:
-        material.parse_status = "deleted"
-        material.deleted_at = now
-        material.updated_at = now
-        db.add(material)
-    folder.deleted_at = now
-    folder.updated_at = now
-    db.add(folder)
-
-    try:
-        rag_index.delete_materials(material_ids)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        _restore_rag_snapshot(rag_index, rag_snapshot, operation_error=exc)
-        raise
-
-    db.refresh(folder)
+    _permanently_delete_materials(
+        db,
+        materials=materials,
+        rag_index=rag_index,
+        storage=storage,
+        folder=folder,
+    )
     return folder
 
 
@@ -277,14 +243,16 @@ def delete_material(
     material_id: str,
     *,
     rag_index: RagIndex,
+    storage: FileStorage,
 ) -> CourseMaterial:
     material = get_material_detail(db, user_id, material_id)
-    rag_index.delete_material(material.id)
-    now = datetime.now(timezone.utc)
-    material.parse_status = "deleted"
-    material.deleted_at = now
-    material.updated_at = now
-    return save_material(db, material)
+    _permanently_delete_materials(
+        db,
+        materials=[material],
+        rag_index=rag_index,
+        storage=storage,
+    )
+    return material
 
 
 def parse_material(
@@ -441,6 +409,125 @@ def _try_delete_material_vectors(rag_index: RagIndex, material_id: str) -> None:
         rag_index.delete_material(material_id)
     except Exception:
         pass
+
+
+def _permanently_delete_materials(
+    db: Session,
+    *,
+    materials: list[CourseMaterial],
+    rag_index: RagIndex,
+    storage: FileStorage,
+    folder: MaterialFolder | None = None,
+) -> None:
+    material_ids = [material.id for material in materials]
+    chunks = list_material_chunks_for_material_ids(db, material_ids)
+    parsed_materials = {material.id: material for material in materials if material.parse_status == "parsed"}
+    chunks_by_material: dict[str, list[MaterialChunk]] = {material_id: [] for material_id in parsed_materials}
+    for chunk in chunks:
+        if chunk.material_id in chunks_by_material:
+            chunks_by_material[chunk.material_id].append(chunk)
+    rag_snapshot = [
+        rag_chunk
+        for material_id, material in parsed_materials.items()
+        for rag_chunk in _rag_chunks_for_material(material, chunks_by_material[material_id])
+    ]
+    staged_files = _stage_material_file_deletions(storage, materials)
+    now = datetime.now(timezone.utc)
+
+    try:
+        detach_material_references(db, material_ids)
+        for chunk in chunks:
+            db.delete(chunk)
+        for material in materials:
+            material.parse_status = "deleted"
+            material.deleted_at = now
+            material.updated_at = now
+            db.delete(material)
+        if folder is not None:
+            folder.deleted_at = now
+            folder.updated_at = now
+            db.delete(folder)
+
+        rag_index.delete_materials(material_ids)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        _compensate_failed_permanent_deletion(
+            rag_index=rag_index,
+            rag_snapshot=rag_snapshot,
+            staged_files=staged_files,
+            operation_error=exc,
+        )
+        raise
+
+    _finalize_material_file_deletions(staged_files)
+
+
+def _stage_material_file_deletions(
+    storage: FileStorage,
+    materials: list[CourseMaterial],
+) -> list[StagedFileDeletion]:
+    staged_files: list[StagedFileDeletion] = []
+    try:
+        for material in materials:
+            if material.source_type != "file":
+                continue
+            staged_files.append(
+                storage.stage_material_deletion(
+                    user_id=material.user_id,
+                    course_id=material.course_id,
+                    material_id=material.id,
+                )
+            )
+    except Exception:
+        for staged_file in reversed(staged_files):
+            staged_file.restore()
+        raise
+    return staged_files
+
+
+def _compensate_failed_permanent_deletion(
+    *,
+    rag_index: RagIndex,
+    rag_snapshot: list[RagChunk],
+    staged_files: list[StagedFileDeletion],
+    operation_error: Exception,
+) -> None:
+    compensation_errors: list[Exception] = []
+    try:
+        _restore_rag_snapshot(rag_index, rag_snapshot, operation_error=operation_error)
+    except Exception as exc:
+        compensation_errors.append(exc)
+    for staged_file in reversed(staged_files):
+        try:
+            staged_file.restore()
+        except Exception as exc:
+            compensation_errors.append(exc)
+
+    if compensation_errors:
+        raise CourseNexusError(
+            code="DELETE_COMPENSATION_FAILED",
+            message="资料删除失败且补偿未完成，请检查文件和重建资料索引",
+            status_code=500,
+            details={"rebuild_required": True, "file_check_required": True},
+        ) from compensation_errors[0]
+
+
+def _finalize_material_file_deletions(staged_files: list[StagedFileDeletion]) -> None:
+    try:
+        for staged_file in staged_files:
+            staged_file.finalize()
+    except Exception as exc:
+        index_logger.error(
+            "资料数据库已删除但暂存文件清理失败 | code=FILE_DELETE_FAILED",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        raise CourseNexusError(
+            code="FILE_DELETE_FAILED",
+            message="资料记录已删除，但文件清理失败",
+            status_code=500,
+            details={"cleanup_required": True},
+        ) from exc
 
 
 def _restore_rag_snapshot(

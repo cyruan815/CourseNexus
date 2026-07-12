@@ -260,7 +260,7 @@ function QaWorkspace({
               <Stack className="course-detail-citations" gap="xs">
                 <Text fw={700} size="sm">引用来源</Text>
                 {answer.source_citations.map((citation) => (
-                  <Text c="dimmed" key={`${citation.material_id}-${citation.chunk_id ?? citation.hit_text}`} size="sm">
+                  <Text c="dimmed" key={`${citation.material_id ?? citation.material_name}-${citation.chunk_id ?? citation.hit_text}`} size="sm">
                     {formatCitation(citation)}
                   </Text>
                 ))}

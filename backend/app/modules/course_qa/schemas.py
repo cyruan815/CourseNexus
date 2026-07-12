@@ -17,7 +17,7 @@ class CourseQuestionCreate(BaseModel):
 class SourceCitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    material_id: str
+    material_id: str | None
     chunk_id: str | None
     material_name: str
     page: str | None

@@ -17,10 +17,12 @@ from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
 import app.modules.materials.service as materials_service
+from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
+from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate, MaterialUpdate
-from app.modules.materials.models import MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
 from app.modules.materials.service import (
     create_material_folder,
     create_link_material,
@@ -218,7 +220,7 @@ def test_list_and_detail_are_scoped_to_user(db: Session, tmp_path) -> None:
     assert exc_info.value.code == "NOT_FOUND"
 
 
-def test_delete_material_soft_deletes_and_hides_from_list(db: Session, tmp_path) -> None:
+def test_delete_material_permanently_removes_database_row_and_file(db: Session, tmp_path) -> None:
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     material = upload_file_material(
@@ -231,10 +233,19 @@ def test_delete_material_soft_deletes_and_hides_from_list(db: Session, tmp_path)
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
 
-    deleted = delete_material(db, user.id, material.id, rag_index=FakeRagIndex())
+    source_path = tmp_path / material.file_url
+    deleted = delete_material(
+        db,
+        user.id,
+        material.id,
+        rag_index=FakeRagIndex(),
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
 
     assert deleted.parse_status == "deleted"
     assert deleted.deleted_at is not None
+    assert db.get(CourseMaterial, material.id) is None
+    assert not source_path.exists()
     assert list_course_materials(db, user.id, course.id) == []
 
 
@@ -295,28 +306,56 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
 
     assert moved.folder_id == folder.id
     assert rag_index.records["chunk-1"].folder_id == folder.id
-    db.add(
-        MaterialChunk(
-            id="chunk-1",
-            material_id=material.id,
-            course_id=course.id,
-            chunk_index=0,
-            content_text="matrix notes",
-            embedding_id="chunk-1",
-        )
+    chunk = MaterialChunk(
+        id="chunk-1",
+        material_id=material.id,
+        course_id=course.id,
+        chunk_index=0,
+        content_text="matrix notes",
+        embedding_id="chunk-1",
     )
+    generated_content = AIGeneratedContent(
+        id="gen-1",
+        user_id=user.id,
+        course_id=course.id,
+        content_type="note",
+        title="Matrix summary",
+        generation_status="success",
+    )
+    citation = SourceCitation(
+        id="cit-1",
+        generated_content_id=generated_content.id,
+        material_id=material.id,
+        chunk_id=chunk.id,
+        material_name=material.name,
+        page="1",
+        hit_text="matrix notes",
+    )
+    db.add_all([chunk, generated_content, citation])
     db.commit()
 
-    deleted_folder = delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+    source_path = tmp_path / material.file_url
+    deleted_folder = delete_material_folder(
+        db,
+        user_id=user.id,
+        folder_id=folder.id,
+        rag_index=rag_index,
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
 
     assert deleted_folder.deleted_at is not None
-    db.refresh(material)
-    assert material.folder_id == folder.id
-    assert material.parse_status == "deleted"
-    assert material.deleted_at is not None
-    db.refresh(link_material)
-    assert link_material.parse_status == "deleted"
-    assert link_material.deleted_at is not None
+    assert db.get(MaterialFolder, folder.id) is None
+    assert db.get(CourseMaterial, material.id) is None
+    assert db.get(CourseMaterial, link_material.id) is None
+    assert db.get(MaterialChunk, "chunk-1") is None
+    preserved_citation = db.get(SourceCitation, citation.id)
+    assert db.get(AIGeneratedContent, generated_content.id) is not None
+    assert preserved_citation is not None
+    assert preserved_citation.material_id is None
+    assert preserved_citation.chunk_id is None
+    assert preserved_citation.material_name == "notes.txt"
+    assert preserved_citation.hit_text == "matrix notes"
+    assert not source_path.exists()
     assert list_course_materials(db, user.id, course.id) == []
     assert rag_index.records == {}
 
@@ -374,12 +413,19 @@ def test_delete_folder_rag_failure_rolls_back_database_and_restores_vectors(db: 
     )
 
     with pytest.raises(CourseNexusError) as exc_info:
-        delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+        delete_material_folder(
+            db,
+            user_id=user.id,
+            folder_id=folder.id,
+            rag_index=rag_index,
+            storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+        )
 
     assert exc_info.value.code == "INDEXING_FAILED"
     assert get_material_detail(db, user.id, material.id).parse_status == "parsed"
     assert get_material_folder(db, user.id, folder.id).deleted_at is None
     assert set(rag_index.records) == {chunk.id}
+    assert (tmp_path / material.file_url).exists()
 
 
 def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
@@ -436,8 +482,15 @@ def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
     monkeypatch.setattr(db, "commit", lambda: (_ for _ in ()).throw(RuntimeError("commit failed")))
 
     with pytest.raises(RuntimeError, match="commit failed"):
-        delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+        delete_material_folder(
+            db,
+            user_id=user.id,
+            folder_id=folder.id,
+            rag_index=rag_index,
+            storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+        )
 
     assert get_material_detail(db, user.id, material.id).parse_status == "parsed"
     assert get_material_folder(db, user.id, folder.id).deleted_at is None
     assert set(rag_index.records) == {chunk.id}
+    assert (tmp_path / material.file_url).exists()

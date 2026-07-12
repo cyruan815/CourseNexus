@@ -110,8 +110,15 @@ def delete_material_folder_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     rag_index: RagIndex = Depends(get_rag_index),
+    storage: FileStorage = Depends(get_material_storage),
 ) -> dict[str, object]:
-    folder = delete_material_folder(db, user_id=current_user.id, folder_id=folder_id, rag_index=rag_index)
+    folder = delete_material_folder(
+        db,
+        user_id=current_user.id,
+        folder_id=folder_id,
+        rag_index=rag_index,
+        storage=storage,
+    )
     return success_response(_folder_data(folder), request_id=get_request_id(request))
 
 
@@ -211,8 +218,9 @@ def delete_material_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     rag_index: RagIndex = Depends(get_rag_index),
+    storage: FileStorage = Depends(get_material_storage),
 ) -> dict[str, object]:
-    material = delete_material(db, current_user.id, material_id, rag_index=rag_index)
+    material = delete_material(db, current_user.id, material_id, rag_index=rag_index, storage=storage)
     return success_response(_material_data(material), request_id=get_request_id(request))
 
 

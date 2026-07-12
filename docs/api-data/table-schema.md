@@ -12,7 +12,7 @@
 - 表名使用 `snake_case` 复数形式；API 字段和 Pydantic schema 继续使用 `snake_case`。
 - ID 使用后端生成的不透明字符串，建议 UUID 或 ULID，不使用自增 ID 暴露业务含义。
 - `created_at`、`updated_at`、`deleted_at` 使用 ISO 8601 datetime 语义；数据库层可用 timezone-aware datetime。
-- 主要业务表使用软删除；默认查询必须过滤 `deleted_at is null` 或对应删除状态。
+- 主要业务表默认使用软删除；用户主动删除资料或资料文件夹是例外，执行不可恢复的物理删除。
 - `user_id` 是权限隔离的核心字段；即使可以经由课程间接追溯到用户，常用业务表也保留 `user_id` 冗余以便过滤和防止越权。
 - 结构化 AI 内容 v0.1 优先写入 `ai_generated_contents.content_json`，暂不强制拆 `quiz`、`flashcard`、`mindmap` 独立表。
 
@@ -54,7 +54,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | --- | --- | --- | --- | --- |
 | `User` | `users` | 已建表 | `users` | 还需实现注册、登录、密码哈希、当前用户识别和权限依赖。 |
 | `Course` | `courses` | 已建表 | `courses` | 还需实现课程 CRUD、归属校验和软删除隐藏规则。 |
-| `MaterialFolder` | `material_folders` | 已建表并已接入 API | `materials` | 已实现一级目录创建、列表、重命名、排序、级联软删除资料和资料移动。 |
+| `MaterialFolder` | `material_folders` | 已建表并已接入 API | `materials` | 已实现一级目录创建、列表、重命名、排序、级联物理删除资料和资料移动。 |
 | `CourseMaterial` | `course_materials` | 已建表 | `materials` | 还需实现上传、链接保存、解析状态流转、重试和资料预览。 |
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
@@ -183,8 +183,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - v0.1 只支持一级目录，不设置 `parent_id`。
 - 目录必须归属于一门课程，且课程必须属于当前用户。
-- 删除目录时，目录和其中未删除资料在同一数据库事务中写入相同删除时间；资料的 `parse_status` 同步变为 `deleted`，`folder_id` 保留以支持历史审计。
-- `material_chunks` 和原始上传文件不随软删除物理移除；RAG 派生向量同步清理，失败时数据库回滚并从 SQLite chunk 补偿恢复向量。
+- 删除目录时物理删除目录、其中全部 `course_materials` 和 `material_chunks`；RAG 向量及原始上传目录同步清理，不提供恢复。
+- 删除前先把 `source_citations.material_id`、`chunk_id` 置空，保留问答和生成内容中的 `material_name`、页码及 `hit_text` 快照。
+- 原始文件先移动到同盘暂存目录；RAG 或数据库失败时回滚并恢复文件与向量，数据库成功后再清空暂存文件。
 - 目录只用于资料归类和列表浏览，不属于 Agent `MaterialScope`；资料范围只能使用具体 `material_ids`。
 
 ## course_materials
@@ -214,10 +215,10 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - `source_type = file` 时 `file_url` 必填；`source_type = url` 时 `source_url` 必填。
-- 只有 `parse_status = parsed` 且未软删除的资料可进入检索、问答、生成和计划上下文。
+- 只有 `parse_status = parsed` 且仍存在的资料可进入检索、问答、生成和计划上下文。
 - `parse_status = parsed` 可与 `parse_quality = partial` 同时存在：资料有可消费 chunk，但不能据此声称完整覆盖原文档。
 - 历史已解析数据和没有诊断能力的 parser 使用 `parse_quality = unknown`，不得自动回填为 `complete`。
-- 删除资料写入 `deleted_at` 并将 `parse_status` 置为 `deleted`；历史引用继续通过 `source_citations.material_name` 展示快照。
+- 删除资料物理删除数据库记录、chunk、RAG 向量和原始文件；删除接口响应中的 `deleted_at`、`parse_status = deleted` 只是最终响应快照。
 
 `parse_diagnostics_json` 契约：
 
@@ -314,7 +315,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `id` | string | 否 | 后端生成 | PK | 引用 ID。 |
 | `message_id` | string | 是 | null | FK -> `messages.id`, INDEX | 关联消息。 |
 | `generated_content_id` | string | 是 | null | FK -> `ai_generated_contents.id`, INDEX | 关联 AI 生成内容。 |
-| `material_id` | string | 否 | 无 | FK -> `course_materials.id`, INDEX | 来源资料。 |
+| `material_id` | string | 是 | null | FK -> `course_materials.id`, INDEX | 来源资料；资料物理删除后置空。 |
 | `chunk_id` | string | 是 | null | FK -> `material_chunks.id`, INDEX | 来源切片。 |
 | `material_name` | string | 否 | 无 |  | 资料名快照。 |
 | `page` | string | 是 | null |  | 真实页码。 |
@@ -326,8 +327,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - `message_id` 与 `generated_content_id` 至少一个非空。
-- 不允许生成没有 `material_id` 的伪引用。
-- `material_name` 是快照字段，资料改名或删除后仍用于历史展示。
+- 创建新引用时必须有真实 `material_id`，不允许生成伪引用；仅资料物理删除后允许历史引用的 `material_id` 变为 null。
+- `material_name`、页码和 `hit_text` 是快照字段，资料删除后仍用于历史展示；`chunk_id` 同时置空。
 - 数据库约束保留`page`和`page_index`至少一个非空。无分页Text/Markdown引用兼容保存`page=null,page_index=0`；0是未知位置哨兵，前端展示“页码未知”，不得解释为真实第0页。
 - 生成内容引用的`sort_order`从1连续递增；历史兼容数据允许为null，读取时使用`ASC NULLS LAST`和引用ID保证SQLite/PostgreSQL顺序一致。
 

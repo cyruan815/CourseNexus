@@ -163,7 +163,7 @@ sequenceDiagram
 - chunk id 必须对同一轮解析稳定；重试解析先按 `material_id` 删除旧向量，再幂等 upsert。
 - 只有 SQLite chunk 和 Chroma 索引都成功后才写 `parse_status = parsed`。
 - 索引失败写 `parse_status = parse_failed` 和稳定错误 `INDEXING_FAILED`；清理本轮部分向量后允许重试。
-- 删除单份资料时同时软删除业务记录并按 `material_id` 删除 Chroma records；删除文件夹时批量软删除其中资料，并按 material-id 集合一次清理派生向量。
+- 删除单份资料时物理删除业务记录、chunk、原始文件并按 `material_id` 删除 Chroma records；删除文件夹时对其中全部资料执行同一清理。历史问答和生成内容保留，引用只保留去关联的快照字段。
 - 用户原始文件名只作为 `CourseMaterial.name` 展示；本地存储路径使用 ASCII `source.<ext>`。Docling adapter 通过 ASCII `DocumentStream` 读取文件内容，避免 Windows 非 ASCII 路径触发底层 PDF backend 解析失败。
 
 当前 `.txt` / `.md` parser 保留为快速路径和测试替身；`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg` 进入 Docling adapter。图片 OCR 已纳入路由和基础错误映射，但 OCR 质量、复杂版面和跨页结构回归夹具后置。
@@ -309,7 +309,7 @@ MATERIAL_BATCH_MAX_TOKENS=12000
 | 不支持的文件或 Docling 解析失败 | `parse_status = parse_failed`，记录 `UNSUPPORTED_FILE_TYPE` 或 `PARSE_FAILED`。 |
 | Embedding endpoint 调用失败 | 清理本轮部分向量，记录 `INDEXING_FAILED`，资料不可进入问答。 |
 | Chroma 目录损坏或记录缺失 | 返回 `RETRIEVAL_FAILED`；提供按 SQLite 全量重建索引命令。 |
-| 文件夹级联删除时 RAG 或 SQLite 提交失败 | SQLite 回滚；用删除前的 SQLite chunk 快照重新索引已解析资料。补偿失败返回 `INDEXING_FAILED` 和 `rebuild_required = true`。 |
+| 资料或文件夹物理删除时 RAG 或 SQLite 提交失败 | SQLite 回滚；暂存文件移回原路径，并用删除前的 SQLite chunk 快照重新索引已解析资料。补偿失败返回 `DELETE_COMPENSATION_FAILED`。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
 | 问答无命中 | 返回 `answer_type = no_source`，不调用或不采信无依据回答。 |
 | 指定材料生成中单个 batch 失败 | 整次生成标记失败，保留可重试状态，不输出“已覆盖全部材料”的部分结果。 |

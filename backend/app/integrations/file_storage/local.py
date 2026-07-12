@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+import shutil
 from time import perf_counter
 from typing import BinaryIO
+from uuid import uuid4
 import zipfile
 
 from app.core.errors import CourseNexusError
@@ -24,6 +27,44 @@ RESERVED_WINDOWS_NAMES = {
 }
 CHUNK_SIZE_BYTES = 1024 * 1024
 logger = get_logger("materials.upload")
+
+
+@dataclass
+class _LocalStagedFileDeletion:
+    original_path: Path | None
+    staged_path: Path | None
+    storage_root: Path
+    trash_root: Path
+
+    def finalize(self) -> None:
+        if self.staged_path is not None and self.staged_path.exists():
+            shutil.rmtree(self.staged_path)
+        self._cleanup_original_parents()
+        self._cleanup_trash_root()
+
+    def restore(self) -> None:
+        if self.original_path is not None and self.staged_path is not None and self.staged_path.exists():
+            self.original_path.parent.mkdir(parents=True, exist_ok=True)
+            self.staged_path.replace(self.original_path)
+        self._cleanup_trash_root()
+
+    def _cleanup_trash_root(self) -> None:
+        if self.trash_root.exists():
+            try:
+                self.trash_root.rmdir()
+            except OSError:
+                pass
+
+    def _cleanup_original_parents(self) -> None:
+        if self.original_path is None:
+            return
+        current = self.original_path.parent
+        while current != self.storage_root and current.exists():
+            try:
+                current.rmdir()
+            except OSError:
+                break
+            current = current.parent
 
 
 class LocalFileStorage:
@@ -118,6 +159,46 @@ class LocalFileStorage:
             (perf_counter() - started_at) * 1000,
         )
         return stored_file
+
+    def stage_material_deletion(
+        self,
+        *,
+        user_id: str,
+        course_id: str,
+        material_id: str,
+    ) -> _LocalStagedFileDeletion:
+        target_dir = self._material_directory(user_id=user_id, course_id=course_id, material_id=material_id)
+        trash_root = self.root_path.resolve() / ".trash"
+        if not target_dir.exists():
+            return _LocalStagedFileDeletion(
+                original_path=None,
+                staged_path=None,
+                storage_root=self.root_path.resolve(),
+                trash_root=trash_root,
+            )
+
+        trash_root.mkdir(parents=True, exist_ok=True)
+        staged_path = trash_root / uuid4().hex
+        try:
+            target_dir.replace(staged_path)
+        except Exception as exc:
+            raise CourseNexusError(code="FILE_DELETE_FAILED", message="资料文件删除失败", status_code=500) from exc
+        return _LocalStagedFileDeletion(
+            original_path=target_dir,
+            staged_path=staged_path,
+            storage_root=self.root_path.resolve(),
+            trash_root=trash_root,
+        )
+
+    def _material_directory(self, *, user_id: str, course_id: str, material_id: str) -> Path:
+        parts = (user_id, course_id, material_id)
+        if any(not part or Path(part).name != part for part in parts):
+            raise CourseNexusError(code="FILE_DELETE_FAILED", message="资料文件路径不合法", status_code=500)
+        root = self.root_path.resolve()
+        target = (root / user_id / course_id / material_id).resolve()
+        if not target.is_relative_to(root):
+            raise CourseNexusError(code="FILE_DELETE_FAILED", message="资料文件路径不合法", status_code=500)
+        return target
 
     def _validate_filename(self, filename: str) -> str:
         safe_filename = filename.strip()

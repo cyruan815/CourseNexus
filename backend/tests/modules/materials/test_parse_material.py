@@ -347,7 +347,13 @@ def test_reparse_material_deletes_old_vectors_before_reindex(db: Session, tmp_pa
 
 def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
-    delete_material(db, user.id, material.id, rag_index=FakeRagIndex())
+    delete_material(
+        db,
+        user.id,
+        material.id,
+        rag_index=FakeRagIndex(),
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
 
     with pytest.raises(CourseNexusError) as exc_info:
         parse_material(
@@ -469,7 +475,13 @@ def test_delete_material_removes_vectors(db: Session, tmp_path: Path) -> None:
         storage_root=tmp_path,
     )
 
-    deleted = delete_material(db, user.id, material.id, rag_index=rag_index)
+    deleted = delete_material(
+        db,
+        user.id,
+        material.id,
+        rag_index=rag_index,
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
 
     assert deleted.parse_status == "deleted"
     assert rag_index.records == {}

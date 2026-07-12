@@ -72,7 +72,7 @@ class SourceCitation(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"))
     generated_content_id: Mapped[str | None] = mapped_column(ForeignKey("ai_generated_contents.id"))
-    material_id: Mapped[str] = mapped_column(ForeignKey("course_materials.id"), nullable=False)
+    material_id: Mapped[str | None] = mapped_column(ForeignKey("course_materials.id"))
     chunk_id: Mapped[str | None] = mapped_column(ForeignKey("material_chunks.id"))
     material_name: Mapped[str] = mapped_column(String(255), nullable=False)
     page: Mapped[str | None] = mapped_column(String(64))

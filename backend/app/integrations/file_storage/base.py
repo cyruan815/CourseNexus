@@ -44,6 +44,14 @@ class StoredFile:
     mime_type: str
 
 
+class StagedFileDeletion(Protocol):
+    def finalize(self) -> None:
+        """Permanently remove the staged material files."""
+
+    def restore(self) -> None:
+        """Restore staged material files to their original path."""
+
+
 class FileStorage(Protocol):
     def save_file(
         self,
@@ -56,3 +64,12 @@ class FileStorage(Protocol):
         content_type: str | None = None,
     ) -> StoredFile:
         """Save an uploaded file and return storage metadata."""
+
+    def stage_material_deletion(
+        self,
+        *,
+        user_id: str,
+        course_id: str,
+        material_id: str,
+    ) -> StagedFileDeletion:
+        """Move one material's files out of active storage for commit or rollback."""
