@@ -129,10 +129,13 @@
 ### S02 学习计划幂等规则
 
 - `POST /api/v1/courses/{course_id}/study-plans` 读取 `Idempotency-Key`。
-- 后端保存 `key_hash` 和请求体 canonical `request_hash` 到 `study_plans.parsed_config_json.idempotency`。
+- 后端将 key 的 SHA-256 写入 `study_plans.idempotency_key_hash`，并在 `study_plans.parsed_config_json.idempotency` 保留 `key_hash` 与请求体 canonical `request_hash`。
+- `(user_id, course_id, idempotency_key_hash)` 由数据库唯一索引兜底；并发重复提交不得创建重复计划、任务树或打卡派生。
 - 同一用户、同一课程、同一 key 且同一请求体：返回既有计划 bundle，不重复创建计划。
 - 同一用户、同一课程、同一 key 但请求体不同：返回 `409 IDEMPOTENCY_CONFLICT`。
+- 已软删除计划仍占用原 key，后续不得复用该 `Idempotency-Key` 创建新计划。
 - 未携带 `Idempotency-Key` 的旧客户端请求仍可保存，但不具备重复提交保护。
+
 ### S03 今日待办与日历只读查询约定
 
 - S03 只使用 GET 接口，不提供待办或日历写接口。

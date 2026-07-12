@@ -166,6 +166,7 @@ EXPECTED_COLUMNS = {
         "title",
         "goal_text",
         "parsed_config_json",
+        "idempotency_key_hash",
         "start_date",
         "end_date",
         "daily_available_minutes",
@@ -225,6 +226,10 @@ def engine():
 
 def _column_names(engine, table_name: str) -> set[str]:
     return {column["name"] for column in inspect(engine).get_columns(table_name)}
+
+
+def _index_names(engine, table_name: str) -> set[str]:
+    return {index["name"] for index in inspect(engine).get_indexes(table_name)}
 
 
 def _constraint_names(engine, table_name: str) -> set[str]:
@@ -290,6 +295,47 @@ def test_study_mode_reuses_existing_columns(engine) -> None:
     for table_name, expected_columns in EXPECTED_COLUMNS.items():
         assert expected_columns <= _column_names(engine, table_name)
 
+
+def test_study_plan_idempotency_key_hash_is_unique_per_user_course(engine) -> None:
+    assert "idempotency_key_hash" in _column_names(engine, "study_plans")
+    assert "uq_study_plans_user_course_idempotency_key_hash" in _index_names(engine, "study_plans")
+
+    with Session(engine) as session:
+        user = User(id="usr_idem", username="idem", password_hash="hash", status="active")
+        course = Course(id="crs_idem", user_id=user.id, name="Computer Networks", status="active")
+        session.add_all([user, course])
+        session.flush()
+        session.add_all(
+            [
+                StudyPlan(
+                    id="sp_idem_1",
+                    user_id=user.id,
+                    course_id=course.id,
+                    title="Plan 1",
+                    goal_text="Master transport layer",
+                    start_date=date(2026, 7, 10),
+                    end_date=date(2026, 7, 12),
+                    daily_available_minutes=60,
+                    status="active",
+                    idempotency_key_hash="same-key-hash",
+                ),
+                StudyPlan(
+                    id="sp_idem_2",
+                    user_id=user.id,
+                    course_id=course.id,
+                    title="Plan 2",
+                    goal_text="Master transport layer",
+                    start_date=date(2026, 7, 10),
+                    end_date=date(2026, 7, 12),
+                    daily_available_minutes=60,
+                    status="active",
+                    idempotency_key_hash="same-key-hash",
+                ),
+            ]
+        )
+
+        with pytest.raises(IntegrityError):
+            session.commit()
 
 def test_checkin_user_date_is_unique(engine) -> None:
     assert "uq_checkin_records_user_date" in _constraint_names(engine, "checkin_records")
