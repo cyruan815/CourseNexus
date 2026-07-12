@@ -53,9 +53,12 @@
 
 关键 commit：`ca9697038111e2f1356e19da4222f2775647b663`（`feat(study-mode): 收紧新向导保存 tasks 契约`）。
 
+复核补丁：`0c84bf942190cfcff1646f64598f9aecfdfb1434`（`fix(study-mode): 兼容 legacy 保存幂等 hash`），处理新增默认 `client_flow = "legacy"` 后旧版幂等 `request_hash` 重放可能误判冲突的问题。
+
 验证：
 
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`37 passed in 15.48s`。
+- `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py tests/modules/study_plans/test_study_plan_lifecycle.py -q`：`72 passed in 17.14s`，额外覆盖 legacy idempotency hash 兼容。
 
 已落地：
 
