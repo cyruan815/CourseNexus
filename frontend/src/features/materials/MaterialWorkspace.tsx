@@ -1,4 +1,5 @@
 import { type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
+import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 
 import { ApiError } from "../../api/errors";
 import {
@@ -21,6 +22,10 @@ type ContextMenu =
   | { kind: "workspace"; x: number; y: number }
   | { folder: MaterialFolder; kind: "folder"; x: number; y: number }
   | { kind: "material"; material: Material; x: number; y: number }
+  | null;
+type DeleteTarget =
+  | { kind: "folder"; folder: MaterialFolder }
+  | { kind: "material"; material: Material }
   | null;
 
 interface MaterialWorkspaceProps {
@@ -66,6 +71,9 @@ export function MaterialWorkspace({
   const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [draggedMaterialId, setDraggedMaterialId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -208,23 +216,71 @@ export function MaterialWorkspace({
     });
   }
 
-  function handleDeleteFolder(folder: MaterialFolder) {
-    if (!window.confirm(`删除文件夹“${folder.name}”？其中资料会回到未分类。`)) {
+  function requestDeleteFolder(folder: MaterialFolder) {
+    setContextMenu(null);
+    setDeleteError(null);
+    setDeleteTarget({ kind: "folder", folder });
+  }
+
+  function requestDeleteMaterial(material: Material) {
+    setContextMenu(null);
+    setDeleteError(null);
+    setDeleteTarget({ kind: "material", material });
+  }
+
+  function closeDeleteModal() {
+    if (isDeleting) {
       return;
     }
-    void mutate(async () => {
-      await deleteMaterialFolder(folder.id);
-      setFolders((current) => current.filter((item) => item.id !== folder.id));
-      setMaterials((current) =>
-        current.map((material) => (material.folder_id === folder.id ? { ...material, folder_id: null } : material)),
-      );
-      setExpandedFolderIds((current) => {
-        const next = new Set(current);
-        next.delete(folder.id);
-        next.add("unfiled");
-        return next;
-      });
-    });
+    setDeleteTarget(null);
+    setDeleteError(null);
+  }
+
+  async function confirmDeleteTarget() {
+    if (!deleteTarget) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      if (deleteTarget.kind === "folder") {
+        const folderId = deleteTarget.folder.id;
+        await deleteMaterialFolder(folderId);
+        const removedMaterialIds = materials
+          .filter((material) => material.folder_id === folderId)
+          .map((material) => material.id);
+        setFolders((current) => current.filter((item) => item.id !== folderId));
+        setMaterials((current) => current.filter((material) => material.folder_id !== folderId));
+        setExpandedFolderIds((current) => {
+          const next = new Set(current);
+          next.delete(folderId);
+          return next;
+        });
+        if (!materialScope.include_all_parsed_materials && removedMaterialIds.length > 0) {
+          onMaterialScopeChange({
+            include_all_parsed_materials: false,
+            material_ids: materialScope.material_ids.filter((id) => !removedMaterialIds.includes(id)),
+          });
+        }
+      } else {
+        const materialId = deleteTarget.material.id;
+        await deleteMaterial(materialId);
+        setMaterials((current) => current.filter((item) => item.id !== materialId));
+        if (!materialScope.include_all_parsed_materials) {
+          onMaterialScopeChange({
+            include_all_parsed_materials: false,
+            material_ids: materialScope.material_ids.filter((id) => id !== materialId),
+          });
+        }
+      }
+      setDeleteTarget(null);
+    } catch (nextError) {
+      setDeleteError(errorMessage(nextError));
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   function handleUpload(event: FormEvent) {
@@ -315,22 +371,6 @@ export function MaterialWorkspace({
   function handleParse(material: Material) {
     void mutate(async () => {
       updateMaterial(await retryParseMaterial(material.id));
-    });
-  }
-
-  function handleDeleteMaterial(material: Material) {
-    if (!window.confirm(`删除资料“${material.name}”？`)) {
-      return;
-    }
-    void mutate(async () => {
-      await deleteMaterial(material.id);
-      setMaterials((current) => current.filter((item) => item.id !== material.id));
-      if (!materialScope.include_all_parsed_materials) {
-        onMaterialScopeChange({
-          include_all_parsed_materials: false,
-          material_ids: materialScope.material_ids.filter((id) => id !== material.id),
-        });
-      }
     });
   }
 
@@ -539,7 +579,7 @@ export function MaterialWorkspace({
               >
                 上传到此文件夹
               </button>
-              <button onClick={() => handleDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
+              <button onClick={() => requestDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
                 删除文件夹
               </button>
             </>
@@ -554,13 +594,61 @@ export function MaterialWorkspace({
                   {contextMenu.material.parse_status === "parse_failed" ? "重试解析" : "开始解析"}
                 </button>
               ) : null}
-              <button onClick={() => handleDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
+              <button onClick={() => requestDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
                 删除资料
               </button>
             </>
           ) : null}
         </div>
       ) : null}
+      <DeleteConfirmModal
+        error={deleteError}
+        isSubmitting={isDeleting}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDeleteTarget}
+        target={deleteTarget}
+      />
     </section>
+  );
+}
+
+function DeleteConfirmModal({
+  error,
+  isSubmitting,
+  onClose,
+  onConfirm,
+  target,
+}: {
+  error: string | null;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  target: DeleteTarget;
+}) {
+  const isFolder = target?.kind === "folder";
+  const title = isFolder ? "删除文件夹" : "删除资料";
+  const message = isFolder
+    ? "删除该文件夹后，文件夹下的所有资料和子文件夹也会被一并删除，且无法恢复。"
+    : "确定删除该资料吗？删除后将无法恢复。";
+
+  return (
+    <Modal centered onClose={onClose} opened={Boolean(target)} title={title} transitionProps={{ duration: 0 }}>
+      <Stack gap="md">
+        {error ? (
+          <Alert color="red" role="alert" title="删除失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        <Text>{message}</Text>
+        <Group justify="flex-end">
+          <Button disabled={isSubmitting} onClick={onClose} variant="default">
+            取消
+          </Button>
+          <Button color="red" loading={isSubmitting} onClick={onConfirm}>
+            确认删除
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
