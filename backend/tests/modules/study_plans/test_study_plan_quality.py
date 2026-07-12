@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from app.core.errors import CourseNexusError
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch, MaterialScope
@@ -14,7 +15,9 @@ from app.modules.study_plans.schemas import (
     StudyPlanConfigParseRequest,
     StudyPlanCoverage,
     StudyPlanParsedConfig,
+    PlanPreference,
     StudyPlanPreview,
+    StudyPlanSaveRequest,
     StudySubTaskPreview,
     StudyTaskPreview,
 )
@@ -112,6 +115,86 @@ def _preview(*, goal_text: str = "我要两天学完计网这门课的第七章�
         tasks=tasks,
     )
 
+
+def test_build_request_derives_end_date_from_duration_days() -> None:
+    request = StudyPlanBuildRequest.model_validate(
+        {
+            "goal_text": "两天学完物理层",
+            "start_date": "2026-07-12",
+            "duration_days": 2,
+            "daily_available_minutes": 90,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        }
+    )
+
+    assert request.end_date == date(2026, 7, 13)
+    assert request.duration_days == 2
+
+    with pytest.raises(ValidationError):
+        StudyPlanBuildRequest.model_validate(
+            {
+                "goal_text": "两天学完物理层",
+                "start_date": "2026-07-12",
+                "daily_available_minutes": 90,
+                "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            }
+        )
+
+
+def test_study_plan_preview_carries_wizard_metadata() -> None:
+    preview = StudyPlanPreview.model_validate(
+        {
+            "course_id": "crs_net",
+            "title": "物理层学习计划",
+            "goal_text": "两天学完物理层",
+            "start_date": "2026-07-12",
+            "end_date": "2026-07-13",
+            "duration_days": 2,
+            "daily_available_minutes": 90,
+            "recommended_daily_minutes": 90,
+            "daily_minutes_source": "system_estimated",
+            "preference": "balanced",
+            "material_scope": {"include_all_parsed_materials": False, "material_ids": ["mat_net"]},
+            "coverage": {"expected_material_ids": ["mat_net"], "processed_material_ids": ["mat_net"], "batch_count": 1},
+            "diagnostic_profile": {"question_version": "study_plan_diagnostic_v1"},
+            "material_snapshot": {"mode": "selected"},
+            "capacity": {"feasibility_status": "ok"},
+            "generation_metadata": {"schema_version": 1},
+            "tasks": [
+                {
+                    "title": "第一天",
+                    "task_date": "2026-07-12",
+                    "sort_order": 1,
+                    "subtasks": [
+                        {
+                            "title": "补基础",
+                            "subtask_type": "learn",
+                            "description": "补物理层基础",
+                            "related_material_ids": ["mat_net"],
+                            "estimated_minutes": 90,
+                            "citation_chunk_ids": ["chk_001"],
+                            "sort_order": 1,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert preview.duration_days == 2
+    assert preview.recommended_daily_minutes == 90
+    assert preview.daily_minutes_source == "system_estimated"
+    assert preview.diagnostic_profile == {"question_version": "study_plan_diagnostic_v1"}
+    assert preview.material_snapshot == {"mode": "selected"}
+    assert preview.capacity == {"feasibility_status": "ok"}
+    assert preview.generation_metadata == {"schema_version": 1}
+
+
+def test_plan_preference_accepts_sprint_and_normalizes_legacy_advanced() -> None:
+    preference_adapter = TypeAdapter(PlanPreference)
+
+    assert preference_adapter.validate_python("sprint") == "sprint"
+    assert preference_adapter.validate_python("advanced") == "sprint"
 
 def test_map_prompt_requires_ordered_detailed_coverage_and_formula_review() -> None:
     prompt = planner._build_map_prompt(batch=_context_batch(), payload=_build_request())
@@ -271,3 +354,102 @@ def test_normalize_relative_config_resolves_two_day_goal_from_explicit_today() -
     assert "start_date" not in normalized.unresolved_fields
     assert "end_date" not in normalized.unresolved_fields
     assert "daily_available_minutes" in normalized.unresolved_fields
+
+def test_build_request_derives_end_date_from_duration_days_and_normalizes_preference() -> None:
+    request = StudyPlanBuildRequest.model_validate(
+        {
+            "goal_text": "我要两天学完计网这门课的第七章节",
+            "start_date": "2026-07-12",
+            "duration_days": 2,
+            "daily_available_minutes": 60,
+            "preference": "advanced",
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        }
+    )
+
+    assert request.end_date == date(2026, 7, 13)
+    assert request.duration_days == 2
+    assert request.preference == "sprint"
+
+
+
+def test_save_request_accepts_wizard_metadata_fields() -> None:
+    request = StudyPlanSaveRequest.model_validate(
+        {
+            "goal_text": "我要两天学完计网这门课的第七章节",
+            "start_date": "2026-07-12",
+            "duration_days": 2,
+            "daily_available_minutes": 60,
+            "preference": "advanced",
+            "recommended_daily_minutes": 90,
+            "daily_minutes_source": "system_estimated",
+            "diagnostic_profile": {"question_version": "study_plan_diagnostic_v1"},
+            "material_snapshot": {"mode": "selected"},
+            "coverage": {"expected_material_ids": ["mat_net"]},
+            "capacity": {"feasibility_status": "ok"},
+            "generation_metadata": {"schema_version": 1},
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        }
+    )
+
+    assert request.end_date == date(2026, 7, 13)
+    assert request.duration_days == 2
+    assert request.preference == "sprint"
+    assert request.diagnostic_profile["question_version"] == "study_plan_diagnostic_v1"
+    assert request.tasks is None
+
+
+
+def test_preview_schema_carries_wizard_metadata_fields() -> None:
+    preview = StudyPlanPreview.model_validate(
+        {
+            "course_id": "crs_net",
+            "title": "Computer Networks 学习计划",
+            "goal_text": "我要两天学完计网这门课的第七章节",
+            "start_date": "2026-07-12",
+            "end_date": "2026-07-13",
+            "duration_days": 2,
+            "daily_available_minutes": 60,
+            "recommended_daily_minutes": 90,
+            "daily_minutes_source": "system_estimated",
+            "preference": "advanced",
+            "diagnostic_profile": {"question_version": "study_plan_diagnostic_v1"},
+            "material_snapshot": {"mode": "selected", "snapshot_hash": "sha256:abc"},
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            "coverage": {"expected_material_ids": ["mat_net"], "processed_material_ids": ["mat_net"], "batch_count": 1},
+            "capacity": {
+                "estimated_total_minutes": 120,
+                "available_total_minutes": 120,
+                "feasibility_status": "ok",
+                "warnings": [],
+            },
+            "generation_metadata": {"schema_version": 1},
+            "tasks": [
+                {
+                    "title": "第 1 天学习任务",
+                    "task_date": "2026-07-12",
+                    "sort_order": 1,
+                    "subtasks": [
+                        {
+                            "title": "理解可靠传输",
+                            "subtask_type": "learn",
+                            "description": "学习滑动窗口和确认机制",
+                            "related_material_ids": ["mat_net"],
+                            "estimated_minutes": 60,
+                            "citation_chunk_ids": ["chk_net"],
+                            "sort_order": 1,
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert preview.duration_days == 2
+    assert preview.preference == "sprint"
+    assert preview.recommended_daily_minutes == 90
+    assert preview.daily_minutes_source == "system_estimated"
+    assert preview.diagnostic_profile["question_version"] == "study_plan_diagnostic_v1"
+    assert preview.material_snapshot["mode"] == "selected"
+    assert preview.capacity["feasibility_status"] == "ok"
+    assert preview.generation_metadata["schema_version"] == 1

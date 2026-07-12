@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from datetime import date, datetime, timezone, timedelta
+from math import ceil
 from time import perf_counter
 from uuid import uuid4
 
@@ -102,20 +103,43 @@ def preview_study_plan(
             course_name=course.name,
         ),
     )
+    task_previews = coverage_result.value.tasks
+    duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
+    estimated_total_minutes = _task_previews_total_minutes(task_previews)
+    recommended_daily_minutes = payload.recommended_daily_minutes or max(30, ceil(estimated_total_minutes / max(duration_days, 1)))
+    available_total_minutes = payload.daily_available_minutes * duration_days
+    daily_minutes_source = payload.daily_minutes_source or ("user_text" if payload.recommended_daily_minutes is not None else "system_estimated")
+    material_snapshot = payload.material_snapshot or _build_material_snapshot(
+        material_scope=payload.material_scope,
+        expected_material_ids=expected_material_ids,
+    )
+    capacity = payload.capacity or _build_capacity_summary(
+        estimated_total_minutes=estimated_total_minutes,
+        available_total_minutes=available_total_minutes,
+    )
+    generation_metadata = payload.generation_metadata or _build_generation_metadata(model_provider=model_provider)
     preview = StudyPlanPreview(
         course_id=course_id,
         title=coverage_result.value.title,
         goal_text=payload.goal_text,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        duration_days=duration_days,
         daily_available_minutes=payload.daily_available_minutes,
+        recommended_daily_minutes=recommended_daily_minutes,
+        daily_minutes_source=daily_minutes_source,
+        preference=payload.preference,
+        diagnostic_profile=payload.diagnostic_profile,
+        material_snapshot=material_snapshot,
         material_scope=payload.material_scope,
         coverage=make_coverage(
             expected_material_ids=expected_material_ids,
             processed_material_ids=coverage_result.processed_material_ids,
             batch_count=len(batches),
         ),
-        tasks=coverage_result.value.tasks,
+        capacity=capacity,
+        generation_metadata=generation_metadata,
+        tasks=task_previews,
     )
     validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
     logger.info(
@@ -126,8 +150,6 @@ def preview_study_plan(
         (perf_counter() - started_at) * 1000,
     )
     return preview
-
-
 def save_study_plan(
     db: Session,
     *,
@@ -157,6 +179,7 @@ def save_study_plan(
                 return _bundle_for_plan(db, existing_plan)
             raise CourseNexusError(code="IDEMPOTENCY_CONFLICT", message="幂等键已用于不同请求", status_code=409)
 
+    preview: StudyPlanPreview | None = None
     if save_payload.tasks is None:
         preview = preview_study_plan(
             db,
@@ -168,11 +191,9 @@ def save_study_plan(
         )
         title = save_payload.title or preview.title
         tasks_preview = preview.tasks
-        coverage = preview.coverage.model_dump(mode="json")
     else:
         title = save_payload.title or "学习计划"
         tasks_preview = save_payload.tasks
-        coverage = None
 
     plan_id = _new_plan_id()
     plan = StudyPlan(
@@ -181,7 +202,16 @@ def save_study_plan(
         course_id=course_id,
         title=title,
         goal_text=save_payload.goal_text,
-        parsed_config_json=_saved_config(save_payload, coverage=coverage, key_hash=key_hash, request_hash=request_hash),
+        parsed_config_json=_saved_config(
+            save_payload,
+            coverage=preview.coverage.model_dump(mode="json") if preview is not None else None,
+            capacity=preview.capacity if preview is not None else None,
+            generation_metadata=preview.generation_metadata if preview is not None else None,
+            tasks_preview=tasks_preview,
+            tasks_source="generated" if save_payload.tasks is None else "confirmed",
+            key_hash=key_hash,
+            request_hash=request_hash,
+        ),
         start_date=save_payload.start_date,
         end_date=save_payload.end_date,
         daily_available_minutes=save_payload.daily_available_minutes,
@@ -205,8 +235,6 @@ def save_study_plan(
         (perf_counter() - started_at) * 1000,
     )
     return _bundle_for_plan(db, plan)
-
-
 def list_study_plans(db: Session, *, user_id: str, course_id: str) -> list[StudyPlan]:
     assert_course_owner(db, user_id, course_id)
     return study_plan_repository.list_active_study_plans_for_course(db, user_id=user_id, course_id=course_id)
@@ -238,7 +266,9 @@ def preview_study_plan_regeneration(
         goal_text=payload.goal_text or plan.goal_text,
         start_date=payload.start_date or plan.start_date,
         end_date=payload.end_date or plan.end_date,
+        duration_days=payload.duration_days,
         daily_available_minutes=payload.daily_available_minutes or plan.daily_available_minutes,
+        preference=payload.preference or config.get("preference", "balanced"),
         material_scope=material_scope,
     )
     preview = preview_study_plan(
@@ -249,9 +279,7 @@ def preview_study_plan_regeneration(
         model_provider=model_provider,
         max_tokens=max_tokens,
     )
-    return preview.model_copy(update={"preference": payload.preference or config.get("preference", "balanced")})
-
-
+    return preview
 def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: StudyPlanReplaceRequest) -> StudyPlanBundle:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
@@ -266,7 +294,16 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         plan.daily_available_minutes = payload.daily_available_minutes
         plan.status = "active"
         plan.updated_at = datetime.now(timezone.utc)
-        plan.parsed_config_json = _saved_config(payload, coverage=None, key_hash=None, request_hash=_hash_request(payload))
+        plan.parsed_config_json = _saved_config(
+            payload,
+            coverage=None,
+            capacity=None,
+            generation_metadata=None,
+            tasks_preview=payload.tasks,
+            tasks_source="confirmed",
+            key_hash=None,
+            request_hash=_hash_request(payload),
+        )
         tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=plan.course_id, task_previews=payload.tasks)
         db.add(plan)
         db.add_all(tasks)
@@ -318,26 +355,163 @@ def _hash_request(payload: StudyPlanSaveRequest) -> str:
     return _hash_value(raw)
 
 
+def _duration_days_between(start_date: date, end_date: date) -> int:
+    return (end_date - start_date).days + 1
+
+
+def _normalize_preference_value(value: str | None) -> str | None:
+    return "sprint" if value == "advanced" else value
+
+
+def _task_previews_total_minutes(task_previews: list[StudyTaskPreview]) -> int:
+    return sum(subtask.estimated_minutes for task in task_previews for subtask in task.subtasks)
+
+
+def _task_previews_material_ids(task_previews: list[StudyTaskPreview]) -> list[str]:
+    material_ids: list[str] = []
+    for task in task_previews:
+        for subtask in task.subtasks:
+            for material_id in subtask.related_material_ids:
+                if material_id not in material_ids:
+                    material_ids.append(material_id)
+    return material_ids
+
+
+def _build_material_snapshot(*, material_scope: object, expected_material_ids: set[str]) -> dict[str, object]:
+    scope = material_scope if hasattr(material_scope, "include_all_parsed_materials") else None
+    include_all = bool(getattr(scope, "include_all_parsed_materials", False)) if scope is not None else False
+    material_ids = sorted(expected_material_ids)
+    snapshot_basis = {
+        "mode": "all_parsed" if include_all else "selected",
+        "material_ids": material_ids,
+    }
+    snapshot_hash = hashlib.sha256(json.dumps(snapshot_basis, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {
+        **snapshot_basis,
+        "snapshot_hash": f"sha256:{snapshot_hash}",
+    }
+
+
+def _build_capacity_summary(*, estimated_total_minutes: int, available_total_minutes: int) -> dict[str, object]:
+    if estimated_total_minutes > available_total_minutes:
+        feasibility_status = "over_capacity"
+        warnings = ["PLAN_OVER_CAPACITY"]
+    elif estimated_total_minutes >= max(1, round(available_total_minutes * 0.8)):
+        feasibility_status = "tight"
+        warnings = []
+    else:
+        feasibility_status = "ok"
+        warnings = []
+    return {
+        "estimated_total_minutes": estimated_total_minutes,
+        "available_total_minutes": available_total_minutes,
+        "feasibility_status": feasibility_status,
+        "warnings": warnings,
+    }
+
+
+def _build_generation_metadata(*, model_provider: ModelProvider) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "model_provider": model_provider.__class__.__name__,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int, recommended_daily_minutes: int | None, daily_minutes_source: str | None) -> dict[str, object]:
+    config: dict[str, object] = {
+        "goal_text": payload.goal_text,
+        "start_date": payload.start_date.isoformat(),
+        "end_date": payload.end_date.isoformat(),
+        "duration_days": duration_days,
+        "daily_available_minutes": payload.daily_available_minutes,
+        "preference": _normalize_preference_value(payload.preference),
+        "material_scope": payload.material_scope.model_dump(mode="json"),
+    }
+    if recommended_daily_minutes is not None:
+        config["recommended_daily_minutes"] = recommended_daily_minutes
+    if daily_minutes_source is not None:
+        config["daily_minutes_source"] = daily_minutes_source
+    if payload.recommended_daily_minutes is not None:
+        config.setdefault("recommended_daily_minutes", payload.recommended_daily_minutes)
+    if payload.diagnostic_profile:
+        config["diagnostic_profile"] = payload.diagnostic_profile
+    if payload.material_snapshot:
+        config["material_snapshot"] = payload.material_snapshot
+    if payload.coverage:
+        config["coverage"] = payload.coverage
+    if payload.capacity:
+        config["capacity"] = payload.capacity
+    if payload.generation_metadata:
+        config["generation_metadata"] = payload.generation_metadata
+    return config
+
+
+def _build_coverage_summary(task_previews: list[StudyTaskPreview]) -> dict[str, object]:
+    material_ids = _task_previews_material_ids(task_previews)
+    return {
+        "expected_material_ids": material_ids,
+        "processed_material_ids": material_ids,
+        "batch_count": 0,
+    }
+
+
 def _saved_config(
     payload: StudyPlanSaveRequest,
     *,
     coverage: dict[str, object] | None,
+    capacity: dict[str, object] | None,
+    generation_metadata: dict[str, object] | None,
+    tasks_preview: list[StudyTaskPreview],
+    tasks_source: str,
     key_hash: str | None,
     request_hash: str,
 ) -> dict[str, object]:
-    config: dict[str, object] = {
+    duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
+    estimated_total_minutes = _task_previews_total_minutes(tasks_preview)
+    available_total_minutes = payload.daily_available_minutes * duration_days
+    recommended_daily_minutes = payload.recommended_daily_minutes or max(30, ceil(estimated_total_minutes / max(duration_days, 1)))
+    daily_minutes_source = payload.daily_minutes_source or ("user_text" if payload.recommended_daily_minutes is not None else "system_estimated")
+    confirmed_config = _build_confirmed_config(
+        payload=payload,
+        duration_days=duration_days,
+        recommended_daily_minutes=recommended_daily_minutes,
+        daily_minutes_source=daily_minutes_source,
+    )
+    material_snapshot = payload.material_snapshot or _build_material_snapshot(
+        material_scope=payload.material_scope,
+        expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
+    )
+    coverage_value = coverage or _build_coverage_summary(tasks_preview)
+    capacity_value = capacity or _build_capacity_summary(
+        estimated_total_minutes=estimated_total_minutes,
+        available_total_minutes=available_total_minutes,
+    )
+    generation_metadata_value = generation_metadata or {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat()}
+    data: dict[str, object] = {
+        "schema_version": 1,
+        "confirmed_config": confirmed_config,
+        "diagnostic_profile": payload.diagnostic_profile,
+        "material_snapshot": material_snapshot,
+        "coverage": coverage_value,
+        "capacity": capacity_value,
+        "generation_metadata": generation_metadata_value,
+        "tasks_source": tasks_source,
+        "task_snapshot": [task.model_dump(mode="json") for task in tasks_preview],
         "material_scope": payload.material_scope.model_dump(mode="json"),
         "daily_available_minutes": payload.daily_available_minutes,
-        "preference": payload.preference,
-        "tasks_source": "confirmed" if payload.tasks is not None else "generated",
+        "preference": _normalize_preference_value(payload.preference),
+        "start_date": payload.start_date.isoformat(),
+        "end_date": payload.end_date.isoformat(),
+        "duration_days": duration_days,
     }
-    if coverage is not None:
-        config["coverage"] = coverage
+    if recommended_daily_minutes is not None:
+        data["recommended_daily_minutes"] = recommended_daily_minutes
+    if daily_minutes_source is not None:
+        data["daily_minutes_source"] = daily_minutes_source
     if key_hash is not None:
-        config["idempotency"] = {"key_hash": key_hash, "request_hash": request_hash}
-    return config
-
-
+        data["idempotency"] = {"key_hash": key_hash, "request_hash": request_hash}
+    return data
 def _rows_from_task_previews(
     *,
     plan_id: str,
@@ -437,24 +611,21 @@ def _normalize_relative_config(parsed: StudyPlanParsedConfig, *, goal_text: str)
         return parsed
 
     start_date = parsed.start_date or explicit_today
-    end_date = parsed.end_date
-    if end_date is None:
-        end_date = start_date + timedelta(days=duration_days - 1)
+    end_date = parsed.end_date or (start_date + timedelta(days=duration_days - 1))
 
     unresolved_fields = [
         field_name
         for field_name in parsed.unresolved_fields
-        if field_name not in {"start_date", "end_date"}
+        if field_name not in {"start_date", "end_date", "duration_days"}
     ]
     return parsed.model_copy(
         update={
             "start_date": start_date,
             "end_date": end_date,
+            "duration_days": duration_days,
             "unresolved_fields": unresolved_fields,
         }
     )
-
-
 def _extract_explicit_today(goal_text: str) -> date | None:
     patterns = (
         r"今天是\s*(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日",
