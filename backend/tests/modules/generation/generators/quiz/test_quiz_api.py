@@ -21,8 +21,9 @@ class PromptGroundedQuizProvider:
                 "difficulty": "easy", "source_chunk_ids": [chunk_id],
             },
             {
-                "question_type": "short_answer", "question_text": "Name the first topic.",
-                "options": [], "correct_answer": "Alpha", "explanation": "Alpha appears first.",
+                "question_type": "single_choice", "question_text": "Which topic appears first?",
+                "options": [{"id": "A", "text": "Alpha"}, {"id": "B", "text": "Beta"}, {"id": "C", "text": "Gamma"}, {"id": "D", "text": "Delta"}],
+                "correct_answer": "A", "explanation": "Alpha appears first.",
                 "difficulty": "medium", "source_chunk_ids": [chunk_id],
             },
         ]})
@@ -38,7 +39,13 @@ def test_quiz_post_history_and_detail_persist_questions_and_citations(
     )
     response = client.post(
         f"/api/v1/courses/{course_id}/generations", headers=alice_api.headers,
-        json={"content_type": "quiz", "parameters": {"question_count": 2}},
+        json={
+            "content_type": "quiz",
+            "parameters": {
+                "question_count": 2,
+                "question_types": ["single_choice"],
+            },
+        },
     )
     assert response.status_code == 200
     data = response.json()["data"]

@@ -34,6 +34,7 @@ class OpenAIModelProvider:
                 details={"missing": api_key_env_name},
             )
         self.model = model
+        self.base_url = base_url
         self.client = client or OpenAI(api_key=api_key, base_url=base_url)
 
     def answer_question(self, *, question: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
@@ -68,6 +69,11 @@ class OpenAIModelProvider:
         output_schema: type[StructuredOutputT],
     ) -> StructuredOutputT:
         started_at = perf_counter()
+        if self._uses_deepseek_chat_completions():
+            result = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
+            self._log_structured_generation(output_schema=output_schema, started_at=started_at)
+            return result
+
         try:
             response = self.client.responses.parse(
                 model=self.model,
@@ -88,13 +94,24 @@ class OpenAIModelProvider:
             parsed = getattr(response, "output_parsed", None)
             result = self._validate_structured_output(parsed=parsed, output_schema=output_schema)
 
+        self._log_structured_generation(output_schema=output_schema, started_at=started_at)
+        return result
+
+    def _uses_deepseek_chat_completions(self) -> bool:
+        return bool(self.base_url and "api.deepseek.com" in self.base_url.casefold())
+
+    def _log_structured_generation(
+        self,
+        *,
+        output_schema: type[StructuredOutputT],
+        started_at: float,
+    ) -> None:
         logger.info(
             "模型调用成功 | operation=generate_structured model=%s schema=%s cost_ms=%.2f",
             self.model,
             output_schema.__name__,
             (perf_counter() - started_at) * 1000,
         )
-        return result
 
     def _answer_question_with_chat(self, *, prompt: str) -> str:
         try:

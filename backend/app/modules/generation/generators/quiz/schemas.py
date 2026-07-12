@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-QuestionType = Literal["single_choice", "multiple_choice", "true_false", "short_answer"]
+QuestionType = Literal["single_choice"]
 Difficulty = Literal["easy", "medium", "hard"]
 RequestedDifficulty = Literal["easy", "medium", "hard", "mixed"]
 
@@ -15,7 +15,7 @@ class QuizParameters(BaseModel):
 
     question_count: int = Field(default=10, ge=1, le=50)
     question_types: list[QuestionType] = Field(
-        default_factory=lambda: ["single_choice", "true_false", "short_answer"]
+        default_factory=lambda: ["single_choice"]
     )
     difficulty: RequestedDifficulty = "mixed"
     focus: str | None = Field(default=None, min_length=1, max_length=200)
@@ -51,7 +51,7 @@ class _QuestionBase(BaseModel):
         option_ids = [option.id for option in self.options]
         if len(option_ids) != len(set(option_ids)):
             raise ValueError("Quiz option IDs must be unique")
-        if self.question_type in {"single_choice", "multiple_choice"}:
+        if self.question_type == "single_choice":
             if option_ids != ["A", "B", "C", "D"]:
                 raise ValueError("Choice questions require options A-D")
         elif self.options:
@@ -61,16 +61,6 @@ class _QuestionBase(BaseModel):
         if self.question_type == "single_choice":
             if isinstance(answer, bool) or not isinstance(answer, str) or answer not in option_ids:
                 raise ValueError("Single choice answer must be one option ID")
-        elif self.question_type == "multiple_choice":
-            if not isinstance(answer, list) or len(answer) not in {2, 3}:
-                raise ValueError("Multiple choice answer must contain two or three IDs")
-            if answer != sorted(set(answer), key=option_ids.index) or any(item not in option_ids for item in answer):
-                raise ValueError("Multiple choice answer IDs must be unique and ordered")
-        elif self.question_type == "true_false":
-            if not isinstance(answer, bool):
-                raise ValueError("True/false answer must be boolean")
-        elif isinstance(answer, bool) or not isinstance(answer, str) or not answer.strip():
-            raise ValueError("Short answer must be a non-empty string")
         return self
 
 
