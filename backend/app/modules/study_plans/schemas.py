@@ -1,26 +1,63 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Literal
+from datetime import date, datetime, timedelta
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, BeforeValidator, field_validator, model_validator
 
 from app.modules.material_context.schemas import MaterialScope
 
 
-PlanPreference = Literal["balanced", "fast_track", "mastery", "advanced"]
+PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced", "sprint"]
+DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 SubTaskType = Literal["learn", "review", "quiz", "test"]
+
+
+def _normalize_preference_value(value: str | None) -> str | None:
+    if value == "advanced":
+        return "sprint"
+    return value
+PlanPreference = Annotated[PlanPreferenceLiteral, BeforeValidator(_normalize_preference_value)]
 
 
 class StudyPlanBuildRequest(BaseModel):
     goal_text: str = Field(min_length=1)
     start_date: date
-    end_date: date
+    end_date: date | None = None
+    duration_days: int | None = Field(default=None, gt=0)
     daily_available_minutes: int = Field(gt=0)
+    recommended_daily_minutes: int | None = Field(default=None, gt=0)
+    daily_minutes_source: DailyMinutesSource | None = None
+    preference: PlanPreference = "balanced"
+    diagnostic_profile: dict[str, object] = Field(default_factory=dict)
+    material_snapshot: dict[str, object] = Field(default_factory=dict)
+    coverage: dict[str, object] = Field(default_factory=dict)
+    capacity: dict[str, object] = Field(default_factory=dict)
+    generation_metadata: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
+
+    @field_validator("preference", mode="after")
+    @classmethod
+    def normalize_preference(cls, value: PlanPreference) -> PlanPreference:
+        normalized = _normalize_preference_value(value)
+        return normalized if normalized is not None else value
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "StudyPlanBuildRequest":
+        if self.end_date is None and self.duration_days is None:
+            raise ValueError("either end_date or duration_days must be provided")
+
+        if self.end_date is None and self.duration_days is not None:
+            self.end_date = self.start_date + timedelta(days=self.duration_days - 1)
+        elif self.end_date is not None and self.duration_days is None:
+            self.duration_days = (self.end_date - self.start_date).days + 1
+        elif self.end_date is not None and self.duration_days is not None:
+            expected_end_date = self.start_date + timedelta(days=self.duration_days - 1)
+            if expected_end_date != self.end_date:
+                raise ValueError("end_date and duration_days must describe the same date range")
+
+        if self.end_date is None or self.duration_days is None:
+            raise ValueError("end_date and duration_days must be resolvable")
         if self.end_date < self.start_date:
             raise ValueError("end_date must be greater than or equal to start_date")
         return self
@@ -35,10 +72,35 @@ class StudyPlanParsedConfig(BaseModel):
     goal_text: str | None = None
     start_date: date | None = None
     end_date: date | None = None
+    duration_days: int | None = Field(default=None, gt=0)
     daily_available_minutes: int | None = Field(default=None, gt=0)
+    recommended_daily_minutes: int | None = Field(default=None, gt=0)
+    daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference | None = None
+    diagnostic_profile: dict[str, object] = Field(default_factory=dict)
+    material_snapshot: dict[str, object] = Field(default_factory=dict)
+    coverage: dict[str, object] = Field(default_factory=dict)
+    capacity: dict[str, object] = Field(default_factory=dict)
+    generation_metadata: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     unresolved_fields: list[str] = Field(default_factory=list)
+
+    @field_validator("preference", mode="after")
+    @classmethod
+    def normalize_preference(cls, value: PlanPreference | None) -> PlanPreference | None:
+        return _normalize_preference_value(value)
+
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "StudyPlanParsedConfig":
+        if self.start_date is not None and self.end_date is not None and self.duration_days is None:
+            self.duration_days = (self.end_date - self.start_date).days + 1
+        elif self.start_date is not None and self.duration_days is not None and self.end_date is None:
+            self.end_date = self.start_date + timedelta(days=self.duration_days - 1)
+        elif self.start_date is not None and self.end_date is not None and self.duration_days is not None:
+            expected_end_date = self.start_date + timedelta(days=self.duration_days - 1)
+            if expected_end_date != self.end_date:
+                raise ValueError("end_date and duration_days must describe the same date range")
+        return self
 
 
 class StudyPlanConfigParseResponse(StudyPlanParsedConfig):
@@ -94,16 +156,28 @@ class StudyPlanPreview(BaseModel):
     goal_text: str
     start_date: date
     end_date: date
+    duration_days: int | None = None
     daily_available_minutes: int
+    recommended_daily_minutes: int | None = None
+    daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference = "balanced"
+    diagnostic_profile: dict[str, object] = Field(default_factory=dict)
+    material_snapshot: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope
     coverage: StudyPlanCoverage = Field(default_factory=StudyPlanCoverage)
+    capacity: dict[str, object] = Field(default_factory=dict)
+    generation_metadata: dict[str, object] = Field(default_factory=dict)
     tasks: list[StudyTaskPreview]
+
+    @field_validator("preference", mode="after")
+    @classmethod
+    def normalize_preference(cls, value: PlanPreference) -> PlanPreference:
+        normalized = _normalize_preference_value(value)
+        return normalized if normalized is not None else value
 
 
 class StudyPlanSaveRequest(StudyPlanBuildRequest):
     title: str | None = None
-    preference: PlanPreference = "balanced"
     tasks: list[StudyTaskPreview] | None = None
 
 
@@ -111,15 +185,26 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
     goal_text: str | None = None
     start_date: date | None = None
     end_date: date | None = None
+    duration_days: int | None = Field(default=None, gt=0)
     daily_available_minutes: int | None = Field(default=None, gt=0)
     preference: PlanPreference | None = None
     material_scope: MaterialScope | None = None
+
+    @field_validator("preference", mode="after")
+    @classmethod
+    def normalize_preference(cls, value: PlanPreference | None) -> PlanPreference | None:
+        return _normalize_preference_value(value)
 
     @model_validator(mode="after")
     def validate_optional_date_range(self) -> "StudyPlanRegenerationPreviewRequest":
         if self.start_date is not None and self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("end_date must be greater than or equal to start_date")
+        if self.start_date is not None and self.duration_days is not None and self.end_date is None:
+            self.end_date = self.start_date + timedelta(days=self.duration_days - 1)
+        if self.start_date is not None and self.end_date is not None and self.duration_days is None:
+            self.duration_days = (self.end_date - self.start_date).days + 1
         return self
+
 
 class StudyPlanReplaceRequest(StudyPlanSaveRequest):
     expected_updated_at: datetime
