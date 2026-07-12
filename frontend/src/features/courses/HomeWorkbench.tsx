@@ -37,6 +37,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../api/errors";
+import { useCourseNexusTheme } from "../../app/theme";
 import type { Course } from "../../types/course";
 import { createCourse, deleteCourse, listCourses, updateCourse } from "./api";
 import "./home-workbench.css";
@@ -69,7 +70,6 @@ interface CalendarDay {
 }
 
 const ALL_TERMS_VALUE = "全部学期";
-const isDarkMode = false;
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
 const COURSE_TERM_OPTIONS = [
   "2025-2026 春季",
@@ -179,6 +179,7 @@ function mapCourseToHomeCourse(course: Course): HomeCourse {
 }
 
 function Header() {
+  const { isDarkMode, toggleTheme } = useCourseNexusTheme();
   const ThemeIcon = isDarkMode ? IconSun : IconMoon;
   const themeLabel = isDarkMode ? "切换为日间模式" : "切换为夜间模式";
 
@@ -192,10 +193,24 @@ function Header() {
         </Group>
 
         <Group gap="md" wrap="nowrap">
-          <ActionIcon aria-label={themeLabel} className="home-theme-single-button" radius="md" size={44} variant="default">
+          <ActionIcon
+            aria-label={themeLabel}
+            className="home-theme-single-button"
+            onClick={toggleTheme}
+            radius="md"
+            size={44}
+            variant="default"
+          >
             <ThemeIcon size={22} stroke={1.8} />
           </ActionIcon>
-          <ActionIcon aria-label="打开个人中心" className="home-user-button" radius="xl" size={48} variant="default">
+          <ActionIcon
+            aria-label="打开个人中心（待接入）"
+            className="home-user-button"
+            disabled
+            radius="xl"
+            size={48}
+            variant="default"
+          >
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
         </Group>

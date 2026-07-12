@@ -1,0 +1,23 @@
+:root[data-course-nexus-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-course-nexus-theme="dark"] body {
+  background: #0f172a;
+}
+
+:root[data-course-nexus-theme="dark"] .home-workbench,
+:root[data-course-nexus-theme="dark"] .course-detail-page {
+  background: #0f172a;
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .home-header,
+:root[data-course-nexus-theme="dark"] .course-detail-topbar,
+:root[data-course-nexus-theme="dark"] .home-main-panel,
+:root[data-course-nexus-theme="dark"] .home-focus-panel,
+:root[data-course-nexus-theme="dark"] .home-calendar-panel,
+:root[data-course-nexus-theme="dark"] .course-detail-card {
+  background: #111c2f;
+  border-color: #263750;
+}

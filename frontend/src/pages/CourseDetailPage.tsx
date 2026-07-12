@@ -28,11 +28,13 @@ import {
   IconSearch,
   IconSend2,
   IconSparkles,
+  IconSun,
   IconUser,
 } from "@tabler/icons-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
+import { useCourseNexusTheme } from "../app/theme";
 import {
   askCourseQuestion,
   generateCourseContent,
@@ -107,6 +109,10 @@ const toolItems = [
 ];
 
 function CourseTopBar({ course }: { course: Course }) {
+  const { isDarkMode, toggleTheme } = useCourseNexusTheme();
+  const ThemeIcon = isDarkMode ? IconSun : IconMoon;
+  const themeLabel = isDarkMode ? "切换为日间模式" : "切换为夜间模式";
+
   return (
     <Paper className="course-detail-topbar" component="header" radius={0}>
       <Group justify="space-between" wrap="nowrap">
@@ -142,10 +148,24 @@ function CourseTopBar({ course }: { course: Course }) {
         </Group>
 
         <Group gap="sm" wrap="nowrap">
-          <ActionIcon aria-label="切换为夜间模式" className="course-detail-theme-single-button" radius="md" size={44} variant="default">
-            <IconMoon size={22} stroke={1.8} />
+          <ActionIcon
+            aria-label={themeLabel}
+            className="course-detail-theme-single-button"
+            onClick={toggleTheme}
+            radius="md"
+            size={44}
+            variant="default"
+          >
+            <ThemeIcon size={22} stroke={1.8} />
           </ActionIcon>
-          <ActionIcon aria-label="打开个人中心" className="course-detail-user-button" radius="xl" size={48} variant="default">
+          <ActionIcon
+            aria-label="打开个人中心（待接入）"
+            className="course-detail-user-button"
+            disabled
+            radius="xl"
+            size={48}
+            variant="default"
+          >
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
         </Group>
@@ -161,7 +181,7 @@ function TodayTodoCard({ plans }: { plans: StudyPlan[] }) {
     <Paper className="course-detail-card course-detail-todo-card" radius="md" withBorder>
       <Group justify="space-between" wrap="nowrap">
         <Title order={2}>今日待办</Title>
-        <ActionIcon aria-label="查看今日待办" variant="subtle">
+        <ActionIcon aria-label="查看今日待办（待接入）" disabled variant="subtle">
           <IconChecklist size={20} stroke={1.8} />
         </ActionIcon>
       </Group>
@@ -178,7 +198,14 @@ function TodayTodoCard({ plans }: { plans: StudyPlan[] }) {
             <Text c="dimmed" size="sm">
               当前课程还没有学习计划
             </Text>
-            <Button className="course-detail-plan-button" leftSection={<IconPlus size={16} />} size="sm" variant="light">
+            <Button
+              aria-label="制定学习计划（待接入）"
+              className="course-detail-plan-button"
+              disabled
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              variant="light"
+            >
               制定学习计划
             </Button>
           </>
@@ -353,7 +380,7 @@ function GeneratedContentPanel({ contents }: { contents: GeneratedContent[] }) {
     <Paper aria-label="AI 生成内容" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
       <Group justify="space-between">
         <Title order={2}>AI 生成内容</Title>
-        <Button size="xs" variant="default">查看全部</Button>
+        <Button aria-label="查看全部（待接入）" disabled size="xs" variant="default">查看全部</Button>
       </Group>
       {contents.length > 0 ? (
         <Stack gap="xs">

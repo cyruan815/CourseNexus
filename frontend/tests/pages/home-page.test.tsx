@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TOKEN_STORAGE_KEY } from "../../src/features/auth/session";
+import { THEME_STORAGE_KEY } from "../../src/app/theme";
 import { HomePage } from "../../src/pages/HomePage";
 
 const backendCourses = [
@@ -157,6 +158,28 @@ describe("HomePage", () => {
     fireEvent.click(await screen.findByRole("link", { name: "打开课程 离散数学" }));
 
     expect(screen.getByTestId("location-path")).toHaveTextContent("/courses/crs_discrete_math");
+  });
+
+  it("toggles the persisted color scheme from the home header", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    renderHomePage();
+
+    const themeButton = screen.getByRole("button", { name: "切换为夜间模式" });
+    fireEvent.click(themeButton);
+
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(document.documentElement).toHaveAttribute("data-course-nexus-theme", "dark");
+    expect(screen.getByRole("button", { name: "切换为日间模式" })).toBeInTheDocument();
   });
 
   it("creates a course from the home modal and enters the new course", async () => {
