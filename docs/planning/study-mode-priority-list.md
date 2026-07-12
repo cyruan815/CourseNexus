@@ -25,6 +25,7 @@
 - `P6：保存请求强制 tasks 的新向导口径收紧` 已完成；当前用户窗口仍定位为后端 API、接口契约、测试和文档同步，不接前端 UI / renderer。
 - `P3：讲义 / task_test 请求级幂等增强` 等 P0 完成后再评估；它会触达 handout/task_test 生成入口，当前不作为第二窗口首选。
 - `P5：资料解析诊断接入 Study Mode warning / 阻断策略` 可后续做后端调研或接口设计，但它跨 materials/parser 和 Study Mode，范围大于 P6。
+- `P10：重生成 preview 配置合并修复` 是后端 plan lifecycle 小修复，可由当前后端窗口优先处理；不触碰 P0/P2/P3 的生成和展示链路，优先级高于 P7/P8/P9。
 - `P7`、`P8`、`P9` 都需要单独评审；其中 P7 涉及 schema / migration，P9 涉及新作答数据结构，不应作为当前最小下一步。
 
 ## 已完成，不再排队
@@ -166,6 +167,22 @@
 
 - 这是 materials/parser 和 Study Mode 的跨域能力，不要插进 P0-P3 的主链路里一起做。
 
+### P10：重生成 preview 配置合并修复
+
+状态：合并前小修复，建议当前后端窗口优先处理；实际优先级高于 P7 / P8 / P9，但为避免重排编号，保留 P10 编号。
+
+目标：
+
+- 修复 `POST /api/v1/study-plans/{plan_id}/regeneration-previews` 只传 `duration_days` 时复用旧 `end_date` 导致日期范围冲突的问题。
+- 重生成 preview 时真正合并已保存配置，至少继承已保存的 `diagnostic_profile`，避免诊断后的补基础、弱项和解释风格在重生成时失效。
+- 补覆盖测试，证明只改学习天数可用，且未传新诊断时会继承旧 `diagnostic_profile`。
+
+限制：
+
+- 不触碰 `task_test` generator、`learning_execution` 主链路或 P0 相关测试。
+- 不新增 migration。
+- 若行为口径影响 API / 领域文档，同步更新 `docs/api-data/` 和 `docs/domains/study-mode/plan-lifecycle.md`。
+
 ### P7：version 乐观锁改造
 
 状态：工程增强。
@@ -220,6 +237,7 @@
 
 - `P0：S06 任务测试题生成闭环` 先独立推进，稳定后再接 `P2：任务测试题轻量只读版`。
 - 如果要开第二个窗口，可单独做 `P4：docs / API 契约校正`，但要提前锁定具体文档 owner，避免和 P0/P2 同时改同一份 `docs/domains/study-mode/*.md`。
+- `P10：重生成 preview 配置合并修复` 可作为当前后端窗口的合并前小修复优先处理，文件范围应限定在 study plan lifecycle 后端、测试和必要文档。
 - `P5：资料解析诊断接入 Study Mode warning / 阻断策略` 可后续并行调研，但不要插进 P0-P3 的主链路。
 
 P2 依赖 P0 的生成正确性，不建议和 P0 同时作为正式展示任务并行；最多可先做静态 renderer / mock 数据验证。
