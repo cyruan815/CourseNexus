@@ -1,12 +1,14 @@
 import type { MaterialScope } from "../materials/types";
 
 export interface SourceCitation {
+  id?: string;
   material_id: string;
   chunk_id: string | null;
   material_name: string;
-  page: string | null;
+  page: string | number | null;
   page_index: number | null;
   hit_text: string;
+  sort_order?: number | null;
 }
 
 export interface CourseQuestionCreate {
@@ -63,6 +65,7 @@ export interface GeneratedContent {
   generation_status: string;
   material_scope_json: unknown;
   error_code: string | null;
+  source_citations: SourceCitation[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

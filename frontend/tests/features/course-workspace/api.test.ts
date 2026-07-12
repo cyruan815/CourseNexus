@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   askCourseQuestion,
   generateCourseContent,
+  getGeneratedContent,
   listCourseConversations,
   listConversationMessages,
   listGeneratedContents,
@@ -68,6 +69,7 @@ describe("course workspace api", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await listGeneratedContents("crs_1");
+    await getGeneratedContent("gen_1");
     await generateCourseContent("crs_1", {
       content_type: "outline",
       material_scope: scope,
@@ -82,6 +84,11 @@ describe("course workspace api", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      "/api/v1/generated-contents/gen_1",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       "/api/v1/courses/crs_1/generations",
       expect.objectContaining({
         body: JSON.stringify({
@@ -93,7 +100,7 @@ describe("course workspace api", () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       "/api/v1/courses/crs_1/study-plans",
       expect.objectContaining({ method: "GET" }),
     );

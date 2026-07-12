@@ -28,6 +28,10 @@ export function listGeneratedContents(courseId: string): Promise<GeneratedConten
   return apiRequest<GeneratedContent[]>(`/api/v1/courses/${courseId}/generated-contents`, { method: "GET" });
 }
 
+export function getGeneratedContent(generatedContentId: string): Promise<GeneratedContent> {
+  return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}`, { method: "GET" });
+}
+
 export function generateCourseContent(courseId: string, payload: GenerateContentRequest): Promise<GeneratedContent> {
   return apiRequest<GeneratedContent>(`/api/v1/courses/${courseId}/generations`, {
     method: "POST",

@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 import { getSessionToken, subscribeSessionChange } from "../features/auth/session";
 import { CourseDetailPage } from "../pages/CourseDetailPage";
 import { CourseDetailPreviewPage } from "../pages/CourseDetailPreviewPage";
+import { GeneratedContentDetailPage } from "../pages/GeneratedContentDetailPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { RegisterPage } from "../pages/RegisterPage";
@@ -34,6 +35,7 @@ export function AppRouter() {
         <Route element={<RequireAuth />}>
           <Route element={<HomePage />} path="/" />
           <Route element={<CourseDetailPage />} path="/courses/:courseId" />
+          <Route element={<GeneratedContentDetailPage />} path="/generated-contents/:generatedContentId" />
         </Route>
         <Route element={<Navigate replace to="/" />} path="*" />
       </Routes>

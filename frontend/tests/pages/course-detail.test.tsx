@@ -30,6 +30,7 @@ const generatedContent = {
   generation_status: "success",
   material_scope_json: { include_all_parsed_materials: true, material_ids: [] },
   error_code: null,
+  source_citations: [],
   created_at: "2026-07-09T12:00:00+00:00",
   updated_at: "2026-07-09T12:00:00+00:00",
   deleted_at: null,
@@ -175,6 +176,7 @@ describe("CourseDetailPage", () => {
     renderDetailPage();
 
     expect(await screen.findByText("期末复习提纲")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
     expect(screen.getByText("高等数学期末计划")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {

@@ -388,7 +388,9 @@ function GeneratedContentPanel({ contents }: { contents: GeneratedContent[] }) {
             <Paper className="course-detail-generated-item" key={content.id} radius="md" withBorder>
               <Group justify="space-between" wrap="nowrap">
                 <Stack gap={2}>
-                  <Text fw={700} size="sm">{content.title}</Text>
+                  <Text component={Link} fw={700} size="sm" to={`/generated-contents/${content.id}`}>
+                    {content.title}
+                  </Text>
                   <Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text>
                 </Stack>
                 <Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">

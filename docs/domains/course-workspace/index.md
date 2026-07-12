@@ -19,7 +19,7 @@
 - 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。首页创建课程成功后跳转到课程详情页时，会通过路由 state 触发一次可关闭的上传资料提示。
 - 中间问答区调用 `POST /api/v1/courses/{course_id}/qa/questions`，传入当前 `material_scope`，展示回答、`grounded` / `no_source` 状态和真实引用来源。
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`。
-- AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`。
+- AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`，列表记录可进入生成内容详情页 `/generated-contents/:generatedContentId`。
 - 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时只展示“制定学习计划”入口，有计划时展示计划摘要。
 - 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心、今日待办查看、制定学习计划和 AI 生成内容“查看全部”等尚未闭环的入口以待接入禁用态展示。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
@@ -28,7 +28,7 @@
 
 - 资料预览视图和引用点击定位。
 - 对话历史选择、连续追问消息列表展示和会话管理完整 UI。
-- 生成内容详情页 / 视图，以及 Quiz、Flashcard、Mindmap、复习提纲、知识点清单的专属结果渲染。
+- Quiz、Flashcard、Mindmap、复习提纲、知识点清单的最终专属学习交互页；当前仅有生成内容基础详情页。
 - 学习计划创建页、计划预览 / 保存表单、本课程计划学习模式日历。
 - 计划今日待办的真实当日任务聚合和任务执行入口。
 - 保存回答为笔记入口。
@@ -42,6 +42,7 @@
 - 课程工作台 API：`frontend/src/features/course-workspace/api.ts`
 - 课程工作台类型：`frontend/src/features/course-workspace/types.ts`
 - 资料工作区：`frontend/src/features/materials/MaterialWorkspace.tsx`
+- 生成内容详情页：`frontend/src/pages/GeneratedContentDetailPage.tsx`
 
 ## 模块边界
 
@@ -66,14 +67,14 @@
 - 资料范围使用后端 `MaterialScope` 结构，一级文件夹只作为浏览归类，不作为 Agent 上下文范围。
 - 创建课程与上传资料解耦：创建课程只写入课程基础信息；创建成功后由课程详情页弹出可关闭的上传资料提示，引导用户继续补资料，但不阻塞课程创建结果。
 - 右侧工具只接后端当前注册生成类型；“学习笔记”当前只作为保存回答后的未来入口，不调用不存在的一键生成 note 能力。
-- 生成接口当前后端为 deterministic placeholder，前端只展示记录和状态，不把结果渲染成最终学习产品页面。
+- 生成接口当前后端仍可能由 deterministic placeholder 提供具体类型 fallback，前端详情页只做基础结构化展示和引用展示，不把结果渲染成最终学习产品页面。
 
 ## PRD / 后端 / 前端一致性缺口
 
 当前后端已有但前端未完全实现：
 
 - 对话列表和消息列表 API 已有，但前端尚未提供会话列表、历史消息切换和完整连续追问 UI。
-- 生成内容详情 API 已有，但前端尚未提供各内容类型详情视图。
+- 生成内容详情 API 已接入基础详情页，但尚未提供各内容类型的最终专属学习交互。
 - 学习计划预览、保存、列表和详情 API 已有，但前端只接入列表摘要，尚未实现计划创建页和保存流程。
 
 PRD 要求但当前后端能力不足或未形成完整接口：
