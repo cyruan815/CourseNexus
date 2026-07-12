@@ -10,11 +10,15 @@ import {
   Divider,
   Grid,
   Group,
+  Menu,
+  Modal,
   Paper,
   Select,
   Skeleton,
   Stack,
   Text,
+  Textarea,
+  TextInput,
   Title,
 } from "@mantine/core";
 import {
@@ -23,28 +27,41 @@ import {
   IconChevronRight,
   IconClipboardList,
   IconDotsVertical,
+  IconEdit,
   IconMoon,
   IconPlus,
   IconSun,
+  IconTrash,
   IconUser,
 } from "@tabler/icons-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../api/errors";
 import type { Course } from "../../types/course";
-import { listCourses } from "./api";
+import { createCourse, deleteCourse, listCourses, updateCourse } from "./api";
 import "./home-workbench.css";
 
 interface HomeCourse {
   id: string;
   name: string;
+  description: string | null;
   teacher: string | null;
   term: string | null;
   materialLabel: string;
   taskLabel: string;
   recentActivity: string;
   progress: string;
+  status: string;
 }
+
+interface CourseFormValues {
+  name: string;
+  description: string;
+  teacher: string;
+  term: string;
+}
+
+type CourseModalMode = "create" | "edit";
 
 interface CalendarDay {
   day: number | null;
@@ -89,16 +106,51 @@ function getErrorMessage(error: unknown): string {
   return "课程列表加载失败";
 }
 
+function createEmptyCourseForm(): CourseFormValues {
+  return {
+    name: "",
+    description: "",
+    teacher: "",
+    term: "",
+  };
+}
+
+function createCourseFormFromCourse(course: HomeCourse): CourseFormValues {
+  return {
+    name: course.name,
+    description: course.description ?? "",
+    teacher: course.teacher ?? "",
+    term: course.term ?? "",
+  };
+}
+
+function optionalText(value: string): string | null {
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed : null;
+}
+
+function buildCoursePayload(values: CourseFormValues) {
+  return {
+    name: values.name.trim(),
+    description: optionalText(values.description),
+    teacher: optionalText(values.teacher),
+    term: optionalText(values.term),
+  };
+}
+
 function mapCourseToHomeCourse(course: Course): HomeCourse {
   return {
     id: course.id,
     name: course.name,
+    description: course.description,
     teacher: course.teacher,
     term: course.term,
     materialLabel: "资料待接入",
     taskLabel: "今日任务待接入",
     recentActivity: course.description?.trim() || "课程资料待上传",
     progress: course.status === "active" ? "课程已创建" : course.status,
+    status: course.status,
   };
 }
 
@@ -211,7 +263,17 @@ function CalendarPanel() {
   );
 }
 
-function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: string }) {
+function CourseCard({
+  course,
+  onDelete,
+  onEdit,
+  toneClass,
+}: {
+  course: HomeCourse;
+  onDelete: (course: HomeCourse) => void;
+  onEdit: (course: HomeCourse) => void;
+  toneClass: string;
+}) {
   return (
     <Card className={`home-course-card home-course-card-${toneClass}`} padding="lg" radius="md" withBorder>
       <Stack gap="lg" h="100%" justify="space-between">
@@ -226,9 +288,21 @@ function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: stri
               {course.teacher ?? "未填写教师"} · {course.term ?? "未填写学期"}
             </Text>
           </Stack>
-          <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
-            <IconDotsVertical size={22} />
-          </ActionIcon>
+          <Menu position="bottom-end" shadow="sm" width={160} withinPortal>
+            <Menu.Target>
+              <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
+                <IconDotsVertical size={22} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => onEdit(course)}>
+                编辑课程
+              </Menu.Item>
+              <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => onDelete(course)}>
+                删除课程
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
 
         <Text className="home-course-activity">{course.recentActivity}</Text>
@@ -249,9 +323,17 @@ function CourseCard({ course, toneClass }: { course: HomeCourse; toneClass: stri
   );
 }
 
-function AddCourseCard() {
+function AddCourseCard({ onClick }: { onClick: () => void }) {
   return (
-    <Paper className="home-add-course" component={Link} radius="md" to="/" withBorder>
+    <Paper
+      aria-label="添加课程"
+      className="home-add-course"
+      component="button"
+      onClick={onClick}
+      radius="md"
+      type="button"
+      withBorder
+    >
       <Stack align="center" gap="sm">
         <Group gap="sm">
           <IconPlus size={28} stroke={1.7} />
@@ -322,15 +404,139 @@ function CourseErrorState({ message, onRetry }: { message: string; onRetry: () =
   );
 }
 
+function CourseFormModal({
+  error,
+  mode,
+  onChange,
+  onClose,
+  onSubmit,
+  opened,
+  values,
+  isSubmitting,
+}: {
+  error: string | null;
+  mode: CourseModalMode;
+  onChange: (field: keyof CourseFormValues, value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  opened: boolean;
+  values: CourseFormValues;
+  isSubmitting: boolean;
+}) {
+  const isCreate = mode === "create";
+  const canSubmit = values.name.trim().length > 0 && !isSubmitting;
+
+  return (
+    <Modal
+      centered
+      onClose={onClose}
+      opened={opened}
+      title={isCreate ? "创建课程" : "编辑课程"}
+      transitionProps={{ duration: 0 }}
+    >
+      <Stack gap="md">
+        {error ? (
+          <Alert color="red" role="alert" title={isCreate ? "课程创建失败" : "课程保存失败"} variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        <TextInput
+          aria-label="课程名称"
+          data-autofocus
+          label="课程名称"
+          onChange={(event) => onChange("name", event.currentTarget.value)}
+          required
+          value={values.name}
+        />
+        <Textarea
+          aria-label="课程简介"
+          label="课程简介"
+          minRows={3}
+          onChange={(event) => onChange("description", event.currentTarget.value)}
+          value={values.description}
+        />
+        <TextInput
+          aria-label="教师"
+          label="教师"
+          onChange={(event) => onChange("teacher", event.currentTarget.value)}
+          value={values.teacher}
+        />
+        <TextInput
+          aria-label="学期"
+          label="学期"
+          onChange={(event) => onChange("term", event.currentTarget.value)}
+          value={values.term}
+        />
+        {isCreate ? (
+          <Text c="dimmed" size="sm">
+            资料可在课程创建后进入课程详情页继续上传。
+          </Text>
+        ) : null}
+        <Group justify="flex-end">
+          <Button disabled={isSubmitting} onClick={onClose} variant="default">
+            取消
+          </Button>
+          <Button disabled={!canSubmit} loading={isSubmitting} onClick={onSubmit}>
+            {isCreate ? "创建课程" : "保存修改"}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function DeleteCourseModal({
+  course,
+  error,
+  isSubmitting,
+  onClose,
+  onConfirm,
+}: {
+  course: HomeCourse | null;
+  error: string | null;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal centered onClose={onClose} opened={Boolean(course)} title="删除课程" transitionProps={{ duration: 0 }}>
+      <Stack gap="md">
+        {error ? (
+          <Alert color="red" role="alert" title="删除失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        <Text>
+          确认删除“{course?.name}”吗？删除后该课程及其资料、对话、生成内容、学习计划会按后端策略隐藏。
+        </Text>
+        <Group justify="flex-end">
+          <Button disabled={isSubmitting} onClick={onClose} variant="default">
+            取消
+          </Button>
+          <Button color="red" loading={isSubmitting} onClick={onConfirm}>
+            确认删除
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function CourseOverview({
   courses,
   error,
   isLoading,
+  onAddCourse,
+  onDeleteCourse,
+  onEditCourse,
   onRetry,
 }: {
   courses: HomeCourse[];
   error: string | null;
   isLoading: boolean;
+  onAddCourse: () => void;
+  onDeleteCourse: (course: HomeCourse) => void;
+  onEditCourse: (course: HomeCourse) => void;
   onRetry: () => void;
 }) {
   const [selectedTerm, setSelectedTerm] = useState(ALL_TERMS_VALUE);
@@ -373,12 +579,17 @@ function CourseOverview({
         {!isLoading && !error
           ? filteredCourses.map((course, index) => (
               <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
-                <CourseCard course={course} toneClass={getCourseToneClass(index)} />
+                <CourseCard
+                  course={course}
+                  onDelete={onDeleteCourse}
+                  onEdit={onEditCourse}
+                  toneClass={getCourseToneClass(index)}
+                />
               </Grid.Col>
             ))
           : null}
         <Grid.Col span={{ base: 12, md: 6, xl: 4 }}>
-          <AddCourseCard />
+          <AddCourseCard onClick={onAddCourse} />
         </Grid.Col>
       </Grid>
     </Paper>
@@ -386,10 +597,20 @@ function CourseOverview({
 }
 
 export function HomeWorkbench() {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<HomeCourse[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [courseModalMode, setCourseModalMode] = useState<CourseModalMode>("create");
+  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<HomeCourse | null>(null);
+  const [courseFormValues, setCourseFormValues] = useState<CourseFormValues>(createEmptyCourseForm);
+  const [courseFormError, setCourseFormError] = useState<string | null>(null);
+  const [isCourseFormSubmitting, setIsCourseFormSubmitting] = useState(false);
+  const [deletingCourse, setDeletingCourse] = useState<HomeCourse | null>(null);
+  const [deleteCourseError, setDeleteCourseError] = useState<string | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -420,6 +641,102 @@ export function HomeWorkbench() {
     };
   }, [reloadKey]);
 
+  function openCreateCourseModal() {
+    setCourseModalMode("create");
+    setEditingCourse(null);
+    setCourseFormValues(createEmptyCourseForm());
+    setCourseFormError(null);
+    setIsCourseModalOpen(true);
+  }
+
+  function openEditCourseModal(course: HomeCourse) {
+    setCourseModalMode("edit");
+    setEditingCourse(course);
+    setCourseFormValues(createCourseFormFromCourse(course));
+    setCourseFormError(null);
+    setIsCourseModalOpen(true);
+  }
+
+  function closeCourseModal() {
+    if (isCourseFormSubmitting) {
+      return;
+    }
+
+    setIsCourseModalOpen(false);
+    setCourseFormError(null);
+  }
+
+  function updateCourseFormValue(field: keyof CourseFormValues, value: string) {
+    setCourseFormValues((currentValues) => ({
+      ...currentValues,
+      [field]: value,
+    }));
+  }
+
+  async function submitCourseForm() {
+    const payload = buildCoursePayload(courseFormValues);
+
+    if (!payload.name) {
+      setCourseFormError("课程名称不能为空");
+      return;
+    }
+
+    setIsCourseFormSubmitting(true);
+    setCourseFormError(null);
+
+    try {
+      if (courseModalMode === "create") {
+        const createdCourse = await createCourse(payload);
+        setCourses((currentCourses) => [...currentCourses, mapCourseToHomeCourse(createdCourse)]);
+        setIsCourseModalOpen(false);
+        navigate(`/courses/${createdCourse.id}`);
+      } else if (editingCourse) {
+        const nextCourse = await updateCourse(editingCourse.id, payload);
+        setCourses((currentCourses) =>
+          currentCourses.map((course) => (course.id === nextCourse.id ? mapCourseToHomeCourse(nextCourse) : course)),
+        );
+        setIsCourseModalOpen(false);
+      }
+    } catch (nextError: unknown) {
+      setCourseFormError(getErrorMessage(nextError));
+    } finally {
+      setIsCourseFormSubmitting(false);
+    }
+  }
+
+  function openDeleteCourseModal(course: HomeCourse) {
+    setDeletingCourse(course);
+    setDeleteCourseError(null);
+  }
+
+  function closeDeleteCourseModal() {
+    if (isDeletingCourse) {
+      return;
+    }
+
+    setDeletingCourse(null);
+    setDeleteCourseError(null);
+  }
+
+  async function confirmDeleteCourse() {
+    if (!deletingCourse) {
+      return;
+    }
+
+    setIsDeletingCourse(true);
+    setDeleteCourseError(null);
+
+    try {
+      await deleteCourse(deletingCourse.id);
+      setCourses((currentCourses) => currentCourses.filter((course) => course.id !== deletingCourse.id));
+      setDeletingCourse(null);
+    } catch (nextError: unknown) {
+      setDeleteCourseError(getErrorMessage(nextError));
+    } finally {
+      setIsDeletingCourse(false);
+    }
+  }
+
   return (
     <Box className="home-workbench">
       <Header />
@@ -433,10 +750,30 @@ export function HomeWorkbench() {
             courses={courses}
             error={error}
             isLoading={isLoading}
+            onAddCourse={openCreateCourseModal}
+            onDeleteCourse={openDeleteCourseModal}
+            onEditCourse={openEditCourseModal}
             onRetry={() => setReloadKey((currentKey) => currentKey + 1)}
           />
         </Box>
       </Container>
+      <CourseFormModal
+        error={courseFormError}
+        isSubmitting={isCourseFormSubmitting}
+        mode={courseModalMode}
+        onChange={updateCourseFormValue}
+        onClose={closeCourseModal}
+        onSubmit={submitCourseForm}
+        opened={isCourseModalOpen}
+        values={courseFormValues}
+      />
+      <DeleteCourseModal
+        course={deletingCourse}
+        error={deleteCourseError}
+        isSubmitting={isDeletingCourse}
+        onClose={closeDeleteCourseModal}
+        onConfirm={confirmDeleteCourse}
+      />
     </Box>
   );
 }

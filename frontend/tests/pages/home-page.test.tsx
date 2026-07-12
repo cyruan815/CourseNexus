@@ -1,6 +1,6 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TOKEN_STORAGE_KEY } from "../../src/features/auth/session";
@@ -45,11 +45,18 @@ const backendCourses = [
   },
 ];
 
+function LocationProbe() {
+  const location = useLocation();
+
+  return <span data-testid="location-path">{location.pathname}</span>;
+}
+
 function renderHomePage() {
   render(
     <MantineProvider>
       <MemoryRouter>
         <HomePage />
+        <LocationProbe />
       </MemoryRouter>
     </MantineProvider>,
   );
@@ -125,6 +132,130 @@ describe("HomePage", () => {
     expect(screen.getByRole("link", { name: "算法设计" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "离散数学" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "操作系统" })).not.toBeInTheDocument();
+  });
+
+  it("creates a course from the home modal and enters the new course", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const createdCourse = {
+      id: "crs_linear_algebra",
+      user_id: "usr_123",
+      name: "线性代数",
+      description: "矩阵和向量空间复习",
+      teacher: "王老师",
+      term: "2026 Spring",
+      status: "active",
+      created_at: "2026-07-12T12:00:00+00:00",
+      updated_at: "2026-07-12T12:00:00+00:00",
+      deleted_at: null,
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/v1/courses" && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: createdCourse, meta: { request_id: "req_create" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHomePage();
+
+    await screen.findByRole("link", { name: "离散数学" });
+    fireEvent.click(screen.getByRole("button", { name: "添加课程" }));
+    fireEvent.change(await screen.findByLabelText("课程名称"), { target: { value: "线性代数" } });
+    fireEvent.change(screen.getByLabelText("课程简介"), { target: { value: "矩阵和向量空间复习" } });
+    fireEvent.change(screen.getByLabelText("教师"), { target: { value: "王老师" } });
+    fireEvent.change(screen.getByLabelText("学期"), { target: { value: "2026 Spring" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建课程" }));
+
+    await waitFor(() => expect(screen.getByTestId("location-path")).toHaveTextContent("/courses/crs_linear_algebra"));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/courses",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          name: "线性代数",
+          description: "矩阵和向量空间复习",
+          teacher: "王老师",
+          term: "2026 Spring",
+        }),
+      }),
+    );
+  });
+
+  it("edits and deletes a course from the course card menu", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const updatedCourse = {
+      ...backendCourses[0],
+      name: "离散数学复习",
+      description: "图论和组合数学复习",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/v1/courses/crs_discrete_math" && init?.method === "PATCH") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: updatedCourse, meta: { request_id: "req_update" } }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+
+      if (String(input) === "/api/v1/courses/crs_discrete_math" && init?.method === "DELETE") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { ...updatedCourse, status: "deleted" }, meta: { request_id: "req_delete" } }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHomePage();
+
+    await screen.findByRole("link", { name: "离散数学" });
+    fireEvent.click(screen.getByRole("button", { name: "离散数学 更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "编辑课程" }));
+    fireEvent.change(await screen.findByLabelText("课程名称"), { target: { value: "离散数学复习" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    expect(await screen.findByRole("link", { name: "离散数学复习" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/courses/crs_discrete_math",
+      expect.objectContaining({
+        method: "PATCH",
+        body: expect.stringContaining("离散数学复习"),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "离散数学复习 更多操作" }));
+    fireEvent.click(await screen.findByText("删除课程"));
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => expect(screen.queryByRole("link", { name: "离散数学复习" })).not.toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/courses/crs_discrete_math",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
   it("renders an empty course state when the backend returns no courses", async () => {

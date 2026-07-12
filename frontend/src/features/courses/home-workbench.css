@@ -322,6 +322,8 @@
   place-items: center;
   border: 1px dashed #93c5fd;
   background: #f8fbff;
+  cursor: pointer;
+  font: inherit;
   padding: 24px;
   transition:
     border-color 160ms ease,
