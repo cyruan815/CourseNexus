@@ -18,7 +18,6 @@ import {
   Title,
 } from "@mantine/core";
 import {
-  IconAlertCircle,
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
@@ -47,9 +46,36 @@ interface HomeCourse {
   progress: string;
 }
 
-const calendarDays = Array.from({ length: 35 }, (_, index) => index + 1);
+interface CalendarDay {
+  day: number | null;
+  isToday: boolean;
+}
+
+const ALL_TERMS_VALUE = "全部学期";
 const isDarkMode = false;
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
+
+function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const leadingEmptyCells = firstDay.getDay();
+  const totalCells = Math.ceil((leadingEmptyCells + lastDate) / 7) * 7;
+
+  return Array.from({ length: totalCells }, (_, index) => {
+    const day = index - leadingEmptyCells + 1;
+
+    if (day < 1 || day > lastDate) {
+      return { day: null, isToday: false };
+    }
+
+    return {
+      day,
+      isToday: day === referenceDate.getDate(),
+    };
+  });
+}
 
 function getCourseToneClass(index: number): string {
   return courseToneClasses[index % courseToneClasses.length];
@@ -110,9 +136,6 @@ function TodayTodoPanel() {
           <Stack gap={2}>
             <Title order={2}>今日待办</Title>
           </Stack>
-          <Badge className="home-urgent-badge" leftSection={<IconAlertCircle size={14} />}>
-            1 项待安排
-          </Badge>
         </Group>
 
         <Stack align="center" className="home-plan-empty" gap="md">
@@ -120,12 +143,9 @@ function TodayTodoPanel() {
           <Stack gap={4}>
             <Title order={3}>今天还没有学习计划</Title>
             <Text c="dimmed" ta="center">
-              生成学习计划后，这里会展示当天任务
+              进入课程详情制定学习计划后，这里会展示当天任务
             </Text>
           </Stack>
-          <Button className="home-plan-button" component={Link} leftSection={<IconPlus size={16} />} to="/" variant="filled">
-            生成今日计划
-          </Button>
         </Stack>
       </Stack>
     </Paper>
@@ -133,13 +153,18 @@ function TodayTodoPanel() {
 }
 
 function CalendarPanel() {
+  const referenceDate = new Date();
+  const monthLabel = `${referenceDate.getMonth() + 1} 月`;
+  const calendarTitle = `${referenceDate.getFullYear()} 年 ${monthLabel}`;
+  const calendarDays = getCalendarDays(referenceDate);
+
   return (
     <Paper className="home-calendar-panel" radius="md" withBorder>
       <Stack gap="md" h="100%">
         <Group justify="space-between">
           <Title order={2}>日历</Title>
           <Badge color="blue" variant="light">
-            7 月
+            {monthLabel}
           </Badge>
         </Group>
 
@@ -148,7 +173,7 @@ function CalendarPanel() {
             <ActionIcon aria-label="上个月" variant="subtle">
               <IconChevronLeft size={22} />
             </ActionIcon>
-            <Text fw={700}>2026 年 7 月</Text>
+            <Text fw={700}>{calendarTitle}</Text>
             <ActionIcon aria-label="下个月" variant="subtle">
               <IconChevronRight size={22} />
             </ActionIcon>
@@ -165,14 +190,19 @@ function CalendarPanel() {
           </Box>
 
           <Box aria-label="月历，无学习计划" className="home-calendar-grid" role="grid">
-            {calendarDays.map((day) => (
-              <Box className="home-calendar-cell" key={day} role="gridcell">
-                {day === 17 ? <span className="home-calendar-today">今</span> : null}
-                {day === 18 ? <span className="home-calendar-dot" /> : null}
+            {calendarDays.map((calendarDay, index) => (
+              <Box
+                aria-label={calendarDay.day ? String(calendarDay.day) : "空白日期"}
+                className="home-calendar-cell"
+                key={`${calendarDay.day ?? "empty"}-${index}`}
+                role="gridcell"
+              >
+                {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
+                {calendarDay.isToday ? <span className="home-calendar-today">今</span> : null}
               </Box>
             ))}
             <Paper className="home-calendar-empty" radius="md" withBorder>
-              <Text fw={700}>待排计划</Text>
+              <Text fw={700}>暂无计划</Text>
             </Paper>
           </Box>
         </Paper>
@@ -303,6 +333,7 @@ function CourseOverview({
   isLoading: boolean;
   onRetry: () => void;
 }) {
+  const [selectedTerm, setSelectedTerm] = useState(ALL_TERMS_VALUE);
   const termOptions = useMemo(() => {
     const terms = courses
       .map((course) => course.term)
@@ -310,8 +341,11 @@ function CourseOverview({
 
     return Array.from(new Set(terms));
   }, [courses]);
-  const termData = termOptions.length > 0 ? termOptions : ["全部学期"];
-  const defaultTerm = termData[0];
+  const termData = [ALL_TERMS_VALUE, ...termOptions];
+  const filteredCourses = selectedTerm === ALL_TERMS_VALUE
+    ? courses
+    : courses.filter((course) => course.term === selectedTerm);
+  const termSummary = selectedTerm === ALL_TERMS_VALUE ? ALL_TERMS_VALUE : selectedTerm;
 
   return (
     <Paper className="home-main-panel" radius="md" withBorder>
@@ -319,24 +353,25 @@ function CourseOverview({
         <Stack gap={4}>
           <Title order={2}>课程概览</Title>
           <Text c="dimmed" size="sm">
-            本学期 {courses.length} 门课程 · 资料统计待接入
+            {termSummary} {filteredCourses.length} 门课程 · 资料统计待接入
           </Text>
         </Stack>
         <Select
           aria-label="选择学期"
           className="home-term-select"
           data={termData}
-          defaultValue={defaultTerm}
+          onChange={(value) => setSelectedTerm(value ?? ALL_TERMS_VALUE)}
           rightSection={<IconChevronDown size={18} />}
+          value={selectedTerm}
         />
       </Group>
 
       <Grid gap="lg">
         {isLoading ? <CourseLoadingCards /> : null}
         {!isLoading && error ? <CourseErrorState message={error} onRetry={onRetry} /> : null}
-        {!isLoading && !error && courses.length === 0 ? <CourseEmptyState /> : null}
+        {!isLoading && !error && filteredCourses.length === 0 ? <CourseEmptyState /> : null}
         {!isLoading && !error
-          ? courses.map((course, index) => (
+          ? filteredCourses.map((course, index) => (
               <Grid.Col key={course.id} span={{ base: 12, md: 6, xl: 4 }}>
                 <CourseCard course={course} toneClass={getCourseToneClass(index)} />
               </Grid.Col>
