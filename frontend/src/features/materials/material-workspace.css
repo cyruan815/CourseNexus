@@ -156,6 +156,34 @@
   color: #a03939;
 }
 
+.material-workspace__upload-dialog {
+  align-items: center;
+  background: rgb(15 23 42 / 42%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 220;
+}
+
+.material-workspace__upload-dialog-panel {
+  background: #ffffff;
+  border: 1px solid #d8e0e8;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgb(15 23 42 / 22%);
+  display: grid;
+  gap: 14px;
+  max-width: 440px;
+  padding: 22px;
+  width: min(100%, 440px);
+}
+
+.material-workspace__upload-dialog-panel h3,
+.material-workspace__upload-dialog-panel p {
+  margin: 0;
+}
+
 .material-workspace__sr-only {
   clip: rect(0, 0, 0, 0);
   clip-path: inset(50%);

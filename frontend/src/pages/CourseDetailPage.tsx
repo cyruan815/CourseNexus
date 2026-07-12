@@ -30,7 +30,7 @@ import {
   IconSparkles,
   IconUser,
 } from "@tabler/icons-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import {
@@ -445,6 +445,8 @@ export function CourseDetailWorkbench({
 
 export function CourseDetailPage() {
   const { courseId } = useParams();
+  const location = useLocation();
+  const shouldOpenUploadPrompt = Boolean((location.state as { openUploadPrompt?: boolean } | null)?.openUploadPrompt);
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -620,6 +622,7 @@ export function CourseDetailPage() {
             courseId={course.id}
             materialScope={materialScope}
             onMaterialScopeChange={setMaterialScope}
+            openUploadPrompt={shouldOpenUploadPrompt}
           />
         )}
         onGenerate={handleGenerateContent}

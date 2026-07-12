@@ -21,6 +21,7 @@ interface MaterialWorkspaceProps {
   courseId: string;
   materialScope: MaterialScope;
   onMaterialScopeChange: (scope: MaterialScope) => void;
+  openUploadPrompt?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -44,6 +45,7 @@ export function MaterialWorkspace({
   courseId,
   materialScope,
   onMaterialScopeChange,
+  openUploadPrompt = false,
 }: MaterialWorkspaceProps) {
   const [folders, setFolders] = useState<MaterialFolder[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -52,6 +54,7 @@ export function MaterialWorkspace({
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploadPromptOpen, setIsUploadPromptOpen] = useState(openUploadPrompt);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +183,7 @@ export function MaterialWorkspace({
     void mutate(async () => {
       const material = await uploadMaterial(courseId, uploadFile, destination);
       setMaterials((current) => [material, ...current]);
+      setIsUploadPromptOpen(false);
       setUploadFile(null);
       const input = document.getElementById("material-upload-input") as HTMLInputElement | null;
       if (input) {
@@ -240,6 +244,25 @@ export function MaterialWorkspace({
 
       {error ? <p role="alert">{error}</p> : null}
       {isLoading ? <p role="status">正在加载资料...</p> : null}
+
+      {isUploadPromptOpen ? (
+        <div aria-labelledby="material-upload-dialog-title" className="material-workspace__upload-dialog" role="dialog">
+          <div className="material-workspace__upload-dialog-panel">
+            <h3 id="material-upload-dialog-title">上传课程资料</h3>
+            <p>课程已创建成功，可以现在上传资料；也可以先关闭，之后在课程详情页继续上传。</p>
+            <form className="material-workspace__upload" onSubmit={handleUpload}>
+              <input
+                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                type="file"
+              />
+              <button disabled={isMutating || !uploadFile} type="submit">上传资料</button>
+            </form>
+            <button disabled={isMutating} onClick={() => setIsUploadPromptOpen(false)} type="button">
+              暂不上传
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!isLoading ? (
         <div className="material-workspace__body">

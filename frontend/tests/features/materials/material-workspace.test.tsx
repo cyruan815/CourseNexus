@@ -114,4 +114,45 @@ describe("MaterialWorkspace", () => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
     });
   });
+
+  it("opens and closes the upload prompt when requested by the course creation flow", async () => {
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+        openUploadPrompt
+      />,
+    );
+
+    expect(await screen.findByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "暂不上传" }));
+
+    expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
+  });
+
+  it("removes a deleted folder from the folder list and moves its materials to unfiled", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(materialsApi.deleteMaterialFolder).mockResolvedValue({
+      ...folder,
+      deleted_at: "2026-07-12T00:00:00Z",
+    });
+
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "第一周" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "删除 第一周" }));
+
+    await waitFor(() => {
+      expect(materialsApi.deleteMaterialFolder).toHaveBeenCalledWith("fld_1");
+    });
+    expect(screen.queryByRole("button", { name: "第一周" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("第一章.pdf 所属文件夹")).toHaveValue("");
+  });
 });

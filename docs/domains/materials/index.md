@@ -13,7 +13,7 @@
 - 后端入口：`backend/app/modules/materials/{router,schemas,service,repository,models}.py`。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -107,7 +107,7 @@ flowchart LR
 - 文件夹 CRUD、资料重命名、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、创建后上传提示、删除文件夹后资料回未分类的前端状态回归：`frontend/tests/features/materials/`。
 
 验证命令：
 
@@ -120,5 +120,6 @@ pnpm frontend:build
 ## 7. 决策、限制与演进
 
 - 2026-07-10 确认文件夹只用于归类，不作为 Agent 范围；该规则覆盖早期文档中的目录选择设计。
+- 2026-07-12 前端确认课程创建成功后由课程详情页资料区弹出可关闭的上传提示；创建课程弹窗本身不承载资料上传。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。

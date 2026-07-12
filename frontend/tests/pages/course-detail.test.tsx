@@ -1,6 +1,6 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, type InitialEntry } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CourseDetailPage } from "../../src/pages/CourseDetailPage";
@@ -50,7 +50,7 @@ const studyPlan = {
   deleted_at: null,
 };
 
-function renderDetailPage(path = "/courses/crs_123") {
+function renderDetailPage(path: InitialEntry = "/courses/crs_123") {
   render(
     <MantineProvider>
       <MemoryRouter initialEntries={[path]}>
@@ -101,6 +101,33 @@ describe("CourseDetailPage", () => {
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成内容区" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制定学习计划" })).toBeInTheDocument();
+  });
+
+  it("opens a dismissible upload prompt after creating a course", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage({ pathname: "/courses/crs_123", state: { openUploadPrompt: true } });
+
+    expect(await screen.findByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "暂不上传" }));
+
+    expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
   });
 
   it("loads backend workspace data and sends course questions", async () => {
