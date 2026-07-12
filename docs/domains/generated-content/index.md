@@ -23,7 +23,15 @@
 ## 3. 当前状态
 
 - G01：全材料批次、用途模型注入、生成器工厂、引用过滤与回填、原子持久化、历史/详情引用响应已经实现。
-- G02-G06：仍由 deterministic placeholder 提供增量开发 fallback，不代表最终内容质量或业务 schema 已完成。
+- G02-G06：Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 均已实现真实结构化生成、全材料 map/reduce、逐条目引用和稳定 schema；placeholder 仅在内建模块文件缺失时作为注册降级机制。
+
+具体实现文档：
+
+- [quiz.md](quiz.md)
+- [flashcard.md](flashcard.md)
+- [mindmap.md](mindmap.md)
+- [outline.md](outline.md)
+- [knowledge-list.md](knowledge-list.md)
 - 当前没有队列、取消、进度查询或持久化幂等键；重复请求生成独立记录。
 - 前端已接入生成内容详情基础闭环：课程详情页生成内容列表中的记录可跳转到 `/generated-contents/:generatedContentId`，详情页调用 `GET /api/v1/generated-contents/{generated_content_id}`，展示标题、类型、状态、结构化结果基础视图和后端返回的真实引用来源。
 - 前端详情页只渲染后端返回内容，不补造引用、统计或最终学习产品交互；`page = null` 且 `page_index = 0` 的引用位置展示为“页码未知”，不得解释为真实第 0 页。
