@@ -241,7 +241,7 @@ def test_parse_config_returns_model_fields_without_writing_db(db: Session) -> No
             unresolved_fields=["start_date", "end_date"],
         )
     )
-    before_count = db.scalar(select(func.count()).select_from(StudyPlan))
+    before_counts = _study_plan_counts(db)
 
     parsed = parse_study_plan_config(
         db,
@@ -260,7 +260,7 @@ def test_parse_config_returns_model_fields_without_writing_db(db: Session) -> No
     assert parsed.preference == "mastery"
     assert parsed.unresolved_fields == ["start_date", "end_date"]
     assert parsed.material_scope.include_all_parsed_materials is True
-    assert db.scalar(select(func.count()).select_from(StudyPlan)) == before_count
+    assert _study_plan_counts(db) == before_counts
     assert provider.prompts
 
 
@@ -272,7 +272,7 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
         create_parsed_material(db, tmp_path, user.id, course.id, "transport-b.txt", b"Beta congestion control"),
     ]
     provider = RecordingPlanProvider(material_ids)
-    before_count = db.scalar(select(func.count()).select_from(StudyPlan))
+    before_counts = _study_plan_counts(db)
 
     preview = preview_study_plan(
         db,
@@ -297,7 +297,7 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
     assert preview.tasks[0].subtasks[-1].subtask_type == "test"
     assert sum(subtask.estimated_minutes for subtask in preview.tasks[0].subtasks) == 60
     assert set(preview.tasks[0].subtasks[0].related_material_ids) == set(material_ids)
-    assert db.scalar(select(func.count()).select_from(StudyPlan)) == before_count
+    assert _study_plan_counts(db) == before_counts
 
 def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
     return StudyPlanSaveRequest.model_validate(
@@ -332,6 +332,17 @@ def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
 
 
 
+
+def _saved_diagnostic_profile() -> dict[str, object]:
+    return {
+        "question_version": "study_plan_diagnostic_v1",
+        "prior_knowledge_level": "little",
+        "foundation_needed": True,
+        "weak_topics": ["transport-reliability"],
+        "weak_area": "calculation",
+        "explanation_style": "step_by_step",
+        "diagnostic_note": "needs sequence number practice",
+    }
 
 def _study_plan_counts(db: Session) -> dict[str, int]:
     return {
@@ -949,7 +960,7 @@ def test_regeneration_preview_does_not_write_db(db: Session, tmp_path: Path) -> 
         max_tokens=12_000,
         idempotency_key="regen-save-key",
     )
-    before_count = db.scalar(select(func.count()).select_from(StudyPlan))
+    before_counts = _study_plan_counts(db)
 
     preview = preview_study_plan_regeneration(
         db,
@@ -961,7 +972,105 @@ def test_regeneration_preview_does_not_write_db(db: Session, tmp_path: Path) -> 
     )
 
     assert preview.goal_text == "重新掌握传输层"
-    assert db.scalar(select(func.count()).select_from(StudyPlan)) == before_count
+    assert _study_plan_counts(db) == before_counts
+
+
+
+def test_regeneration_preview_inherits_saved_diagnostic_profile(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_profile", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-profile.txt", b"Reliable transport")
+    saved_profile = _saved_diagnostic_profile()
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request_from_data(_request_data([material_id]) | {"diagnostic_profile": saved_profile}),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-profile-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest(goal_text="review transport layer"),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.diagnostic_profile == saved_profile
+    assert preview.generation_metadata["planner_strategy"]["foundation_required"] is True
+    assert preview.generation_metadata["planner_strategy"]["weak_topics"] == ["transport-reliability"]
+    assert preview.generation_metadata["planner_strategy"]["explanation_style"] == "step_by_step"
+
+
+def test_regeneration_preview_duration_override_recomputes_end_date_from_saved_start(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_duration", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-duration.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-duration-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest(duration_days=3),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.start_date == date(2026, 7, 11)
+    assert preview.end_date == date(2026, 7, 13)
+    assert preview.duration_days == 3
+    assert preview.capacity["available_total_minutes"] == 180
+
+
+def test_regeneration_preview_request_diagnostic_profile_overrides_saved_profile(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_profile_override", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-profile-override.txt", b"Reliable transport")
+    saved_profile = _saved_diagnostic_profile()
+    override_profile = {
+        **saved_profile,
+        "foundation_needed": False,
+        "weak_topics": ["congestion-control"],
+        "weak_area": "application",
+        "explanation_style": "example_first",
+        "diagnostic_note": "switch to congestion control examples",
+    }
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request_from_data(_request_data([material_id]) | {"diagnostic_profile": saved_profile}),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-profile-override-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest.model_validate({"diagnostic_profile": override_profile}),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.diagnostic_profile == override_profile
+    assert preview.generation_metadata["planner_strategy"]["foundation_required"] is False
+    assert preview.generation_metadata["planner_strategy"]["weak_topics"] == ["congestion-control"]
+    assert preview.generation_metadata["planner_strategy"]["explanation_style"] == "example_first"
 
 
 def test_replace_study_plan_replaces_task_tree_atomically(db: Session, tmp_path: Path) -> None:
