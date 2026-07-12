@@ -181,9 +181,6 @@ function TodayTodoCard({ plans }: { plans: StudyPlan[] }) {
     <Paper className="course-detail-card course-detail-todo-card" radius="md" withBorder>
       <Group justify="space-between" wrap="nowrap">
         <Title order={2}>今日待办</Title>
-        <ActionIcon aria-label="查看今日待办（待接入）" disabled variant="subtle">
-          <IconChecklist size={20} stroke={1.8} />
-        </ActionIcon>
       </Group>
       <Stack gap="xs">
         {activePlan ? (
@@ -322,24 +319,26 @@ function ToolCard({
   const ToolIcon = item.icon;
   const canGenerate = Boolean(item.type);
   return (
-    <Card className={`course-detail-tool-card course-detail-tool-card-${item.tone}`} padding="md" radius="md" withBorder>
+    <Card
+      aria-label={canGenerate ? `生成 ${item.label}` : `${item.label}（待接入）`}
+      className={`course-detail-tool-card course-detail-tool-card-${item.tone}`}
+      component="button"
+      disabled={!canGenerate || isGenerating}
+      onClick={() => item.type && onGenerate(item.type)}
+      padding="md"
+      radius="md"
+      type="button"
+      withBorder
+    >
       <Group className="course-detail-tool-head" justify="space-between" wrap="nowrap">
         <Box className="course-detail-tool-icon">
           <ToolIcon size={30} stroke={1.65} />
         </Box>
-        <Badge className="course-detail-tool-status" size="xs" variant="light">
-          {item.status}
-        </Badge>
+        <Stack gap={3}>
+          <Text fw={750}>{item.label}</Text>
+          <Text c="dimmed" size="sm">{item.description}</Text>
+        </Stack>
       </Group>
-      <Stack gap={3}>
-        <Text fw={750}>{item.label}</Text>
-        <Text c="dimmed" size="sm">{item.description}</Text>
-      </Stack>
-      {canGenerate ? (
-        <Button loading={isGenerating} onClick={() => item.type && onGenerate(item.type)} size="xs" variant="light">
-          生成
-        </Button>
-      ) : null}
     </Card>
   );
 }
@@ -378,17 +377,22 @@ function contentTypeLabel(type: string): string {
 function GeneratedContentPanel({ contents }: { contents: GeneratedContent[] }) {
   return (
     <Paper aria-label="AI 生成内容" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
-      <Group justify="space-between">
-        <Title order={2}>AI 生成内容</Title>
-        <Button aria-label="查看全部（待接入）" disabled size="xs" variant="default">查看全部</Button>
-      </Group>
+      <Title order={2}>AI 生成内容</Title>
       {contents.length > 0 ? (
-        <Stack gap="xs">
+        <Stack className="course-detail-generated-list" gap="xs">
           {contents.map((content) => (
-            <Paper className="course-detail-generated-item" key={content.id} radius="md" withBorder>
+            <Paper
+              aria-label={`查看生成内容 ${content.title}`}
+              className="course-detail-generated-item"
+              component={Link}
+              key={content.id}
+              radius="md"
+              to={`/generated-contents/${content.id}`}
+              withBorder
+            >
               <Group justify="space-between" wrap="nowrap">
                 <Stack gap={2}>
-                  <Text component={Link} fw={700} size="sm" to={`/generated-contents/${content.id}`}>
+                  <Text fw={700} size="sm">
                     {content.title}
                   </Text>
                   <Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text>
