@@ -169,19 +169,28 @@
 
 ### P10：重生成 preview 配置合并修复
 
-状态：合并前小修复，建议当前后端窗口优先处理；实际优先级高于 P7 / P8 / P9，但为避免重排编号，保留 P10 编号。
+状态：已完成。
 
-目标：
+完成日期：2026-07-13。
 
-- 修复 `POST /api/v1/study-plans/{plan_id}/regeneration-previews` 只传 `duration_days` 时复用旧 `end_date` 导致日期范围冲突的问题。
-- 重生成 preview 时真正合并已保存配置，至少继承已保存的 `diagnostic_profile`，避免诊断后的补基础、弱项和解释风格在重生成时失效。
-- 补覆盖测试，证明只改学习天数可用，且未传新诊断时会继承旧 `diagnostic_profile`。
+关键 commit：`e06314c87d2e5feba64fa9b50ef2dd2ce0684958`（`fix(study-mode): 修复重生成 preview 配置合并`）。
 
-限制：
+验证：
 
-- 不触碰 `task_test` generator、`learning_execution` 主链路或 P0 相关测试。
-- 不新增 migration。
-- 若行为口径影响 API / 领域文档，同步更新 `docs/api-data/` 和 `docs/domains/study-mode/plan-lifecycle.md`。
+- `uv run python -m pytest tests/modules/study_plans/test_study_plan_lifecycle.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`50 passed in 19.26s`。
+
+已落地：
+
+- `POST /api/v1/study-plans/{plan_id}/regeneration-previews` 现在先合并已保存配置，再应用请求覆盖项。
+- 请求未传 `diagnostic_profile` 时继承保存计划中的诊断 profile；显式传入新 profile 时覆盖，避免诊断后的补基础、弱项和解释风格在重生成时失效。
+- 请求只传 `duration_days` 时，后端基于保存的 `start_date` 或请求覆盖后的 `start_date` 重新推导 `end_date`，不再复用旧 `end_date` 造成范围冲突。
+- 已补 service 和 API 覆盖，证明 profile 继承、profile 覆盖、只改学习天数和 preview 不写数据库。
+- 已同步 `docs/domains/study-mode/plan-lifecycle.md`、`docs/api-data/contracts.md` 和 `docs/api-data/frontend-integration.md`。
+
+限制确认：
+
+- 未触碰 `task_test` generator、`learning_execution` 主链路或 P0 相关测试。
+- 未改数据库，未新增 migration。
 
 ### P7：version 乐观锁改造
 
