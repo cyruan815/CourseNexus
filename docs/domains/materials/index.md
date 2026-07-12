@@ -71,6 +71,14 @@ flowchart LR
 
 ### 5.2 算法步骤
 
+PDF 解析：
+
+1. 使用 `pdf_text_first` profile，关闭 OCR 并强制读取 PDF 文本层。
+2. 把 OCR、layout、table batch 限制为 1，队列限制为 4，CPU thread 限制为 1。
+3. 首轮存在有效 chunk 时直接返回，不初始化 OCR converter。
+4. 首轮零 chunk 时使用 `pdf_ocr_fallback` profile 整份重试，并记录 `OCR_FALLBACK_USED` info。
+5. Docling 返回 `partial_success` 时保留有效 chunk，同时记录失败页和 warning；零 chunk 才映射为 `PARSE_FAILED`。
+
 创建文件夹：
 
 1. 校验课程所有权。
@@ -103,6 +111,7 @@ flowchart LR
 - 删除文件夹为 `O(n)`，`n` 是目录内资料数；每份已解析资料执行一次 metadata 更新。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
+- PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
 
 ## 6. 测试与验收
 
@@ -124,3 +133,4 @@ pnpm frontend:build
 - 2026-07-10 确认文件夹只用于归类，不作为 Agent 范围；该规则覆盖早期文档中的目录选择设计。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
+- 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。

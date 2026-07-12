@@ -168,6 +168,10 @@ sequenceDiagram
 
 当前 `.txt` / `.md` parser 保留为快速路径和测试替身；`.pdf`、`.docx`、`.pptx`、`.png`、`.jpg`、`.jpeg` 进入 Docling adapter。图片 OCR 已纳入路由和基础错误映射，但 OCR 质量、复杂版面和跨页结构回归夹具后置。
 
+PDF 采用资源受限的两阶段解析：首轮关闭 OCR、强制使用 PDF backend 文本、关闭高级表格结构模型，并把 OCR / layout / table batch 固定为 1、队列固定为 4、CPU thread 固定为 1；只有首轮没有产生任何有效 chunk 时才使用同等资源限制的 OCR profile 整份重试。DOCX、PPTX 和图片继续使用 Docling 默认格式 converter，不改变非 PDF 行为。
+
+Docling conversion 使用 `raises_on_error = false` 获取 `status`、`errors`、处理页和输入页数。`partial_success` 的有效 chunk 必须保留，失败页和稳定 warning 由项目内部 `ParseDiagnostics` 返回，不能因部分失败静默标记为无诊断成功。关闭高级表格结构模型是本地 POC 的稳定性取舍；PDF backend 和 layout 仍提取表格文字，但高级单元格结构恢复不属于本次修复。
+
 ## 6. 两类上下文接口
 
 `material-context` 对业务层暴露两种语义不同的接口，不能继续用一个模糊的 `resolve_context()` 同时承担两类任务。
