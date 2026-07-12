@@ -250,7 +250,7 @@ conda run -n course-nexus python -m pytest tests/modules/todos_calendar tests/mo
 - `learning_execution` schema/repository/service/router。
 - service/API/事务集成测试。
 - API、架构、当前状态文档更新。
-- 中文验收记录 `docs/planning/phase-1-validation/S04-learning-execution.md`。
+- 中文验收记录 `docs/domains/study-mode/validation/S04-learning-execution.md`。
 - 建议独立提交：`feat(execution): 新增当日任务执行上下文`；`feat(execution): 幂等更新二级任务完成状态`；`fix(execution): 原子汇总任务计划与打卡`。
 
 ## 7. 文档同步

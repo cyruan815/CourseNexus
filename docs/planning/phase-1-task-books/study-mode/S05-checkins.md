@@ -118,7 +118,7 @@ conda run -n course-nexus python -m pytest tests/modules/learning_execution test
 ## 6. 交付物
 - checkins schema/repository/service/router 与三组测试。
 - API、数据、运行流程和当前状态文档。
-- `docs/planning/phase-1-validation/S05-checkins.md` 中文验收记录。
+- `docs/domains/study-mode/validation/S05-checkins.md` 中文验收记录。
 - 建议提交：`feat(checkins): 幂等重算每日学习完成记录`；`feat(checkins): 新增打卡查询接口`；`fix(checkins): 同步计划生命周期与打卡`。
 
 ## 7. 文档同步

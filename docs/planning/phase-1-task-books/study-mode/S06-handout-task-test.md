@@ -116,7 +116,7 @@ conda run -n course-nexus python -m pytest tests/integration/test_task_content_g
 ## 6. 交付物
 - 两个 generator、schema、任务 API 与四组测试。
 - API/架构/内容 JSON/当前状态文档。
-- `docs/planning/phase-1-validation/S06-task-content.md` 中文验收记录。
+- `docs/domains/study-mode/validation/S06-task-content.md` 中文验收记录。
 - 建议提交：`feat(handout): 接入任务讲义生成器`；`feat(task-test): 接入任务测试题生成器`；`feat(execution): 新增任务内容按需生成接口`。
 
 ## 7. 文档同步

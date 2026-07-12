@@ -181,7 +181,7 @@ conda run -n course-nexus python -m alembic upgrade head
 - `backend/tests/modules/study_mode/test_subsystem_schema_contract.py`。
 - 更新后的 `docs/api-data/contracts.md`、`data-model.md`、`table-schema.md`。
 - 更新后的 `docs/architecture/module-boundaries.md` 和 `docs/planning/current-state.md`。
-- 中文审计记录 `docs/planning/phase-1-validation/S01-schema-audit.md`，记录命令、日期、13 表结论和无 migration 结论。
+- 中文审计记录 `docs/domains/study-mode/validation/S01-schema-audit.md`，记录命令、日期、13 表结论和无 migration 结论。
 - 建议独立提交：`test(study-mode): 固定计划子系统表结构契约`；`docs(study-mode): 记录子系统契约与迁移结论`。
 
 ## 7. 文档同步

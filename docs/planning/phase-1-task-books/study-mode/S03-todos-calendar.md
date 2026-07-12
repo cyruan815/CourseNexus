@@ -260,7 +260,7 @@ conda run -n course-nexus python -m pytest tests/modules/study_plans tests/modul
 - `todos_calendar` 的 schema/repository/service/router。
 - service/API 测试和计划聚合集成回归。
 - API、架构、当前状态文档更新。
-- 中文验收记录 `docs/planning/phase-1-validation/S03-todos-calendar.md`。
+- 中文验收记录 `docs/domains/study-mode/validation/S03-todos-calendar.md`。
 - 建议独立提交：`feat(todos): 新增今日待办只读聚合`；`feat(calendar): 新增全局月历与当日分组查询`；`feat(calendar): 新增课程计划日历查询`。
 
 ## 7. 文档同步

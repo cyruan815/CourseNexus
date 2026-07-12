@@ -118,7 +118,7 @@ pnpm backend:test
 - PDF integration、exports module、依赖与四组测试。
 - ADR `docs/architecture/adr/0004-reportlab-pdf-export.md` 及 index 更新。
 - API/架构/工程/当前状态/技术债文档。
-- `docs/planning/phase-1-validation/S07-study-mode-e2e.md` 中文闭环记录。
+- `docs/domains/study-mode/validation/S07-study-mode-e2e.md` 中文闭环记录。
 - 建议提交：`build(pdf): 引入 ReportLab 导出依赖`；`feat(exports): 支持任务内容 PDF 导出`；`test(study-mode): 覆盖计划学习完整闭环`。
 
 ## 7. 文档同步

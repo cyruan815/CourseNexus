@@ -123,7 +123,7 @@ PDF 解析：
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
 - 基础前端归类与逐文件复选：`frontend/tests/features/materials/`。
-- 计网第七章 59 页 PDF 真实回归：[../../planning/phase-1-validation/net-chap7-pdf-parser-regression-2026-07-12.md](../../planning/phase-1-validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
+- 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 
 验证命令：
 

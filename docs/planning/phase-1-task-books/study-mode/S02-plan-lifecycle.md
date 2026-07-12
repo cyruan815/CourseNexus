@@ -321,7 +321,7 @@ conda run -n course-nexus python -m pytest tests/modules/study_plans tests/integ
 - `planner.py`、更新后的 study plan router/schema/service/repository。
 - 三个精确测试文件及回归测试调整。
 - API、数据、架构、当前状态文档。
-- 中文真实材料验收记录 `docs/planning/phase-1-validation/S02-plan-lifecycle.md`。
+- 中文真实材料验收记录 `docs/domains/study-mode/validation/S02-plan-lifecycle.md`。
 - 建议独立提交：`feat(study-plans): 支持自然语言配置回填`；`feat(study-plans): 基于全材料生成可调整预览`；`fix(study-plans): 原子保存计划任务结构`；`feat(study-plans): 支持计划替换重生成与删除`。
 
 ## 7. 文档同步
