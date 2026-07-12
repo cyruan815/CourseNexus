@@ -51,7 +51,7 @@ def test_course_crud_flow(client: TestClient) -> None:
 
     create_response = client.post(
         "/api/v1/courses",
-        json={"name": "Linear Algebra", "teacher": "Prof. A", "term": "2026 Spring"},
+        json={"name": "Linear Algebra", "teacher": "Prof. A", "term": "2025-2026-spring"},
         headers=headers,
     )
 
@@ -59,6 +59,7 @@ def test_course_crud_flow(client: TestClient) -> None:
     created_course = create_response.json()["data"]
     course_id = created_course["id"]
     assert created_course["name"] == "Linear Algebra"
+    assert created_course["term"] == "2025-2026-spring"
 
     list_response = client.get("/api/v1/courses", headers=headers)
 
@@ -87,11 +88,64 @@ def test_course_crud_flow(client: TestClient) -> None:
     assert client.get("/api/v1/courses", headers=headers).json()["data"] == []
 
 
+def test_course_term_options_and_nullable_default(client: TestClient) -> None:
+    token = register_and_token(client, "term-user")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    options_response = client.get("/api/v1/course-terms", headers=headers)
+
+    assert options_response.status_code == 200
+    assert options_response.json()["data"] == [
+        {"value": "2027-2028-autumn", "label": "2027-2028 秋季"},
+        {"value": "2027-2028-spring", "label": "2027-2028 春季"},
+        {"value": "2026-2027-autumn", "label": "2026-2027 秋季"},
+        {"value": "2026-2027-spring", "label": "2026-2027 春季"},
+        {"value": "2025-2026-autumn", "label": "2025-2026 秋季"},
+        {"value": "2025-2026-spring", "label": "2025-2026 春季"},
+        {"value": "2024-2025-autumn", "label": "2024-2025 秋季"},
+        {"value": "2024-2025-spring", "label": "2024-2025 春季"},
+    ]
+
+    create_response = client.post("/api/v1/courses", json={"name": "No Term"}, headers=headers)
+
+    assert create_response.status_code == 200
+    assert create_response.json()["data"]["term"] is None
+
+
+def test_course_create_and_update_reject_nonstandard_term(client: TestClient) -> None:
+    token = register_and_token(client, "invalid-term-user")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    invalid_create_response = client.post(
+        "/api/v1/courses",
+        json={"name": "Bad Term", "term": "2026 Spring"},
+        headers=headers,
+    )
+
+    assert invalid_create_response.status_code == 422
+    assert invalid_create_response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    created = client.post("/api/v1/courses", json={"name": "Valid"}, headers=headers).json()["data"]
+    invalid_update_response = client.patch(
+        f"/api/v1/courses/{created['id']}",
+        json={"term": "custom term"},
+        headers=headers,
+    )
+
+    assert invalid_update_response.status_code == 422
+    assert invalid_update_response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_course_api_requires_authentication(client: TestClient) -> None:
     response = client.get("/api/v1/courses")
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+    term_options_response = client.get("/api/v1/course-terms")
+
+    assert term_options_response.status_code == 401
+    assert term_options_response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
 def test_course_detail_does_not_cross_user_boundary(client: TestClient) -> None:

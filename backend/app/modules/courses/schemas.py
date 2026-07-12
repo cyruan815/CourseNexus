@@ -4,19 +4,21 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.courses.terms import CourseTerm
+
 
 class CourseCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     teacher: str | None = Field(default=None, max_length=255)
-    term: str | None = Field(default=None, max_length=255)
+    term: CourseTerm | None = None
 
 
 class CourseUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     teacher: str | None = Field(default=None, max_length=255)
-    term: str | None = Field(default=None, max_length=255)
+    term: CourseTerm | None = None
 
 
 class CourseRead(BaseModel):
@@ -32,3 +34,8 @@ class CourseRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+
+
+class CourseTermOptionRead(BaseModel):
+    value: CourseTerm
+    label: str

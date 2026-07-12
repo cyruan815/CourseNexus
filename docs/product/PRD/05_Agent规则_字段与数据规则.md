@@ -277,7 +277,7 @@ erDiagram
 | `name` | string | 是 | 课程名称 | 当前用户下建议可重名，但展示需区分 |
 | `description` | text | 否 | 课程简介 | 可为空 |
 | `teacher` | string | 否 | 教师 | 可为空 |
-| `term` | string | 否 | 学期 | 可为空 |
+| `term` | string | 否 | 学期标准值 | 可为空，默认 `null`；仅允许后端学期选项中的值，不接受自由文本 |
 | `material_count` | int | 否 | 资料数量 | 可计算字段 |
 | `status` | enum | 是 | 课程状态 | `active`、`archived`、`deleted` |
 | `created_at` | datetime | 是 | 创建时间 | 系统生成 |
