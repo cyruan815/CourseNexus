@@ -202,7 +202,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |
 | `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
 
-保存接口支持 `Idempotency-Key`：同键同请求返回同一 plan bundle；同键不同请求返回 `IDEMPOTENCY_CONFLICT`。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`。S02 不新增表、不修改 migration，不在保存阶段生成讲义或任务测试题。
+保存接口支持 `Idempotency-Key`：同键同请求返回同一 plan bundle；同键不同请求返回 `IDEMPOTENCY_CONFLICT`。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口通过数据库条件 UPDATE 原子校验 `expected_updated_at`，在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`；失败请求不得删除或部分修改旧任务树和打卡记录。S02 不新增表、不修改 migration，不在保存阶段生成讲义或任务测试题。
 ## 计划学习模式 S03 今日待办与日历契约
 
 S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
