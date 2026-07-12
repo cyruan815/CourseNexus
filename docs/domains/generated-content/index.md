@@ -17,7 +17,15 @@
 ## 3. 当前状态
 
 - G01：全材料批次、用途模型注入、生成器工厂、引用过滤与回填、原子持久化、历史/详情引用响应已经实现。
-- G02-G06：仍由 deterministic placeholder 提供增量开发 fallback，不代表最终内容质量或业务 schema 已完成。
+- G02-G06：Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 均已实现真实结构化生成、全材料 map/reduce、逐条目引用和稳定 schema；placeholder 仅在内建模块文件缺失时作为注册降级机制。
+
+具体实现文档：
+
+- [quiz.md](quiz.md)
+- [flashcard.md](flashcard.md)
+- [mindmap.md](mindmap.md)
+- [outline.md](outline.md)
+- [knowledge-list.md](knowledge-list.md)
 - 当前没有队列、取消、进度查询或持久化幂等键；重复请求生成独立记录。
 
 详细架构、算法、资源预算和失败策略见 [architecture.md](architecture.md)。

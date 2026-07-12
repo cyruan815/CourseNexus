@@ -56,7 +56,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 已完成G01公共生成链路：用途模型提供器注入、生成器工厂注册、全材料批次读取、真实引用过滤和ID回填、成功内容与引用原子保存。
    - 生成POST、课程历史和详情均返回稳定`source_citations`数组；失败记录不保存部分JSON或引用。
    - 已覆盖跨用户课程/资料、无资料、非法参数、模型/schema/coverage失败、重复请求、引用去重和真实数据库回滚。
-   - 已提供 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的占位生成器，用于验证模块边界和存储契约。
+   - 已实现 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的真实结构化生成器，覆盖全材料批次、确定性 reduce、稳定 ID、逐条目真实引用和失败记录。
    - 已实现单课程学习计划预览、保存、列表和详情接口。
    - 学习计划当前只生成计划 / 任务结构，不提前生成今日讲义、任务测试题或执行页内容。
    - 已完成 S01 计划学习模式表结构契约测试，确认现有 13 张核心表可支撑第一阶段计划、任务、打卡、生成内容和导出闭环；S01 不新增业务表、不创建 migration。
@@ -74,7 +74,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 
 - 资料上传面板、资料范围选择器、资料状态列表等完整前端资料交互。
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
-- Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
+- 五类独立生成器的前端展示、交互和人工内容质量验收仍需按各自交接文档完成。
 - 图片 OCR 质量验收和复杂版面回归夹具。
 - S01 文档同步后的后续 S02-S07 业务实现：真实学习计划生成 / 编辑 / 删除、今日待办、大日历、执行页、打卡同步、今日讲义、任务测试题和 PDF 导出。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
@@ -97,8 +97,8 @@ conda run -n course-nexus python -m pytest tests/integrations/test_llama_index_c
 
 最近一次后端完整验证：
 
-- G01隔离环境后端全量：`256 passed`（2026-07-12）。
-- G01 generation + generated-content回归：`82 passed`。
+- G01-G06 整合后后端全量：`310 passed`（2026-07-12）。
+- 五类具体生成器：`54 passed`；generation + generated-content + material-context 回归：`161 passed`。
 - `pnpm backend:migrate`：Alembic `upgrade head` 成功。
 - Chroma persistence smoke：`1 passed in 3.82s`。
 
@@ -125,6 +125,6 @@ pnpm test
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
-3. 为 Flashcard、Mindmap、Quiz 和学习计划分别设计业务 schema、prompt、质量验收和保存流程。
+3. 根据五类生成器交接文档完成前端渲染，并使用真实模型和课程材料开展人工内容质量验收。
 4. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
 5. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
