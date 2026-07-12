@@ -188,11 +188,11 @@ sequenceDiagram
     participant Repo as todos-calendar repository
     participant DB as StudyPlan/StudyTask/StudySubTask
 
-    FE->>API: GET /todos/today?date=YYYY-MM-DD
-    FE->>API: GET /calendar/month?month=YYYY-MM
-    FE->>API: GET /calendar/days/{date}/todos
-    FE->>API: GET /courses/{course_id}/study-calendar?month=YYYY-MM
-    FE->>API: GET /courses/{course_id}/study-calendar/days/{date}
+    FE->>API: GET /api/v1/todos/today?date=YYYY-MM-DD
+    FE->>API: GET /api/v1/calendar/month?month=YYYY-MM
+    FE->>API: GET /api/v1/calendar/days/{date}/todos
+    FE->>API: GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM
+    FE->>API: GET /api/v1/courses/{course_id}/study-calendar/days/{date}
     API->>SVC: parse date/month + current_user
     SVC->>Repo: readonly task row query
     Repo->>DB: join Course + StudyPlan + StudyTask + StudySubTask
@@ -307,7 +307,7 @@ sequenceDiagram
     SP->>DB: one transaction inserts StudyPlan/StudyTask/StudySubTask
 ```
 
-替换计划使用 `PUT /study-plans/{plan_id}`，先校验 `expected_updated_at`、无进度和无绑定生成内容，再在一次事务中替换任务树。重生成预览只返回 preview，不写数据库。删除计划写软删除状态，默认聚合查询隐藏。
+替换计划使用 `PUT /api/v1/study-plans/{plan_id}`，先校验 `expected_updated_at`、无进度和无绑定生成内容，再在一次事务中替换任务树；重生成预览使用 `POST /api/v1/study-plans/{plan_id}/regeneration-previews`，只返回 preview，不写数据库；删除计划使用 `DELETE /api/v1/study-plans/{plan_id}` 写软删除状态，默认聚合查询隐藏。
 
 ### S04/S05 学习执行与打卡运行流
 
