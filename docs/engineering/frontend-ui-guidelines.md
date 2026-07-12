@@ -359,4 +359,3 @@ pnpm frontend:build
 ```
 
 如果 Codex 沙盒在 Windows 下出现 `esbuild spawn EPERM`，使用提权运行验证命令，并在结果中说明这是环境权限问题。
-
