@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -71,6 +71,12 @@ interface CalendarDay {
 const ALL_TERMS_VALUE = "全部学期";
 const isDarkMode = false;
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
+const COURSE_TERM_OPTIONS = [
+  "2025-2026 春季",
+  "2025-2026 秋季",
+  "2026-2027 春季",
+  "2026-2027 秋季",
+];
 
 function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
   const year = referenceDate.getFullYear();
@@ -130,6 +136,24 @@ function optionalText(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeCourseTerm(term: string | null): string | null {
+  const trimmed = term?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const compact = trimmed.replace(/\s+/g, "");
+  const matchedTerm = compact.match(/^(\d{4})-?(\d{4})(春季?|秋季?)$/);
+
+  if (!matchedTerm) {
+    return trimmed;
+  }
+
+  const season = matchedTerm[3].startsWith("春") ? "春季" : "秋季";
+  return `${matchedTerm[1]}-${matchedTerm[2]} ${season}`;
+}
+
 function buildCoursePayload(values: CourseFormValues) {
   return {
     name: values.name.trim(),
@@ -145,7 +169,7 @@ function mapCourseToHomeCourse(course: Course): HomeCourse {
     name: course.name,
     description: course.description,
     teacher: course.teacher,
-    term: course.term,
+    term: normalizeCourseTerm(course.term),
     materialLabel: "资料待接入",
     taskLabel: "今日任务待接入",
     recentActivity: course.description?.trim() || "课程资料待上传",
@@ -267,15 +291,34 @@ function CourseCard({
   course,
   onDelete,
   onEdit,
+  onOpen,
   toneClass,
 }: {
   course: HomeCourse;
   onDelete: (course: HomeCourse) => void;
   onEdit: (course: HomeCourse) => void;
+  onOpen: (course: HomeCourse) => void;
   toneClass: string;
 }) {
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen(course);
+    }
+  }
+
   return (
-    <Card className={`home-course-card home-course-card-${toneClass}`} padding="lg" radius="md" withBorder>
+    <Card
+      aria-label={`打开课程 ${course.name}`}
+      className={`home-course-card home-course-card-${toneClass}`}
+      onClick={() => onOpen(course)}
+      onKeyDown={handleKeyDown}
+      padding="lg"
+      radius="md"
+      role="link"
+      tabIndex={0}
+      withBorder
+    >
       <Stack gap="lg" h="100%" justify="space-between">
         <Group align="flex-start" justify="space-between" wrap="nowrap">
           <Stack gap="xs">
@@ -290,7 +333,12 @@ function CourseCard({
           </Stack>
           <Menu position="bottom-end" shadow="sm" width={160} withinPortal>
             <Menu.Target>
-              <ActionIcon aria-label={`${course.name} 更多操作`} className="home-card-menu" variant="subtle">
+              <ActionIcon
+                aria-label={`${course.name} 更多操作`}
+                className="home-card-menu"
+                onClick={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()}
+                variant="subtle"
+              >
                 <IconDotsVertical size={22} />
               </ActionIcon>
             </Menu.Target>
@@ -342,7 +390,7 @@ function AddCourseCard({ onClick }: { onClick: () => void }) {
           </Text>
         </Group>
         <Text c="dimmed" ta="center">
-          可在创建时同步上传资料
+          创建后进入课程详情上传资料
         </Text>
       </Stack>
     </Paper>
@@ -425,6 +473,9 @@ function CourseFormModal({
 }) {
   const isCreate = mode === "create";
   const canSubmit = values.name.trim().length > 0 && !isSubmitting;
+  const termData = values.term && !COURSE_TERM_OPTIONS.includes(values.term)
+    ? [...COURSE_TERM_OPTIONS, values.term]
+    : COURSE_TERM_OPTIONS;
 
   return (
     <Modal
@@ -461,10 +512,13 @@ function CourseFormModal({
           onChange={(event) => onChange("teacher", event.currentTarget.value)}
           value={values.teacher}
         />
-        <TextInput
+        <Select
           aria-label="学期"
+          clearable
+          data={termData}
           label="学期"
-          onChange={(event) => onChange("term", event.currentTarget.value)}
+          onChange={(value) => onChange("term", value ?? "")}
+          placeholder="请选择学期"
           value={values.term}
         />
         {isCreate ? (
@@ -529,6 +583,7 @@ function CourseOverview({
   onAddCourse,
   onDeleteCourse,
   onEditCourse,
+  onOpenCourse,
   onRetry,
 }: {
   courses: HomeCourse[];
@@ -537,6 +592,7 @@ function CourseOverview({
   onAddCourse: () => void;
   onDeleteCourse: (course: HomeCourse) => void;
   onEditCourse: (course: HomeCourse) => void;
+  onOpenCourse: (course: HomeCourse) => void;
   onRetry: () => void;
 }) {
   const [selectedTerm, setSelectedTerm] = useState(ALL_TERMS_VALUE);
@@ -545,7 +601,7 @@ function CourseOverview({
       .map((course) => course.term)
       .filter((term): term is string => Boolean(term));
 
-    return Array.from(new Set(terms));
+    return Array.from(new Set([...COURSE_TERM_OPTIONS, ...terms]));
   }, [courses]);
   const termData = [ALL_TERMS_VALUE, ...termOptions];
   const filteredCourses = selectedTerm === ALL_TERMS_VALUE
@@ -583,6 +639,7 @@ function CourseOverview({
                   course={course}
                   onDelete={onDeleteCourse}
                   onEdit={onEditCourse}
+                  onOpen={onOpenCourse}
                   toneClass={getCourseToneClass(index)}
                 />
               </Grid.Col>
@@ -689,7 +746,7 @@ export function HomeWorkbench() {
         const createdCourse = await createCourse(payload);
         setCourses((currentCourses) => [...currentCourses, mapCourseToHomeCourse(createdCourse)]);
         setIsCourseModalOpen(false);
-        navigate(`/courses/${createdCourse.id}`);
+        navigate(`/courses/${createdCourse.id}`, { state: { openUploadPrompt: true } });
       } else if (editingCourse) {
         const nextCourse = await updateCourse(editingCourse.id, payload);
         setCourses((currentCourses) =>
@@ -753,6 +810,7 @@ export function HomeWorkbench() {
             onAddCourse={openCreateCourseModal}
             onDeleteCourse={openDeleteCourseModal}
             onEditCourse={openEditCourseModal}
+            onOpenCourse={(course) => navigate(`/courses/${course.id}`)}
             onRetry={() => setReloadKey((currentKey) => currentKey + 1)}
           />
         </Box>

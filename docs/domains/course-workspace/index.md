@@ -16,7 +16,7 @@
 已实现：
 
 - 正式路由 `/courses/:courseId` 读取 `GET /api/v1/courses/{course_id}`。
-- 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。
+- 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。首页创建课程成功后跳转到课程详情页时，会通过路由 state 触发一次可关闭的上传资料提示。
 - 中间问答区调用 `POST /api/v1/courses/{course_id}/qa/questions`，传入当前 `material_scope`，展示回答、`grounded` / `no_source` 状态和真实引用来源。
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`。
 - AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`。
@@ -46,14 +46,14 @@
 
 - `CourseDetailPage` 负责课程详情页级数据编排：课程、生成内容、学习计划、问答请求和当前资料范围。
 - `features/course-workspace/api.ts` 只封装课程工作台相关后端接口，不直接处理 UI 状态。
-- `MaterialWorkspace` 仍归属 `materials` 领域，课程详情页只传入 `courseId`、`materialScope` 和 `onMaterialScopeChange`。
+- `MaterialWorkspace` 仍归属 `materials` 领域，课程详情页只传入 `courseId`、`materialScope`、`onMaterialScopeChange` 和可选的创建后上传提示开关。
 - 问答、生成和学习计划只通过后端公开 API 使用资料范围；前端不得直接读取资料 chunk 或伪造引用来源。
 
 ## 状态流转
 
 - 课程 loading：展示课程详情骨架。
 - 课程 error：展示课程加载失败 alert。
-- 资料区：沿用 `materials` 领域状态，包括 loading、empty、error、ready 和 mutating。
+- 资料区：沿用 `materials` 领域状态，包括 loading、empty、error、ready 和 mutating。若从首页创建课程成功后进入详情页，资料区初次挂载时展示“上传课程资料”提示，用户可以上传文件，也可以直接关闭；普通进入课程详情页不自动弹出。
 - 问答区：无回答时展示空态；输入为空或发送中禁用发送；发送成功展示回答和引用；失败时展示工作区错误提示。
 - 生成内容：页面加载时读取列表；点击支持的工具后进入 pending；成功后把返回的 `GeneratedContentRead` 插入列表；失败时展示工作区错误提示。
 - 学习计划：无计划时只展示制定计划入口；有计划时展示第一条计划摘要，不伪造今日任务。
@@ -63,6 +63,7 @@
 - PRD 的三栏结构是信息架构依据，但视觉不照搬线框图；采用亮色课程工作台风格。
 - 学习计划入口与今日待办合并：无计划时是小型行动入口，有计划后才展示课程内计划摘要。
 - 资料范围使用后端 `MaterialScope` 结构，一级文件夹只作为浏览归类，不作为 Agent 上下文范围。
+- 创建课程与上传资料解耦：创建课程只写入课程基础信息；创建成功后由课程详情页弹出可关闭的上传资料提示，引导用户继续补资料，但不阻塞课程创建结果。
 - 右侧工具只接后端当前注册生成类型；“学习笔记”当前只作为保存回答后的未来入口，不调用不存在的一键生成 note 能力。
 - 生成接口当前后端为 deterministic placeholder，前端只展示记录和状态，不把结果渲染成最终学习产品页面。
 

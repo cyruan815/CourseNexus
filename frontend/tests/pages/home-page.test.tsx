@@ -13,7 +13,7 @@ const backendCourses = [
     name: "离散数学",
     description: "图论和组合数学复习",
     teacher: "周老师",
-    term: "2025-2026 春",
+    term: "2025-2026 春季",
     status: "active",
     created_at: "2026-07-09T12:00:00+00:00",
     updated_at: "2026-07-09T12:00:00+00:00",
@@ -37,7 +37,7 @@ const backendCourses = [
     name: "算法设计",
     description: "图算法和复杂度分析",
     teacher: "李老师",
-    term: "2025-2026 秋",
+    term: "2025-2026 秋季",
     status: "active",
     created_at: "2026-07-11T12:00:00+00:00",
     updated_at: "2026-07-11T12:00:00+00:00",
@@ -48,7 +48,12 @@ const backendCourses = [
 function LocationProbe() {
   const location = useLocation();
 
-  return <span data-testid="location-path">{location.pathname}</span>;
+  return (
+    <>
+      <span data-testid="location-path">{location.pathname}</span>
+      <span data-testid="location-state">{JSON.stringify(location.state ?? null)}</span>
+    </>
+  );
 }
 
 function renderHomePage() {
@@ -93,6 +98,7 @@ describe("HomePage", () => {
       "href",
       "/courses/crs_discrete_math",
     );
+    expect(screen.getByRole("link", { name: "打开课程 离散数学" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "操作系统" })).toHaveAttribute("href", "/courses/crs_os");
     expect(screen.getByRole("link", { name: "算法设计" })).toHaveAttribute("href", "/courses/crs_algorithm");
     expect(screen.getByText("全部学期 3 门课程 · 资料统计待接入")).toBeInTheDocument();
@@ -126,12 +132,31 @@ describe("HomePage", () => {
 
     expect(await screen.findByRole("link", { name: "离散数学" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("combobox", { name: "选择学期" }));
-    fireEvent.click(await screen.findByRole("option", { name: "2025-2026 秋", hidden: true }));
+    fireEvent.click(await screen.findByRole("option", { name: "2025-2026 秋季", hidden: true }));
 
-    expect(screen.getByText("2025-2026 秋 1 门课程 · 资料统计待接入")).toBeInTheDocument();
+    expect(screen.getByText("2025-2026 秋季 1 门课程 · 资料统计待接入")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "算法设计" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "离散数学" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "操作系统" })).not.toBeInTheDocument();
+  });
+
+  it("enters a course when clicking the course card body", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    renderHomePage();
+
+    fireEvent.click(await screen.findByRole("link", { name: "打开课程 离散数学" }));
+
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/courses/crs_discrete_math");
   });
 
   it("creates a course from the home modal and enters the new course", async () => {
@@ -142,7 +167,7 @@ describe("HomePage", () => {
       name: "线性代数",
       description: "矩阵和向量空间复习",
       teacher: "王老师",
-      term: "2026 Spring",
+      term: "2025-2026 春季",
       status: "active",
       created_at: "2026-07-12T12:00:00+00:00",
       updated_at: "2026-07-12T12:00:00+00:00",
@@ -174,10 +199,13 @@ describe("HomePage", () => {
     fireEvent.change(await screen.findByLabelText("课程名称"), { target: { value: "线性代数" } });
     fireEvent.change(screen.getByLabelText("课程简介"), { target: { value: "矩阵和向量空间复习" } });
     fireEvent.change(screen.getByLabelText("教师"), { target: { value: "王老师" } });
-    fireEvent.change(screen.getByLabelText("学期"), { target: { value: "2026 Spring" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "学期" }));
+    const springOptions = await screen.findAllByRole("option", { name: "2025-2026 春季", hidden: true });
+    fireEvent.click(springOptions[springOptions.length - 1]);
     fireEvent.click(screen.getByRole("button", { name: "创建课程" }));
 
     await waitFor(() => expect(screen.getByTestId("location-path")).toHaveTextContent("/courses/crs_linear_algebra"));
+    expect(screen.getByTestId("location-state")).toHaveTextContent('"openUploadPrompt":true');
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/courses",
       expect.objectContaining({
@@ -186,7 +214,7 @@ describe("HomePage", () => {
           name: "线性代数",
           description: "矩阵和向量空间复习",
           teacher: "王老师",
-          term: "2026 Spring",
+          term: "2025-2026 春季",
         }),
       }),
     );
