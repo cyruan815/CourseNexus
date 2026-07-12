@@ -4,6 +4,7 @@ from app.core.request_id import get_request_id
 from app.modules.checkins.router import router as checkins_router
 from app.modules.course_qa.router import router as course_qa_router
 from app.modules.courses.router import router as courses_router, term_router as course_terms_router
+from app.modules.exports.router import router as exports_router
 from app.modules.generated_content.router import router as generated_content_router
 from app.modules.generation.orchestrator.router import router as generation_router
 from app.modules.learning_execution.router import router as learning_execution_router
@@ -22,6 +23,7 @@ api_router.include_router(checkins_router)
 api_router.include_router(materials_router)
 api_router.include_router(course_qa_router)
 api_router.include_router(generated_content_router)
+api_router.include_router(exports_router)
 api_router.include_router(generation_router)
 api_router.include_router(learning_execution_router)
 api_router.include_router(study_plans_router)

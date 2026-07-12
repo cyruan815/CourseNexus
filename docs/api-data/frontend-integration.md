@@ -622,6 +622,12 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 主要错误码：`STATE_CONFLICT` 表示二级任务类型不允许生成该内容；`NO_PARSED_MATERIAL` 表示当前二级任务没有可用解析上下文；`MATERIAL_COVERAGE_INCOMPLETE` 表示关联资料覆盖不完整；`GENERATION_SCHEMA_INVALID` 表示模型输出结构、测试题硬约束或引用不符合契约；`GENERATION_FAILED` 表示模型调用或未知生成失败。
 
+### 3.23.2 任务测试题 Markdown 导出
+
+`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 导出已成功生成的 `task_test` Markdown 文件。接口要求 Bearer token，成功时直接返回 `text/markdown; charset=utf-8` 文件流，`Content-Disposition` 文件名为 `task-test-{generated_content_id}.md`，不包统一 `{data, meta}` envelope。
+
+前端调用前应先通过 execution-context 获取 `task_test_content_id`，或通过 `GET /api/v1/generated-contents/{generated_content_id}` 确认内容为当前用户可访问的成功 `task_test`。错误响应仍使用统一 error envelope：`EXPORT_UNSUPPORTED_CONTENT_TYPE` 表示不是任务测试题；`EXPORT_CONTENT_NOT_READY` 表示生成未成功；`EXPORT_CONTENT_INVALID` 表示历史内容结构畸形；`NOT_FOUND` 表示内容不存在或不属于当前用户。
+
 ### 3.24 学前诊断问题
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
@@ -1011,8 +1017,9 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | 二级任务完成 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 请求体为 `{ "completed": boolean }`，不是 toggle。 |
 | 今日讲义生成 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 返回 `GeneratedContentRead`；默认复用最近一次 success，`force_regenerate=true` 重建。 |
 | 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；P2 只读展示通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情。 |
+| 任务测试题 Markdown 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 返回 Markdown 文件流；只支持成功的 `task_test`，不保存作答、不判分、不生成 PDF。 |
 
-任务测试题后端生成已实现；当前前端缺口是 P2 轻量只读展示。提交答案、判分、attempt 历史和反馈闭环属于后续 P9 / phase-1 S08，不在 P2 中引入。
+任务测试题后端生成和 Markdown 文件导出已实现；当前前端缺口是 P2 轻量只读展示。提交答案、判分、attempt 历史和反馈闭环属于后续 P9 / phase-1 S08，不在 P2 中引入。
 ## 5. 前端最小工作台验收口径
 
 - 前端页面只需要覆盖基础集成路径：登录、课程列表、课程详情选择、资料上传、资料范围选择、问答提交和引用展示。

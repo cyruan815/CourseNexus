@@ -39,7 +39,7 @@ S01 只固定计划学习模式的子系统契约和数据库审计结论，不�
 | `GET /api/v1/courses/{course_id}/study-plans` | 已实现 | 查询课程下未删除计划列表。 |
 | `GET /api/v1/study-plans/{plan_id}` | 已实现 | 查询单个计划及任务结构。 |
 
-S02-S06 已实现接口和 S07 候选接口如下；候选接口在对应任务合并前仍视为未实现契约，前端不得提前调用或自行拼接路径：
+S02-S06 已实现接口和 S07 已实现 / 候选接口如下；候选接口在对应任务合并前仍视为未实现契约，前端不得提前调用或自行拼接路径：
 
 | 任务 | 方法与路径 | 用途 |
 | --- | --- | --- |
@@ -60,7 +60,8 @@ S02-S06 已实现接口和 S07 候选接口如下；候选接口在对应任务�
 | S05 | `GET /api/v1/checkins/{date}` | 单日打卡；无任务也返回稳定零值。 |
 | S06 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 为学习/复习任务按需生成讲义。 |
 | S06 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 为测试/小测任务按需生成任务测试题。 |
-| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 流式导出成功的讲义或任务测试题。 |
+| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 已实现：导出成功的任务测试题 Markdown 文件。 |
+| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 候选：流式导出成功的今日讲义 PDF；轻量阶段不做任务测试题 PDF。 |
 
 计划学习模式统一遵守以下边界：
 
@@ -335,3 +336,26 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 - 生成不会改变二级任务完成状态，不触发一级任务汇总，也不写 `checkin_records`。
 
 错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`；400 `NO_PARSED_MATERIAL`；409 `MATERIAL_COVERAGE_INCOMPLETE`；500 `GENERATION_SCHEMA_INVALID`；502 `GENERATION_FAILED`。
+
+## S07 任务内容导出契约
+
+### 任务测试题 Markdown 导出
+
+`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`
+
+要求：Bearer token。只能导出当前用户自己的、未删除且 `generation_status = "success"` 的 `task_test` 生成内容。接口返回文件流，不使用统一成功 envelope。
+
+响应头：
+
+- `Content-Type: text/markdown; charset=utf-8`
+- `Content-Disposition: attachment; filename="task-test-{generated_content_id}.md"`
+
+Markdown 内容包含标题、instructions、题目、选项、正确答案、解析和引用来源。题目中的 `source_citation_ids` 只和 `GeneratedContentRead.source_citations[].id` 匹配；匹配不到时写 `Sources: unavailable`，不得伪造引用。
+
+错误码：
+
+- 401 `UNAUTHORIZED`：未登录。
+- 404 `NOT_FOUND`：生成内容不存在、已删除或不属于当前用户。
+- 409 `EXPORT_UNSUPPORTED_CONTENT_TYPE`：当前 `content_type` 不是 `task_test`。
+- 409 `EXPORT_CONTENT_NOT_READY`：当前 `generation_status` 不是 `success`。
+- 500 `EXPORT_CONTENT_INVALID`：`content_json` 不是合法的任务测试题结构，例如缺少非空 `questions`。

@@ -100,7 +100,16 @@
 
 ### P2：任务测试题轻量只读版
 
-状态：POC 展示层任务，偏前端执行页接入。
+状态：部分完成。后端 Markdown 导出已完成；前端执行页只读展示仍待前端 owner 接入。
+
+后端已完成：
+
+- 完成日期：2026-07-13。
+- 新增 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`，只支持当前用户自己的成功 `task_test`，返回 `text/markdown; charset=utf-8` 文件流。
+- Markdown 输出包含标题、instructions、题目、选项、正确答案、解析和引用来源；引用只匹配 `source_citations[].id`，缺失时写 `Sources: unavailable`，不伪造来源。
+- 已覆盖成功导出、跨用户不可导出、非 `task_test` 不支持、非 success 不可导出、畸形 `content_json` 不导出、引用缺失兜底。
+- 验证：`uv run python -m pytest tests/modules/exports tests/modules/generated_content tests/modules/learning_execution/test_task_content_api.py -q`。
+- 关键 commit：本次 T1 提交（`feat(study-mode): 支持任务测试题 Markdown 导出`）。
 
 目标：
 
