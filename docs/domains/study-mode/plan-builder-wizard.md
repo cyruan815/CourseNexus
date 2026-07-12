@@ -3,7 +3,7 @@
 ## 状态
 
 - 日期：2026-07-12
-- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口和 diagnostic_profile 影响 planner 策略已实施。
+- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略和诊断后 capacity 闭环已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 已实施入口：每日学习时间规则
@@ -40,6 +40,17 @@
 - 薄弱方向：`concept` 强化概念解释，`calculation` 强化公式、步骤推导和计算练习，`application` 强化例题和应用任务，`memorization` 强化重点记忆、回顾和检查。
 - 解释风格：`explanation_style` 进入 reduce prompt，要求任务 description 匹配 `plain_language`、`step_by_step`、`example_first` 或 `exam_focused` 的描述风格。
 - 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖 reduce prompt 内容和四类 `weak_area` 规则；`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 用同一份资料、不同 diagnostic_profile 验证 preview 传给 planner 的策略不同。
+
+## 已实施入口：诊断后 capacity 闭环
+
+2026-07-12 已落地诊断影响 planner 后的 capacity 闭环。范围仅包含 preview/save 容量统计、模型输出校验边界、测试和文档；不新增数据库表，不写 migration，不新增核心依赖。
+
+- Preview 服务：`backend/app/modules/study_plans/service.py::preview_study_plan` 在 reduce 得到最终 `coverage_result.value.tasks` 后，用最终二级任务分钟数重算 `capacity.estimated_total_minutes`，公式为 `sum(preview.tasks[].subtasks[].estimated_minutes)`。
+- 每日建议值：`recommended_daily_minutes` 继续使用 map 阶段材料单元规模估算，避免模型 reduce 输出的任务拆分反过来改变系统建议值；`daily_available_minutes` 仍按用户输入或系统估算解析。
+- 容量状态：`available_total_minutes = daily_available_minutes * duration_days`；当最终任务总时长超出容量时，`feasibility_status = "over_capacity"` 且 `warnings` 包含 `PLAN_OVER_CAPACITY`；接近容量时保持 `tight`。
+- Preview 校验：`backend/app/modules/study_plans/planner.py::validate_preview` 继续硬校验结构非法、日期越界、任务类型、测验排序、引用缺失和范围外资料；仅当 preview 已携带 `over_capacity` 和 `PLAN_OVER_CAPACITY` 时，允许每日任务时长超出用户每日可用时间，由 capacity warning 交给前端展示和引导调整。
+- 保存追溯：`backend/app/modules/study_plans/service.py::_resolve_save_payload_daily_minutes` 和 `_saved_config` 都以最终提交的 `tasks` 重新计算 capacity，`StudyPlan.parsed_config_json.capacity` 不信任旧客户端传入的过期 capacity。
+- 测试入口：`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖同一资料和时间约束下，`foundation_needed=true` 让最终任务分钟数增加，并使 capacity 从 `tight` 变为 `over_capacity`；同时覆盖保存后 `parsed_config_json.capacity` 追溯最终 capacity。
 
 ## 目标
 
@@ -651,13 +662,22 @@ reduce prompt 需要区分：
 
 ### 诊断后的容量校验
 
-诊断可能新增补基础、更多例题、更多测试或更细解释，因此需要在诊断 profile 生成后和 preview 生成后都做容量检查。
+诊断可能让 planner 新增补基础、例题、测试或 review，因此 preview 的 capacity 必须以 reduce 后最终任务为准，而不是只看 map 阶段材料单元估算。
 
 ```text
-if required_minutes > available_total_minutes:
+estimated_total_minutes = sum(preview.tasks[].subtasks[].estimated_minutes)
+available_total_minutes = daily_available_minutes * duration_days
+
+if estimated_total_minutes > available_total_minutes:
   feasibility_status = over_capacity
   warnings += PLAN_OVER_CAPACITY
+elif estimated_total_minutes >= round(available_total_minutes * 0.8):
+  feasibility_status = tight
+else:
+  feasibility_status = ok
 ```
+
+`recommended_daily_minutes` 仍可基于 map 阶段材料规模估算，避免模型输出任务时长造成每日建议值不稳定。Preview 不因最终总时长超出容量直接失败；结构非法、日期越界、引用缺失和范围外资料仍必须失败。若每日任务时长超过 `daily_available_minutes`，只有在 capacity 已明确返回 `over_capacity` 和 `PLAN_OVER_CAPACITY` 时才允许返回 preview，前端必须展示该 warning。
 
 前端提示应给出可操作建议：
 
