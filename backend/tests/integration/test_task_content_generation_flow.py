@@ -267,18 +267,45 @@ def test_execution_context_returns_latest_successful_task_content_after_regenera
     second_handout_response = api.client.post(
         f"/api/v1/study-subtasks/{learn_subtask_id}/handouts",
         headers=headers,
-        json={"parameters": {}},
+        json={"force_regenerate": True, "parameters": {}},
     )
     second_task_test_response = api.client.post(
         f"/api/v1/study-subtasks/{quiz_subtask_id}/task-tests",
         headers=headers,
-        json={"parameters": {"question_count": 1}},
+        json={"force_regenerate": True, "parameters": {"question_count": 1}},
     )
     assert second_handout_response.status_code == 200
     assert second_task_test_response.status_code == 200
     second_handout = second_handout_response.json()["data"]
     second_task_test = second_task_test_response.json()["data"]
 
+    api.db.add(
+        AIGeneratedContent(
+            id="gen_flow_failed_handout_latest",
+            user_id=user_id,
+            course_id="crs_flow",
+            study_subtask_id=learn_subtask_id,
+            content_type="handout",
+            title="失败讲义",
+            generation_status="failed",
+            error_code="GENERATION_FAILED",
+            created_at=datetime(2099, 1, 1),
+        )
+    )
+    api.db.add(
+        AIGeneratedContent(
+            id="gen_flow_failed_task_test_latest",
+            user_id=user_id,
+            course_id="crs_flow",
+            study_subtask_id=quiz_subtask_id,
+            content_type="task_test",
+            title="失败测试题",
+            generation_status="failed",
+            error_code="GENERATION_FAILED",
+            created_at=datetime(2099, 1, 1),
+        )
+    )
+    api.db.commit()
     learn_context_response = api.client.get(f"/api/v1/study-subtasks/{learn_subtask_id}/execution-context", headers=headers)
     quiz_context_response = api.client.get(f"/api/v1/study-subtasks/{quiz_subtask_id}/execution-context", headers=headers)
     assert learn_context_response.status_code == 200, learn_context_response.text

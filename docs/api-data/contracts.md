@@ -258,6 +258,7 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 
 ```json
 {
+  "force_regenerate": false,
   "parameters": {
     "language": "zh-CN",
     "detail_level": "standard"
@@ -265,12 +266,13 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 }
 ```
 
-`detail_level` 支持 `brief`、`standard`、`deep`。`parameters` 可省略，后端使用默认参数。
+`detail_level` 支持 `brief`、`standard`、`deep`。`parameters` 可省略，后端使用默认参数。`force_regenerate` 可省略，默认 `false`。
 
 `TaskTestGenerationRequest` 请求体：
 
 ```json
 {
+  "force_regenerate": false,
   "parameters": {
     "question_count": 5,
     "question_types": ["single_choice", "short_answer"],
@@ -290,7 +292,11 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 - 材料范围严格来自 `StudySubTask.related_material_ids_json`，接口请求体不能覆盖资料范围。
 - 后端使用 `MaterialScope(include_all_parsed_materials=false, material_ids=related_material_ids_json)`。
 - S06 使用 `iter_material_context_batches()` 和 `run_material_coverage()`，不使用 Top-K 检索或旧 `resolve_context()`。
+- 默认请求幂等：同一 `study_subtask_id + content_type` 已有未删除 success 时直接返回最近成功内容，不调用模型、不新建 `AIGeneratedContent`。
+- `force_regenerate=true` 时即使已有 success 也重新生成，并创建新的成功内容。
+- failed 记录不作为幂等命中结果，也不阻止后续请求重新尝试生成。
 - 成功和进入生成流程后的失败都写入 `ai_generated_contents`；权限、任务不存在和任务类型不匹配不会创建生成记录。
+- execution-context 只返回最近一次成功内容 ID；最新 failed 记录不会覆盖 `handout_content_id` / `task_test_content_id`。
 - 生成不会改变二级任务完成状态，不触发一级任务汇总，也不写 `checkin_records`。
 
 错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`；400 `NO_PARSED_MATERIAL`；409 `MATERIAL_COVERAGE_INCOMPLETE`；500 `GENERATION_SCHEMA_INVALID`；502 `GENERATION_FAILED`。

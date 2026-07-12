@@ -61,10 +61,12 @@ class ExecutionContextRead(BaseModel):
 
 
 class HandoutGenerationRequest(BaseModel):
+    force_regenerate: bool = False
     parameters: HandoutGenerationParameters = Field(default_factory=HandoutGenerationParameters)
 
 
 class TaskTestGenerationRequest(BaseModel):
+    force_regenerate: bool = False
     parameters: TaskTestGenerationParameters = Field(default_factory=TaskTestGenerationParameters)
 
 
