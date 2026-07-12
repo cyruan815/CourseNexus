@@ -61,7 +61,7 @@ S02-S06 已实现接口和 S07 已实现 / 候选接口如下；候选接口在�
 | S06 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 为学习/复习任务按需生成讲义。 |
 | S06 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 为测试/小测任务按需生成任务测试题。 |
 | S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 已实现：导出成功的任务测试题 Markdown 文件。 |
-| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 候选：流式导出成功的今日讲义 PDF；轻量阶段不做任务测试题 PDF。 |
+| S07 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 已实现：导出成功的今日讲义 PDF；轻量阶段不做任务测试题 PDF。 |
 
 计划学习模式统一遵守以下边界：
 
@@ -359,3 +359,25 @@ Markdown 内容包含标题、instructions、题目、选项、正确答案、�
 - 409 `EXPORT_UNSUPPORTED_CONTENT_TYPE`：当前 `content_type` 不是 `task_test`。
 - 409 `EXPORT_CONTENT_NOT_READY`：当前 `generation_status` 不是 `success`。
 - 500 `EXPORT_CONTENT_INVALID`：`content_json` 不是合法的任务测试题结构，例如缺少非空 `questions`。
+
+### 今日讲义 PDF 导出
+
+`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`
+
+要求：Bearer token。只能导出当前用户自己的、未删除且 `generation_status = "success"` 的 `handout` 生成内容。接口返回文件流，不使用统一成功 envelope，不保存导出历史。
+
+响应头：
+
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="handout-{generated_content_id}.pdf"`
+
+PDF 内容包含标题、overview、learning objectives、sections、key points、summary 和引用来源。轻量阶段仅支持今日讲义 PDF；`task_test` 调用 PDF 导出返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，任务测试题使用 Markdown 导出。
+
+错误码：
+
+- 401 `UNAUTHORIZED`：未登录。
+- 404 `NOT_FOUND`：生成内容不存在、已删除或不属于当前用户。
+- 409 `EXPORT_UNSUPPORTED_CONTENT_TYPE`：当前 `content_type` 不是 `handout`。
+- 409 `EXPORT_CONTENT_NOT_READY`：当前 `generation_status` 不是 `success`。
+- 500 `EXPORT_CONTENT_INVALID`：`content_json` 不是合法的今日讲义结构。
+- 500 `EXPORT_FAILED`：PDF 渲染或写出失败，不影响原 generated content。

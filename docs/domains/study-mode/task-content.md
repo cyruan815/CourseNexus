@@ -29,10 +29,13 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `POST /api/v1/study-subtasks/{subtask_id}/task-tests`
 - `GET /api/v1/study-subtasks/{subtask_id}/execution-context`
 - `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`
+- `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`
 
 两个 POST 接口都返回统一成功 envelope，`data` 为 `GeneratedContentRead`。默认重复请求是幂等的：同一个 `study_subtask_id + content_type` 已存在未删除且 `generation_status=success` 的内容时，接口直接返回最近一次成功内容，不调用模型、不新增 `AIGeneratedContent`。请求体可传 `force_regenerate=true` 显式重新生成新内容；failed 记录不会作为幂等命中结果。执行上下文会返回最近一次成功生成的 `handout_content_id` 或 `task_test_content_id`；失败记录不会作为执行页内容 ID 返回。
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
+
+今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用内置最小 PDF 生成器，不新增依赖、不保存导出历史，内容包含标题、overview、learning objectives、sections、key points、summary 和引用来源；渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
 
 ## 幂等与重新生成
 
@@ -129,16 +132,17 @@ sequenceDiagram
 - `EXPORT_UNSUPPORTED_CONTENT_TYPE`：导出格式不支持当前生成内容类型。
 - `EXPORT_CONTENT_NOT_READY`：生成内容尚未成功，不能导出。
 - `EXPORT_CONTENT_INVALID`：历史生成内容结构畸形，不能安全导出。
+- `EXPORT_FAILED`：PDF 渲染失败，不影响原 generated content。
 
 ## 复杂度与资源预算
 
 材料读取按 `material_batch_max_tokens` 分批。时间复杂度约为 O(b + c)，其中 b 为材料批次数，c 为生成内容中的引用数量；引用保存按去重后的 chunk 数线性处理。
 
-Handout 模型调用次数等于材料批次数。Task test 模型调用次数固定为 1，prompt 包含当前二级任务允许材料批次中的所有候选 chunk；因此它适合当前 POC 的二级任务范围，后续若要支持更大的测试范围，应先评审候选考点摘要、chunk 级范围追溯或后台任务机制。Task test 结构校验最多处理 20 道题，题干相似度比较为 O(q²)，q 上限由 `question_count <= 20` 控制。
+Handout 模型调用次数等于材料批次数。Task test 模型调用次数固定为 1，prompt 包含当前二级任务允许材料批次中的所有候选 chunk；因此它适合当前 POC 的二级任务范围，后续若要支持更大的测试范围，应先评审候选考点摘要、chunk 级范围追溯或后台任务机制。Task test 结构校验最多处理 20 道题，题干相似度比较为 O(q²)，q 上限由 `question_count <= 20` 控制。导出接口不调用模型、不写数据库；Markdown 渲染复杂度约为 O(q + c)，PDF 渲染复杂度约为 O(s + c + p)，其中 q 为题目数，s 为讲义 section 和文本行数，c 为引用数，p 为分页后的页数。
 
 ## 已知限制
 
 - 不保存学生作答，作答记录已拆到后续任务。
-- 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出。今日讲义 PDF 导出仍属于 S07 后续任务。
+- 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，今日讲义支持 PDF 导出。
 - 不新增 chunk 级任务范围持久化字段；当前只保证生成时引用来自当前二级任务相关资料的当次 material-context 批次。
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。

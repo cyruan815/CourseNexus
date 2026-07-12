@@ -74,6 +74,31 @@
 - 未改数据库，未新增 migration，未做前端页面、组件或样式。
 - 未触碰 P0 的 `task_test` generator、`learning_execution` 主链路或相关测试。
 
+
+### 轻量化 T2：今日讲义 PDF 导出
+
+状态：已完成。
+
+完成日期：2026-07-13。
+
+关键 commit：本次 T2 提交（`feat(study-mode): 支持今日讲义 PDF 导出`）。
+
+验证：
+
+- `uv run python -m pytest tests/modules/exports tests/modules/learning_execution/test_task_content_api.py -q`：`32 passed in 6.50s`。
+
+已落地：
+
+- 新增 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`，只支持当前用户自己的成功 `handout`，返回 `application/pdf` 文件流。
+- PDF 文件名为 `handout-{generated_content_id}.pdf`，不保存导出历史，不新增 `export_records`。
+- `task_test` 调用 PDF 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`；测试题轻量阶段继续使用 Markdown 导出。
+- 已覆盖成功导出、跨用户不可导出、`task_test` 不支持、非 success 不可导出、畸形 handout 不导出、renderer 失败返回 `EXPORT_FAILED`。
+
+限制确认：
+
+- 未新增 migration，未新增业务表，未引入新依赖。
+- 导出不修改二级任务完成状态，不写 `checkin_records`。
+
 ## 新的未完成优先级
 
 ### P0：S06 任务测试题生成闭环

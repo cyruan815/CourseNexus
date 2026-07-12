@@ -14,7 +14,7 @@
 
 响应只返回当前二级任务父任务的 `task_date` 当天、同一计划内的一级任务和二级任务，不返回完整计划树。`execution_date` 使用父任务业务日期，允许用户从日历进入历史或未来任务。
 
-关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；导出不改变二级任务完成状态，也不写打卡记录。
+关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；拿到 `handout_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 下载今日讲义 PDF。导出不改变二级任务完成状态，也不写打卡记录。
 
 ## 完成事务
 
