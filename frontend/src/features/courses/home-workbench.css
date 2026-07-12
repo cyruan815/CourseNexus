@@ -164,6 +164,17 @@
   padding: 10px;
 }
 
+.home-month-picker-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 74px 74px;
+  gap: 12px;
+  align-items: end;
+}
+
+.home-month-picker-action {
+  min-width: 74px;
+}
+
 .home-calendar-weekdays,
 .home-calendar-grid {
   display: grid;
@@ -184,6 +195,7 @@
 .home-calendar-cell {
   position: relative;
   min-height: 50px;
+  border: 0;
   border-right: 1px solid #e5e7eb;
   border-bottom: 1px solid #e5e7eb;
   background: #ffffff;
@@ -355,9 +367,15 @@
   cursor: pointer;
   font: inherit;
   padding: 24px;
+  width: 100%;
   transition:
     border-color 160ms ease,
     background 160ms ease;
+}
+
+.home-add-course .mantine-Stack-root {
+  width: 100%;
+  justify-content: center;
 }
 
 .home-add-course:hover {

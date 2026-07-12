@@ -123,7 +123,7 @@ function CourseTopBar({ course }: { course: Course }) {
           <Stack className="course-detail-heading" gap={2}>
             <Group gap="sm" wrap="nowrap">
               <Text className="course-detail-title" fw={760}>
-                课程详情页
+                课程详情
               </Text>
               <Text c="dimmed" fw={650} size="xl">
                 /
@@ -628,7 +628,7 @@ export function CourseDetailPage() {
     return (
       <Box className="course-detail-page">
         <Paper className="course-detail-topbar" component="header" radius={0}>
-          <Title className="course-detail-title" order={1}>课程详情页</Title>
+          <Title className="course-detail-title" order={1}>课程详情</Title>
         </Paper>
         <Alert className="course-detail-error" color="red" role="alert" title="课程加载失败" variant="light">
           {error ?? "课程不存在"}
