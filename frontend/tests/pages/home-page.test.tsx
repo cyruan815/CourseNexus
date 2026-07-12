@@ -143,9 +143,33 @@ describe("HomePage", () => {
     expect(screen.getByText("今天还没有学习计划")).toBeInTheDocument();
     expect(screen.queryByText("1 项待安排")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "生成今日计划" })).not.toBeInTheDocument();
-    expect(screen.getByRole("gridcell", { name: "1" })).toBeInTheDocument();
-    expect(screen.getByRole("gridcell", { name: "15" })).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "打开 2026-07-01 的日历" })).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" })).toBeInTheDocument();
+    expect(screen.queryByText("暂无计划")).not.toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
+  });
+
+  it("lets the month calendar navigate without fake empty-state overlays", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal("fetch", createHomeFetchMock());
+
+    renderHomePage();
+
+    await screen.findByRole("link", { name: "离散数学" });
+    expect(screen.queryByText("暂无计划")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /下个月/ }));
+    expect(screen.getByRole("button", { name: /2026 年 8 月/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /上个月/ }));
+    expect(screen.getByRole("button", { name: /2026 年 7 月/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /2026 年 7 月/ }));
+    expect(await screen.findByRole("dialog", { name: "选择年月" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭年月选择" }));
+
+    fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/calendar");
   });
 
   it("filters courses by the selected term", async () => {
@@ -301,8 +325,9 @@ describe("HomePage", () => {
 
     renderHomePage();
 
-    expect(await screen.findByText("还没有课程")).toBeInTheDocument();
-    expect(screen.getByText("创建第一门课程后，这里会展示课程资料和学习入口。")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "添加课程" })).toBeInTheDocument();
+    expect(screen.queryByText("还没有课程")).not.toBeInTheDocument();
+    expect(screen.queryByText("创建第一门课程后，这里会展示课程资料和学习入口。")).not.toBeInTheDocument();
   });
 
   it("renders backend errors without showing mock courses", async () => {
