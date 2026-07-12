@@ -102,8 +102,10 @@ describe("CourseDetailPage", () => {
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成内容区" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制定学习计划（待接入）" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "查看今日待办（待接入）" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "查看全部（待接入）" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "查看今日待办（待接入）" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();
+    expect(screen.queryByText("生成入口")).not.toBeInTheDocument();
+    expect(screen.queryByText("保存入口")).not.toBeInTheDocument();
   });
 
   it("opens a dismissible upload prompt after creating a course", async () => {
@@ -176,7 +178,7 @@ describe("CourseDetailPage", () => {
     renderDetailPage();
 
     expect(await screen.findByText("期末复习提纲")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
+    expect(screen.getByRole("link", { name: "查看生成内容 期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
     expect(screen.getByText("高等数学期末计划")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {
@@ -220,5 +222,55 @@ describe("CourseDetailPage", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("正在加载课程");
     expect(await screen.findByRole("alert")).toHaveTextContent("课程不存在");
+  });
+
+  it("generates content from the whole tool card", async () => {
+    const generatedQuiz = {
+      ...generatedContent,
+      id: "gen_quiz",
+      content_type: "quiz",
+      title: "Quiz",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      if (url.endsWith("/generations") && init?.method === "POST") {
+        return Promise.resolve(successResponse(generatedQuiz, "req_generation"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetailPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "生成 Quiz" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/generations",
+        expect.objectContaining({
+          body: JSON.stringify({
+            content_type: "quiz",
+            material_scope: { include_all_parsed_materials: true, material_ids: [] },
+            parameters: {},
+          }),
+          method: "POST",
+        }),
+      );
+    });
+    expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "查看生成内容 Quiz" })).toHaveAttribute("href", "/generated-contents/gen_quiz");
   });
 });

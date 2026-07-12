@@ -18,10 +18,10 @@
 - 正式路由 `/courses/:courseId` 读取 `GET /api/v1/courses/{course_id}`。
 - 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。首页创建课程成功后跳转到课程详情页时，会通过路由 state 触发一次可关闭的上传资料提示。
 - 中间问答区调用 `POST /api/v1/courses/{course_id}/qa/questions`，传入当前 `material_scope`，展示回答、`grounded` / `no_source` 状态和真实引用来源。
-- 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`。
-- AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`，列表记录可进入生成内容详情页 `/generated-contents/:generatedContentId`。
+- 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；支持生成的工具以整张卡片作为操作入口，不再额外显示内嵌“生成”按钮。
+- AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`，列表记录整张卡片可进入生成内容详情页 `/generated-contents/:generatedContentId`。
 - 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时只展示“制定学习计划”入口，有计划时展示计划摘要。
-- 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心、今日待办查看、制定学习计划和 AI 生成内容“查看全部”等尚未闭环的入口以待接入禁用态展示。
+- 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心和制定学习计划入口仍以待接入禁用态展示。今日待办查看和 AI 生成内容“查看全部”在没有真实页面或接口闭环前不渲染占位按钮。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
 
 未实现：
@@ -67,6 +67,9 @@
 - 资料范围使用后端 `MaterialScope` 结构，一级文件夹只作为浏览归类，不作为 Agent 上下文范围。
 - 创建课程与上传资料解耦：创建课程只写入课程基础信息；创建成功后由课程详情页弹出可关闭的上传资料提示，引导用户继续补资料，但不阻塞课程创建结果。
 - 右侧工具只接后端当前注册生成类型；“学习笔记”当前只作为保存回答后的未来入口，不调用不存在的一键生成 note 能力。
+- 功能模块保持六张卡片的 2 列布局；支持生成的卡片整卡触发生成，不展示额外“生成入口”徽标，学习笔记卡片保持同尺寸待接入状态，不跨整行占用空间。
+- 课程详情页桌面工作台高度贴合当前视口，资料列表和 AI 生成内容列表作为局部滚动区，避免页面级滚动条挤压三栏工作台。
+- 没有 PRD / 后端闭环的“查看全部”和今日待办查看动作不保留假入口；需要对应列表页、聚合接口或交互闭环后再接入。
 - 生成接口当前后端仍可能由 deterministic placeholder 提供具体类型 fallback，前端详情页只做基础结构化展示和引用展示，不把结果渲染成最终学习产品页面。
 
 ## PRD / 后端 / 前端一致性缺口
