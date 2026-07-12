@@ -6,7 +6,7 @@ from app.core.errors import CourseNexusError
 from app.integrations.model_provider.mock import MockModelProvider
 from app.modules.generation.generators.task_test.generator import TaskTestGenerator
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
-from app.modules.material_context.schemas import ContextChunk, MaterialContextResult
+from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch, MaterialContextResult
 
 
 def _context() -> MaterialContextResult:
@@ -25,6 +25,11 @@ def _context() -> MaterialContextResult:
             )
         ],
     )
+
+
+def _batch() -> MaterialContextBatch:
+    context = _context()
+    return MaterialContextBatch(chunks=context.chunks, material_ids=["mat_1"], estimated_tokens=10)
 
 
 def test_task_test_generator_returns_questions_and_citations() -> None:
@@ -49,14 +54,15 @@ def test_task_test_generator_returns_questions_and_citations() -> None:
     )
 
     output = TaskTestGenerator(model_provider=provider).generate(
-        context=_context(),
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
         parameters={"question_count": 1, "question_types": ["single_choice"], "difficulty": "medium"},
     )
 
     assert output.title == "任务测试题"
     assert output.content_json is not None
     assert output.content_json["questions"][0]["correct_answer"] == "A"
-    assert output.citation_chunk_ids == ["chunk_1"]
+    assert output.item_citation_chunk_ids == {"q_1": ["chunk_1"]}
 
 
 def test_task_test_generator_rejects_choice_question_without_options() -> None:
@@ -81,7 +87,11 @@ def test_task_test_generator_rejects_choice_question_without_options() -> None:
     )
 
     with pytest.raises(CourseNexusError) as exc_info:
-        TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1},
+        )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
@@ -119,7 +129,11 @@ def test_task_test_generator_rejects_blank_string_correct_answer(
     )
 
     with pytest.raises(CourseNexusError) as exc_info:
-        TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1},
+        )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
@@ -157,6 +171,10 @@ def test_task_test_generator_rejects_invalid_multiple_choice_correct_answer_list
     )
 
     with pytest.raises(CourseNexusError) as exc_info:
-        TaskTestGenerator(model_provider=provider).generate(context=_context(), parameters={"question_count": 1})
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1},
+        )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"

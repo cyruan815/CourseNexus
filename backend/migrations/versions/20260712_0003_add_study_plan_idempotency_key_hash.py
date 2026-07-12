@@ -1,7 +1,7 @@
 """add study plan idempotency key hash
 
-Revision ID: 20260712_0002
-Revises: 20260709_0001
+Revision ID: 20260712_0003
+Revises: 20260712_0002
 Create Date: 2026-07-12
 """
 from __future__ import annotations
@@ -12,8 +12,8 @@ import json
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "20260712_0002"
-down_revision: str | None = "20260709_0001"
+revision: str = "20260712_0003"
+down_revision: str | None = "20260712_0002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

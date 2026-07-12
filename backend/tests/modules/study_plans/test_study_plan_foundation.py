@@ -201,8 +201,11 @@ def test_save_study_plan_writes_plan_tasks_and_subtasks(db: Session, tmp_path: P
     assert saved.plan.parsed_config_json["coverage"]["expected_material_ids"] == [material_id]
     assert list_study_plans(db, user_id=user.id, course_id=course.id)[0].id == saved.plan.id
     assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).plan.id == saved.plan.id
-    record = next(record for record in caplog.records if record.name.endswith("study_plan.build"))
-    assert "计划保存成功" in record.getMessage()
+    record = next(
+        record
+        for record in caplog.records
+        if record.name.endswith("study_plan.build") and "计划保存成功" in record.getMessage()
+    )
     assert "tasks=3" in record.getMessage()
     assert f"plan={saved.plan.id}" in record.getMessage()
     assert build_request().goal_text not in record.getMessage()

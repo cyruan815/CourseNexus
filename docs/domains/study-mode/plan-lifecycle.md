@@ -51,7 +51,7 @@
 
 ## 验证
 
-- `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002`，新增 `study_plans.idempotency_key_hash` 和唯一索引。
+- `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002 -> 20260712_0003`，其中 `20260712_0003` 新增 `study_plans.idempotency_key_hash` 和唯一索引。
 - `uv run python -m pytest tests/modules/study_mode/test_subsystem_schema_contract.py tests/modules/study_plans -q`：`68 passed in 18.11s`，覆盖 schema 契约、计划保存幂等、确认任务树校验和原子替换。
 - `uv run python -m pytest tests/modules/study_plans tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/integration -q`：`125 passed in 28.53s`，覆盖计划、执行、打卡、日历和集成链路。
 - `uv run python -m pytest -q`：`316 passed in 41.41s`。
