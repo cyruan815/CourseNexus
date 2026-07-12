@@ -21,7 +21,7 @@
 1. 自然语言配置回填：`POST /courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
 2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。
 3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用。
-4. 幂等：保存接口读取 `Idempotency-Key`，在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。
+4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
 5. 替换：`PUT /study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
 6. 重生成：`POST /study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
 7. 删除：`DELETE /study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
@@ -42,16 +42,17 @@
 ## 不变量
 
 - S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。
-- S02 不新增表、不新增列、不修改 migration。
+- S02 不新增业务表；幂等修复新增 `study_plans.idempotency_key_hash` 和唯一索引迁移，baseline migration 不回改。
 - 计划保存只写 `study_plans`、`study_tasks`、`study_subtasks`。
+- 未携带 `Idempotency-Key` 的保存请求允许创建多份计划；携带 key 的保存请求必须在数据库唯一约束竞争后恢复为原计划或返回 `IDEMPOTENCY_CONFLICT`，不得暴露 500。
 - 计划保存不生成 `handout`、`task_test` 或任何 `ai_generated_contents`。
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
 - 每份范围内已解析资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
 
 ## 验证
 
-- `uv run python -m alembic upgrade head`：通过。
-- `uv run python -m pytest tests/modules/study_plans tests/modules/material_context tests/integration/test_full_material_plan_flow.py tests/integration/test_material_context_to_plan_flow.py -q`：`49 passed in 16.80s`。
-- `uv run python -m pytest tests/modules/study_plans tests/integration/test_full_material_plan_flow.py tests/integration/test_material_context_to_plan_flow.py -q`：`27 passed in 15.91s`，覆盖 parser / generator provider 拆分。
-- `uv run python -m pytest tests/integrations/test_openai_structured_output.py tests/integrations/test_openai_model_provider.py -q`：`7 passed in 1.31s`，覆盖 Responses API 结构化输出和 Chat Completions JSON fallback。
-- `uv run python %TEMP%\course_nexus_os12_report.py`：通过，使用真实 `study_plan_parser` / `study_plan_generator` 配置生成 `docs/planning/phase-1-validation/os-ch12-real-model-preview-2026-07-12.md` 验收报告。
+- `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002`，新增 `study_plans.idempotency_key_hash` 和唯一索引。
+- `uv run python -m pytest tests/modules/study_mode/test_subsystem_schema_contract.py tests/modules/study_plans -q`：`68 passed in 18.11s`，覆盖 schema 契约、计划保存幂等、确认任务树校验和原子替换。
+- `uv run python -m pytest tests/modules/study_plans tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/integration -q`：`125 passed in 28.53s`，覆盖计划、执行、打卡、日历和集成链路。
+- `uv run python -m pytest -q`：`316 passed in 41.41s`。
+- 历史真实模型验收报告保留在 `docs/planning/phase-1-validation/`，但不属于本次幂等修复提交范围。

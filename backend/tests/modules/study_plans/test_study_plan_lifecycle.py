@@ -598,12 +598,237 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert first.plan.title == "传输层冲刺计划"
     assert first.plan.parsed_config_json["preference"] == "fast_track"
     assert first.plan.parsed_config_json["idempotency"]["key_hash"]
+    assert first.plan.idempotency_key_hash == first.plan.parsed_config_json["idempotency"]["key_hash"]
     assert first.tasks[0].title == "用户调整后的任务"
     assert first.subtasks[0].title == "用户调整后的学习项"
     assert first.subtasks[0].related_material_ids_json == [material_id]
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1
     assert provider.batch_prompts == []
 
+
+def test_save_study_plan_without_idempotency_key_keeps_existing_create_behavior(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="idem-no-key", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "idem-no-key.txt", b"Reliable transport")
+    provider = RecordingPlanProvider([material_id])
+
+    first = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+    )
+    second = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+    )
+
+    assert first.plan.id != second.plan.id
+    assert first.plan.idempotency_key_hash is None
+    assert second.plan.idempotency_key_hash is None
+    assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 2
+
+
+def test_save_study_plan_allows_different_idempotency_keys(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="idem-different-key", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "idem-different-key.txt", b"Reliable transport")
+    provider = RecordingPlanProvider([material_id])
+
+    first = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="idem-key-one",
+    )
+    second = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="idem-key-two",
+    )
+
+    assert first.plan.id != second.plan.id
+    assert first.plan.idempotency_key_hash != second.plan.idempotency_key_hash
+    assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 2
+
+
+def test_save_study_plan_recovers_existing_plan_when_idempotent_insert_races(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    setup_db = testing_session()
+    try:
+        user = register_user(setup_db, UserCreate(username="idem-race-same", password="password123"))
+        course = create_course(setup_db, user.id, CourseCreate(name="Computer Networks"))
+        material_id = create_parsed_material(setup_db, tmp_path, user.id, course.id, "idem-race-same.txt", b"Reliable transport")
+        user_id = user.id
+        course_id = course.id
+    finally:
+        setup_db.close()
+
+    from app.modules.study_plans import repository as study_plan_repository
+
+    original_lookup = study_plan_repository.get_active_study_plan_for_idempotency_key
+    calls = {"count": 0}
+
+    def miss_initial_race_reads(*args: object, **kwargs: object) -> StudyPlan | None:
+        calls["count"] += 1
+        if calls["count"] <= 2:
+            return None
+        return original_lookup(*args, **kwargs)
+
+    monkeypatch.setattr(study_plan_repository, "get_active_study_plan_for_idempotency_key", miss_initial_race_reads)
+
+    first_db = testing_session()
+    second_db = testing_session()
+    verify_db = testing_session()
+    try:
+        first = save_study_plan(
+            first_db,
+            user_id=user_id,
+            course_id=course_id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="idem-race-key",
+        )
+        second = save_study_plan(
+            second_db,
+            user_id=user_id,
+            course_id=course_id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="idem-race-key",
+        )
+
+        assert second.plan.id == first.plan.id
+        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 1, "checkins": 1}
+    finally:
+        first_db.close()
+        second_db.close()
+        verify_db.close()
+
+
+def test_save_study_plan_returns_conflict_when_raced_idempotency_body_differs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    setup_db = testing_session()
+    try:
+        user = register_user(setup_db, UserCreate(username="idem-race-conflict", password="password123"))
+        course = create_course(setup_db, user.id, CourseCreate(name="Computer Networks"))
+        material_id = create_parsed_material(setup_db, tmp_path, user.id, course.id, "idem-race-conflict.txt", b"Reliable transport")
+        user_id = user.id
+        course_id = course.id
+    finally:
+        setup_db.close()
+
+    from app.modules.study_plans import repository as study_plan_repository
+
+    original_lookup = study_plan_repository.get_active_study_plan_for_idempotency_key
+    calls = {"count": 0}
+
+    def miss_initial_race_reads(*args: object, **kwargs: object) -> StudyPlan | None:
+        calls["count"] += 1
+        if calls["count"] <= 2:
+            return None
+        return original_lookup(*args, **kwargs)
+
+    monkeypatch.setattr(study_plan_repository, "get_active_study_plan_for_idempotency_key", miss_initial_race_reads)
+
+    first_db = testing_session()
+    second_db = testing_session()
+    verify_db = testing_session()
+    try:
+        save_study_plan(
+            first_db,
+            user_id=user_id,
+            course_id=course_id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="idem-race-conflict-key",
+        )
+
+        changed_payload = _save_request([material_id]).model_copy(update={"title": "changed race title"})
+        with pytest.raises(CourseNexusError) as exc_info:
+            save_study_plan(
+                second_db,
+                user_id=user_id,
+                course_id=course_id,
+                payload=changed_payload,
+                model_provider=RecordingPlanProvider([material_id]),
+                max_tokens=12_000,
+                idempotency_key="idem-race-conflict-key",
+            )
+
+        assert exc_info.value.code == "IDEMPOTENCY_CONFLICT"
+        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 1, "checkins": 1}
+    finally:
+        first_db.close()
+        second_db.close()
+        verify_db.close()
+
+
+def test_save_study_plan_rejects_reusing_idempotency_key_after_soft_delete(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="idem-deleted", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "idem-deleted.txt", b"Reliable transport")
+    provider = RecordingPlanProvider([material_id])
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=provider,
+        max_tokens=12_000,
+        idempotency_key="deleted-key",
+    )
+
+    delete_study_plan(db, user_id=user.id, plan_id=saved.plan.id)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=provider,
+            max_tokens=12_000,
+            idempotency_key="deleted-key",
+        )
+
+    assert exc_info.value.code == "IDEMPOTENCY_CONFLICT"
 
 def test_save_study_plan_rejects_same_idempotency_key_with_different_body(db: Session, tmp_path: Path) -> None:
     user = register_user(db, UserCreate(username="dave", password="password123"))

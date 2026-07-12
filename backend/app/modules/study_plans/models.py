@@ -15,6 +15,7 @@ class StudyPlan(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     goal_text: Mapped[str] = mapped_column(Text, nullable=False)
     parsed_config_json: Mapped[dict | list | None] = mapped_column(JSON)
+    idempotency_key_hash: Mapped[str | None] = mapped_column(String(64))
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     daily_available_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -28,6 +29,7 @@ class StudyPlan(Base):
         CheckConstraint("end_date >= start_date", name="study_plan_date_range"),
         CheckConstraint("daily_available_minutes > 0", name="study_plan_daily_minutes_positive"),
         Index("ix_study_plans_user_id", "user_id"),
+        Index("uq_study_plans_user_course_idempotency_key_hash", "user_id", "course_id", "idempotency_key_hash", unique=True),
         Index("ix_study_plans_course_id", "course_id"),
         Index("ix_study_plans_course_title", "course_id", "title"),
         Index("ix_study_plans_start_date", "start_date"),

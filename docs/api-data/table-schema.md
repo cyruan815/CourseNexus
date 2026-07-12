@@ -371,6 +371,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `title` | string | 否 | 无 | INDEX(`course_id`, `title`) | 计划名称。 |
 | `goal_text` | text | 否 | 无 |  | 用户自然语言目标原文。 |
 | `parsed_config_json` | json | 是 | null |  | 自然语言解析后的配置，可编辑后保存。 |
+| `idempotency_key_hash` | string | 是 | null | UNIQUE(`user_id`, `course_id`, `idempotency_key_hash`) | `Idempotency-Key` 的 SHA-256，未携带 key 时为 null；软删除计划仍占用非空 key。 |
 | `start_date` | date | 否 | 无 | INDEX | 开始日期。 |
 | `end_date` | date | 否 | 无 | INDEX | 结束日期，不早于开始日期。 |
 | `daily_available_minutes` | integer | 否 | 无 |  | 每日可用学习时长，单位分钟。 |
@@ -641,7 +642,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 | 候选表 | v0.1 处理方式 | 后续建表触发条件 |
 | --- | --- | --- |
-| `idempotency_records` | 可由服务层、请求日志或轻量存储实现，不作为核心业务表。 | 需要跨进程幂等、任务恢复或并发生成保障。 |
+| `idempotency_records` | 不新增独立业务表；学习计划保存幂等由 `study_plans.idempotency_key_hash` 唯一索引兜底，其他生成类接口可继续由服务层或请求日志处理。 | 需要跨接口统一幂等、任务恢复或异步生成恢复时再评估。 |
 | `sessions` | 可使用 Bearer token 或等价 session 机制，不在业务数据模型中固定。 | 需要服务端会话管理、设备管理或强制下线。 |
 | `material_parse_jobs` | v0.1 可先用 `course_materials.parse_status` 和 `parse_error` 表达解析状态。 | 需要独立解析队列、重试次数、任务锁或后台任务恢复。 |
 | `generation_jobs` | v0.1 可先用 `messages.generation_status` 和 `ai_generated_contents.generation_status` 表达生成状态。 | 需要统一生成任务队列、排队状态、取消任务或异步任务恢复。 |
@@ -657,7 +658,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | 课程对话列表 | `conversations(course_id, status, updated_at)` |
 | 对话消息列表 | `messages(conversation_id, created_at)` |
 | 生成内容历史 | `ai_generated_contents(course_id, content_type, generation_status, created_at)` |
-| 课程计划列表 | `study_plans(course_id, status, start_date, end_date)` |
+| 课程计划列表 | `study_plans(course_id, status, start_date, end_date)`；保存幂等查重使用 `study_plans(user_id, course_id, idempotency_key_hash)` 唯一索引 |
 | 首页今日待办 / 日历 | `study_tasks(course_id, task_date, status)`、`study_subtasks(course_id, status)` |
 | 用户打卡日历 | `checkin_records(user_id, checkin_date)` |
 
@@ -674,9 +675,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 ## S02 表结构结论
 
-S02 已实现真实学习计划生命周期，但表结构结论不变：不新增业务表、不新增列、不修改 `backend/migrations/versions/20260709_0001_create_core_tables.py`。
+S02 已实现真实学习计划生命周期；仍不新增业务表，但为保存计划幂等性新增 `study_plans.idempotency_key_hash` 和唯一索引，并通过 `backend/migrations/versions/20260712_0002_add_study_plan_idempotency_key_hash.py` 迁移。baseline migration 不回改。
 
-- `study_plans.parsed_config_json` 保存偏好、材料范围、coverage、幂等 hash 和任务来源。
+- `study_plans.idempotency_key_hash` 保存 `Idempotency-Key` 的 key hash，用 `(user_id, course_id, idempotency_key_hash)` 唯一索引防止并发重复创建；`parsed_config_json` 继续保存偏好、材料范围、coverage、request hash 和任务来源。
 - `study_tasks` 保存日期级一级任务。
 - `study_subtasks` 保存二级任务、任务类型和关联资料 ID 数组。
 - `ai_generated_contents` 只在 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。

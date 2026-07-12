@@ -81,13 +81,15 @@ def get_active_study_plan_for_idempotency_key(
     course_id: str,
     key_hash: str,
 ) -> StudyPlan | None:
-    plans = list_active_study_plans_for_course(db, user_id=user_id, course_id=course_id)
-    for plan in plans:
-        config = plan.parsed_config_json if isinstance(plan.parsed_config_json, dict) else {}
-        idempotency = config.get("idempotency") if isinstance(config, dict) else None
-        if isinstance(idempotency, dict) and idempotency.get("key_hash") == key_hash:
-            return plan
-    return None
+    return db.execute(
+        select(StudyPlan).where(
+            StudyPlan.user_id == user_id,
+            StudyPlan.course_id == course_id,
+            StudyPlan.idempotency_key_hash == key_hash,
+            StudyPlan.deleted_at.is_(None),
+            StudyPlan.status != "deleted",
+        )
+    ).scalar_one_or_none()
 
 
 def list_tasks_for_plan(db: Session, *, plan_id: str) -> list[StudyTask]:

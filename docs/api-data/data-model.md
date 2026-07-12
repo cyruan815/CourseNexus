@@ -119,7 +119,7 @@ erDiagram
 
 ## S02 学习计划生命周期落库规则
 
-S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增表、不新增列、不修改 baseline migration。
+S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业务表；为保存计划幂等性新增 `study_plans.idempotency_key_hash` 和 `(user_id, course_id, idempotency_key_hash)` 唯一索引，baseline migration 不回改。
 
 `StudyPlan.parsed_config_json` 在 S02 中保存以下结构化信息：
 
@@ -142,6 +142,9 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增表
 ```
 
 保存计划只创建计划、一级任务和二级任务结构。重生成 preview 不落库；替换计划会在一次事务中删除旧任务树并写入新任务树；删除计划写 `status = deleted` 和 `deleted_at`。
+
+保存计划携带 `Idempotency-Key` 时，key hash 写入 `study_plans.idempotency_key_hash`，request hash 仍写入 `parsed_config_json.idempotency.request_hash`。同 key 同请求返回原计划；同 key 不同请求、并发唯一约束冲突且 request hash 不一致、或旧计划已软删除但 key 被占用时，均返回 `IDEMPOTENCY_CONFLICT`。
+
 ## S04/S05 派生状态规则
 
 `study_subtasks.status` 是学习执行的事实来源。S04 completion 只写 `completed` 或 `not_started`，不直接写二级任务 `in_progress`。

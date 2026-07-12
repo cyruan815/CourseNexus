@@ -8,6 +8,7 @@ from math import ceil
 from time import perf_counter
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
@@ -210,6 +211,7 @@ def save_study_plan(
         course_id=course_id,
         title=title,
         goal_text=save_payload.goal_text,
+        idempotency_key_hash=key_hash,
         parsed_config_json=_saved_config(
             save_payload,
             coverage=preview.coverage.model_dump(mode="json") if preview is not None else None,
@@ -232,6 +234,17 @@ def save_study_plan(
         study_plan_repository.add_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
         _recalculate_checkins_for_dates(db, user_id=user_id, dates=_task_dates(tasks))
         db.commit()
+    except IntegrityError:
+        db.rollback()
+        if key_hash:
+            return _resolve_idempotency_write_conflict(
+                db,
+                user_id=user_id,
+                course_id=course_id,
+                key_hash=key_hash,
+                request_hash=request_hash,
+            )
+        raise
     except Exception:
         db.rollback()
         raise
@@ -367,6 +380,31 @@ def delete_study_plan(db: Session, *, user_id: str, plan_id: str) -> StudyPlan:
     db.commit()
     db.refresh(plan)
     return plan
+
+
+def _resolve_idempotency_write_conflict(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    key_hash: str,
+    request_hash: str,
+) -> StudyPlanBundle:
+    existing_plan = study_plan_repository.get_active_study_plan_for_idempotency_key(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        key_hash=key_hash,
+    )
+    if existing_plan is None:
+        raise CourseNexusError(code="IDEMPOTENCY_CONFLICT", message="幂等键已被已删除或不可复用计划占用", status_code=409)
+
+    config = existing_plan.parsed_config_json if isinstance(existing_plan.parsed_config_json, dict) else {}
+    idempotency = config.get("idempotency") if isinstance(config, dict) else {}
+    if isinstance(idempotency, dict) and idempotency.get("request_hash") == request_hash:
+        return _bundle_for_plan(db, existing_plan)
+    raise CourseNexusError(code="IDEMPOTENCY_CONFLICT", message="幂等键已用于不同请求", status_code=409)
+
 
 def _task_dates(tasks: list[StudyTask]) -> set[date]:
     return {task.task_date for task in tasks}
