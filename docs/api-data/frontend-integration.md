@@ -715,7 +715,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 - `calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余映射 `plain_language`。
 - `DIAGNOSTIC_STALE` 表示 `question_version` 或 topic 不再匹配当前资料范围；前端应回到诊断步骤重新获取问题和作答。
 
-生成出的 profile 可原样放入 `study-plans/preview` 请求：
+生成出的 profile 可原样放入 `study-plans/preview` 请求。Preview 会用它影响 planner：`foundation_needed=true` 时前置补基础，`weak_topics` 会更靠前更细，`weak_area` 和 `explanation_style` 会影响例题、测试、review 和 description 风格。
 
 ```json
 {
@@ -743,7 +743,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/study-plans/preview`
 
-要求：Bearer token。后端基于当前资料范围生成 preview；请求允许省略 `daily_available_minutes`，后端会在资料 map 后计算新的 `recommended_daily_minutes` 和最终采用的 `daily_available_minutes`。
+要求：Bearer token。后端基于当前资料范围和可选 `diagnostic_profile` 生成 preview；请求允许省略 `daily_available_minutes`，后端会在资料 map 后计算新的 `recommended_daily_minutes` 和最终采用的 `daily_available_minutes`。Capacity 在 planner reduce 后按最终任务树重新统计。
 
 请求（未指定每日时间时）：
 
@@ -779,9 +779,12 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 规则：
 
-- 后端始终按 `max(30, ceil(estimated_total_minutes / duration_days))` 返回新的 `recommended_daily_minutes`。
+- `recommended_daily_minutes` 继续按 map 阶段资料规模估算：`max(30, ceil(mapped_estimated_total_minutes / duration_days))`。
 - 未传 `daily_available_minutes` 时，`daily_available_minutes = recommended_daily_minutes`，`daily_minutes_source = "system_estimated"`。
-- 传入 `daily_available_minutes` 时，后端保留该最终采用值；若 `daily_minutes_source = "user_modified"`，capacity 使用前端传入值计算。
+- 传入 `daily_available_minutes` 时，后端保留该最终采用值；若 `daily_minutes_source = "user_modified"`，capacity 的 `available_total_minutes` 使用前端传入值计算。
+- `capacity.estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，即按最终 preview 任务统计，而不是 map 阶段材料单元估算。
+- 当 `estimated_total_minutes > available_total_minutes` 时，`capacity.feasibility_status = "over_capacity"` 且 `capacity.warnings` 包含 `PLAN_OVER_CAPACITY`；前端应展示 warning 并引导用户增加每日时间、增加天数或降低学习强度。
+- 接近容量时返回 `feasibility_status = "tight"`。
 - 旧客户端继续可以传 `daily_available_minutes`；低于 30 分钟的请求会被校验拒绝。
 
 响应 `data`：
@@ -840,7 +843,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/study-plans`
 
-要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。保存时 capacity 会按最终提交的 `tasks[].subtasks[].estimated_minutes` 重新计算，避免旧客户端传入过期 capacity。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
 
 响应 `data`：
 

@@ -48,6 +48,49 @@ class DiagnosticApiProvider:
         if output_schema.__name__ == "StudyPlanReduction":
             self.reduce_prompts.append(prompt)
             material_ids = sorted({part.strip(",;[]'") for part in prompt.split() if part.startswith("mat_")})
+            if "foundation_needed: true" in prompt:
+                return output_schema.model_validate(
+                    {
+                        "title": "诊断后学习计划",
+                        "tasks": [
+                            {
+                                "title": "按诊断结果补基础",
+                                "task_date": "2026-07-12",
+                                "sort_order": 1,
+                                "subtasks": [
+                                    {
+                                        "title": "补基础：信道容量概念",
+                                        "subtask_type": "learn",
+                                        "description": "先补齐 Nyquist 和 Shannon 的基础概念",
+                                        "related_material_ids": material_ids,
+                                        "estimated_minutes": 35,
+                                        "citation_chunk_ids": ["chk_diagnostic"],
+                                        "sort_order": 1,
+                                    },
+                                    {
+                                        "title": "例题演练：容量公式",
+                                        "subtask_type": "review",
+                                        "description": "用例题按步骤练习容量公式",
+                                        "related_material_ids": material_ids,
+                                        "estimated_minutes": 35,
+                                        "citation_chunk_ids": ["chk_diagnostic"],
+                                        "sort_order": 2,
+                                    },
+                                    {
+                                        "title": "诊断小测",
+                                        "subtask_type": "quiz",
+                                        "description": "确认补基础后的掌握情况",
+                                        "related_material_ids": material_ids,
+                                        "estimated_minutes": 20,
+                                        "citation_chunk_ids": ["chk_diagnostic"],
+                                        "sort_order": 3,
+                                    },
+                                ],
+                            }
+                        ],
+                        "citation_chunk_ids": ["chk_diagnostic"],
+                    }
+                )
             return output_schema.model_validate(
                 {
                     "title": "诊断后学习计划",
@@ -499,3 +542,97 @@ def test_preview_reduce_prompt_changes_with_different_diagnostic_profiles(
     assert "weak_area: memorization" in memorization_prompt
     assert "explanation_style: exam_focused" in memorization_prompt
     assert "重点记忆、回顾、检查" in memorization_prompt
+
+
+def test_diagnostic_foundation_minutes_recalculate_capacity_and_save_trace(
+    api_context: tuple[TestClient, DiagnosticApiProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "diagnostic_capacity")
+    course_id = create_course(client, token)
+    material_id = upload_and_parse_material(
+        client,
+        token,
+        course_id,
+        "capacity-topic.md",
+        "# 信道容量\nNyquist 和 Shannon 公式。",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    base_payload = {
+        "goal_text": "一天复习物理层核心内容",
+        "start_date": "2026-07-12",
+        "duration_days": 1,
+        "daily_available_minutes": 60,
+        "preference": "balanced",
+        "material_scope": {"include_all_parsed_materials": False, "material_ids": [material_id]},
+    }
+
+    solid_preview = client.post(
+        f"/api/v1/courses/{course_id}/study-plans/preview",
+        headers=headers,
+        json=base_payload
+        | {
+            "diagnostic_profile": {
+                "question_version": "study_plan_diagnostic_v1",
+                "prior_knowledge_level": "solid",
+                "foundation_needed": False,
+                "weak_topics": [],
+                "weak_area": "memorization",
+                "explanation_style": "exam_focused",
+            }
+        },
+    )
+    weak_preview = client.post(
+        f"/api/v1/courses/{course_id}/study-plans/preview",
+        headers=headers,
+        json=base_payload
+        | {
+            "diagnostic_profile": {
+                "question_version": "study_plan_diagnostic_v1",
+                "prior_knowledge_level": "little",
+                "foundation_needed": True,
+                "weak_topics": ["nyquist_shannon"],
+                "weak_area": "calculation",
+                "explanation_style": "step_by_step",
+            }
+        },
+    )
+
+    assert solid_preview.status_code == 200
+    assert weak_preview.status_code == 200
+    solid_data = solid_preview.json()["data"]
+    weak_data = weak_preview.json()["data"]
+    solid_minutes = _preview_total_minutes(solid_data)
+    weak_minutes = _preview_total_minutes(weak_data)
+    assert solid_minutes == 60
+    assert weak_minutes > solid_minutes
+    assert solid_data["capacity"]["estimated_total_minutes"] == solid_minutes
+    assert solid_data["capacity"]["feasibility_status"] == "tight"
+    assert weak_data["recommended_daily_minutes"] == 60
+    assert weak_data["capacity"]["estimated_total_minutes"] == weak_minutes
+    assert weak_data["capacity"]["available_total_minutes"] == 60
+    assert weak_data["capacity"]["feasibility_status"] == "over_capacity"
+    assert "PLAN_OVER_CAPACITY" in weak_data["capacity"]["warnings"]
+
+    saved = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers | {"Idempotency-Key": "diagnostic-capacity-save"},
+        json=weak_data,
+    )
+
+    assert saved.status_code == 200
+    parsed_config = saved.json()["data"]["plan"]["parsed_config_json"]
+    assert parsed_config["capacity"]["estimated_total_minutes"] == weak_minutes
+    assert parsed_config["capacity"]["available_total_minutes"] == 60
+    assert parsed_config["capacity"]["feasibility_status"] == "over_capacity"
+    assert "PLAN_OVER_CAPACITY" in parsed_config["capacity"]["warnings"]
+
+
+def _preview_total_minutes(preview_data: dict[str, object]) -> int:
+    tasks = preview_data["tasks"]
+    assert isinstance(tasks, list)
+    return sum(
+        subtask["estimated_minutes"]
+        for task in tasks
+        for subtask in task["subtasks"]
+    )

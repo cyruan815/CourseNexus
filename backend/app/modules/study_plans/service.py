@@ -244,10 +244,10 @@ def preview_study_plan(
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
     task_previews = coverage_result.value.tasks
-    estimated_total_minutes = mapped_estimated_total_minutes or _task_previews_total_minutes(task_previews)
+    estimated_total_minutes = _task_previews_total_minutes(task_previews)
     daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
     recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
-        estimated_total_minutes=estimated_total_minutes,
+        estimated_total_minutes=mapped_estimated_total_minutes or estimated_total_minutes,
         duration_days=duration_days,
     )
     daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"

@@ -4,7 +4,7 @@
 
 - 日期：2026-07-12
 - 状态：已实现并通过自动化验证。
-- 范围：单课程学习计划生成、配置解析、确认保存、幂等、重生成预览、原子替换和软删除。
+- 范围：单课程学习计划生成、配置解析、诊断后 capacity 统计、确认保存、幂等、重生成预览、原子替换和软删除。
 
 ## 代码入口
 
@@ -19,8 +19,8 @@
 ## 数据流
 
 1. 自然语言配置回填：`POST /courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
-2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。
-3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用。
+2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
+3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
 4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
 5. 替换：`PUT /study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
 6. 重生成：`POST /study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
@@ -32,7 +32,7 @@
 - planner map prompt 负责把资料 chunk 按章节/页码顺序抽成细粒度知识单元，要求保留公式、例子、接口、设备、调制/编码/复用、安全隐患等可学习细节，并要求每个知识单元携带 `citation_chunk_ids`。
 - planner reduce prompt 负责把知识单元排成可执行计划。生成标题时必须使用课程名称原文；完成型目标需要尽量利用每日可用时间，并通过复习、练习、输出任务和最终 quiz/test 补足学习闭环。
 - planner reduce prompt 现在会读取 `StudyPlanBuildRequest.diagnostic_profile` 并作为生成策略：`foundation_needed=true` 时要前置补基础，`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt 策略，不新增表、不改前端和结构化输出 schema。
-- `validate_preview()` 除结构校验外，还会校验生成质量底线：`quiz` 和 `test` 都必须位于当天最后；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间，最后一天必须包含综合自测。
+- `validate_preview()` 除结构校验外，还会校验生成质量底线：`quiz` 和 `test` 都必须位于当天最后；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间，最后一天必须包含综合自测。每日任务时长超过 `daily_available_minutes` 时，只有 preview capacity 已明确 `feasibility_status = over_capacity` 且 `warnings` 包含 `PLAN_OVER_CAPACITY` 才允许返回，由前端展示容量 warning；结构非法、日期越界、引用缺失和范围外资料仍返回 `GENERATION_SCHEMA_INVALID`。
 - 资料解析层的公式 OCR、图表理解、图片页补全，以及模型 provider 的 `responses.parse` 兼容配置，不属于 study-mode 生命周期模块职责，后续应分别在 materials/parser 和 model provider 任务中处理。
 
 ## 模型调用兼容性
@@ -50,6 +50,7 @@
 - 计划保存不生成 `handout`、`task_test` 或任何 `ai_generated_contents`。
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
 - 每份范围内已解析资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
+- Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；超出容量时必须返回 `PLAN_OVER_CAPACITY` warning。
 
 ## 验证
 

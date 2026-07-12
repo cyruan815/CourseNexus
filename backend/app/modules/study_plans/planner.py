@@ -149,7 +149,7 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
             raise _invalid_generation("每天至少需要一个二级任务")
 
         daily_minutes = sum(subtask.estimated_minutes for subtask in task.subtasks)
-        if daily_minutes > preview.daily_available_minutes:
+        if daily_minutes > preview.daily_available_minutes and not _has_over_capacity_warning(preview):
             raise _invalid_generation("每日任务时长超过用户可用时间")
         if completion_quality_required and daily_minutes < _minimum_required_minutes(preview.daily_available_minutes):
             raise _invalid_generation("每日任务时长利用不足")
@@ -232,6 +232,15 @@ def _build_reduce_prompt(
             "expected_material_ids: " + " ".join(sorted(expected_material_ids)),
             f"mapped_batches: {mapped_json}",
         ]
+    )
+
+
+def _has_over_capacity_warning(preview: StudyPlanPreview) -> bool:
+    warnings = preview.capacity.get("warnings")
+    return (
+        preview.capacity.get("feasibility_status") == "over_capacity"
+        and isinstance(warnings, list)
+        and "PLAN_OVER_CAPACITY" in warnings
     )
 
 
