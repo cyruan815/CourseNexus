@@ -1,0 +1,33 @@
+{
+  "status": "PASS_WITH_EXECUTION_QA_SKIPPED",
+  "run_dir": "D:\\Projects\\CourseNexus\\docs\\domains\\study-mode\\validation\\real-e2e-physical-layer-20260713-040639",
+  "source_pdf": "D:\\大二下课程\\计算机网络\\课件\\Chap7 物理层.pdf",
+  "natural_language_goal": "我要两天内深度学习计算机网络物理层的知识点，今天是2026年7月13日",
+  "material_id": "mat_2f7428d240034c36979b3c01e48097c7",
+  "material_status": "parsed",
+  "plan_id": "sp_85279ec5c59b4953b351b49a0394de96",
+  "selected_handout_subtask": {
+    "id": "sub_6d87183c14844ad6b632f722f28076a3",
+    "title": "补基础：信息、数据、信号与码元基本概念",
+    "task_date": "2026-07-13",
+    "type": "learn"
+  },
+  "selected_task_test_subtask": {
+    "id": "sub_b7845cf98b104e12ab51b30fa6737067",
+    "title": "综合测验：物理层全章",
+    "task_date": "2026-07-14",
+    "type": "test"
+  },
+  "handout_content_id": "gen_2e9ca76cfc97457ab98409e63f51a05b",
+  "task_test_content_id": "gen_9f872e50a6ab40d398c0ea2fe384114f",
+  "handout_sections": 7,
+  "task_test_questions": 3,
+  "handout_pdf": "handout-gen_2e9ca76cfc97457ab98409e63f51a05b.pdf",
+  "handout_pdf_pages": 1,
+  "task_test_markdown": "task-test-gen_9f872e50a6ab40d398c0ea2fe384114f.md",
+  "logs": [
+    "run.log.jsonl",
+    "continue.log.jsonl"
+  ],
+  "note": "原完整脚本额外执行 execution-page QA 时，COURSE_QA deepseek-chat 调 /responses 返回 404；本次续跑跳过该非本轮验收必需步骤。"
+}
