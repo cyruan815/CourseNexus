@@ -95,6 +95,27 @@ def test_openai_provider_falls_back_to_chat_completions_when_responses_api_is_no
     assert chat_completions.calls[0]["response_format"] == {"type": "json_object"}
 
 
+def test_deepseek_provider_uses_chat_completions_without_calling_responses_api() -> None:
+    responses = FakeResponses(error=AssertionError("Responses API must not be used"))
+    chat_completions = FakeChatCompletions(content='{"facts":["A"],"citation_chunk_ids":["c1"]}')
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    result = provider.generate_structured(
+        prompt="reference extraction",
+        output_schema=ReferenceExtraction,
+    )
+
+    assert result == ReferenceExtraction(facts=["A"], citation_chunk_ids=["c1"])
+    assert responses.calls == []
+    assert chat_completions.calls[0]["model"] == "deepseek-v4-flash"
+    assert "reference extraction" in chat_completions.calls[0]["messages"][1]["content"]
+
+
 def test_openai_provider_maps_sdk_error_to_generation_failed() -> None:
     provider = OpenAIModelProvider(
         api_key="test",
