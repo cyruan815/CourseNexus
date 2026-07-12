@@ -206,6 +206,7 @@ describe("HomePage", () => {
 
     renderHomePage();
 
+    await screen.findByRole("link", { name: "离散数学" });
     const themeButton = screen.getByRole("button", { name: "切换为夜间模式" });
     fireEvent.click(themeButton);
 
