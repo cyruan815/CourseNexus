@@ -1,4 +1,6 @@
+﻿import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MaterialWorkspace } from "../../../src/features/materials/MaterialWorkspace";
@@ -58,6 +60,10 @@ const materials = [
   },
 ];
 
+function renderWorkspace(ui: ReactElement) {
+  render(<MantineProvider>{ui}</MantineProvider>);
+}
+
 describe("MaterialWorkspace", () => {
   beforeEach(() => {
     vi.mocked(materialsApi.listMaterialFolders).mockResolvedValue([folder]);
@@ -67,7 +73,7 @@ describe("MaterialWorkspace", () => {
   it("uses folders only for organization and selects individual parsed files", async () => {
     const onScopeChange = vi.fn();
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: false, material_ids: [] }}
@@ -94,7 +100,7 @@ describe("MaterialWorkspace", () => {
     vi.mocked(materialsApi.createMaterialFolder).mockResolvedValue({ ...folder, id: "fld_2", name: "考试" });
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -117,7 +123,7 @@ describe("MaterialWorkspace", () => {
   });
 
   it("opens and closes the upload prompt when requested by the course creation flow", async () => {
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -132,14 +138,13 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
   });
 
-  it("removes a deleted folder from the folder list and moves its materials to unfiled", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("removes a deleted folder and its materials after confirmation", async () => {
     vi.mocked(materialsApi.deleteMaterialFolder).mockResolvedValue({
       ...folder,
       deleted_at: "2026-07-12T00:00:00Z",
     });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -151,11 +156,17 @@ describe("MaterialWorkspace", () => {
     fireEvent.contextMenu(folderButton);
     fireEvent.click(screen.getByRole("menuitem", { name: "删除文件夹" }));
 
+    expect(screen.getByRole("dialog", { name: "删除文件夹" })).toHaveTextContent(
+      "删除该文件夹后，文件夹下的所有资料和子文件夹也会被一并删除，且无法恢复。",
+    );
+    expect(materialsApi.deleteMaterialFolder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
     await waitFor(() => {
       expect(materialsApi.deleteMaterialFolder).toHaveBeenCalledWith("fld_1");
     });
     expect(screen.queryByRole("button", { name: /第一周/ })).not.toBeInTheDocument();
-    expect(screen.getByText("第一章.pdf")).toBeInTheDocument();
+    expect(screen.queryByText("第一章.pdf")).not.toBeInTheDocument();
   });
 
   it("creates a link material from the workspace context menu", async () => {
@@ -172,7 +183,7 @@ describe("MaterialWorkspace", () => {
       source_url: "https://example.com/course",
     });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -200,7 +211,7 @@ describe("MaterialWorkspace", () => {
       name: "第一章重命名.pdf",
     });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -218,14 +229,13 @@ describe("MaterialWorkspace", () => {
   });
 
   it("removes a deleted material from the explorer immediately", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(materialsApi.deleteMaterial).mockResolvedValue({
       ...materials[0],
       parse_status: "deleted",
       deleted_at: "2026-07-12T00:00:00Z",
     });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
@@ -236,14 +246,40 @@ describe("MaterialWorkspace", () => {
     fireEvent.contextMenu(await screen.findByText("第一章.pdf"));
     fireEvent.click(screen.getByRole("menuitem", { name: "删除资料" }));
 
+    expect(screen.getByRole("dialog", { name: "删除资料" })).toHaveTextContent(
+      "确定删除该资料吗？删除后将无法恢复。",
+    );
+    expect(materialsApi.deleteMaterial).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
     await waitFor(() => {
       expect(materialsApi.deleteMaterial).toHaveBeenCalledWith("mat_1");
     });
     expect(screen.queryByText("第一章.pdf")).not.toBeInTheDocument();
   });
 
+  it("keeps material data and shows backend errors when deletion fails", async () => {
+    vi.mocked(materialsApi.deleteMaterial).mockRejectedValue(new Error("资料索引配置缺失"));
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByText("第一章.pdf"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除资料" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("资料索引配置缺失");
+    expect(screen.getByText("第一章.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "删除资料" })).toBeInTheDocument();
+  });
+
   it("closes the context menu when left-clicking elsewhere", async () => {
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -262,7 +298,7 @@ describe("MaterialWorkspace", () => {
   it("moves a material by dragging it onto a folder", async () => {
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
-    render(
+    renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
         materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
@@ -279,3 +315,4 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByText("待解析.md")).toBeInTheDocument();
   });
 });
+

@@ -274,7 +274,7 @@
 - `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
 - `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
 - `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
-- `DELETE /api/v1/material-folders/{folder_id}`：软删除文件夹，其中资料保留并自动回到未分类。
+- `DELETE /api/v1/material-folders/{folder_id}`：删除文件夹及其全部内容。前端需在二次确认后调用接口；成功后移除该文件夹及其下资料，失败时保留当前页面数据并展示后端错误。
 - `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
 
 文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。

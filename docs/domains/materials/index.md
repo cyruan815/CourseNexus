@@ -36,14 +36,14 @@ flowchart LR
     CTX --> RAG
 ```
 
-文件夹和资料 API 同步执行。上传先写文件和 `CourseMaterial`；解析接口同步写 chunk 与向量。移动已解析资料或删除文件夹时，只更新 Chroma 的 `folder_id` metadata，不重新计算 embedding。
+文件夹和资料 API 同步执行。上传先写文件和 `CourseMaterial`；解析接口同步写 chunk 与向量。移动已解析资料时，只更新 Chroma 的 `folder_id` metadata，不重新计算 embedding。当前前端删除文件夹按“删除文件夹及其全部内容”的产品语义处理：接口成功后从当前列表移除该文件夹及其下资料；接口失败时不做假删除，保留列表并展示后端错误。
 
 ## 4. 数据、状态与接口
 
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；软删除后不可再访问。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
-- 删除文件夹不会删除资料，所有关联资料回到未分类。
+- 删除文件夹不会删除资料，所有关联资料回到未分类；前端展示必须与该后端语义保持一致。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。
 - `parse_quality` 是全局解析质量信号：`complete` 表示本轮未观察到失败，`partial` 表示有可用 chunk 但存在失败页或 warning，`unknown` 表示证据不足。
 - `parse_status = parsed` 与 `parse_quality = partial` 可以同时存在；下游仍可读取 chunk，但不能把它解释为完整覆盖。
@@ -97,10 +97,10 @@ PDF 解析：
 
 删除文件夹：
 
-1. 查询目录内资料。
-2. 对已解析且未删除资料更新向量 metadata 为未分类。
-3. 将所有关联资料 `folder_id` 置空。
-4. 软删除文件夹并在同一数据库提交中保存资料变化。
+1. 前端先展示二次确认弹窗，明确告知文件夹下资料和子文件夹会一并删除且无法恢复。
+2. 用户确认后调用 `DELETE /api/v1/material-folders/{folder_id}`，请求期间显示 loading 并禁用重复提交。
+3. 接口成功后关闭弹窗，从当前列表移除该文件夹及其下资料，并清理这些资料在当前 `MaterialScope` 中的勾选状态。
+4. 接口失败时保留列表和弹窗，展示后端返回的错误信息。
 
 重命名资料：
 
@@ -112,7 +112,7 @@ PDF 解析：
 ### 5.3 复杂度与资源预算
 
 - 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
-- 删除文件夹为 `O(n)`，`n` 是目录内资料数；每份已解析资料执行一次 metadata 更新。
+- 删除文件夹为 `O(n)`，`n` 是目录内资料数；每份已解析资料执行一次 metadata 更新。前端删除成功后的本地列表同步同样为 `O(n)`，`n` 是当前课程资料数。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 - PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
@@ -122,7 +122,7 @@ PDF 解析：
 - 文件夹 CRUD、资料重命名、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹后资料回未分类、删除资料后立即移除、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹后资料回未分类、删除资料后立即移除、删除失败保留列表并展示错误、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 
 验证命令：
