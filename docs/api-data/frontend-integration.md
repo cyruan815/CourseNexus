@@ -786,6 +786,8 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 - 当 `estimated_total_minutes > available_total_minutes` 时，`capacity.feasibility_status = "over_capacity"` 且 `capacity.warnings` 包含 `PLAN_OVER_CAPACITY`；前端应展示 warning 并引导用户增加每日时间、增加天数或降低学习强度。
 - 接近容量时返回 `feasibility_status = "tight"`。
 - 旧客户端继续可以传 `daily_available_minutes`；低于 30 分钟的请求会被校验拒绝。
+- `preference` 请求和响应始终使用英文枚举：`fast_track`、`balanced`、`mastery`、`sprint`；前端可展示中文“快速通关 / 均衡学习 / 深入掌握 / 冲刺强化”，但不得把中文值写入 API。
+- 后端会在 `generation_metadata.planner_strategy` 中返回派生后的 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity`，并合并诊断得出的 `foundation_required`、`weak_topics`、`weak_area` 和 `explanation_style`。
 
 响应 `data`：
 
@@ -810,6 +812,22 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
     "available_total_minutes": 60,
     "feasibility_status": "tight",
     "warnings": []
+  },
+  "generation_metadata": {
+    "schema_version": 1,
+    "model_provider": "openai-compatible",
+    "generated_at": "2026-07-12T10:00:00+08:00",
+    "planner_strategy": {
+      "preference": "sprint",
+      "content_depth": "focused",
+      "example_intensity": "standard",
+      "assessment_intensity": "high",
+      "review_intensity": "high",
+      "foundation_required": false,
+      "weak_topics": [],
+      "weak_area": "other",
+      "explanation_style": "plain_language"
+    }
   },
   "tasks": [
     {
@@ -843,7 +861,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/study-plans`
 
-要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。保存时 capacity 会按最终提交的 `tasks[].subtasks[].estimated_minutes` 重新计算，避免旧客户端传入过期 capacity。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`planner_strategy`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。保存时 capacity 会按最终提交的 `tasks[].subtasks[].estimated_minutes` 重新计算，避免旧客户端传入过期 capacity。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
 
 响应 `data`：
 

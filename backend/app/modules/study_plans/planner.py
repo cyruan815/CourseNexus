@@ -29,6 +29,95 @@ _EXPLANATION_STYLE_RULES = {
     "exam_focused": "exam_focused：任务描述风格要突出重点记忆、易错回顾和可检查产出。",
 }
 
+_PREFERENCE_PLANNER_STRATEGIES = {
+    "fast_track": {
+        "content_depth": "concise",
+        "example_intensity": "low",
+        "assessment_intensity": "low",
+        "review_intensity": "low",
+    },
+    "balanced": {
+        "content_depth": "standard",
+        "example_intensity": "standard",
+        "assessment_intensity": "standard",
+        "review_intensity": "standard",
+    },
+    "mastery": {
+        "content_depth": "detailed",
+        "example_intensity": "high",
+        "assessment_intensity": "high",
+        "review_intensity": "high",
+    },
+    "sprint": {
+        "content_depth": "focused",
+        "example_intensity": "standard",
+        "assessment_intensity": "high",
+        "review_intensity": "high",
+    },
+}
+
+
+def derive_planner_strategy(
+    preference: object,
+    diagnostic_profile: dict[str, object] | None = None,
+) -> dict[str, object]:
+    normalized_preference = _normalize_strategy_preference(preference)
+    base_strategy = _PREFERENCE_PLANNER_STRATEGIES[normalized_preference]
+    profile = diagnostic_profile if isinstance(diagnostic_profile, dict) else {}
+    return {
+        "preference": normalized_preference,
+        "content_depth": base_strategy["content_depth"],
+        "example_intensity": base_strategy["example_intensity"],
+        "assessment_intensity": base_strategy["assessment_intensity"],
+        "review_intensity": base_strategy["review_intensity"],
+        "foundation_required": _diagnostic_bool(profile.get("foundation_needed")),
+        "weak_topics": _diagnostic_string_list(profile.get("weak_topics")),
+        "weak_area": _diagnostic_string(profile.get("weak_area"), default="other"),
+        "explanation_style": _diagnostic_string(profile.get("explanation_style"), default="plain_language"),
+    }
+
+
+def _normalize_strategy_preference(preference: object) -> str:
+    if preference is None:
+        return "balanced"
+    value = str(preference).strip()
+    if value == "advanced":
+        value = "sprint"
+    return value if value in _PREFERENCE_PLANNER_STRATEGIES else "balanced"
+
+
+def _planner_strategy_prompt_lines(strategy: dict[str, object]) -> list[str]:
+    preference = str(strategy.get("preference") or "balanced")
+    foundation_required = bool(strategy.get("foundation_required"))
+    weak_topics = strategy.get("weak_topics") if isinstance(strategy.get("weak_topics"), list) else []
+    weak_topics_value = ", ".join(str(topic) for topic in weak_topics) if weak_topics else "none"
+    lines = [
+        "planner_strategy:",
+        f"preference: {preference}",
+        f"content_depth: {strategy['content_depth']}",
+        f"example_intensity: {strategy['example_intensity']}",
+        f"assessment_intensity: {strategy['assessment_intensity']}",
+        f"review_intensity: {strategy['review_intensity']}",
+        f"foundation_required: {_format_prompt_bool(foundation_required)}",
+        f"strategy_weak_topics: {weak_topics_value}",
+        f"strategy_weak_area: {strategy['weak_area']}",
+        f"strategy_explanation_style: {strategy['explanation_style']}",
+        "合并优先级：",
+        "1. 用户时间约束：必须尊重 daily_available_minutes；容量不足时先压缩额外例题、测试和 review，并通过 capacity warning 暴露，不静默加重计划。",
+        "2. 诊断得出的必要补基础：foundation_required=true 时必须保留补基础任务，优先排在第一天或最早可行日期，即使 preference=fast_track。",
+        "3. 学习方式 preference 派生配置：planner 必须显式使用 content_depth、example_intensity、assessment_intensity、review_intensity 控制任务描述、例题、自测和复习强度。",
+        "4. 额外例题、测试、review：只在前三级约束满足且时间允许时，根据对应 intensity 增补。",
+    ]
+    if preference == "fast_track":
+        lines.append("fast_track 不能生成过重计划：content_depth=concise，例题/测评/review 保持 low；除必要补基础外，优先压缩拓展讲解和重复练习。")
+    elif preference == "mastery":
+        lines.append("mastery 应更详细：content_depth=detailed，并安排更充分例题、更频繁 review 和阶段测评。")
+    elif preference == "sprint":
+        lines.append("sprint 应明显偏回顾和测试：content_depth=focused，assessment_intensity=high，review_intensity=high，压缩铺垫但保留必要补基础。")
+    else:
+        lines.append("balanced 使用标准深度和标准例题/测评/review 强度，保持日常学习节奏。")
+    return lines
+
 
 def _diagnostic_profile_prompt_lines(diagnostic_profile: dict[str, object]) -> list[str]:
     if not diagnostic_profile:
@@ -212,6 +301,8 @@ def _build_reduce_prompt(
 ) -> str:
     mapped_json = [batch.model_dump(mode="json") for batch in mapped_batches]
     course_line = f"课程名称：{course_name}" if course_name else "课程名称：未提供，标题必须忠实使用 goal_text 中的课程名"
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    strategy_prompt_lines = _planner_strategy_prompt_lines(planner_strategy)
     diagnostic_prompt_lines = _diagnostic_profile_prompt_lines(payload.diagnostic_profile)
     return "\n".join(
         [
@@ -228,6 +319,7 @@ def _build_reduce_prompt(
             f"goal_text: {payload.goal_text}",
             f"date_range: {payload.start_date.isoformat()} to {payload.end_date.isoformat()}",
             f"daily_available_minutes: {payload.daily_available_minutes}",
+            *strategy_prompt_lines,
             *diagnostic_prompt_lines,
             "expected_material_ids: " + " ".join(sorted(expected_material_ids)),
             f"mapped_batches: {mapped_json}",

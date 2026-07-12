@@ -626,6 +626,10 @@ def test_diagnostic_foundation_minutes_recalculate_capacity_and_save_trace(
     assert parsed_config["capacity"]["available_total_minutes"] == 60
     assert parsed_config["capacity"]["feasibility_status"] == "over_capacity"
     assert "PLAN_OVER_CAPACITY" in parsed_config["capacity"]["warnings"]
+    assert parsed_config["planner_strategy"]["preference"] == "balanced"
+    assert parsed_config["planner_strategy"]["content_depth"] == "standard"
+    assert parsed_config["planner_strategy"]["foundation_required"] is True
+    assert parsed_config["confirmed_config"]["planner_strategy"] == parsed_config["planner_strategy"]
 
 
 def _preview_total_minutes(preview_data: dict[str, object]) -> int:
