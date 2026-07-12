@@ -274,7 +274,7 @@
 - `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
 - `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
 - `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
-- `DELETE /api/v1/material-folders/{folder_id}`：当前后端软删除文件夹，其中资料保留并自动回到未分类。前端需在二次确认后调用接口；成功后应把原文件夹下资料更新为未分类，失败时保留当前页面数据并展示后端错误。后续如切换为“连同资料删除”，必须先完成后端级联软删除、RAG 清理和事务一致性，再同步修改本契约。
+- `DELETE /api/v1/material-folders/{folder_id}`：软删除文件夹及其中全部资料，并清理这些资料的 RAG 向量。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。后端在 RAG 或数据库提交失败时回滚 SQLite，并用 SQLite chunk 快照补偿恢复已清理向量；补偿也失败时返回 `502 INDEXING_FAILED`，`details.rebuild_required = true`。
 - `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
 
 文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。

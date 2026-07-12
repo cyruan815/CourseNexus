@@ -41,6 +41,9 @@ class RagIndex(Protocol):
     def delete_material(self, material_id: str) -> None:
         """Remove all derived records for one material."""
 
+    def delete_materials(self, material_ids: Sequence[str]) -> None:
+        """Remove all derived records for multiple materials as one logical operation."""
+
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
         """Update folder metadata without recomputing embeddings."""
 

@@ -20,11 +20,13 @@ import app.modules.materials.service as materials_service
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate, MaterialUpdate
+from app.modules.materials.models import MaterialChunk
 from app.modules.materials.service import (
     create_material_folder,
     create_link_material,
     delete_material_folder,
     delete_material,
+    get_material_folder,
     get_material_detail,
     list_course_materials,
     move_material_to_folder,
@@ -256,6 +258,16 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         course_id=course.id,
         payload=MaterialFolderCreate(name="Week 1"),
     )
+    link_material = create_link_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=MaterialLinkCreate(
+            name="reference",
+            source_url="https://example.com/reference",
+            folder_id=folder.id,
+        ),
+    )
     rag_index = FakeRagIndex.from_chunks(
         [
             RagChunk(
@@ -283,10 +295,149 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
 
     assert moved.folder_id == folder.id
     assert rag_index.records["chunk-1"].folder_id == folder.id
+    db.add(
+        MaterialChunk(
+            id="chunk-1",
+            material_id=material.id,
+            course_id=course.id,
+            chunk_index=0,
+            content_text="matrix notes",
+            embedding_id="chunk-1",
+        )
+    )
+    db.commit()
 
     deleted_folder = delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
 
     assert deleted_folder.deleted_at is not None
     db.refresh(material)
-    assert material.folder_id is None
-    assert rag_index.records["chunk-1"].folder_id is None
+    assert material.folder_id == folder.id
+    assert material.parse_status == "deleted"
+    assert material.deleted_at is not None
+    db.refresh(link_material)
+    assert link_material.parse_status == "deleted"
+    assert link_material.deleted_at is not None
+    assert list_course_materials(db, user.id, course.id) == []
+    assert rag_index.records == {}
+
+
+def test_delete_folder_rag_failure_rolls_back_database_and_restores_vectors(db: Session, tmp_path) -> None:
+    class FailingDeleteRagIndex(FakeRagIndex):
+        def delete_materials(self, material_ids):
+            super().delete_materials(material_ids)
+            raise CourseNexusError(code="INDEXING_FAILED", message="删除失败", status_code=502)
+
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    folder = create_material_folder(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=MaterialFolderCreate(name="Week 1"),
+    )
+    material = upload_file_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        folder_id=folder.id,
+        filename="notes.txt",
+        stream=BytesIO(b"matrix notes"),
+        content_type="text/plain",
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
+    material.parse_status = "parsed"
+    chunk = MaterialChunk(
+        id="chunk-1",
+        material_id=material.id,
+        course_id=course.id,
+        chunk_index=0,
+        content_text="matrix notes",
+        embedding_id="chunk-1",
+    )
+    db.add_all([material, chunk])
+    db.commit()
+    rag_index = FailingDeleteRagIndex.from_chunks(
+        [
+            RagChunk(
+                chunk_id=chunk.id,
+                user_id=user.id,
+                course_id=course.id,
+                material_id=material.id,
+                folder_id=folder.id,
+                chunk_index=0,
+                text=chunk.content_text,
+                page=None,
+                page_index=None,
+                heading=None,
+            )
+        ]
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+
+    assert exc_info.value.code == "INDEXING_FAILED"
+    assert get_material_detail(db, user.id, material.id).parse_status == "parsed"
+    assert get_material_folder(db, user.id, folder.id).deleted_at is None
+    assert set(rag_index.records) == {chunk.id}
+
+
+def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
+    db: Session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    folder = create_material_folder(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=MaterialFolderCreate(name="Week 1"),
+    )
+    material = upload_file_material(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        folder_id=folder.id,
+        filename="notes.txt",
+        stream=BytesIO(b"matrix notes"),
+        content_type="text/plain",
+        storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
+    )
+    material.parse_status = "parsed"
+    chunk = MaterialChunk(
+        id="chunk-1",
+        material_id=material.id,
+        course_id=course.id,
+        chunk_index=0,
+        content_text="matrix notes",
+        embedding_id="chunk-1",
+    )
+    db.add_all([material, chunk])
+    db.commit()
+    rag_index = FakeRagIndex.from_chunks(
+        [
+            RagChunk(
+                chunk_id=chunk.id,
+                user_id=user.id,
+                course_id=course.id,
+                material_id=material.id,
+                folder_id=folder.id,
+                chunk_index=0,
+                text=chunk.content_text,
+                page=None,
+                page_index=None,
+                heading=None,
+            )
+        ]
+    )
+
+    monkeypatch.setattr(db, "commit", lambda: (_ for _ in ()).throw(RuntimeError("commit failed")))
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        delete_material_folder(db, user_id=user.id, folder_id=folder.id, rag_index=rag_index)
+
+    assert get_material_detail(db, user.id, material.id).parse_status == "parsed"
+    assert get_material_folder(db, user.id, folder.id).deleted_at is None
+    assert set(rag_index.records) == {chunk.id}

@@ -24,7 +24,7 @@
 7. 当前解析接口同步返回；等待时仅目标行 parsing；HTTP 200 + parse_failed 仍按失败展示。
 8. 只有 parsed 资料行可进入显式 scope；文件夹按钮只过滤列表，不能勾选、不能批量转换成 `material_ids`。
 9. 文件夹支持创建、重命名、排序和删除；资料支持重命名、移动到目录或未分类；重命名只更新展示名，不修改 `file_url` 或解析状态。
-10. 删除目录后资料回到未分类；删除资料二次确认，成功移除并 `removeMaterial(id)`，失败保留；`file_url` 不作 URL。
+10. 删除目录会级联软删除其中全部资料；删除目录或资料均需二次确认，成功后移除并清理对应 scope，失败时保留当前列表；`file_url` 不作 URL。
 
 ### 精确文件边界
 - 创建或完善：`features/materials/{MaterialWorkspace,MaterialList,MaterialFolderList,MaterialScopeSelector,AddMaterialDialog,DeleteMaterialDialog,MaterialStatus}.tsx`、`materialErrors.ts`。

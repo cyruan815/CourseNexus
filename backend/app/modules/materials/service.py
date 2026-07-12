@@ -20,6 +20,7 @@ from app.modules.materials.repository import (
     get_active_material_for_user,
     list_active_material_folders_for_course,
     list_active_materials_for_course,
+    list_material_chunks_for_material_ids,
     list_materials_for_folder,
     next_material_folder_sort_order,
     replace_material_chunks,
@@ -191,19 +192,48 @@ def delete_material_folder(
 ) -> MaterialFolder:
     folder = get_material_folder(db, user_id, folder_id)
     materials = list_materials_for_folder(db, user_id, folder_id)
-    for material in materials:
-        if material.parse_status == "parsed" and material.deleted_at is None:
-            rag_index.update_material_folder(material.id, None)
+    active_materials = [
+        material
+        for material in materials
+        if material.deleted_at is None and material.parse_status != "deleted"
+    ]
+    material_ids = [material.id for material in materials]
+    parsed_materials = {
+        material.id: material
+        for material in active_materials
+        if material.parse_status == "parsed"
+    }
+    chunks = list_material_chunks_for_material_ids(db, list(parsed_materials))
+    chunks_by_material: dict[str, list[MaterialChunk]] = {material_id: [] for material_id in parsed_materials}
+    for chunk in chunks:
+        chunks_by_material[chunk.material_id].append(chunk)
+    rag_snapshot = [
+        rag_chunk
+        for material_id, material in parsed_materials.items()
+        for rag_chunk in _rag_chunks_for_material(
+            material,
+            chunks_by_material[material_id],
+        )
+    ]
 
     now = datetime.now(timezone.utc)
-    for material in materials:
-        material.folder_id = None
+    for material in active_materials:
+        material.parse_status = "deleted"
+        material.deleted_at = now
         material.updated_at = now
         db.add(material)
     folder.deleted_at = now
     folder.updated_at = now
     db.add(folder)
-    db.commit()
+
+    try:
+        rag_index.delete_materials(material_ids)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        _restore_rag_snapshot(rag_index, rag_snapshot, operation_error=exc)
+        raise
+
     db.refresh(folder)
     return folder
 
@@ -411,6 +441,31 @@ def _try_delete_material_vectors(rag_index: RagIndex, material_id: str) -> None:
         rag_index.delete_material(material_id)
     except Exception:
         pass
+
+
+def _restore_rag_snapshot(
+    rag_index: RagIndex,
+    snapshot: list[RagChunk],
+    *,
+    operation_error: Exception,
+) -> None:
+    if not snapshot:
+        return
+    try:
+        rag_index.index_chunks(snapshot)
+    except Exception as compensation_error:
+        index_logger.error(
+            "资料目录删除索引补偿失败 | code=INDEXING_FAILED chunks=%d operation_error=%s",
+            len(snapshot),
+            type(operation_error).__name__,
+            exc_info=(type(compensation_error), compensation_error, compensation_error.__traceback__),
+        )
+        raise CourseNexusError(
+            code="INDEXING_FAILED",
+            message="资料目录删除失败且索引补偿失败，请重建资料索引",
+            status_code=502,
+            details={"rebuild_required": True},
+        ) from compensation_error
 
 
 def _parse_diagnostics_json(diagnostics: ParseDiagnostics) -> dict[str, object]:

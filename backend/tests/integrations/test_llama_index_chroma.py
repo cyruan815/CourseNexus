@@ -170,6 +170,27 @@ def test_chroma_delete_material_removes_vectors(tmp_path: Path) -> None:
     assert [hit.chunk_id for hit in hits] == ["c2"]
 
 
+def test_chroma_delete_materials_removes_all_requested_vectors(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks(
+        [
+            rag_chunk("c1", material_id="m1"),
+            rag_chunk("c2", material_id="m2"),
+            rag_chunk("c3", material_id="m3"),
+        ]
+    )
+
+    rag_index.delete_materials(["m1", "m2"])
+
+    hits = rag_index.retrieve(
+        query="matrix",
+        scope=RagScopeFilter(user_id="u1", course_id="math"),
+        top_k=8,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["c3"]
+
+
 def test_chroma_updates_material_folder_without_reembedding(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
     rag_index.index_chunks([rag_chunk("c1", material_id="m1", folder_id="old")])

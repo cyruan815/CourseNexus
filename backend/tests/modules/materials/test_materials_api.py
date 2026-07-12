@@ -248,7 +248,11 @@ def test_material_folder_crud_and_material_move_flow(client: TestClient) -> None
     assert delete_response.json()["data"]["deleted_at"] is not None
 
     material_response = client.get(f"/api/v1/materials/{material_id}", headers=headers)
-    assert material_response.json()["data"]["folder_id"] is None
+    assert material_response.status_code == 404
+
+    list_materials_response = client.get(f"/api/v1/courses/{course_id}/materials", headers=headers)
+    assert list_materials_response.status_code == 200
+    assert list_materials_response.json()["data"] == []
 
 
 def test_material_folder_endpoints_do_not_cross_user_boundary(client: TestClient) -> None:

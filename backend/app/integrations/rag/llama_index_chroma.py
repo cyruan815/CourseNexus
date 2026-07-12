@@ -73,13 +73,24 @@ class LlamaIndexChromaRagIndex:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引失败", status_code=502) from exc
 
     def delete_material(self, material_id: str) -> None:
+        self.delete_materials([material_id])
+
+    def delete_materials(self, material_ids: Sequence[str]) -> None:
+        unique_material_ids = list(dict.fromkeys(material_ids))
+        if not unique_material_ids:
+            return
         started_at = perf_counter()
         try:
-            self.collection.delete(where={"material_id": material_id})
+            material_filter: str | dict[str, list[str]] = (
+                unique_material_ids[0]
+                if len(unique_material_ids) == 1
+                else {"$in": unique_material_ids}
+            )
+            self.collection.delete(where={"material_id": material_filter})
             index_logger.info(
-                "索引删除成功 | collection=%s material=%s cost_ms=%.2f",
+                "索引批量删除成功 | collection=%s materials=%d cost_ms=%.2f",
                 self.collection_name,
-                material_id,
+                len(unique_material_ids),
                 (perf_counter() - started_at) * 1000,
             )
         except Exception as exc:

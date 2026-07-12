@@ -67,6 +67,18 @@ def list_materials_for_folder(db: Session, user_id: str, folder_id: str) -> list
     )
 
 
+def list_material_chunks_for_material_ids(db: Session, material_ids: list[str]) -> list[MaterialChunk]:
+    if not material_ids:
+        return []
+    return list(
+        db.execute(
+            select(MaterialChunk)
+            .where(MaterialChunk.material_id.in_(material_ids))
+            .order_by(MaterialChunk.material_id, MaterialChunk.chunk_index, MaterialChunk.id)
+        ).scalars()
+    )
+
+
 def save_material(db: Session, material: CourseMaterial) -> CourseMaterial:
     db.add(material)
     db.commit()

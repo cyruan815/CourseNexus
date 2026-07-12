@@ -28,10 +28,14 @@ class FakeRagIndex:
         self.records = {}
 
     def delete_material(self, material_id: str) -> None:
+        self.delete_materials([material_id])
+
+    def delete_materials(self, material_ids: Sequence[str]) -> None:
+        deleted_ids = set(material_ids)
         self.records = {
             chunk_id: chunk
             for chunk_id, chunk in self.records.items()
-            if chunk.material_id != material_id
+            if chunk.material_id not in deleted_ids
         }
 
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:

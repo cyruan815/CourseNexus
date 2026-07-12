@@ -127,3 +127,17 @@ def test_fake_rag_index_delete_material_removes_records() -> None:
     index.delete_material("m1")
 
     assert set(index.records) == {"c2"}
+
+
+def test_fake_rag_index_delete_materials_removes_all_requested_records() -> None:
+    index = FakeRagIndex.from_chunks(
+        [
+            rag_chunk("c1", material_id="m1"),
+            rag_chunk("c2", material_id="m2"),
+            rag_chunk("c3", material_id="m3"),
+        ]
+    )
+
+    index.delete_materials(["m1", "m2"])
+
+    assert set(index.records) == {"c3"}
