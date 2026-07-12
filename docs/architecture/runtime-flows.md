@@ -86,7 +86,7 @@ sequenceDiagram
 
 适用于 Quiz、Flashcard、Mindmap、复习提纲、知识点清单。
 
-G01已落地用途模型注入、全材料批次、生成器工厂、引用allow-list与ID回填、原子存储和引用响应。五类真实LLM提示词、map/reduce业务规则和质量验收仍属于G02-G06；在对应任务完成前使用占位fallback。
+G01已落地用途模型注入、全材料批次、生成器工厂、引用allow-list与ID回填、原子存储和引用响应。G02-G06 已分别实现 Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 的真实结构化提示词、map/reduce、业务 schema、引用绑定和质量测试；占位 fallback 只在具体生成器模块文件缺失时启用。
 
 ```mermaid
 sequenceDiagram
