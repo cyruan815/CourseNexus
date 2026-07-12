@@ -1,4 +1,4 @@
-﻿import { MantineProvider } from "@mantine/core";
+import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -355,4 +355,3 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByText("待解析.md")).toBeInTheDocument();
   });
 });
-
