@@ -72,6 +72,7 @@ interface CalendarDay {
 }
 
 const ALL_TERMS_VALUE = "__all_terms__";
+const UNSELECTED_TERM_VALUE = "__unselected_term__";
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
 
 function padDatePart(value: number): string {
@@ -163,6 +164,10 @@ function getTermSummaryLabel(selectedTerm: string, termOptions: CourseTermOption
     return "全部学期";
   }
 
+  if (selectedTerm === UNSELECTED_TERM_VALUE) {
+    return "未选择";
+  }
+
   return getTermLabel(selectedTerm, termOptions);
 }
 
@@ -176,7 +181,12 @@ function buildTermSelectData(courses: HomeCourse[], termOptions: CourseTermOptio
     ),
   ).map((term) => ({ value: term, label: `${term}（旧学期值）` }));
 
-  return [{ value: ALL_TERMS_VALUE, label: "全部学期" }, ...termOptions, ...legacyTermOptions];
+  return [
+    { value: ALL_TERMS_VALUE, label: "全部学期" },
+    { value: UNSELECTED_TERM_VALUE, label: "未选择" },
+    ...termOptions,
+    ...legacyTermOptions,
+  ];
 }
 
 function mapCourseToHomeCourse(course: Course): HomeCourse {
@@ -316,14 +326,14 @@ function CalendarPanel() {
 
             {isMonthPickerOpen ? (
               <Paper aria-label="选择年月" className="home-month-picker" component="section" radius="md" withBorder>
-                <Group align="flex-end" gap="sm" wrap="nowrap">
+                <Box className="home-month-picker-controls">
                   <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
                   <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
-                  <Button aria-label="关闭年月选择" onClick={() => setIsMonthPickerOpen(false)} variant="default">
+                  <Button aria-label="关闭年月选择" className="home-month-picker-action" onClick={() => setIsMonthPickerOpen(false)} variant="default">
                     取消
                   </Button>
-                  <Button onClick={applyMonthPicker}>应用</Button>
-                </Group>
+                  <Button className="home-month-picker-action" onClick={applyMonthPicker}>应用</Button>
+                </Box>
               </Paper>
             ) : null}
 
@@ -699,7 +709,9 @@ function CourseOverview({
   const termData = useMemo(() => buildTermSelectData(courses, termOptions), [courses, termOptions]);
   const filteredCourses = selectedTerm === ALL_TERMS_VALUE
     ? courses
-    : courses.filter((course) => course.term === selectedTerm);
+    : selectedTerm === UNSELECTED_TERM_VALUE
+      ? courses.filter((course) => !course.term)
+      : courses.filter((course) => course.term === selectedTerm);
   const termSummary = getTermSummaryLabel(selectedTerm, termOptions);
 
   return (
