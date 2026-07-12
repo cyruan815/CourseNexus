@@ -92,6 +92,7 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
 
 
 def _build_map_prompt(*, batch: MaterialContextBatch, payload: StudyPlanBuildRequest) -> str:
+    daily_minutes = payload.daily_available_minutes if payload.daily_available_minutes is not None else "auto"
     chunk_lines = [
         (
             f"chunk_id={chunk.chunk_id} material_id={chunk.material_id} "
@@ -111,7 +112,7 @@ def _build_map_prompt(*, batch: MaterialContextBatch, payload: StudyPlanBuildReq
             "网络类资料要特别保留 10BaseT/RJ45、ASK、FSK、PSK、PCM、WDM、STDM、HUB、冲突域等具体术语。",
             f"goal_text: {payload.goal_text}",
             f"date_range: {payload.start_date.isoformat()} to {payload.end_date.isoformat()}",
-            f"daily_available_minutes: {payload.daily_available_minutes}",
+            f"daily_available_minutes: {daily_minutes}",
             "material_ids: " + " ".join(batch.material_ids),
             "chunks:",
             *chunk_lines,

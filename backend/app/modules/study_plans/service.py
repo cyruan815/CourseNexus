@@ -24,6 +24,8 @@ from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.planner import map_material_batch, make_coverage, reduce_plan_batches, validate_preview
 from app.modules.study_plans.repository import StudyPlanBundle
 from app.modules.study_plans.schemas import (
+    MIN_DAILY_AVAILABLE_MINUTES,
+    PlanBatchExtraction,
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
     StudyPlanParsedConfig,
@@ -65,6 +67,8 @@ def parse_study_plan_config(
         output_schema=StudyPlanParsedConfig,
     )
     normalized = _normalize_relative_config(parsed, goal_text=payload.goal_text)
+    if normalized.daily_available_minutes is not None and normalized.daily_minutes_source is None:
+        normalized = normalized.model_copy(update={"daily_minutes_source": "user_text"})
     return normalized.model_copy(update={"material_scope": payload.material_scope})
 
 
@@ -92,29 +96,57 @@ def preview_study_plan(
         raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
 
     expected_material_ids = {material_id for batch in batches for material_id in batch.material_ids}
+    duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
+    resolved_payload: StudyPlanBuildRequest | None = None
+    mapped_estimated_total_minutes = 0
+
+    def reduce_results(mapped_batches: list[PlanBatchExtraction]):
+        nonlocal mapped_estimated_total_minutes, resolved_payload
+        mapped_estimated_total_minutes = _mapped_batches_total_minutes(mapped_batches)
+        daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
+            payload=payload,
+            estimated_total_minutes=mapped_estimated_total_minutes,
+            duration_days=duration_days,
+            use_payload_recommendation=False,
+        )
+        resolved_payload = payload.model_copy(
+            update={
+                "daily_available_minutes": daily_available_minutes,
+                "recommended_daily_minutes": recommended_daily_minutes,
+                "daily_minutes_source": daily_minutes_source,
+            }
+        )
+        return reduce_plan_batches(
+            mapped_batches=mapped_batches,
+            payload=resolved_payload,
+            expected_material_ids=expected_material_ids,
+            model_provider=model_provider,
+            course_name=course.name,
+        )
+
     coverage_result = run_material_coverage(
         batches=batches,
         expected_material_ids=expected_material_ids,
         map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
-        reduce_results=lambda mapped_batches: reduce_plan_batches(
-            mapped_batches=mapped_batches,
-            payload=payload,
-            expected_material_ids=expected_material_ids,
-            model_provider=model_provider,
-            course_name=course.name,
-        ),
+        reduce_results=reduce_results,
     )
+    if resolved_payload is None:
+        raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
+
     task_previews = coverage_result.value.tasks
-    duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
-    estimated_total_minutes = _task_previews_total_minutes(task_previews)
-    recommended_daily_minutes = payload.recommended_daily_minutes or max(30, ceil(estimated_total_minutes / max(duration_days, 1)))
-    available_total_minutes = payload.daily_available_minutes * duration_days
-    daily_minutes_source = payload.daily_minutes_source or ("user_text" if payload.recommended_daily_minutes is not None else "system_estimated")
+    estimated_total_minutes = mapped_estimated_total_minutes or _task_previews_total_minutes(task_previews)
+    daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
+    recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
+        estimated_total_minutes=estimated_total_minutes,
+        duration_days=duration_days,
+    )
+    daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"
+    available_total_minutes = daily_available_minutes * duration_days
     material_snapshot = payload.material_snapshot or _build_material_snapshot(
         material_scope=payload.material_scope,
         expected_material_ids=expected_material_ids,
     )
-    capacity = payload.capacity or _build_capacity_summary(
+    capacity = _build_capacity_summary(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
     )
@@ -126,7 +158,7 @@ def preview_study_plan(
         start_date=payload.start_date,
         end_date=payload.end_date,
         duration_days=duration_days,
-        daily_available_minutes=payload.daily_available_minutes,
+        daily_available_minutes=daily_available_minutes,
         recommended_daily_minutes=recommended_daily_minutes,
         daily_minutes_source=daily_minutes_source,
         preference=payload.preference,
@@ -151,6 +183,8 @@ def preview_study_plan(
         (perf_counter() - started_at) * 1000,
     )
     return preview
+
+
 def save_study_plan(
     db: Session,
     *,
@@ -192,6 +226,17 @@ def save_study_plan(
         )
         title = save_payload.title or preview.title
         tasks_preview = preview.tasks
+        save_payload = save_payload.model_copy(
+            update={
+                "daily_available_minutes": preview.daily_available_minutes,
+                "recommended_daily_minutes": preview.recommended_daily_minutes,
+                "daily_minutes_source": preview.daily_minutes_source,
+                "material_snapshot": preview.material_snapshot,
+                "coverage": preview.coverage.model_dump(mode="json"),
+                "capacity": preview.capacity,
+                "generation_metadata": preview.generation_metadata,
+            }
+        )
     else:
         title = save_payload.title or "学习计划"
         tasks_preview = save_payload.tasks
@@ -202,6 +247,7 @@ def save_study_plan(
             payload=save_payload,
             task_previews=tasks_preview,
         )
+        save_payload = _resolve_save_payload_daily_minutes(save_payload, tasks_preview=tasks_preview)
 
     plan_id = _new_plan_id()
     now = datetime.now(timezone.utc)
@@ -224,7 +270,7 @@ def save_study_plan(
         ),
         start_date=save_payload.start_date,
         end_date=save_payload.end_date,
-        daily_available_minutes=save_payload.daily_available_minutes,
+        daily_available_minutes=_require_resolved_daily_minutes(save_payload.daily_available_minutes),
         status="active",
         created_at=now,
         updated_at=now,
@@ -304,6 +350,8 @@ def preview_study_plan_regeneration(
         max_tokens=max_tokens,
     )
     return preview
+
+
 def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: StudyPlanReplaceRequest) -> StudyPlanBundle:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
@@ -315,6 +363,7 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         payload=payload,
         task_previews=payload.tasks,
     )
+    payload = _resolve_save_payload_daily_minutes(payload, tasks_preview=payload.tasks)
     parsed_config = _saved_config(
         payload,
         coverage=None,
@@ -336,7 +385,7 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
             goal_text=payload.goal_text,
             start_date=payload.start_date,
             end_date=payload.end_date,
-            daily_available_minutes=payload.daily_available_minutes,
+            daily_available_minutes=_require_resolved_daily_minutes(payload.daily_available_minutes),
             parsed_config_json=parsed_config,
             updated_at=updated_at,
         )
@@ -350,7 +399,7 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         plan.goal_text = payload.goal_text
         plan.start_date = payload.start_date
         plan.end_date = payload.end_date
-        plan.daily_available_minutes = payload.daily_available_minutes
+        plan.daily_available_minutes = _require_resolved_daily_minutes(payload.daily_available_minutes)
         plan.status = "active"
         plan.updated_at = updated_at
         plan.parsed_config_json = parsed_config
@@ -419,6 +468,32 @@ def _coerce_save_request(payload: StudyPlanBuildRequest | StudyPlanSaveRequest) 
         return payload
     return StudyPlanSaveRequest.model_validate(payload.model_dump(mode="json"))
 
+def _resolve_save_payload_daily_minutes(
+    payload: StudyPlanSaveRequest,
+    *,
+    tasks_preview: list[StudyTaskPreview],
+) -> StudyPlanSaveRequest:
+    duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
+    estimated_total_minutes = _task_previews_total_minutes(tasks_preview)
+    daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
+        payload=payload,
+        estimated_total_minutes=estimated_total_minutes,
+        duration_days=duration_days,
+        use_payload_recommendation=True,
+    )
+    capacity = _build_capacity_summary(
+        estimated_total_minutes=estimated_total_minutes,
+        available_total_minutes=daily_available_minutes * duration_days,
+    )
+    return payload.model_copy(
+        update={
+            "daily_available_minutes": daily_available_minutes,
+            "recommended_daily_minutes": recommended_daily_minutes,
+            "daily_minutes_source": daily_minutes_source,
+            "capacity": capacity,
+        }
+    )
+
 
 def _hash_value(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -439,6 +514,36 @@ def _normalize_preference_value(value: str | None) -> str | None:
 
 def _task_previews_total_minutes(task_previews: list[StudyTaskPreview]) -> int:
     return sum(subtask.estimated_minutes for task in task_previews for subtask in task.subtasks)
+
+def _mapped_batches_total_minutes(mapped_batches: list[PlanBatchExtraction]) -> int:
+    return sum(unit.estimated_minutes for batch in mapped_batches for unit in batch.units)
+
+
+def _recommended_daily_minutes(*, estimated_total_minutes: int, duration_days: int) -> int:
+    return max(MIN_DAILY_AVAILABLE_MINUTES, ceil(estimated_total_minutes / max(duration_days, 1)))
+
+
+def _resolve_daily_minutes(
+    *,
+    payload: StudyPlanBuildRequest,
+    estimated_total_minutes: int,
+    duration_days: int,
+    use_payload_recommendation: bool,
+) -> tuple[int, int, str]:
+    recommended_daily_minutes = (
+        payload.recommended_daily_minutes
+        if use_payload_recommendation and payload.recommended_daily_minutes is not None
+        else _recommended_daily_minutes(estimated_total_minutes=estimated_total_minutes, duration_days=duration_days)
+    )
+    if payload.daily_available_minutes is None:
+        return recommended_daily_minutes, recommended_daily_minutes, "system_estimated"
+    return payload.daily_available_minutes, recommended_daily_minutes, payload.daily_minutes_source or "user_text"
+
+
+def _require_resolved_daily_minutes(value: int | None) -> int:
+    if value is None:
+        raise CourseNexusError(code="VALIDATION_ERROR", message="每日学习时间未解析", status_code=422)
+    return value
 
 
 def _task_previews_material_ids(task_previews: list[StudyTaskPreview]) -> list[str]:
@@ -498,7 +603,7 @@ def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int
         "start_date": payload.start_date.isoformat(),
         "end_date": payload.end_date.isoformat(),
         "duration_days": duration_days,
-        "daily_available_minutes": payload.daily_available_minutes,
+        "daily_available_minutes": _require_resolved_daily_minutes(payload.daily_available_minutes),
         "preference": _normalize_preference_value(payload.preference),
         "material_scope": payload.material_scope.model_dump(mode="json"),
     }
@@ -543,9 +648,13 @@ def _saved_config(
 ) -> dict[str, object]:
     duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
     estimated_total_minutes = _task_previews_total_minutes(tasks_preview)
-    available_total_minutes = payload.daily_available_minutes * duration_days
-    recommended_daily_minutes = payload.recommended_daily_minutes or max(30, ceil(estimated_total_minutes / max(duration_days, 1)))
-    daily_minutes_source = payload.daily_minutes_source or ("user_text" if payload.recommended_daily_minutes is not None else "system_estimated")
+    daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
+        payload=payload,
+        estimated_total_minutes=estimated_total_minutes,
+        duration_days=duration_days,
+        use_payload_recommendation=True,
+    )
+    available_total_minutes = daily_available_minutes * duration_days
     confirmed_config = _build_confirmed_config(
         payload=payload,
         duration_days=duration_days,
@@ -557,7 +666,7 @@ def _saved_config(
         expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
     )
     coverage_value = coverage or _build_coverage_summary(tasks_preview)
-    capacity_value = capacity or _build_capacity_summary(
+    capacity_value = _build_capacity_summary(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
     )
@@ -573,7 +682,7 @@ def _saved_config(
         "tasks_source": tasks_source,
         "task_snapshot": [task.model_dump(mode="json") for task in tasks_preview],
         "material_scope": payload.material_scope.model_dump(mode="json"),
-        "daily_available_minutes": payload.daily_available_minutes,
+        "daily_available_minutes": daily_available_minutes,
         "preference": _normalize_preference_value(payload.preference),
         "start_date": payload.start_date.isoformat(),
         "end_date": payload.end_date.isoformat(),

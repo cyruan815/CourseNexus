@@ -374,7 +374,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `idempotency_key_hash` | string | 是 | null | UNIQUE(`user_id`, `course_id`, `idempotency_key_hash`) | `Idempotency-Key` 的 SHA-256，未携带 key 时为 null；软删除计划仍占用非空 key。 |
 | `start_date` | date | 否 | 无 | INDEX | 开始日期。 |
 | `end_date` | date | 否 | 无 | INDEX | 结束日期，不早于开始日期。 |
-| `daily_available_minutes` | integer | 否 | 无 |  | 每日可用学习时长，单位分钟。 |
+| `daily_available_minutes` | integer | 否 | 无 |  | 最终采用的每日可用学习时长，单位分钟；若 preview 请求未传每日时间，则写入后端推荐值。 |
 | `status` | enum `plan_status` | 否 | `draft` | INDEX | 计划状态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |

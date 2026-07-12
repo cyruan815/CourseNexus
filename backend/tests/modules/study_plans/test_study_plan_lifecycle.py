@@ -254,6 +254,7 @@ def test_parse_config_returns_model_fields_without_writing_db(db: Session) -> No
 
     assert parsed.goal_text == "精通传输层"
     assert parsed.daily_available_minutes == 60
+    assert parsed.daily_minutes_source == "user_text"
     assert parsed.preference == "mastery"
     assert parsed.unresolved_fields == ["start_date", "end_date"]
     assert parsed.material_scope.include_all_parsed_materials is True
