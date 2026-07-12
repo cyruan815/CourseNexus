@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import date, datetime, timezone
@@ -15,6 +15,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.modules.checkins.models import CheckinRecord
 from app.modules.generated_content.models import AIGeneratedContent
 from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
@@ -22,7 +23,7 @@ from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
 from app.modules.materials.service import parse_material, upload_file_material
-from app.modules.study_plans.models import StudyPlan
+from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
@@ -326,6 +327,246 @@ def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
         }
     )
 
+
+
+
+def _study_plan_counts(db: Session) -> dict[str, int]:
+    return {
+        "plans": int(db.scalar(select(func.count()).select_from(StudyPlan)) or 0),
+        "tasks": int(db.scalar(select(func.count()).select_from(StudyTask)) or 0),
+        "subtasks": int(db.scalar(select(func.count()).select_from(StudySubTask)) or 0),
+        "checkins": int(db.scalar(select(func.count()).select_from(CheckinRecord)) or 0),
+    }
+
+
+def _assert_no_plan_write_side_effects(db: Session) -> None:
+    assert _study_plan_counts(db) == {"plans": 0, "tasks": 0, "subtasks": 0, "checkins": 0}
+
+
+def _request_data(material_ids: list[str]) -> dict[str, object]:
+    return _save_request(material_ids).model_dump(mode="json")
+
+
+def _save_request_from_data(data: dict[str, object]) -> StudyPlanSaveRequest:
+    return StudyPlanSaveRequest.model_validate(data)
+
+
+def _replace_request_from_data(saved_updated_at: datetime, data: dict[str, object]) -> StudyPlanReplaceRequest:
+    return StudyPlanReplaceRequest.model_validate(
+        data
+        | {
+            "expected_updated_at": saved_updated_at.isoformat(),
+            "title": "替换后的传输层计划",
+        }
+    )
+
+
+def _material_violation_case(
+    db: Session,
+    tmp_path: Path,
+    *,
+    user_id: str,
+    course_id: str,
+    valid_material_id: str,
+    case_name: str,
+) -> tuple[str, dict[str, object]]:
+    if case_name == "missing":
+        return "mat_missing", {"include_all_parsed_materials": True, "material_ids": []}
+    if case_name == "cross_user":
+        other_user = register_user(db, UserCreate(username="material-other-user", password="password123"))
+        other_course = create_course(db, other_user.id, CourseCreate(name="Other User Course"))
+        material_id = create_parsed_material(db, tmp_path, other_user.id, other_course.id, "other-user.txt", b"Other user material")
+        return material_id, {"include_all_parsed_materials": True, "material_ids": []}
+    if case_name == "cross_course":
+        other_course = create_course(db, user_id, CourseCreate(name="Other Course"))
+        material_id = create_parsed_material(db, tmp_path, user_id, other_course.id, "other-course.txt", b"Other course material")
+        return material_id, {"include_all_parsed_materials": True, "material_ids": []}
+    if case_name == "outside_scope":
+        outside_material_id = create_parsed_material(db, tmp_path, user_id, course_id, "outside-scope.txt", b"Outside scope material")
+        return outside_material_id, {"include_all_parsed_materials": False, "material_ids": [valid_material_id]}
+    raise AssertionError(case_name)
+
+
+def test_save_study_plan_rejects_confirmed_task_outside_date_range_without_side_effects(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="save-date-range", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-date.txt", b"Reliable transport")
+    data = _request_data([material_id])
+    data["tasks"][0]["task_date"] = "2026-07-12"
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    _assert_no_plan_write_side_effects(db)
+
+
+@pytest.mark.parametrize("case_name", ["missing", "cross_user", "cross_course", "outside_scope"])
+def test_save_study_plan_rejects_confirmed_task_material_violations_without_side_effects(
+    db: Session,
+    tmp_path: Path,
+    case_name: str,
+) -> None:
+    user = register_user(db, UserCreate(username=f"save-material-{case_name}", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    valid_material_id = create_parsed_material(db, tmp_path, user.id, course.id, f"valid-{case_name}.txt", b"Valid material")
+    invalid_material_id, material_scope = _material_violation_case(
+        db,
+        tmp_path,
+        user_id=user.id,
+        course_id=course.id,
+        valid_material_id=valid_material_id,
+        case_name=case_name,
+    )
+    data = _request_data([invalid_material_id])
+    data["material_scope"] = material_scope
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([valid_material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_save_study_plan_rejects_empty_confirmed_task_tree_without_side_effects(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="save-empty-tree", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-empty-tree.txt", b"Reliable transport")
+    data = _request_data([material_id])
+    data["tasks"] = []
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_save_study_plan_rejects_task_without_subtasks_without_side_effects(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="save-empty-subtasks", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-empty-subtasks.txt", b"Reliable transport")
+    data = _request_data([material_id])
+    data["tasks"][0]["subtasks"] = []
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_replace_study_plan_rejects_confirmed_task_outside_date_range_without_side_effects(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="replace-date-range", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "replace-date.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+    before_counts = _study_plan_counts(db)
+    data = _request_data([material_id])
+    data["tasks"][0]["task_date"] = "2026-07-12"
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=_replace_request_from_data(saved.plan.updated_at, data))
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    assert _study_plan_counts(db) == before_counts
+    assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).tasks[0].title == "用户调整后的任务"
+
+
+@pytest.mark.parametrize("case_name", ["missing", "cross_user", "cross_course", "outside_scope"])
+def test_replace_study_plan_rejects_confirmed_task_material_violations_without_side_effects(
+    db: Session,
+    tmp_path: Path,
+    case_name: str,
+) -> None:
+    user = register_user(db, UserCreate(username=f"replace-material-{case_name}", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    valid_material_id = create_parsed_material(db, tmp_path, user.id, course.id, f"replace-valid-{case_name}.txt", b"Valid material")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([valid_material_id]),
+        model_provider=RecordingPlanProvider([valid_material_id]),
+        max_tokens=12_000,
+    )
+    invalid_material_id, material_scope = _material_violation_case(
+        db,
+        tmp_path,
+        user_id=user.id,
+        course_id=course.id,
+        valid_material_id=valid_material_id,
+        case_name=case_name,
+    )
+    before_counts = _study_plan_counts(db)
+    data = _request_data([invalid_material_id])
+    data["material_scope"] = material_scope
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=_replace_request_from_data(saved.plan.updated_at, data))
+
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    assert _study_plan_counts(db) == before_counts
+    assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).subtasks[0].related_material_ids_json == [valid_material_id]
+
+
+def test_replace_study_plan_rejects_task_without_subtasks_without_side_effects(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="replace-empty-subtasks", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "replace-empty-subtasks.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request([material_id]),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+    before_counts = _study_plan_counts(db)
+    data = _request_data([material_id])
+    data["tasks"][0]["subtasks"] = []
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=_replace_request_from_data(saved.plan.updated_at, data))
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    assert _study_plan_counts(db) == before_counts
+    assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).subtasks[0].title == "用户调整后的学习项"
 
 def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tmp_path: Path) -> None:
     user = register_user(db, UserCreate(username="carol", password="password123"))

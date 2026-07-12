@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import date
@@ -13,6 +13,7 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.modules.checkins.models import CheckinRecord
 from app.modules.courses.models import Course
+from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.study_plans.models import StudyTask
 from app.modules.study_plans.schemas import StudyPlanReplaceRequest, StudyPlanSaveRequest
 from app.modules.study_plans.service import delete_study_plan, replace_study_plan, save_study_plan
@@ -43,7 +44,27 @@ class DummyProvider:
 def _seed_owner_course(db: Session) -> tuple[User, Course]:
     user = User(id="usr_lifecycle", username="lifecycle", password_hash="hash", status="active")
     course = Course(id="crs_lifecycle", user_id=user.id, name="数据库", status="active")
-    db.add_all([user, course])
+    material = CourseMaterial(
+        id="mat_seed",
+        user_id=user.id,
+        course_id=course.id,
+        name="seed.txt",
+        material_type="text",
+        source_type="file",
+        file_url="memory://seed.txt",
+        file_size=16,
+        mime_type="text/plain",
+        parse_status="parsed",
+    )
+    chunk = MaterialChunk(
+        id="chk_mat_seed_000001",
+        material_id=material.id,
+        course_id=course.id,
+        chunk_index=1,
+        heading="Seed",
+        content_text="Seed material",
+    )
+    db.add_all([user, course, material, chunk])
     db.commit()
     return user, course
 

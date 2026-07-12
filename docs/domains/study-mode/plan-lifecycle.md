@@ -20,7 +20,7 @@
 
 1. 自然语言配置回填：`POST /courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
 2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。
-3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。
+3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用。
 4. 幂等：保存接口读取 `Idempotency-Key`，在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。
 5. 替换：`PUT /study-plans/{plan_id}` 校验 `expected_updated_at`、无进度、无绑定生成内容后，在一次事务中删除旧任务树并写入新任务树。
 6. 重生成：`POST /study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
@@ -41,6 +41,7 @@
 
 ## 不变量
 
+- S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。
 - S02 不新增表、不新增列、不修改 migration。
 - 计划保存只写 `study_plans`、`study_tasks`、`study_subtasks`。
 - 计划保存不生成 `handout`、`task_test` 或任何 `ai_generated_contents`。
