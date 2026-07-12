@@ -657,6 +657,10 @@ Quiz 沿用 `POST /api/v1/courses/{course_id}/generations`、课程生成历史�
 
 前端按 `question_type` 解释 `correct_answer`：单选为字符串，多选为有序字符串数组，判断为 boolean，简答为字符串。`source_citation_ids` 在顶层 `source_citations` 中解析。当前后端不提供提交答案、评分、错题或答题历史接口，前端不得伪造持久化结果。
 
+### Flashcard 生成结果
+
+Flashcard 沿用通用生成、历史和详情接口，请求使用 `content_type="flashcard"`。前端展示 `content_json.cards` 的正面、背面、标签和引用；`mastery_status="unknown"` 只是初始展示值。当前没有掌握/待复习写接口，前端不得把本地翻卡状态当作后端持久化掌握度。
+
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
