@@ -16,6 +16,7 @@
 | [tech-debt-tracker.md](tech-debt-tracker.md) | 当前已知技术债、影响、优先级和处理状态。 | 2026-07-09 |
 | [information-processing-optimization.md](information-processing-optimization.md) | 资料解析、切片、检索、引用、生成和学习反馈链路优化计划。 | 2026-07-09 |
 | [phase-1-task-books/README.md](phase-1-task-books/README.md) | 第一阶段三人并行开发任务书、共享契约、文件所有权和验收索引。 | 2026-07-10 |
+| [phase-1-validation/net-chap7-pdf-parser-regression-2026-07-12.md](phase-1-validation/net-chap7-pdf-parser-regression-2026-07-12.md) | 计网第七章 PDF 文本优先解析、完整性诊断和真实文件回归。 | 2026-07-12 |
 
 ## 相关链接
 
