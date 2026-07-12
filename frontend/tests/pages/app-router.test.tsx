@@ -113,6 +113,44 @@ describe("AppRouter", () => {
     expect(await screen.findByRole("heading", { name: "高等数学" })).toBeInTheDocument();
   });
 
+  it("renders protected generated content detail route for authenticated users", async () => {
+    setSessionToken("token-123");
+    window.history.pushState({}, "", "/generated-contents/gen_1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "gen_1",
+              user_id: "usr_123",
+              course_id: "crs_123",
+              study_subtask_id: null,
+              source_message_id: null,
+              content_type: "knowledge_list",
+              title: "知识点清单",
+              content: null,
+              content_json: { items: [] },
+              generation_status: "success",
+              material_scope_json: { include_all_parsed_materials: true, material_ids: [] },
+              error_code: null,
+              source_citations: [],
+              created_at: "2026-07-09T12:00:00+00:00",
+              updated_at: "2026-07-09T12:00:00+00:00",
+              deleted_at: null,
+            },
+            meta: { request_id: "req_1" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    renderRouter();
+
+    expect(await screen.findByRole("heading", { name: "知识点清单" })).toBeInTheDocument();
+  });
+
   it("returns to the public entry when an authenticated request is unauthorized", async () => {
     setSessionToken("expired-token");
     window.history.pushState({}, "", "/");
