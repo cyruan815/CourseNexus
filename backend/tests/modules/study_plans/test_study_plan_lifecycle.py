@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Generator
 from datetime import date, datetime, timezone
 from io import BytesIO
@@ -606,6 +608,47 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1
     assert provider.batch_prompts == []
 
+
+def _legacy_request_hash_without_client_flow(payload: StudyPlanSaveRequest) -> str:
+    data = payload.model_dump(mode="json")
+    data.pop("client_flow", None)
+    raw = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def test_save_study_plan_replays_legacy_idempotency_hash_without_client_flow(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="legacy-idem-hash", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "legacy-idem-hash.txt", b"Reliable transport")
+    payload = _save_request([material_id])
+
+    first = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=payload,
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="legacy-idem-hash-key",
+    )
+    config = dict(first.plan.parsed_config_json)
+    config["idempotency"] = dict(config["idempotency"])
+    config["idempotency"]["request_hash"] = _legacy_request_hash_without_client_flow(payload)
+    first.plan.parsed_config_json = config
+    db.add(first.plan)
+    db.commit()
+
+    second = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=payload,
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="legacy-idem-hash-key",
+    )
+
+    assert second.plan.id == first.plan.id
 
 def test_save_study_plan_without_idempotency_key_keeps_existing_create_behavior(db: Session, tmp_path: Path) -> None:
     user = register_user(db, UserCreate(username="idem-no-key", password="password123"))
