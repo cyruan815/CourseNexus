@@ -65,6 +65,10 @@ interface CourseFormValues {
 
 type CourseModalMode = "create" | "edit";
 
+const COURSE_NAME_MAX_LENGTH = 20;
+const COURSE_DESCRIPTION_MAX_LENGTH = 50;
+const COURSE_TEACHER_MAX_LENGTH = 10;
+
 interface CalendarDay {
   day: number | null;
   dateKey: string | null;
@@ -621,21 +625,27 @@ function CourseFormModal({
         <TextInput
           aria-label="课程名称"
           data-autofocus
+          description={`最多 ${COURSE_NAME_MAX_LENGTH} 个字符`}
           label="课程名称"
+          maxLength={COURSE_NAME_MAX_LENGTH}
           onChange={(event) => onChange("name", event.currentTarget.value)}
           required
           value={values.name}
         />
         <Textarea
           aria-label="课程简介"
+          description={`最多 ${COURSE_DESCRIPTION_MAX_LENGTH} 个字符`}
           label="课程简介"
+          maxLength={COURSE_DESCRIPTION_MAX_LENGTH}
           minRows={3}
           onChange={(event) => onChange("description", event.currentTarget.value)}
           value={values.description}
         />
         <TextInput
           aria-label="教师"
+          description={`最多 ${COURSE_TEACHER_MAX_LENGTH} 个字符`}
           label="教师"
+          maxLength={COURSE_TEACHER_MAX_LENGTH}
           onChange={(event) => onChange("teacher", event.currentTarget.value)}
           value={values.teacher}
         />

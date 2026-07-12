@@ -270,6 +270,20 @@ describe("HomePage", () => {
     );
   });
 
+  it("limits course form text fields to the supported character counts", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal("fetch", createHomeFetchMock());
+
+    renderHomePage();
+
+    await screen.findByRole("link", { name: "离散数学" });
+    fireEvent.click(screen.getByRole("button", { name: "添加课程" }));
+
+    expect(await screen.findByLabelText("课程名称")).toHaveAttribute("maxlength", "20");
+    expect(screen.getByLabelText("课程简介")).toHaveAttribute("maxlength", "50");
+    expect(screen.getByLabelText("教师")).toHaveAttribute("maxlength", "10");
+  });
+
   it("edits and deletes a course from the course card menu", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
     const updatedCourse = {

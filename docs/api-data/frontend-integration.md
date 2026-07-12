@@ -145,7 +145,7 @@
 
 响应 `data`：`CourseRead`，字段同课程列表单项。
 
-`term` 可省略或提交 `null`；前端创建表单默认显示“未选择”并提交 `null`，不得提供自由文本输入。
+`name` 最多 20 个字符，`description` 最多 50 个字符，`teacher` 最多 10 个字符；超出任一上限返回 `422 VALIDATION_ERROR`。`term` 可省略或提交 `null`；前端创建表单默认显示“未选择”并提交 `null`，不得提供自由文本输入。
 
 ### 3.6.1 课程学期选项
 
@@ -197,7 +197,7 @@
 
 响应 `data`：`CourseRead`。
 
-`term` 可提交 `null` 以清除已选学期；提交非选项值返回 `422 VALIDATION_ERROR`。
+`name` 最多 20 个字符，`description` 最多 50 个字符，`teacher` 最多 10 个字符；超出任一上限返回 `422 VALIDATION_ERROR`。`term` 可提交 `null` 以清除已选学期；提交非选项值返回 `422 VALIDATION_ERROR`。
 
 ### 3.9 删除课程
 

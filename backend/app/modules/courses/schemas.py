@@ -8,16 +8,16 @@ from app.modules.courses.terms import CourseTerm
 
 
 class CourseCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
-    teacher: str | None = Field(default=None, max_length=255)
+    name: str = Field(min_length=1, max_length=20)
+    description: str | None = Field(default=None, max_length=50)
+    teacher: str | None = Field(default=None, max_length=10)
     term: CourseTerm | None = None
 
 
 class CourseUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = None
-    teacher: str | None = Field(default=None, max_length=255)
+    name: str | None = Field(default=None, min_length=1, max_length=20)
+    description: str | None = Field(default=None, max_length=50)
+    teacher: str | None = Field(default=None, max_length=10)
     term: CourseTerm | None = None
 
 

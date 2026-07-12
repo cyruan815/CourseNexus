@@ -150,9 +150,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | --- | --- | --- | --- | --- | --- |
 | `id` | string | 否 | 后端生成 | PK | 课程 ID。 |
 | `user_id` | string | 否 | 无 | FK -> `users.id`, INDEX | 所属用户。 |
-| `name` | string | 否 | 无 | INDEX(`user_id`, `name`) | 课程名称。 |
-| `description` | text | 是 | null |  | 课程简介。 |
-| `teacher` | string | 是 | null |  | 教师。 |
+| `name` | string | 否 | 无 | INDEX(`user_id`, `name`), API 最多 20 字符 | 课程名称。 |
+| `description` | text | 是 | null | API 最多 50 字符 | 课程简介。 |
+| `teacher` | string | 是 | null | API 最多 10 字符 | 教师。 |
 | `term` | string | 是 | null |  | 学期标准值；API 仅允许课程学期选项接口返回的值或 `null`。 |
 | `status` | enum `course_status` | 否 | `active` | INDEX | 课程状态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |

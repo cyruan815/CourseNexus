@@ -73,12 +73,12 @@ def test_course_crud_flow(client: TestClient) -> None:
 
     update_response = client.patch(
         f"/api/v1/courses/{course_id}",
-        json={"name": "Advanced Linear Algebra"},
+        json={"name": "Linear Algebra II"},
         headers=headers,
     )
 
     assert update_response.status_code == 200
-    assert update_response.json()["data"]["name"] == "Advanced Linear Algebra"
+    assert update_response.json()["data"]["name"] == "Linear Algebra II"
 
     delete_response = client.delete(f"/api/v1/courses/{course_id}", headers=headers)
 
@@ -110,6 +110,34 @@ def test_course_term_options_and_nullable_default(client: TestClient) -> None:
 
     assert create_response.status_code == 200
     assert create_response.json()["data"]["term"] is None
+
+
+def test_course_text_fields_enforce_character_limits(client: TestClient) -> None:
+    token = register_and_token(client, "course-text-limit-user")
+    headers = {"Authorization": f"Bearer {token}"}
+    valid_payload = {
+        "name": "课" * 20,
+        "description": "简" * 50,
+        "teacher": "师" * 10,
+    }
+
+    create_response = client.post("/api/v1/courses", json=valid_payload, headers=headers)
+
+    assert create_response.status_code == 200
+    course_id = create_response.json()["data"]["id"]
+
+    for field_name, over_limit_value in (
+        ("name", "课" * 21),
+        ("description", "简" * 51),
+        ("teacher", "师" * 11),
+    ):
+        response = client.patch(
+            f"/api/v1/courses/{course_id}",
+            json={field_name: over_limit_value},
+            headers=headers,
+        )
+
+        assert response.status_code == 422
 
 
 def test_course_create_and_update_reject_nonstandard_term(client: TestClient) -> None:
