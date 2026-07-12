@@ -17,6 +17,7 @@ from app.integrations.model_provider.mock import MockModelProvider
 from app.main import app
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.placeholder_generators import PlaceholderGenerator
+from app.modules.generation.generators.outline.schemas import OutlineMapResult
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.generation.orchestrator.registry import GeneratorRegistry
 
@@ -277,6 +278,25 @@ def test_generation_api_creates_and_reads_generated_content(
     course_id = create_course(client, token)
     material_id = upload_and_parse_material(client, token, course_id)
     headers = {"Authorization": f"Bearer {token}"}
+    chunk_id = f"chk_{material_id.removeprefix('mat_')}_000000"
+    provider = MockModelProvider(
+        structured_outputs={
+            OutlineMapResult: {
+                "candidates": [
+                    {
+                        "title": "Introduction",
+                        "summary": "Alpha",
+                        "review_suggestion": "Review Alpha",
+                        "source_order_key": "000001",
+                        "source_chunk_ids": [chunk_id],
+                    }
+                ]
+            }
+        }
+    )
+    app.dependency_overrides[generation_router.get_generation_model_provider_factory] = (
+        lambda: lambda content_type: provider
+    )
 
     generation = client.post(
         f"/api/v1/courses/{course_id}/generations",
@@ -302,7 +322,7 @@ def test_generation_api_creates_and_reads_generated_content(
     }
     assert citation["id"].startswith("cit_")
     assert citation["material_id"] == material_id
-    assert citation["chunk_id"] == f"chk_{material_id.removeprefix('mat_')}_000000"
+    assert citation["chunk_id"] == chunk_id
     assert citation["material_name"] == "notes.md"
     assert citation["page"] is None
     assert citation["page_index"] == 0
