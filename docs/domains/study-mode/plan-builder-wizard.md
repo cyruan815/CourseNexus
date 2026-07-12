@@ -3,7 +3,7 @@
 ## 状态
 
 - 日期：2026-07-12
-- 状态：设计已确认；后端每日学习时间自动估算规则和学前诊断后端接口已实施。
+- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口和 diagnostic_profile 影响 planner 策略已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 已实施入口：每日学习时间规则
@@ -18,17 +18,29 @@
 
 ## 已实施入口：学前诊断后端接口
 
-2026-07-12 已落地后端学前诊断问题和诊断 profile 归纳接口，范围仅包含后端 API、schema、资料范围校验、确定性归纳规则、测试和文档；不包含诊断向导前端，也不改变 planner 根据诊断自动安排补基础任务的生成策略。
+2026-07-12 已落地后端学前诊断问题和诊断 profile 归纳接口，范围包含后端 API、schema、资料范围校验、确定性归纳规则、测试和文档；不包含诊断向导前端。diagnostic_profile 对 planner 的影响策略见下方独立实施入口。
 
 - Router：`backend/app/modules/study_plans/router.py` 暴露 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` 和 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`。
 - Schema：`backend/app/modules/study_plans/schemas.py` 定义 `StudyPlanDiagnosticQuestionRequest`、`StudyPlanDiagnosticQuestionsResponse`、`StudyPlanDiagnosticProfileRequest` 和 `StudyPlanDiagnosticProfileResponse`；`question_version` 固定为 `study_plan_diagnostic_v1`。
 - Service：`backend/app/modules/study_plans/service.py::build_study_plan_diagnostic_questions` 复用 `iter_material_context_batches()` 校验资料属于当前用户、当前课程且已解析，并从当前 `material_scope` 的 chunk heading / 资料名 / 正文首行中稳定抽取 1 到 3 个 topic，不足 3 个时不补无意义问题。
 - Profile 归纳：`build_study_plan_diagnostic_profile` 校验 `question_version` 和 `topic_id` 是否仍属于当前资料范围；不匹配返回 `DIAGNOSTIC_STALE`。`none` / `heard` 视为弱掌握，弱掌握超过一半时 `foundation_needed=true`，`weak_topics` 保留弱 topic id。
 - 解释风格：`weak_area=calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余为 `plain_language`。
-- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `study-plans/preview`；当前 preview 负责透传和保存追溯，不在本次任务中调整任务排序、讲义细度或补基础任务生成。
+- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `study-plans/preview`；2026-07-12 起，preview 除透传和保存追溯外，还会把 diagnostic_profile 摘要写入 planner reduce prompt，影响补基础、任务顺序、主题颗粒度和 description 风格。
 - 失败与补偿：无 parsed 资料返回 `NO_PARSED_MATERIAL`；资料范围越界沿用 material context 的 `NOT_FOUND` / 覆盖错误；旧诊断答案或版本不匹配返回 `DIAGNOSTIC_STALE`，前端应回到学前诊断重新作答。
 - 复杂度与资源预算：诊断 topic 抽取只扫描当前资料范围批次，时间复杂度 O(chunks)，最多返回 3 个 topic，不额外调用模型，不写数据库。
 - 测试入口：`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖正常问题生成、少于 3 个 topic、profile 归纳、旧 topic 拒绝、弱基础 profile 和 profile 继续传入 preview。
+
+## 已实施入口：diagnostic_profile 影响 planner
+
+2026-07-12 已落地 diagnostic_profile 到 planner reduce prompt 的策略注入。范围仅包含后端 planner prompt、preview 链路测试和领域文档；不新增数据库表，不改前端，不新增核心依赖，不绕过 `ModelProvider.generate_structured()` 和现有 map/reduce 流程。
+
+- Planner：`backend/app/modules/study_plans/planner.py::_build_reduce_prompt` 会展开 `StudyPlanBuildRequest.diagnostic_profile` 摘要，包含 `foundation_needed`、`weak_topics`、`weak_area`、`explanation_style` 和 `diagnostic_note`。
+- 补基础：`foundation_needed=true` 时，reduce prompt 明确要求前置补基础任务，优先放在第一天或最早可行日期；因现有 schema 不新增 `foundation` 类型，任务仍使用 `learn` / `review`，在标题或 description 中体现“补基础”。
+- 薄弱主题：`weak_topics` 对应主题需更靠前、更细，能在任务标题、description 或排序中看到差异。
+- 薄弱方向：`concept` 强化概念解释，`calculation` 强化公式、步骤推导和计算练习，`application` 强化例题和应用任务，`memorization` 强化重点记忆、回顾和检查。
+- 解释风格：`explanation_style` 进入 reduce prompt，要求任务 description 匹配 `plain_language`、`step_by_step`、`example_first` 或 `exam_focused` 的描述风格。
+- 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖 reduce prompt 内容和四类 `weak_area` 规则；`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 用同一份资料、不同 diagnostic_profile 验证 preview 传给 planner 的策略不同。
+
 ## 目标
 
 计划生成向导要把“用户想怎么学”和“用户现在会多少”分开处理。

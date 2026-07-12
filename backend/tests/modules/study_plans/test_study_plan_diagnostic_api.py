@@ -429,3 +429,73 @@ def test_diagnostic_profile_can_be_sent_to_preview(
 
     assert response.status_code == 200
     assert response.json()["data"]["diagnostic_profile"] == diagnostic_profile
+
+
+def test_preview_reduce_prompt_changes_with_different_diagnostic_profiles(
+    api_context: tuple[TestClient, DiagnosticApiProvider],
+) -> None:
+    client, provider = api_context
+    token = register_and_token(client, "diagnostic_strategy_preview")
+    course_id = create_course(client, token)
+    material_id = upload_and_parse_material(
+        client,
+        token,
+        course_id,
+        "strategy-topic.md",
+        "# 信道容量\nNyquist 和 Shannon 公式。",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    base_payload = {
+        "goal_text": "一天复习物理层核心内容",
+        "start_date": "2026-07-12",
+        "duration_days": 1,
+        "daily_available_minutes": 60,
+        "preference": "balanced",
+        "material_scope": {"include_all_parsed_materials": False, "material_ids": [material_id]},
+    }
+
+    calculation_preview = client.post(
+        f"/api/v1/courses/{course_id}/study-plans/preview",
+        headers=headers,
+        json=base_payload
+        | {
+            "diagnostic_profile": {
+                "question_version": "study_plan_diagnostic_v1",
+                "prior_knowledge_level": "little",
+                "foundation_needed": True,
+                "weak_topics": ["nyquist_shannon"],
+                "weak_area": "calculation",
+                "explanation_style": "step_by_step",
+            }
+        },
+    )
+    memorization_preview = client.post(
+        f"/api/v1/courses/{course_id}/study-plans/preview",
+        headers=headers,
+        json=base_payload
+        | {
+            "diagnostic_profile": {
+                "question_version": "study_plan_diagnostic_v1",
+                "prior_knowledge_level": "solid",
+                "foundation_needed": False,
+                "weak_topics": [],
+                "weak_area": "memorization",
+                "explanation_style": "exam_focused",
+            }
+        },
+    )
+
+    assert calculation_preview.status_code == 200
+    assert memorization_preview.status_code == 200
+    assert len(provider.reduce_prompts) == 2
+    calculation_prompt, memorization_prompt = provider.reduce_prompts
+    assert calculation_prompt != memorization_prompt
+    assert "foundation_needed: true" in calculation_prompt
+    assert "weak_topics: nyquist_shannon" in calculation_prompt
+    assert "weak_area: calculation" in calculation_prompt
+    assert "explanation_style: step_by_step" in calculation_prompt
+    assert "公式、步骤推导、计算练习" in calculation_prompt
+    assert "foundation_needed: false" in memorization_prompt
+    assert "weak_area: memorization" in memorization_prompt
+    assert "explanation_style: exam_focused" in memorization_prompt
+    assert "重点记忆、回顾、检查" in memorization_prompt
