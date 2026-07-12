@@ -34,7 +34,7 @@ Decimal 固定保留四位小数
 
 `color_level=0` 和 `color_level=1` 是不同后端状态。当前前端可以把两者渲染成同一个颜色，后续如需区分只调整前端颜色映射，不需要改表或迁移。
 
-连续天数统计在范围查询 summary 中派生：当天 `total_subtask_count > 0` 且 `completed_subtask_count > 0` 即计入 streak，不要求 100% 完成。
+连续天数统计在范围查询 summary 中派生：当天 `total_subtask_count > 0` 且 `completed_subtask_count > 0` 即计入 streak，不要求 100% 完成。`longest_streak_days` 是查询范围内最长连续完成段；`current_streak_days` 是查询结果最后一条记录所在连续段长度，如果最后一条记录是无任务日或有任务但未完成，则为 0。无任务日会中断当前连续段；范围查询只基于已经持久化的记录计算，缺失日期不会被补齐，两个完成日之间只要日期不相邻就视为中断。空结果返回 `task_days=0`、`completed_days=0`、`current_streak_days=0`、`longest_streak_days=0`。
 
 ## 事务与失败策略
 

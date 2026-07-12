@@ -232,7 +232,7 @@ S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
 
 `GET /api/v1/checkins/{target_date}` 返回单日打卡 DTO；如果持久化记录不存在，后端只读计算当前事实并返回，不写入 `checkin_records`。
 
-`GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 返回闭区间内已有持久化记录和 summary。summary 中 `current_streak_days` / `longest_streak_days` 按“当天有任务且完成过任意二级任务”计算。
+`GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 返回闭区间内已有持久化记录和 summary。summary 中 `current_streak_days` / `longest_streak_days` 按“当天有任务且完成过任意二级任务”计算。无任务日和有任务但未完成日都会中断当前连续段；范围内缺失的持久化记录不会被补齐，相邻完成日必须日期连续才会合并为同一 streak。若查询结果最后一条记录不是完成日，`current_streak_days=0`；空结果返回 0 值 summary。
 
 错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`。
 
