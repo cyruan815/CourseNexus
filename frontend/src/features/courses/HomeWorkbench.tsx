@@ -151,6 +151,31 @@ function buildCoursePayload(values: CourseFormValues) {
   };
 }
 
+function shouldPreserveLegacyTerm(
+  course: HomeCourse | null,
+  values: CourseFormValues,
+  termOptions: CourseTermOption[],
+): boolean {
+  return Boolean(
+    course?.term
+      && course.term === values.term
+      && !termOptions.some((option) => option.value === course.term),
+  );
+}
+
+function buildCourseUpdatePayload(
+  values: CourseFormValues,
+  preserveLegacyTerm: boolean,
+) {
+  const payload = buildCoursePayload(values);
+  if (!preserveLegacyTerm) {
+    return payload;
+  }
+
+  const { term: _term, ...payloadWithoutTerm } = payload;
+  return payloadWithoutTerm;
+}
+
 function getTermLabel(term: string | null, termOptions: CourseTermOption[]): string {
   if (!term) {
     return "未填写学期";
@@ -574,9 +599,9 @@ function CourseFormModal({
   const hasSelectedLegacyTerm = Boolean(
     values.term && !termOptions.some((option) => option.value === values.term),
   );
-  const canSubmit = values.name.trim().length > 0 && !isSubmitting && !hasSelectedLegacyTerm;
+  const canSubmit = values.name.trim().length > 0 && !isSubmitting;
   const termData = hasSelectedLegacyTerm
-    ? [...termOptions, { value: values.term, label: `${values.term}（旧学期值，请重新选择或清空）` }]
+    ? [...termOptions, { value: values.term, label: `${values.term}（旧学期值，保存其他修改时会保留）` }]
     : termOptions;
 
   return (
@@ -618,8 +643,9 @@ function CourseFormModal({
           aria-label="学期"
           clearable
           data={termData}
+          description={hasSelectedLegacyTerm ? "如需修改学期，请重新选择标准选项或清空。" : undefined}
           disabled={isTermLoading || Boolean(termError)}
-          error={hasSelectedLegacyTerm ? "旧学期值不能直接保存，请重新选择或清空" : termError}
+          error={termError}
           label="学期"
           nothingFoundMessage={isTermLoading ? "正在加载学期" : "暂无学期选项"}
           onChange={(value) => onChange("term", value ?? "")}
@@ -850,10 +876,7 @@ export function HomeWorkbench() {
   function openEditCourseModal(course: HomeCourse) {
     setCourseModalMode("edit");
     setEditingCourse(course);
-    setCourseFormValues({
-      ...createCourseFormFromCourse(course),
-      term: course.term && termOptions.some((option) => option.value === course.term) ? course.term : "",
-    });
+    setCourseFormValues(createCourseFormFromCourse(course));
     setCourseFormError(null);
     setIsCourseModalOpen(true);
   }
@@ -892,7 +915,13 @@ export function HomeWorkbench() {
         setIsCourseModalOpen(false);
         navigate(`/courses/${createdCourse.id}`, { state: { openUploadPrompt: true } });
       } else if (editingCourse) {
-        const nextCourse = await updateCourse(editingCourse.id, payload);
+        const nextCourse = await updateCourse(
+          editingCourse.id,
+          buildCourseUpdatePayload(
+            courseFormValues,
+            shouldPreserveLegacyTerm(editingCourse, courseFormValues, termOptions),
+          ),
+        );
         setCourses((currentCourses) =>
           currentCourses.map((course) => (course.id === nextCourse.id ? mapCourseToHomeCourse(nextCourse) : course)),
         );

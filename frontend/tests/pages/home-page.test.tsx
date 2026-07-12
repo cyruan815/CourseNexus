@@ -322,6 +322,55 @@ describe("HomePage", () => {
     );
   });
 
+  it("preserves an unchanged legacy term when editing another course field", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const legacyCourse = {
+      ...backendCourses[0],
+      id: "crs_legacy_term",
+      name: "旧课程",
+      term: "2023-2024-summer",
+    };
+    const updatedCourse = {
+      ...legacyCourse,
+      name: "旧课程（已编辑）",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/v1/courses/crs_legacy_term" && init?.method === "PATCH") {
+        return jsonResponse(updatedCourse, "req_update_legacy");
+      }
+
+      if (String(input) === "/api/v1/course-terms") {
+        return jsonResponse(backendTermOptions, "req_terms");
+      }
+
+      return jsonResponse([legacyCourse], "req_courses");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHomePage();
+
+    await screen.findByRole("link", { name: "旧课程" });
+    fireEvent.click(screen.getByRole("button", { name: "旧课程 更多操作" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "编辑课程" }));
+    expect(screen.getByText("2023-2024-summer（旧学期值，保存其他修改时会保留）")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("课程名称"), { target: { value: "旧课程（已编辑）" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+
+    expect(await screen.findByRole("link", { name: "旧课程（已编辑）" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/courses/crs_legacy_term",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          name: "旧课程（已编辑）",
+          description: "图论和组合数学复习",
+          teacher: "周老师",
+        }),
+      }),
+    );
+  });
+
   it("renders an empty course state when the backend returns no courses", async () => {
     vi.stubGlobal("fetch", createHomeFetchMock([]));
 
