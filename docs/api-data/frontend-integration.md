@@ -587,7 +587,159 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 模型、schema或材料覆盖失败会保存`generation_status="failed"`记录，`error_code`分别为`GENERATION_FAILED`、`GENERATION_SCHEMA_INVALID`或`MATERIAL_COVERAGE_INCOMPLETE`；失败记录的`content_json=null`且`source_citations=[]`。重复请求会创建不同ID，当前没有持久化幂等键或retry-by-id接口。
 
-### 3.24 学习计划预览
+### 3.24 学前诊断问题
+
+`POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
+
+要求：Bearer token。后端根据当前 `material_scope` 的 parsed 资料生成学前诊断问题；接口不写数据库，不做前端向导状态保存。
+
+请求：
+
+```json
+{
+  "goal_text": "两天复习物理层核心内容",
+  "material_scope": {
+    "include_all_parsed_materials": false,
+    "material_ids": ["mat_123"]
+  }
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "question_version": "study_plan_diagnostic_v1",
+  "questions": [
+    {
+      "question_id": "topic_mastery_topic_xxx",
+      "question_type": "topic_mastery",
+      "question_text": "你对「物理层的基本功能」了解多少？",
+      "sort_order": 1,
+      "required": true,
+      "topic_id": "topic_xxx",
+      "topic_title": "物理层的基本功能",
+      "options": [
+        { "value": "none", "label": "完全不了解" },
+        { "value": "heard", "label": "听说过，但不清楚" },
+        { "value": "some", "label": "了解一些" },
+        { "value": "familiar", "label": "比较熟悉" }
+      ],
+      "placeholder": null
+    },
+    {
+      "question_id": "weak_area",
+      "question_type": "weak_area",
+      "question_text": "你最担心哪类内容？",
+      "sort_order": 2,
+      "required": true,
+      "topic_id": null,
+      "topic_title": null,
+      "options": [
+        { "value": "concept", "label": "概念理解" },
+        { "value": "calculation", "label": "计算推导" },
+        { "value": "application", "label": "做题应用" },
+        { "value": "memorization", "label": "记忆重点" },
+        { "value": "other", "label": "其他" }
+      ],
+      "placeholder": null
+    },
+    {
+      "question_id": "diagnostic_note",
+      "question_type": "diagnostic_note",
+      "question_text": "还有什么想特别补的地方？",
+      "sort_order": 3,
+      "required": false,
+      "topic_id": null,
+      "topic_title": null,
+      "options": [],
+      "placeholder": "可选填写"
+    }
+  ]
+}
+```
+
+规则：
+
+- `topic_mastery` 问题数量为 1 到 3 个，来自当前资料范围；少于 3 个稳定 topic 时不会硬凑。
+- 问题只表达当前掌握程度、薄弱方向和可选补充，不包含学习偏好、学习方式或资料范围问题。
+- 当前资料范围没有 parsed chunk 时返回 `NO_PARSED_MATERIAL`。
+
+### 3.25 学前诊断 Profile
+
+`POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`
+
+要求：Bearer token。前端提交诊断答案，后端归纳成后续 preview 可携带的 `diagnostic_profile`。
+
+请求：
+
+```json
+{
+  "question_version": "study_plan_diagnostic_v1",
+  "topic_mastery": [
+    {
+      "topic_id": "topic_xxx",
+      "topic_title": "物理层的基本功能",
+      "mastery_level": "heard"
+    }
+  ],
+  "weak_area": "calculation",
+  "diagnostic_note": "希望多讲公式怎么用",
+  "material_scope": {
+    "include_all_parsed_materials": false,
+    "material_ids": ["mat_123"]
+  }
+}
+```
+
+响应 `data`：
+
+```json
+{
+  "question_version": "study_plan_diagnostic_v1",
+  "prior_knowledge_level": "little",
+  "foundation_needed": true,
+  "weak_topics": ["topic_xxx"],
+  "weak_area": "calculation",
+  "explanation_style": "step_by_step",
+  "diagnostic_note": "希望多讲公式怎么用"
+}
+```
+
+归纳规则：
+
+- `mastery_level` 支持 `none`、`heard`、`some`、`familiar`。
+- `weak_area` 支持 `concept`、`calculation`、`application`、`memorization`、`other`。
+- `none` / `heard` 计为弱掌握；弱掌握超过一半时 `foundation_needed = true`。
+- `weak_topics` 包含弱掌握 topic 的 `topic_id`。
+- `calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余映射 `plain_language`。
+- `DIAGNOSTIC_STALE` 表示 `question_version` 或 topic 不再匹配当前资料范围；前端应回到诊断步骤重新获取问题和作答。
+
+生成出的 profile 可原样放入 `study-plans/preview` 请求：
+
+```json
+{
+  "goal_text": "两天复习物理层核心内容",
+  "start_date": "2026-07-12",
+  "duration_days": 1,
+  "daily_available_minutes": 60,
+  "preference": "balanced",
+  "diagnostic_profile": {
+    "question_version": "study_plan_diagnostic_v1",
+    "prior_knowledge_level": "little",
+    "foundation_needed": true,
+    "weak_topics": ["topic_xxx"],
+    "weak_area": "calculation",
+    "explanation_style": "step_by_step"
+  },
+  "material_scope": {
+    "include_all_parsed_materials": false,
+    "material_ids": ["mat_123"]
+  }
+}
+```
+
+### 3.26 学习计划预览
 
 `POST /api/v1/courses/{course_id}/study-plans/preview`
 
@@ -684,7 +836,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | `NOT_FOUND` | 课程或显式资料范围不属于当前用户。 |
 | `VALIDATION_ERROR` | 日期范围、资料范围或每日学习时间不合法，例如低于 30 分钟。 |
 
-### 3.25 学习计划保存
+### 3.27 学习计划保存
 
 `POST /api/v1/courses/{course_id}/study-plans`
 
@@ -706,7 +858,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 实际响应字段以 `StudyPlanRead`、`StudyTaskRead`、`StudySubTaskRead` 为准，包含创建时间、更新时间、排序和状态字段。
 
-### 3.26 课程学习计划列表
+### 3.28 课程学习计划列表
 
 `GET /api/v1/courses/{course_id}/study-plans`
 
@@ -714,7 +866,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 响应 `data`：`StudyPlanRead[]`。
 
-### 3.27 学习计划详情
+### 3.29 学习计划详情
 
 `GET /api/v1/study-plans/{plan_id}`
 
