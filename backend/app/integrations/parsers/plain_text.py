@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from app.core.errors import CourseNexusError
-from app.integrations.parsers.base import ParsedChunk, ParsedDocument
+from app.integrations.parsers.base import ParseDiagnostics, ParsedChunk, ParsedDocument
 
 
 class PlainTextParser:
@@ -24,9 +24,15 @@ class PlainTextParser:
         except OSError as exc:
             raise CourseNexusError(code="PARSE_FAILED", message="资料文件读取失败", status_code=500) from exc
 
-        if extension == ".md":
-            return ParsedDocument(chunks=self._parse_markdown(text))
-        return ParsedDocument(chunks=self._parse_text(text))
+        chunks = self._parse_markdown(text) if extension == ".md" else self._parse_text(text)
+        return ParsedDocument(
+            chunks=chunks,
+            diagnostics=ParseDiagnostics(
+                parser="plain_text",
+                profile="text",
+                conversion_status="success",
+            ),
+        )
 
     def _parse_text(self, text: str) -> list[ParsedChunk]:
         paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()]
