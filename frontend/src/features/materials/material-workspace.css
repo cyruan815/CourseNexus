@@ -176,6 +176,20 @@
   padding: 8px 8px 12px 68px;
 }
 
+.material-workspace__context-zone {
+  align-items: center;
+  border: 1px dashed #d4dce5;
+  border-radius: 8px;
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 0;
+  min-height: 120px;
+}
+
+.material-workspace__material-select input:disabled {
+  cursor: not-allowed;
+}
+
 .material-workspace__upload {
   display: grid;
   gap: 8px;
