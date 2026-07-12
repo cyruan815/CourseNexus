@@ -9,6 +9,24 @@
 - `handout / task_test` 的“最近一次 success 复用 + `force_regenerate=true` 重建”已经是现有默认行为；如果后面还要加显式 `Idempotency-Key`，应单独算增强项，不要和当前默认幂等混成一件事。
 - 凡是会改 API、schema、数据契约、migration 或长期文档的任务，都要同步更新 `docs/`，必要时先确认 owner。
 
+## 协作必做规则
+
+- 每完成一个需求、优先级项或可验证子任务，必须同步更新本文对应条目的状态，写清“已完成 / 部分完成 / 剩余事项”、完成日期、验证命令和关键 commit。
+- 如果只是完成了其中一部分，不得把整项标成已完成；应在该条目下新增“已完成”和“仍待处理”两段，避免后续窗口误判。
+- 如果调整下一步、拆分任务、改变优先级或变更 owner，必须同步更新本文的状态、限制和并行建议；不要只把决策留在聊天记录里。
+- 如果任务涉及 API、schema、数据契约、migration、模块边界或长期实现口径，除本文外，还必须同步更新 `docs/api-data/`、`docs/architecture/` 或 `docs/domains/study-mode/` 中的对应文档。
+- 提交前必须确认没有带入其他窗口的未跟踪文件或未完成改动；当前已知 P0 窗口产物和 `backend/uv.lock` 不应被无关任务顺手提交。
+
+## 2026-07-13 派活 / owner 审计
+
+- 当前用户窗口定位为后端 API、接口契约、测试和文档同步；不承担前端页面、前端组件或前端样式实现。
+- `P0：S06 任务测试题生成闭环` 仍归正在运行的 P0 窗口收尾；未拿到最终完成报告前，其他窗口不要修改 `task_test` generator、`learning_execution` 主链路或相关测试。
+- `P2：任务测试题轻量只读版` 的 UI / renderer 属于前端 owner；当前用户最多只补后端接口、API 契约和文档，不做前端实现。
+- 当前用户下一步最适合接 `P6：保存请求强制 tasks 的新向导口径收紧`，因为它是后端 API 行为和文档任务，不碰 P0 的生成链路，不需要 migration。
+- `P3：讲义 / task_test 请求级幂等增强` 等 P0 完成后再评估；它会触达 handout/task_test 生成入口，当前不作为第二窗口首选。
+- `P5：资料解析诊断接入 Study Mode warning / 阻断策略` 可后续做后端调研或接口设计，但它跨 materials/parser 和 Study Mode，范围大于 P6。
+- `P7`、`P8`、`P9` 都需要单独评审；其中 P7 涉及 schema / migration，P9 涉及新作答数据结构，不应作为当前最小下一步。
+
 ## 已完成，不再排队
 
 ### P1：学习方式 preference 派生配置落地
@@ -68,6 +86,7 @@
 限制：
 
 - 这个任务依赖 P0 的生成正确性先稳定，否则展示层会把错误内容“放大”给前端。
+- UI / renderer 属于前端 owner；当前用户窗口不实现前端组件，只能在需要时补后端接口、API 契约和文档。
 - 不新增后端 API、schema、migration 或新的业务表。
 - 不新增 `task_test_attempts / task_test_answers`。
 - 不引入“提交答案”“隐藏正确答案”“得分统计”“历史 attempts”等作答反馈语义；这些都归 P9。
@@ -121,7 +140,7 @@
 
 ### P6：保存请求强制 tasks 的新向导口径收紧
 
-状态：可等前端更稳定后再收。
+状态：当前用户可接的下一项，建议先做最小后端 API 行为收紧和文档同步。
 
 目标：
 
@@ -133,6 +152,10 @@
 限制：
 
 - 当前兼容行为不是 bug，别把它和 P0 的正确性问题混在一起。
+- 不改数据库、不新增 migration、不改前端。
+- 必须保留旧客户端兼容路径；只有明确标识为新向导的保存请求才强制提交 preview tasks。
+- 建议最小实现是在 `POST /api/v1/courses/{course_id}/study-plans` 请求体中增加稳定标识字段，例如 `client_flow = "wizard_v1"`；当该字段为新向导且 `tasks` 缺失或为空时返回 `PREVIEW_TASKS_REQUIRED`。
+- 完成后必须同步更新本文状态、`docs/api-data/contracts.md`、`docs/api-data/frontend-integration.md` 和 `docs/domains/study-mode/plan-lifecycle.md`。
 
 ### P7：version 乐观锁改造
 
