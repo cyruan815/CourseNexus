@@ -896,7 +896,57 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/study-plans`
 
-要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`planner_strategy`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。保存时 capacity 会按最终提交的 `tasks[].subtasks[].estimated_minutes` 重新计算，避免旧客户端传入过期 capacity。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+要求：Bearer token。新向导保存时必须提交 `client_flow = "wizard_v1"`、preview 中展示过的配置和用户确认后的非空 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`planner_strategy`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。保存时 capacity 会按最终提交的 `tasks[].subtasks[].estimated_minutes` 重新计算，避免旧客户端传入过期 capacity。旧客户端不传 `client_flow` 或使用默认 `legacy` 且省略 `tasks` 时，仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+
+请求体示例（新向导保存 exact preview tasks）：
+
+```json
+{
+  "client_flow": "wizard_v1",
+  "title": "Linear Algebra 学习计划",
+  "goal_text": "期末复习",
+  "start_date": "2026-07-10",
+  "end_date": "2026-07-10",
+  "duration_days": 1,
+  "daily_available_minutes": 60,
+  "recommended_daily_minutes": 60,
+  "daily_minutes_source": "system_estimated",
+  "preference": "sprint",
+  "diagnostic_profile": {
+    "question_version": "study_plan_diagnostic_v1"
+  },
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "material_ids": []
+  },
+  "capacity": {
+    "estimated_total_minutes": 60,
+    "available_total_minutes": 60,
+    "feasibility_status": "tight",
+    "warnings": []
+  },
+  "tasks": [
+    {
+      "title": "第 1 天学习任务",
+      "task_date": "2026-07-10",
+      "sort_order": 1,
+      "subtasks": [
+        {
+          "title": "学习: Intro",
+          "subtask_type": "learn",
+          "description": "Alpha",
+          "related_material_ids": ["mat_123"],
+          "estimated_minutes": 60,
+          "citation_chunk_ids": ["chk_123"],
+          "sort_order": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+`client_flow = "wizard_v1"` 但缺少 `tasks` 或提交 `tasks = []` 时，后端返回 `422 PREVIEW_TASKS_REQUIRED`。旧客户端兼容路径只适用于未声明新向导的保存请求。
 
 响应 `data`：
 

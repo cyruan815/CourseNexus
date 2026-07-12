@@ -22,7 +22,7 @@
 - 当前用户窗口定位为后端 API、接口契约、测试和文档同步；不承担前端页面、前端组件或前端样式实现。
 - `P0：S06 任务测试题生成闭环` 仍归正在运行的 P0 窗口收尾；未拿到最终完成报告前，其他窗口不要修改 `task_test` generator、`learning_execution` 主链路或相关测试。
 - `P2：任务测试题轻量只读版` 的 UI / renderer 属于前端 owner；当前用户最多只补后端接口、API 契约和文档，不做前端实现。
-- 当前用户下一步最适合接 `P6：保存请求强制 tasks 的新向导口径收紧`，因为它是后端 API 行为和文档任务，不碰 P0 的生成链路，不需要 migration。
+- `P6：保存请求强制 tasks 的新向导口径收紧` 已完成；当前用户窗口仍定位为后端 API、接口契约、测试和文档同步，不接前端 UI / renderer。
 - `P3：讲义 / task_test 请求级幂等增强` 等 P0 完成后再评估；它会触达 handout/task_test 生成入口，当前不作为第二窗口首选。
 - `P5：资料解析诊断接入 Study Mode warning / 阻断策略` 可后续做后端调研或接口设计，但它跨 materials/parser 和 Study Mode，范围大于 P6。
 - `P7`、`P8`、`P9` 都需要单独评审；其中 P7 涉及 schema / migration，P9 涉及新作答数据结构，不应作为当前最小下一步。
@@ -44,6 +44,31 @@
 后续只保留文档校正：
 
 - 若发现 `plan-builder-wizard.md`、API 契约或 current-state 仍有旧口径，归入 P4 文档校正，不再作为功能任务排队。
+
+### P6：保存请求强制 tasks 的新向导口径收紧
+
+状态：已完成。
+
+完成日期：2026-07-13。
+
+关键 commit：待提交后回填。
+
+验证：
+
+- `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`37 passed in 15.48s`。
+
+已落地：
+
+- `StudyPlanSaveRequest.client_flow` 增加稳定枚举字段，默认 `legacy`，支持 `wizard_v1`。
+- 旧客户端不传 `client_flow` 且不传 `tasks` 时继续走保存前生成 preview 的兼容路径。
+- 新向导传 `client_flow = "wizard_v1"` 时必须提交 preview 中确认后的非空 `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。
+- 新向导提交合法 exact tasks 时正常保存，`parsed_config_json.tasks_source = "confirmed"`。
+- 已同步 `docs/api-data/contracts.md`、`docs/api-data/frontend-integration.md` 和 `docs/domains/study-mode/plan-lifecycle.md`。
+
+限制确认：
+
+- 未改数据库，未新增 migration，未做前端页面、组件或样式。
+- 未触碰 P0 的 `task_test` generator、`learning_execution` 主链路或相关测试。
 
 ## 新的未完成优先级
 
@@ -137,25 +162,6 @@
 限制：
 
 - 这是 materials/parser 和 Study Mode 的跨域能力，不要插进 P0-P3 的主链路里一起做。
-
-### P6：保存请求强制 tasks 的新向导口径收紧
-
-状态：当前用户可接的下一项，建议先做最小后端 API 行为收紧和文档同步。
-
-目标：
-
-- 区分旧客户端和新向导请求。
-- 新向导强制提交 preview tasks。
-- 缺少 tasks 时返回 `PREVIEW_TASKS_REQUIRED`。
-- 旧客户端可以继续兼容，或者明确宣布废弃窗口。
-
-限制：
-
-- 当前兼容行为不是 bug，别把它和 P0 的正确性问题混在一起。
-- 不改数据库、不新增 migration、不改前端。
-- 必须保留旧客户端兼容路径；只有明确标识为新向导的保存请求才强制提交 preview tasks。
-- 建议最小实现是在 `POST /api/v1/courses/{course_id}/study-plans` 请求体中增加稳定标识字段，例如 `client_flow = "wizard_v1"`；当该字段为新向导且 `tasks` 缺失或为空时返回 `PREVIEW_TASKS_REQUIRED`。
-- 完成后必须同步更新本文状态、`docs/api-data/contracts.md`、`docs/api-data/frontend-integration.md` 和 `docs/domains/study-mode/plan-lifecycle.md`。
 
 ### P7：version 乐观锁改造
 

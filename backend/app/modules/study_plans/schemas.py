@@ -10,6 +10,7 @@ from app.modules.material_context.schemas import MaterialScope
 
 PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced", "sprint"]
 DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
+StudyPlanClientFlow = Literal["legacy", "wizard_v1"]
 SubTaskType = Literal["learn", "review", "quiz", "test"]
 MIN_DAILY_AVAILABLE_MINUTES = 30
 DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v1"
@@ -256,6 +257,7 @@ class StudyPlanPreview(BaseModel):
 
 
 class StudyPlanSaveRequest(StudyPlanBuildRequest):
+    client_flow: StudyPlanClientFlow = "legacy"
     title: str | None = None
     tasks: list[StudyTaskPreview] | None = None
 

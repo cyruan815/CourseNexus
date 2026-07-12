@@ -318,6 +318,72 @@ def build_auto_minutes_wizard_payload() -> dict[str, object]:
     }
 
 
+def test_legacy_save_endpoint_without_client_flow_keeps_preview_generation_compatibility(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, provider = api_context
+    token = register_and_token(client, "legacy_save_without_tasks")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    upload_and_parse_material(client, token, course_id)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers,
+        json=build_auto_minutes_wizard_payload(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["tasks"]
+    assert data["plan"]["parsed_config_json"]["tasks_source"] == "generated"
+    assert provider.batch_prompts
+
+
+
+def test_wizard_v1_save_endpoint_requires_preview_tasks_when_missing(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, provider = api_context
+    token = register_and_token(client, "wizard_missing_tasks")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    material_id = upload_and_parse_material(client, token, course_id)
+    prompt_count = len(provider.batch_prompts)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers,
+        json=build_wizard_payload(material_id) | {"client_flow": "wizard_v1"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PREVIEW_TASKS_REQUIRED"
+    assert len(provider.batch_prompts) == prompt_count
+
+
+
+def test_wizard_v1_save_endpoint_requires_preview_tasks_when_empty(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, provider = api_context
+    token = register_and_token(client, "wizard_empty_tasks")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    material_id = upload_and_parse_material(client, token, course_id)
+    prompt_count = len(provider.batch_prompts)
+
+    response = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers,
+        json=build_wizard_payload(material_id) | {"client_flow": "wizard_v1", "tasks": []},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PREVIEW_TASKS_REQUIRED"
+    assert len(provider.batch_prompts) == prompt_count
+
+
 def test_preview_without_daily_minutes_estimates_and_save_traces_capacity(
     api_context: tuple[TestClient, ConfigParseProvider],
 ) -> None:
@@ -394,7 +460,11 @@ def test_preview_and_save_accept_wizard_metadata_and_exact_tasks(
     assert preview_data["capacity"]["feasibility_status"] == "ok"
     assert preview_data["tasks"]
 
-    saved = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=preview_data)
+    saved = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers,
+        json=preview_data | {"client_flow": "wizard_v1"},
+    )
 
     assert saved.status_code == 200
     saved_data = saved.json()["data"]

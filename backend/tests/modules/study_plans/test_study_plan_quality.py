@@ -567,8 +567,26 @@ def test_save_request_accepts_wizard_metadata_fields() -> None:
 
     assert request.end_date == date(2026, 7, 13)
     assert request.duration_days == 2
+    assert request.client_flow == "legacy"
     assert request.preference == "sprint"
     assert request.diagnostic_profile["question_version"] == "study_plan_diagnostic_v1"
+    assert request.tasks is None
+
+
+
+def test_save_request_accepts_wizard_v1_client_flow_without_changing_task_optional_contract() -> None:
+    request = StudyPlanSaveRequest.model_validate(
+        {
+            "client_flow": "wizard_v1",
+            "goal_text": "我要两天学完计网这门课的第七章节",
+            "start_date": "2026-07-12",
+            "duration_days": 2,
+            "daily_available_minutes": 60,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        }
+    )
+
+    assert request.client_flow == "wizard_v1"
     assert request.tasks is None
 
 

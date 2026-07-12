@@ -20,7 +20,7 @@
 
 1. 自然语言配置回填：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
 2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
-3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.planner_strategy` 由当前 `preference + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
+3. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.planner_strategy` 由当前 `preference + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
 4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
 5. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
 6. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
@@ -44,7 +44,7 @@
 
 ## 不变量
 
-- S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。
+- S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。`client_flow = "wizard_v1"` 的保存请求必须额外在 preview 生成前校验 `tasks` 非空，失败返回 `PREVIEW_TASKS_REQUIRED`。
 - S02 不新增业务表；幂等修复新增 `study_plans.idempotency_key_hash` 和唯一索引迁移，baseline migration 不回改。
 - 计划保存只写 `study_plans`、`study_tasks`、`study_subtasks`。
 - 未携带 `Idempotency-Key` 的保存请求允许创建多份计划；携带 key 的保存请求必须在数据库唯一约束竞争后恢复为原计划或返回 `IDEMPOTENCY_CONFLICT`，不得暴露 500。
@@ -55,6 +55,7 @@
 
 ## 验证
 
+- `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`37 passed in 15.48s`，覆盖 `client_flow` 默认 `legacy`、`wizard_v1` 缺失 / 空 `tasks` 返回 `PREVIEW_TASKS_REQUIRED`、旧客户端兼容保存和新向导 exact tasks 保存。
 - `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002 -> 20260712_0003`，其中 `20260712_0003` 新增 `study_plans.idempotency_key_hash` 和唯一索引。
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_diagnostic_api.py -q`：覆盖 preference -> planner_strategy 派生、unknown/缺省回落 balanced、fast_track + 基础薄弱仍保留补基础、mastery 高强度、sprint 高测评 / review，以及保存追溯中的 `planner_strategy`。
 - `uv run python -m pytest tests/modules/study_mode/test_subsystem_schema_contract.py tests/modules/study_plans -q`：`68 passed in 18.11s`，覆盖 schema 契约、计划保存幂等、确认任务树校验和原子替换。

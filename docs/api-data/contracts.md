@@ -201,7 +201,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` | 已实现 | 基于当前 parsed 资料范围生成 1 到 3 个 topic 掌握问题、1 个薄弱方向问题和 1 个可选补充输入；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` | 已实现 | 校验 topic 仍属于当前资料范围，并归纳 `prior_knowledge_level`、`foundation_needed`、`weak_topics`、`weak_area` 和 `explanation_style`；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy` 和基于最终任务树统计的 `capacity`。 |
-| `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；支持旧客户端省略 `tasks` 时先生成 preview。 |
+| `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；请求体 `client_flow` 默认为 `legacy`。新向导必须传 `client_flow = "wizard_v1"` 和 preview 中确认后的非空 `tasks`；旧客户端省略 `tasks` 时仍先生成 preview。 |
 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 已实现 | 生成新 preview，不写数据库。 |
 | `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |
 | `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
@@ -210,6 +210,8 @@ S02 已实现以下接口，前端可在契约评审后接入：
 学前诊断接口统一使用 `question_version = "study_plan_diagnostic_v1"`。掌握程度枚举为 `none`、`heard`、`some`、`familiar`；薄弱方向枚举为 `concept`、`calculation`、`application`、`memorization`、`other`。诊断问题的 topic 来自当前 `material_scope` 解析后的资料上下文；若只能稳定提取 1 到 2 个 topic，后端不会补足到 3 个。
 
 `study-plan-diagnostic-profiles` 会重新基于当前 `material_scope` 计算合法 topic 集。若请求中的 `question_version` 过期，或 `topic_mastery[].topic_id` 不属于当前资料范围，返回 `409 DIAGNOSTIC_STALE`，`details.invalid_topic_ids` 列出失效 topic。无可用 parsed 资料返回 `400 NO_PARSED_MATERIAL`。归纳出的 `diagnostic_profile` 可直接传给 `POST /api/v1/courses/{course_id}/study-plans/preview` 的 `diagnostic_profile` 字段；preview 会把英文 `preference` 派生为 `planner_strategy` 并与该 profile 一起写入 planner reduce prompt，用于影响 `content_depth`、例题强度、测评强度、review 强度、补基础、薄弱主题顺序和颗粒度、薄弱方向强化以及 description 解释风格；保存时继续追溯 `diagnostic_profile` 和 `planner_strategy`，不在本接口层提前生成讲义或任务测试题。
+
+保存请求新增稳定字段 `client_flow`，可选值为 `legacy`、`wizard_v1`，默认 `legacy`。旧客户端不传 `client_flow` 且省略 `tasks` 时保留保存前生成 preview 的兼容路径；新向导必须传 `client_flow = "wizard_v1"`，并提交 preview 中展示和用户确认后的 exact `tasks`。当 `client_flow = "wizard_v1"` 且 `tasks` 缺失或为空数组时，后端返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成，也不会写入计划、任务、二级任务或打卡记录。`wizard_v1` 提交合法 `tasks` 时按确认任务树保存，`parsed_config_json.tasks_source = "confirmed"`。
 
 保存接口支持 `Idempotency-Key`：key hash 写入 `study_plans.idempotency_key_hash`，request hash 保留在 `parsed_config_json.idempotency`；数据库通过 `(user_id, course_id, idempotency_key_hash)` 唯一索引兜底，同键同请求返回同一 plan bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`，已软删除计划占用的 key 不可复用。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口通过数据库条件 UPDATE 原子校验 `expected_updated_at`，在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`；失败请求不得删除或部分修改旧任务树和打卡记录。S02 不新增业务表，不在保存阶段生成讲义或任务测试题。Preview 和保存后的 `parsed_config_json.capacity` 均以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；超出容量时 `feasibility_status = "over_capacity"` 且 `warnings` 包含 `PLAN_OVER_CAPACITY`。`recommended_daily_minutes` 可继续基于 map 阶段资料规模估算，`study_plans.daily_available_minutes` 保存最终采用的每日学习时间。
 
