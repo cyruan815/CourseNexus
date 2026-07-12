@@ -213,13 +213,14 @@ def _clean_text(text: str) -> str:
 
 def _build_pdf(lines: list[PDFLine]) -> bytes:
     pages = _paginate_pdf_lines(lines)
-    page_object_ids = [5 + index * 2 for index in range(len(pages))]
+    page_object_ids = [6 + index * 2 for index in range(len(pages))]
     content_object_ids = [object_id + 1 for object_id in page_object_ids]
     objects: list[tuple[int, bytes]] = [
         (1, b"<< /Type /Catalog /Pages 2 0 R >>"),
         (2, _pages_object(page_object_ids)),
         (3, _font_object()),
         (4, _cid_font_object()),
+        (5, _latin_font_object()),
     ]
     for page_lines, page_object_id, content_object_id in zip(pages, page_object_ids, content_object_ids, strict=True):
         objects.append((page_object_id, _page_object(content_object_id)))
@@ -259,10 +260,13 @@ def _cid_font_object() -> bytes:
     )
 
 
+def _latin_font_object() -> bytes:
+    return b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+
 def _page_object(content_object_id: int) -> bytes:
     return (
         f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PAGE_WIDTH} {PAGE_HEIGHT}] "
-        f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_object_id} 0 R >>"
+        f"/Resources << /Font << /F1 3 0 R /F2 5 0 R >> >> /Contents {content_object_id} 0 R >>"
     ).encode("ascii")
 
 
