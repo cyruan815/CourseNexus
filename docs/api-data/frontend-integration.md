@@ -9,7 +9,8 @@
 ## 2. 接入基线
 
 - API 前缀固定为 `/api/v1`。
-- 本地 Vite 开发服务器通过 `frontend/vite.config.ts` 将 `/api` 代理到 `http://127.0.0.1:8000`；浏览器侧仍使用相对路径请求后端，避免手动配置 `VITE_API_BASE_URL` 才能注册、登录或读取课程。
+- 默认本地配置使用 `VITE_API_BASE_URL=http://localhost:8000`，浏览器直接请求后端；后端通过 `CORS_ALLOWED_ORIGINS`（默认 `http://localhost:5173`）响应跨域预检，并允许 `Authorization`、`Content-Type`、`Idempotency-Key` 和 `X-Request-ID` 请求头。多个允许来源使用英文逗号分隔。
+- `frontend/vite.config.ts` 保留 `/api` 到 `http://127.0.0.1:8000` 的开发代理；只有将 `VITE_API_BASE_URL` 留空时，浏览器才使用该同源代理。生产环境必须由后端 CORS 配置或反向代理明确允许前端来源，不能依赖 Vite 代理。
 - JSON 字段统一使用 `snake_case`。
 - 成功响应统一为 `{ "data": ..., "meta": ... }`，前端业务代码只消费 `data`。
 - 错误响应统一为 `{ "error": { "code": "...", "message": "...", "details": ... }, "meta": ... }`。

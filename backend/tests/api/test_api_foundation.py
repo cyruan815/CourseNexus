@@ -34,6 +34,26 @@ def test_health_response_uses_inbound_request_id() -> None:
     assert body["meta"]["request_id"] == "req_test"
 
 
+def test_cors_preflight_allows_local_frontend() -> None:
+    from app.main import app
+
+    response = TestClient(app).options(
+        "/api/v1/auth/register",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Authorization, Content-Type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "POST" in response.headers["access-control-allow-methods"]
+    allowed_headers = response.headers["access-control-allow-headers"].lower()
+    assert "authorization" in allowed_headers
+    assert "content-type" in allowed_headers
+
+
 def test_course_nexus_error_uses_error_envelope() -> None:
     app = FastAPI()
     app.add_middleware(RequestIdMiddleware)

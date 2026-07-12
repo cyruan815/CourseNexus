@@ -76,6 +76,7 @@ notepad .env
 
 - `SECRET_KEY` 已替换为本地开发值。
 - `VITE_API_BASE_URL=http://localhost:8000`，末尾不要再添加 `/api/v1`，业务请求路径已经包含该前缀。
+- `CORS_ALLOWED_ORIGINS=http://localhost:5173`；浏览器直连后端时，后端只接受该配置中列出的前端来源，多个来源用英文逗号分隔。
 - 仅体验账号、课程和基础页面时，可以暂时不填写模型密钥。
 - 要进行真实资料解析、向量索引和检索，需填写 `EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL` 和 `EMBEDDING_MODEL`。
 - 要进行真实课程资料问答，还需填写 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL`。

@@ -33,6 +33,8 @@
 
 成功响应由 `login()` / `register()` 写入 `course_nexus_token`，随后页面导航到 `/`。受保护路由在没有 token 时跳转到 `/welcome`，由入口页再引导用户进入登录或注册。任意 API 请求收到 401 时，`apiRequest()` 清理 token，`session` 模块发出登录态变化事件，路由守卫重新计算状态并回到公开入口。
 
+本地前端以 `http://localhost:5173` 直连 `http://localhost:8000` 时，后端通过 `CORS_ALLOWED_ORIGINS` 处理跨域预检；默认仅允许该本地前端来源，并允许 Bearer Token 所需的 `Authorization` 请求头。CORS 只允许浏览器发起和读取请求，实际身份仍由后端 Bearer Token 校验。
+
 页面状态：
 
 - `ready`：展示入口页、登录表单或注册表单。
@@ -50,6 +52,7 @@
 
 - `frontend/tests/pages/app-router.test.tsx` 覆盖匿名跳转 `/welcome`、公开 `/login` 和 `/register`、认证后首页和课程详情路由，以及 401 后回到公开入口。
 - `frontend/tests/features/auth/auth-pages.test.tsx` 覆盖登录提交、注册提交、token 写入、成功跳转、错误提示和未实现找回密码入口不展示。
+- `backend/tests/api/test_api_foundation.py` 覆盖本地前端对注册接口的 CORS 预检，确保登录、注册和 Bearer Token 请求不会被浏览器拦截。
 
 匹配验证命令：
 

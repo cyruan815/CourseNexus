@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     log_max_bytes: int = 20_971_520
     log_backup_count: int = 20
     slow_request_ms: int = 3_000
+    cors_allowed_origins: str = "http://localhost:5173"
 
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
@@ -131,6 +132,14 @@ class Settings(BaseSettings):
             base_url=getattr(self, f"{purpose}_base_url") or None,
             model=getattr(self, f"{purpose}_model"),
         )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

@@ -14,7 +14,7 @@
 | [data-model.md](data-model.md) | 核心实体、关系、数据归属、状态字段、软删除、审计字段和迁移规则。 | 2026-07-09 |
 | [table-schema.md](table-schema.md) | v0.1 后端数据表、字段、约束、索引和结构化 JSON 契约。 | 2026-07-09 |
 | [contracts.md](contracts.md) | 前后端契约、模块间契约、跨模块数据引用原则和契约变更规则。 | 2026-07-09 |
-| [frontend-integration.md](frontend-integration.md) | 前端最小集成验证工作台的后端接口接入指南。 | 2026-07-09 |
+| [frontend-integration.md](frontend-integration.md) | 前端最小集成验证工作台的后端接口接入指南。 | 2026-07-13 |
 
 ## 相关链接
 
