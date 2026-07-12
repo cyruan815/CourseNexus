@@ -642,6 +642,21 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 ## 4. 待后续任务落地的接口入口
 
+### Quiz 生成结果
+
+Quiz 沿用 `POST /api/v1/courses/{course_id}/generations`、课程生成历史和生成详情接口。请求使用 `content_type="quiz"`，参数示例：
+
+```json
+{
+  "question_count": 10,
+  "question_types": ["single_choice", "multiple_choice", "true_false", "short_answer"],
+  "difficulty": "mixed",
+  "focus": "进程调度"
+}
+```
+
+前端按 `question_type` 解释 `correct_answer`：单选为字符串，多选为有序字符串数组，判断为 boolean，简答为字符串。`source_citation_ids` 在顶层 `source_citations` 中解析。当前后端不提供提交答案、评分、错题或答题历史接口，前端不得伪造持久化结果。
+
 以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
 
 | 能力 | 接口入口 |
