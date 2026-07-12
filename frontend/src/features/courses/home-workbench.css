@@ -166,10 +166,19 @@
   background: #ffffff;
 }
 
-.home-calendar-today {
+.home-calendar-day {
   position: absolute;
   top: 8px;
   left: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.home-calendar-today {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   width: 24px;
   height: 24px;
   display: grid;
@@ -179,16 +188,6 @@
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
-}
-
-.home-calendar-dot {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #7c3aed;
 }
 
 .home-calendar-empty {

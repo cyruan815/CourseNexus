@@ -1,7 +1,7 @@
 import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TOKEN_STORAGE_KEY } from "../../src/features/auth/session";
 import { HomePage } from "../../src/pages/HomePage";
@@ -31,6 +31,18 @@ const backendCourses = [
     updated_at: "2026-07-10T12:00:00+00:00",
     deleted_at: null,
   },
+  {
+    id: "crs_algorithm",
+    user_id: "usr_123",
+    name: "算法设计",
+    description: "图算法和复杂度分析",
+    teacher: "李老师",
+    term: "2025-2026 秋",
+    status: "active",
+    created_at: "2026-07-11T12:00:00+00:00",
+    updated_at: "2026-07-11T12:00:00+00:00",
+    deleted_at: null,
+  },
 ];
 
 function renderHomePage() {
@@ -44,6 +56,10 @@ function renderHomePage() {
 }
 
 describe("HomePage", () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
   afterEach(() => {
     localStorage.clear();
     vi.unstubAllGlobals();
@@ -71,7 +87,8 @@ describe("HomePage", () => {
       "/courses/crs_discrete_math",
     );
     expect(screen.getByRole("link", { name: "操作系统" })).toHaveAttribute("href", "/courses/crs_os");
-    expect(screen.getByText("本学期 2 门课程 · 资料统计待接入")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "算法设计" })).toHaveAttribute("href", "/courses/crs_algorithm");
+    expect(screen.getByText("全部学期 3 门课程 · 资料统计待接入")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/courses",
       expect.objectContaining({
@@ -79,7 +96,35 @@ describe("HomePage", () => {
       }),
     );
     expect(screen.getByText("今天还没有学习计划")).toBeInTheDocument();
+    expect(screen.queryByText("1 项待安排")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "生成今日计划" })).not.toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "1" })).toBeInTheDocument();
+    expect(screen.getByRole("gridcell", { name: "15" })).toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
+  });
+
+  it("filters courses by the selected term", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "离散数学" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: "选择学期" }));
+    fireEvent.click(await screen.findByRole("option", { name: "2025-2026 秋", hidden: true }));
+
+    expect(screen.getByText("2025-2026 秋 1 门课程 · 资料统计待接入")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "算法设计" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "离散数学" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "操作系统" })).not.toBeInTheDocument();
   });
 
   it("renders an empty course state when the backend returns no courses", async () => {
