@@ -318,6 +318,12 @@ def save_study_plan(
     started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
     save_payload = _coerce_save_request(payload)
+    if save_payload.client_flow == "wizard_v1" and not save_payload.tasks:
+        raise CourseNexusError(
+            code="PREVIEW_TASKS_REQUIRED",
+            message="新向导保存必须提交预览中的 tasks",
+            status_code=422,
+        )
     key_hash = _hash_value(idempotency_key) if idempotency_key else None
     request_hash = _hash_request(save_payload)
     if key_hash:
