@@ -7,6 +7,7 @@ from app.modules.materials.models import CourseMaterial, MaterialChunk
 
 
 ContextRow = tuple[MaterialChunk, str]
+MaterialQualityRow = tuple[str, str, str, dict | list | None, int | None]
 
 
 def list_parsed_context_chunks(
@@ -155,3 +156,36 @@ def list_active_scope_material_ids(
         statement = statement.where(CourseMaterial.id.in_(material_ids))
 
     return list(db.execute(statement).scalars())
+
+
+def list_parsed_material_quality_for_scope(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_ids: list[str],
+) -> list[MaterialQualityRow]:
+    if not material_ids:
+        return []
+
+    statement = (
+        select(
+            CourseMaterial.id,
+            CourseMaterial.name,
+            CourseMaterial.parse_quality,
+            CourseMaterial.parse_diagnostics_json,
+            CourseMaterial.page_count,
+        )
+        .where(
+            CourseMaterial.user_id == user_id,
+            CourseMaterial.course_id == course_id,
+            CourseMaterial.deleted_at.is_(None),
+            CourseMaterial.parse_status == "parsed",
+            CourseMaterial.id.in_(material_ids),
+        )
+        .order_by(CourseMaterial.id.asc())
+    )
+    return [
+        (row[0], row[1], row[2], row[3], row[4])
+        for row in db.execute(statement).all()
+    ]

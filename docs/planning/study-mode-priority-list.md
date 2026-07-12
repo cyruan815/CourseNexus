@@ -153,15 +153,29 @@
 
 ### P5：资料解析诊断接入 Study Mode warning / 阻断策略
 
-状态：后续接入。
+状态：部分完成。P5a（preview warning）已落地；阻断策略仍待后续拆分。
 
-目标：
+完成日期：2026-07-13。
 
-- 计划生成时识别资料解析质量问题。
-- 对低质量资料返回 warning。
-- 必要时阻止计划生成或提示重新上传。
-- 将 `parse_diagnostics_json` 映射到 Study Mode warning。
-- 明确哪些问题是 warning，哪些问题是 block。
+关键 commit：本次 P5a 提交（`feat(study-mode): 接入资料解析质量 warning`）。
+
+验证：
+
+- `uv run python -m compileall app/modules/material_context app/modules/study_plans/service.py`：通过，覆盖 touched 后端模块语法检查。
+- `uv run python -m pytest tests/modules/material_context/test_material_context_batches.py tests/modules/study_plans/test_study_plan_foundation.py -q`：`10 passed in 2.00s`，覆盖 material-context 解析质量摘要、Study Mode preview metadata 接入，以及解析 warning 不进入 `capacity.warnings`。
+
+P5a 已落地：
+
+- `material-context` 增加当前 `MaterialScope` 内 parsed 资料的解析质量摘要读取能力。
+- Study Mode preview 将 `parse_quality = partial / unknown` 和 `parse_diagnostics_json.warnings[].severity = warning` 映射到 `generation_metadata.material_quality.warnings`。
+- `severity = info` 的 parser 诊断不升级为 warning。
+- 不新增 migration，不改变公开请求字段，不做前端。
+- 保留现有 `NO_PARSED_MATERIAL` / `MATERIAL_COVERAGE_INCOMPLETE` 阻断语义；P5a 不收紧显式非 parsed 资料行为。
+
+仍待处理：
+
+- 低质量资料是否阻止 plan preview、哪些诊断需要 block、是否需要前端交互提示，另拆 P5b 评审。
+- 若后续 block 策略需要新错误码、API schema 或数据库字段，需单独确认 owner 和 migration/API 契约。
 
 限制：
 

@@ -31,3 +31,18 @@ class MaterialContextBatch(BaseModel):
     chunks: list[ContextChunk]
     material_ids: list[str]
     estimated_tokens: int
+
+
+class MaterialQualityWarning(BaseModel):
+    code: str
+    message: str
+    material_id: str
+    material_name: str
+    parse_quality: str
+    page_no: int | None = None
+    component: str | None = None
+    details: dict[str, object] = Field(default_factory=dict)
+
+
+class MaterialQualitySummary(BaseModel):
+    warnings: list[MaterialQualityWarning] = Field(default_factory=list)

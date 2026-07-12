@@ -21,6 +21,7 @@ from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
+from app.modules.materials.models import CourseMaterial
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.study_plans.schemas import StudyPlanBuildRequest
 from app.modules.study_plans.service import (
@@ -229,3 +230,54 @@ def test_study_plan_scope_rejects_cross_user_material_id(db: Session, tmp_path: 
         )
 
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_preview_study_plan_exposes_material_quality_warnings_in_generation_metadata(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
+    material = db.get(CourseMaterial, material_id)
+    assert material is not None
+    material.parse_quality = "partial"
+    material.page_count = 4
+    material.parse_diagnostics_json = {
+        "parser": "docling",
+        "profile": "pdf_text_first",
+        "conversion_status": "partial_success",
+        "page_count": 4,
+        "processed_pages": [1, 2, 4],
+        "pages_with_content": [1, 2, 4],
+        "pages_with_chunks": [1, 2],
+        "failed_pages": [3],
+        "warnings": [
+            {
+                "code": "OCR_MEMORY_ERROR",
+                "message": "OCR memory limit hit",
+                "page_no": 3,
+                "component": "ocr",
+                "severity": "warning",
+            }
+        ],
+    }
+    db.add(material)
+    db.commit()
+
+    preview = preview_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=build_request(),
+        model_provider=FoundationPlanProvider(material_id),
+        max_tokens=12_000,
+    )
+
+    material_quality = preview.generation_metadata["material_quality"]
+    warning_codes = [warning["code"] for warning in material_quality["warnings"]]
+    assert warning_codes == ["MATERIAL_PARSE_PARTIAL", "MATERIAL_PARSE_DIAGNOSTIC_WARNING"]
+    assert material_quality["warnings"][0]["material_id"] == material_id
+    assert material_quality["warnings"][0]["parse_quality"] == "partial"
+    assert material_quality["warnings"][1]["details"]["diagnostic_code"] == "OCR_MEMORY_ERROR"
+    assert preview.capacity["warnings"] == []

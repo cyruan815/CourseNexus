@@ -19,7 +19,7 @@
 ## 数据流
 
 1. 自然语言配置回填：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
-2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
+2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。P5a 同步通过 `material_context.summarize_material_quality_for_scope()` 读取同一 `material_scope` 内 parsed 资料的 `parse_quality` / `parse_diagnostics_json`，并写入 `generation_metadata.material_quality.warnings`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
 3. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.planner_strategy` 由当前 `preference + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
 4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
 5. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
@@ -34,6 +34,8 @@
 - planner reduce prompt 现在会读取 `StudyPlanBuildRequest.preference` 派生出的 `planner_strategy`，并显式使用 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity` 控制讲解深度、例题、测评和 review 强度。映射为：`fast_track=concise/low/low/low`、`balanced=standard/standard/standard/standard`、`mastery=detailed/high/high/high`、`sprint=focused/standard/high/high`；`advanced` 兼容为 `sprint`，未知或缺省回落 `balanced`。
 - planner reduce prompt 同时读取 `StudyPlanBuildRequest.diagnostic_profile` 并按固定优先级合并：用户时间约束 > 诊断得出的必要补基础 > 学习方式 preference 派生配置 > 额外例题、测试、review。`foundation_needed=true` 会进入 `planner_strategy.foundation_required`，即使 `fast_track` 也必须保留前置补基础任务；`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt、preview metadata 和保存追溯，不新增表、不改前端和结构化输出 schema。
 - `validate_preview()` 除结构校验外，还会校验生成质量底线：`quiz` 和 `test` 都必须位于当天最后；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间，最后一天必须包含综合自测。每日任务时长超过 `daily_available_minutes` 时，只有 preview capacity 已明确 `feasibility_status = over_capacity` 且 `warnings` 包含 `PLAN_OVER_CAPACITY` 才允许返回，由前端展示容量 warning；结构非法、日期越界、引用缺失和范围外资料仍返回 `GENERATION_SCHEMA_INVALID`。
+- Study Mode 只消费 materials 已持久化的解析质量摘要，不直接调用 parser，也不解释 Docling 内部类型。`parse_quality = partial` 或 `unknown` 会转成 `MATERIAL_PARSE_PARTIAL` / `MATERIAL_PARSE_QUALITY_UNKNOWN`；`parse_diagnostics_json.warnings[]` 中 `severity = "warning"` 的条目会转成 `MATERIAL_PARSE_DIAGNOSTIC_WARNING`，原始 parser code/message 保存在 `details.diagnostic_code` 和 `details.diagnostic_message`；`severity = "info"` 不升级为 preview warning。
+- 资料解析质量 warning 只写入 `generation_metadata.material_quality.warnings`，不得写入 `capacity.warnings`。P5a 不新增 block 策略，`NO_PARSED_MATERIAL` 和 `MATERIAL_COVERAGE_INCOMPLETE` 保持原有阻断语义。
 - 资料解析层的公式 OCR、图表理解、图片页补全，以及模型 provider 的 `responses.parse` 兼容配置，不属于 study-mode 生命周期模块职责，后续应分别在 materials/parser 和 model provider 任务中处理。
 
 ## 模型调用兼容性
@@ -52,9 +54,12 @@
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
 - 每份范围内已解析资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
 - Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；超出容量时必须返回 `PLAN_OVER_CAPACITY` warning。
+- Preview 的资料解析质量 warning 以当前 material-context scope 内 parsed 资料为事实来源，只进入 `generation_metadata.material_quality.warnings`；不得改变 capacity 计算，也不得把显式未 parsed 资料升级为新的 P5a 阻断。
 
 ## 验证
 
+- `uv run python -m compileall app/modules/material_context app/modules/study_plans/service.py`：通过，覆盖 touched 后端模块语法检查。
+- `uv run python -m pytest tests/modules/material_context/test_material_context_batches.py tests/modules/study_plans/test_study_plan_foundation.py -q`：`10 passed in 2.00s`，覆盖 P5a material-context 解析质量摘要、preview `generation_metadata.material_quality.warnings` 接入，并确认解析 warning 不进入 `capacity.warnings`。
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_lifecycle.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`50 passed in 18.43s`，覆盖 P10 重生成 preview 继承已保存 `diagnostic_profile`、显式 profile 覆盖、只传 `duration_days` 重新推导 `end_date`，以及 preview 不写计划 / 任务 / 打卡记录。
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`37 passed in 15.48s`，覆盖 `client_flow` 默认 `legacy`、`wizard_v1` 缺失 / 空 `tasks` 返回 `PREVIEW_TASKS_REQUIRED`、旧客户端兼容保存和新向导 exact tasks 保存。
 - `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002 -> 20260712_0003`，其中 `20260712_0003` 新增 `study_plans.idempotency_key_hash` 和唯一索引。
