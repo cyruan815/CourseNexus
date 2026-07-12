@@ -10,6 +10,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db
+from app.modules.courses.models import Course
+from app.modules.materials.models import CourseMaterial, MaterialChunk
 import app.db.models  # noqa: F401
 from app.main import app
 
@@ -32,10 +34,13 @@ def client() -> Generator[TestClient, None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.state.todos_calendar_testing_session = testing_session
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+        if hasattr(app.state, "todos_calendar_testing_session"):
+            del app.state.todos_calendar_testing_session
 
 
 def _register_and_token(client: TestClient, username: str) -> str:
@@ -54,7 +59,7 @@ def _create_course(client: TestClient, token: str, name: str) -> str:
     return response.json()["data"]["id"]
 
 
-def _plan_payload(*, title: str, task_date: str = "2026-07-11", task_count: int = 1) -> dict[str, object]:
+def _plan_payload(*, title: str, material_id: str, task_date: str = "2026-07-11", task_count: int = 1) -> dict[str, object]:
     return {
         "title": title,
         "goal_text": "掌握传输层",
@@ -72,7 +77,7 @@ def _plan_payload(*, title: str, task_date: str = "2026-07-11", task_count: int 
                         "title": f"{title} 子任务 {index}",
                         "subtask_type": "learn",
                         "description": "学习内容",
-                        "related_material_ids": ["mat_api"],
+                        "related_material_ids": [material_id],
                         "estimated_minutes": 30,
                         "citation_chunk_ids": [],
                         "sort_order": 1,
@@ -83,6 +88,41 @@ def _plan_payload(*, title: str, task_date: str = "2026-07-11", task_count: int 
         ],
     }
 
+
+def _seed_parsed_material(client: TestClient, course_id: str, material_id: str) -> str:
+    testing_session = client.app.state.todos_calendar_testing_session
+    db = testing_session()
+    try:
+        course = db.get(Course, course_id)
+        assert course is not None
+        db.add_all(
+            [
+                CourseMaterial(
+                    id=material_id,
+                    user_id=course.user_id,
+                    course_id=course.id,
+                    name=f"{material_id}.txt",
+                    material_type="text",
+                    source_type="file",
+                    file_url=f"memory://{material_id}.txt",
+                    file_size=16,
+                    mime_type="text/plain",
+                    parse_status="parsed",
+                ),
+                MaterialChunk(
+                    id=f"chk_{material_id}_000001",
+                    material_id=material_id,
+                    course_id=course.id,
+                    chunk_index=1,
+                    heading="Calendar",
+                    content_text="Calendar material",
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+    return material_id
 
 def _save_plan(client: TestClient, token: str, course_id: str, payload: dict[str, object]) -> dict[str, object]:
     response = client.post(
@@ -100,9 +140,12 @@ def _seed_api_data(client: TestClient) -> tuple[str, str, str, str]:
     math_course_id = _create_course(client, token, "Math")
     other_token = _register_and_token(client, "bob")
     other_course_id = _create_course(client, other_token, "Other")
-    _save_plan(client, token, net_course_id, _plan_payload(title="网络", task_count=4))
-    _save_plan(client, token, math_course_id, _plan_payload(title="数学", task_count=1))
-    _save_plan(client, other_token, other_course_id, _plan_payload(title="其他", task_count=1))
+    net_material_id = _seed_parsed_material(client, net_course_id, "mat_api_net")
+    math_material_id = _seed_parsed_material(client, math_course_id, "mat_api_math")
+    other_material_id = _seed_parsed_material(client, other_course_id, "mat_api_other")
+    _save_plan(client, token, net_course_id, _plan_payload(title="网络", material_id=net_material_id, task_count=4))
+    _save_plan(client, token, math_course_id, _plan_payload(title="数学", material_id=math_material_id, task_count=1))
+    _save_plan(client, other_token, other_course_id, _plan_payload(title="其他", material_id=other_material_id, task_count=1))
     return token, net_course_id, math_course_id, other_course_id
 
 

@@ -214,7 +214,7 @@ def test_config_parse_endpoint_requires_authentication(
 
     assert response.status_code == 401
 
-def _save_payload(title: str = "传输层冲刺计划") -> dict[str, object]:
+def _save_payload(title: str = "传输层冲刺计划", material_id: str = "mat_api") -> dict[str, object]:
     return {
         "title": title,
         "goal_text": "掌握传输层",
@@ -233,7 +233,7 @@ def _save_payload(title: str = "传输层冲刺计划") -> dict[str, object]:
                         "title": "用户调整后的学习项",
                         "subtask_type": "learn",
                         "description": "按用户确认内容保存",
-                        "related_material_ids": ["mat_api"],
+                        "related_material_ids": [material_id],
                         "estimated_minutes": 60,
                         "citation_chunk_ids": ["chk_api"],
                         "sort_order": 1,
@@ -251,9 +251,10 @@ def test_save_endpoint_replays_same_idempotency_key(
     token = register_and_token(client, "bob")
     course_id = create_course(client, token)
     headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "api-stable-key"}
+    material_id = upload_and_parse_material(client, token, course_id)
 
-    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
-    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
+    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload(material_id=material_id))
+    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload(material_id=material_id))
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -268,9 +269,10 @@ def test_save_endpoint_rejects_same_idempotency_key_with_changed_body(
     token = register_and_token(client, "chris")
     course_id = create_course(client, token)
     headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "api-conflict-key"}
+    material_id = upload_and_parse_material(client, token, course_id)
 
-    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload())
-    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload("另一个计划标题"))
+    first = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload(material_id=material_id))
+    second = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=_save_payload("另一个计划标题", material_id=material_id))
 
     assert first.status_code == 200
     assert second.status_code == 409

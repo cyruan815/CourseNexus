@@ -17,7 +17,7 @@ from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import ContextChunk
-from app.modules.material_context.service import iter_material_context_batches
+from app.modules.material_context.service import iter_material_context_batches, resolve_material_scope_ids
 from app.modules.study_plans import repository as study_plan_repository
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.planner import map_material_batch, make_coverage, reduce_plan_batches, validate_preview
@@ -194,6 +194,13 @@ def save_study_plan(
     else:
         title = save_payload.title or "学习计划"
         tasks_preview = save_payload.tasks
+        _validate_confirmed_task_tree(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            payload=save_payload,
+            task_previews=tasks_preview,
+        )
 
     plan_id = _new_plan_id()
     plan = StudyPlan(
@@ -260,6 +267,7 @@ def preview_study_plan_regeneration(
 ) -> StudyPlanPreview:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_replace_allowed(db, plan_id=plan_id)
+
     config = plan.parsed_config_json if isinstance(plan.parsed_config_json, dict) else {}
     material_scope = payload.material_scope or _material_scope_from_config(config)
     build_payload = StudyPlanBuildRequest(
@@ -284,6 +292,13 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
     _assert_replace_allowed(db, plan_id=plan_id)
+    _validate_confirmed_task_tree(
+        db,
+        user_id=user_id,
+        course_id=plan.course_id,
+        payload=payload,
+        task_previews=payload.tasks,
+    )
     old_dates = _task_dates(study_plan_repository.list_tasks_for_plan(db, plan_id=plan_id))
     try:
         study_plan_repository.delete_tasks_for_plan(db, plan_id=plan_id)
@@ -512,6 +527,88 @@ def _saved_config(
     if key_hash is not None:
         data["idempotency"] = {"key_hash": key_hash, "request_hash": request_hash}
     return data
+def _validate_confirmed_task_tree(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanBuildRequest,
+    task_previews: list[StudyTaskPreview],
+) -> None:
+    if not task_previews:
+        _raise_invalid_confirmed_task_tree("计划至少需要一个一级任务")
+
+    end_date = payload.end_date
+    if end_date is None:
+        _raise_invalid_confirmed_task_tree("计划结束日期未解析")
+
+    task_orders = [task.sort_order for task in task_previews]
+    expected_task_orders = list(range(1, len(task_previews) + 1))
+    if task_orders != expected_task_orders:
+        _raise_invalid_confirmed_task_tree(
+            "一级任务排序不连续",
+            details={"sort_orders": task_orders, "expected_sort_orders": expected_task_orders},
+        )
+
+    scoped_material_ids = set(
+        resolve_material_scope_ids(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_scope=payload.material_scope,
+        )
+    )
+
+    for task in task_previews:
+        if task.task_date < payload.start_date or task.task_date > end_date:
+            _raise_invalid_confirmed_task_tree(
+                "计划任务日期超出请求范围",
+                details={
+                    "task_date": task.task_date.isoformat(),
+                    "start_date": payload.start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                },
+            )
+        if not task.subtasks:
+            _raise_invalid_confirmed_task_tree(
+                "每个一级任务至少需要一个二级任务",
+                details={"task_sort_order": task.sort_order},
+            )
+
+        subtask_orders = [subtask.sort_order for subtask in task.subtasks]
+        expected_subtask_orders = list(range(1, len(task.subtasks) + 1))
+        if subtask_orders != expected_subtask_orders:
+            _raise_invalid_confirmed_task_tree(
+                "二级任务排序不连续",
+                details={
+                    "task_sort_order": task.sort_order,
+                    "sort_orders": subtask_orders,
+                    "expected_sort_orders": expected_subtask_orders,
+                },
+            )
+
+        for subtask in task.subtasks:
+            related_material_ids = set(subtask.related_material_ids)
+            if not related_material_ids:
+                _raise_invalid_confirmed_task_tree(
+                    "二级任务必须关联资料",
+                    details={"task_sort_order": task.sort_order, "subtask_sort_order": subtask.sort_order},
+                )
+            if not related_material_ids.issubset(scoped_material_ids):
+                _raise_invalid_confirmed_task_tree(
+                    "二级任务关联了范围外或不可用资料",
+                    details={
+                        "task_sort_order": task.sort_order,
+                        "subtask_sort_order": subtask.sort_order,
+                        "related_material_ids": sorted(related_material_ids),
+                        "scoped_material_ids": sorted(scoped_material_ids),
+                    },
+                )
+
+
+def _raise_invalid_confirmed_task_tree(message: str, *, details: dict[str, object] | None = None) -> None:
+    raise CourseNexusError(code="VALIDATION_ERROR", message=message, status_code=422, details=details)
+
 def _rows_from_task_previews(
     *,
     plan_id: str,

@@ -12,6 +12,7 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
+from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.study_plans.schemas import StudyPlanSaveRequest
 from app.modules.study_plans.service import get_study_plan_detail, save_study_plan
 from app.modules.todos_calendar.service import get_course_day_todos, get_global_day_todos, get_global_month_calendar
@@ -46,6 +47,31 @@ def db() -> Generator[Session, None, None]:
 def test_saved_plan_appears_in_today_calendar_and_plan_detail(db: Session) -> None:
     user = register_user(db, UserCreate(username="s03alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    db.add_all(
+        [
+            CourseMaterial(
+                id="mat_s03",
+                user_id=user.id,
+                course_id=course.id,
+                name="s03.txt",
+                material_type="text",
+                source_type="file",
+                file_url="memory://s03.txt",
+                file_size=12,
+                mime_type="text/plain",
+                parse_status="parsed",
+            ),
+            MaterialChunk(
+                id="chk_mat_s03_000001",
+                material_id="mat_s03",
+                course_id=course.id,
+                chunk_index=1,
+                heading="S03",
+                content_text="S03 material",
+            ),
+        ]
+    )
+    db.commit()
     payload = StudyPlanSaveRequest.model_validate(
         {
             "title": "期末复习计划",

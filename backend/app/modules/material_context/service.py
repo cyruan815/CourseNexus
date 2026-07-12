@@ -32,6 +32,18 @@ class _ResolvedScope:
     empty_selection: bool = False
 
 
+def resolve_material_scope_ids(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope | None,
+) -> tuple[str, ...]:
+    resolved_scope = _resolve_scope(db, user_id=user_id, course_id=course_id, material_scope=material_scope)
+    if resolved_scope.empty_selection:
+        return ()
+    return resolved_scope.eligible_material_ids
+
 def resolve_context(
     db: Session,
     user_id: str,
