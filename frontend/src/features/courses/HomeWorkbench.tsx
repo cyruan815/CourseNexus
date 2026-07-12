@@ -162,7 +162,7 @@ function buildTermSelectData(courses: HomeCourse[], termOptions: CourseTermOptio
     new Set(
       courses
         .map((course) => course.term)
-        .filter((term): term is string => Boolean(term) && !optionValues.has(term)),
+        .filter((term): term is string => typeof term === "string" && term.length > 0 && !optionValues.has(term)),
     ),
   ).map((term) => ({ value: term, label: `${term}（旧学期值）` }));
 
