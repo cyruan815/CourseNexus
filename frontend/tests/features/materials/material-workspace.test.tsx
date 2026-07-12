@@ -75,7 +75,7 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    expect(await screen.findByRole("button", { name: "第一周" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /第一周/ })).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "第一周" })).not.toBeInTheDocument();
 
     const parsedMaterial = screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" });
@@ -90,6 +90,7 @@ describe("MaterialWorkspace", () => {
   });
 
   it("creates folders and moves a material without selecting the folder", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("考试");
     vi.mocked(materialsApi.createMaterialFolder).mockResolvedValue({ ...folder, id: "fld_2", name: "考试" });
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
@@ -102,14 +103,14 @@ describe("MaterialWorkspace", () => {
     );
 
     await screen.findByText("第一章.pdf");
-    fireEvent.change(screen.getByLabelText("新建资料文件夹"), { target: { value: "考试" } });
     fireEvent.click(screen.getByRole("button", { name: "新建文件夹" }));
 
     await waitFor(() => {
       expect(materialsApi.createMaterialFolder).toHaveBeenCalledWith("crs_1", { name: "考试" });
     });
 
-    fireEvent.change(screen.getByLabelText("待解析.md 所属文件夹"), { target: { value: "fld_1" } });
+    fireEvent.dragStart(screen.getByText("待解析.md"));
+    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
     await waitFor(() => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
     });
@@ -146,14 +147,15 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    expect(await screen.findByRole("button", { name: "第一周" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "删除 第一周" }));
+    const folderButton = await screen.findByRole("button", { name: /第一周/ });
+    fireEvent.contextMenu(folderButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除文件夹" }));
 
     await waitFor(() => {
       expect(materialsApi.deleteMaterialFolder).toHaveBeenCalledWith("fld_1");
     });
-    expect(screen.queryByRole("button", { name: "第一周" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("第一章.pdf 所属文件夹")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /第一周/ })).not.toBeInTheDocument();
+    expect(screen.getByText("第一章.pdf")).toBeInTheDocument();
   });
 
   it("creates a link material from the workspace context menu", async () => {
@@ -215,6 +217,48 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByText("第一章重命名.pdf")).toBeInTheDocument();
   });
 
+  it("removes a deleted material from the explorer immediately", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(materialsApi.deleteMaterial).mockResolvedValue({
+      ...materials[0],
+      parse_status: "deleted",
+      deleted_at: "2026-07-12T00:00:00Z",
+    });
+
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByText("第一章.pdf"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除资料" }));
+
+    await waitFor(() => {
+      expect(materialsApi.deleteMaterial).toHaveBeenCalledWith("mat_1");
+    });
+    expect(screen.queryByText("第一章.pdf")).not.toBeInTheDocument();
+  });
+
+  it("closes the context menu when left-clicking elsewhere", async () => {
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByLabelText("资料列表区域"));
+    expect(screen.getByRole("menuitem", { name: "添加链接" })).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+
+    expect(screen.queryByRole("menuitem", { name: "添加链接" })).not.toBeInTheDocument();
+  });
+
   it("moves a material by dragging it onto a folder", async () => {
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
@@ -227,11 +271,11 @@ describe("MaterialWorkspace", () => {
     );
 
     fireEvent.dragStart(await screen.findByText("待解析.md"));
-    fireEvent.drop(screen.getByRole("button", { name: "第一周" }));
+    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
 
     await waitFor(() => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
     });
-    expect(screen.getByLabelText("待解析.md 所属文件夹")).toHaveValue("fld_1");
+    expect(screen.getByText("待解析.md")).toBeInTheDocument();
   });
 });

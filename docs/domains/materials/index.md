@@ -13,7 +13,7 @@
 - 后端入口：`backend/app/modules/materials/{router,schemas,service,repository,models}.py`。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前还提供能用版资源管理器交互，包括资料区右键菜单、文件夹右键菜单、资料右键菜单和拖拽资料移动到文件夹。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，包括顶部工具栏、搜索、文件夹折叠、空白区域右键菜单、文件夹右键菜单、资料右键菜单和拖拽资料移动到文件夹。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -107,7 +107,7 @@ flowchart LR
 - 文件夹 CRUD、资料重命名、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、创建后上传提示、删除文件夹后资料回未分类、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹后资料回未分类、删除资料后立即移除、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
 
 验证命令：
 
@@ -121,6 +121,6 @@ pnpm frontend:build
 
 - 2026-07-10 确认文件夹只用于归类，不作为 Agent 范围；该规则覆盖早期文档中的目录选择设计。
 - 2026-07-12 前端确认课程创建成功后由课程详情页资料区弹出可关闭的上传提示；创建课程弹窗本身不承载资料上传。
-- 2026-07-12 前端补齐资料区能用版资源管理器交互：空白区域右键可新建文件夹、上传资料或添加链接；资料右键可重命名、解析或删除；文件夹右键可重命名或删除；资料可拖拽到文件夹完成移动。当前右键创建/重命名使用浏览器 prompt，后续视觉优化时可替换为 Mantine 弹窗。
+- 2026-07-12 前端补齐资料区资源管理器式交互：页面不再同时展示旧侧栏和资料下拉视图，改为单一文件夹树列表；空白区域右键可新建文件夹、上传资料或添加链接；资料右键可重命名、解析或删除；文件夹右键可重命名、上传到此文件夹或删除；资料可拖拽到文件夹或未分类完成移动；左键点击其他位置会关闭右键菜单。当前创建/重命名仍使用浏览器 prompt，后续视觉优化时可替换为 Mantine 弹窗。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
