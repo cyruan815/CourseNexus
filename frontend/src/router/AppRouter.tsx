@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 
 import { getSessionToken } from "../features/auth/session";
 import { CourseDetailPage } from "../pages/CourseDetailPage";
+import { CourseDetailPreviewPage } from "../pages/CourseDetailPreviewPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { RegisterPage } from "../pages/RegisterPage";
@@ -19,6 +20,7 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {import.meta.env.DEV ? <Route element={<CourseDetailPreviewPage />} path="/preview/course-detail" /> : null}
         <Route element={<WelcomePage />} path="/welcome" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<RegisterPage />} path="/register" />
