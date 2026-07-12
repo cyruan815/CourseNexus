@@ -32,6 +32,7 @@ class CourseAnswerRead(BaseModel):
     answer_text: str
     answer_type: str
     source_citations: list[SourceCitationRead]
+    used_material_ids: list[str] = Field(default_factory=list)
 
 
 class ConversationRead(BaseModel):

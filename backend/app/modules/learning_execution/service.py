@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
+from app.integrations.rag.base import RagIndex
 from app.modules.checkins.service import recalculate_checkin
 from app.modules.course_qa.models import SourceCitation
+from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate
+from app.modules.course_qa.service import ask_course_question
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentRead
 from app.modules.generation.generators.handout import build_generator as build_handout_generator
@@ -129,6 +132,40 @@ def generate_task_test_for_subtask(
         force_regenerate=force_regenerate,
         model_provider=model_provider,
         max_tokens=max_tokens,
+    )
+
+
+def ask_subtask_question(
+    db: Session,
+    *,
+    user_id: str,
+    subtask_id: str,
+    conversation_id: str | None,
+    question: str,
+    model_provider: ModelProvider,
+    rag_index: RagIndex,
+    top_k: int,
+) -> CourseAnswerRead:
+    target = repository.get_execution_target(db, user_id=user_id, subtask_id=subtask_id)
+    material_ids = _material_ids(target.subtask)
+    material_scope = MaterialScope(include_all_parsed_materials=False, material_ids=material_ids)
+    payload = CourseQuestionCreate(
+        conversation_id=conversation_id,
+        question=question,
+        material_scope=material_scope,
+        source_page="task_execution",
+    )
+    return ask_course_question(
+        db,
+        user_id=user_id,
+        course_id=target.course.id,
+        payload=payload,
+        model_provider=model_provider,
+        rag_index=rag_index,
+        top_k=top_k,
+        allowed_conversation_source_pages={"task_execution"},
+        material_scope_metadata={"subtask_id": target.subtask.id, "task_id": target.task.id},
+        model_question_context=_task_qa_context(target),
     )
 
 
@@ -253,6 +290,20 @@ def _generate_task_content(
 
     db.refresh(content)
     return GeneratedContentRead.model_validate(content)
+
+
+def _task_qa_context(target: repository.ExecutionTarget) -> str:
+    lines = [
+        f"Course: {target.course.name}",
+        f"Plan: {target.plan.title}",
+        f"Plan goal: {target.plan.goal_text}",
+        f"Task: {target.task.title}",
+        f"Subtask: {target.subtask.title}",
+        f"Subtask type: {target.subtask.subtask_type}",
+    ]
+    if target.subtask.description:
+        lines.append(f"Subtask description: {target.subtask.description}")
+    return "\n".join(lines)
 
 
 def _task_content_registry() -> GeneratorRegistry:

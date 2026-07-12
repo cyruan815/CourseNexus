@@ -3,21 +3,24 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_required_user
+from app.api.dependencies import get_required_user, get_retrieval_rag_index
 from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.model_provider.mock import MockModelProvider
 from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.rag.base import RagIndex
 from app.modules.learning_execution.schemas import (
     ExecutionContextRead,
     HandoutGenerationRequest,
     SubTaskCompletionResult,
+    TaskQAQuestionRequest,
     SubTaskCompletionUpdate,
     TaskTestGenerationRequest,
 )
 from app.modules.learning_execution.service import (
+    ask_subtask_question,
     generate_handout_for_subtask,
     generate_task_test_for_subtask,
     get_execution_context,
@@ -48,6 +51,10 @@ def get_handout_model_provider() -> ModelProvider:
 
 def get_task_test_model_provider() -> ModelProvider:
     return _model_provider_for_purpose("task_test", "TASK_TEST_API_KEY")
+
+
+def get_task_qa_model_provider() -> ModelProvider:
+    return _model_provider_for_purpose("course_qa", "COURSE_QA_API_KEY")
 
 
 @router.get("/study-subtasks/{subtask_id}/execution-context")
@@ -103,6 +110,30 @@ def generate_task_test_endpoint(
         max_tokens=settings.material_batch_max_tokens,
     )
     return success_response(data.model_dump(mode="json"), request_id=get_request_id(request))
+
+
+@router.post("/study-subtasks/{subtask_id}/qa/questions")
+def ask_subtask_question_endpoint(
+    subtask_id: str,
+    payload: TaskQAQuestionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_task_qa_model_provider),
+    rag_index: RagIndex = Depends(get_retrieval_rag_index),
+) -> dict[str, object]:
+    settings = get_settings()
+    answer = ask_subtask_question(
+        db,
+        user_id=current_user.id,
+        subtask_id=subtask_id,
+        conversation_id=payload.conversation_id,
+        question=payload.question,
+        model_provider=model_provider,
+        rag_index=rag_index,
+        top_k=settings.rag_similarity_top_k,
+    )
+    return success_response(answer.model_dump(mode="json"), request_id=get_request_id(request))
 
 
 @router.put("/study-subtasks/{subtask_id}/completion")

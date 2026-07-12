@@ -50,11 +50,24 @@ def ask_course_question(
     model_provider: ModelProvider,
     rag_index: RagIndex,
     top_k: int = 8,
+    allowed_conversation_source_pages: set[str] | None = None,
+    material_scope_metadata: dict[str, object] | None = None,
+    model_question_context: str | None = None,
 ) -> CourseAnswerRead:
     started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
-    conversation = _get_or_create_conversation(db, user_id=user_id, course_id=course_id, payload=payload)
-    material_scope_json = payload.material_scope.model_dump(mode="json")
+    conversation = _get_or_create_conversation(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        payload=payload,
+        allowed_source_pages=allowed_conversation_source_pages,
+    )
+    material_scope_json = _message_material_scope_json(
+        payload,
+        material_scope_metadata=material_scope_metadata,
+        used_material_ids=[],
+    )
     user_message = save_message(
         db,
         Message(
@@ -76,6 +89,14 @@ def ask_course_question(
         rag_index=rag_index,
         top_k=top_k,
     )
+    used_material_ids = _used_material_ids(context.chunks)
+    material_scope_json = _message_material_scope_json(
+        payload,
+        material_scope_metadata=material_scope_metadata,
+        used_material_ids=used_material_ids,
+    )
+    user_message.material_scope_json = material_scope_json
+    user_message = save_message(db, user_message)
 
     if context.no_parsed_material or not context.chunks:
         answer_text = (
@@ -112,10 +133,14 @@ def ask_course_question(
             answer_text=assistant_message.content,
             answer_type="no_source",
             source_citations=[],
+            used_material_ids=used_material_ids,
         )
 
     try:
-        model_answer = model_provider.answer_question(question=payload.question, context_chunks=context.chunks)
+        model_answer = model_provider.answer_question(
+            question=_model_question(payload.question, model_question_context),
+            context_chunks=context.chunks,
+        )
     except CourseNexusError as exc:
         assistant_message = save_message(
             db,
@@ -175,6 +200,7 @@ def ask_course_question(
         answer_text=assistant_message.content,
         answer_type="grounded",
         source_citations=[SourceCitationRead.model_validate(citation) for citation in citations],
+        used_material_ids=used_material_ids,
     )
 
 
@@ -190,12 +216,36 @@ def list_conversation_messages(db: Session, *, user_id: str, conversation_id: st
     return list_messages_for_conversation(db, conversation_id=conversation_id)
 
 
+def _message_material_scope_json(
+    payload: CourseQuestionCreate,
+    *,
+    material_scope_metadata: dict[str, object] | None,
+    used_material_ids: list[str],
+) -> dict[str, object]:
+    data: dict[str, object] = payload.material_scope.model_dump(mode="json")
+    if material_scope_metadata:
+        data.update(material_scope_metadata)
+    data["used_material_ids"] = used_material_ids
+    return data
+
+
+def _used_material_ids(chunks: list[ContextChunk]) -> list[str]:
+    return list(dict.fromkeys(chunk.material_id for chunk in chunks))
+
+
+def _model_question(question: str, context: str | None) -> str:
+    if not context:
+        return question
+    return f"{question}\n\nTask context:\n{context}"
+
+
 def _get_or_create_conversation(
     db: Session,
     *,
     user_id: str,
     course_id: str,
     payload: CourseQuestionCreate,
+    allowed_source_pages: set[str] | None = None,
 ) -> Conversation:
     if payload.conversation_id:
         conversation = get_active_conversation_for_user(
@@ -205,6 +255,8 @@ def _get_or_create_conversation(
             conversation_id=payload.conversation_id,
         )
         if conversation is None:
+            raise CourseNexusError(code="NOT_FOUND", message="对话不存在", status_code=404)
+        if allowed_source_pages is not None and conversation.source_page not in allowed_source_pages:
             raise CourseNexusError(code="NOT_FOUND", message="对话不存在", status_code=404)
         return conversation
 

@@ -55,6 +55,7 @@ S02-S06 已实现接口和 S07 已实现 / 候选接口如下；候选接口在�
 | S03 | `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM` | 单课程月历。 |
 | S03 | `GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 单课程当日任务，作为课程详情页今日任务数据源。 |
 | S04 | `GET /api/v1/study-subtasks/{subtask_id}/execution-context` | 执行页当日上下文。 |
+| S04 | `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` | 执行页任务级问答，资料范围固定为当前二级任务关联资料。 |
 | S04 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 幂等完成或取消完成。 |
 | S05 | `GET /api/v1/checkins?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` | 个人中心打卡日期范围。 |
 | S05 | `GET /api/v1/checkins/{date}` | 单日打卡；无任务也返回稳定零值。 |
@@ -155,18 +156,22 @@ Agent 回答响应示例：
 ```json
 {
   "data": {
+    "conversation_id": "cnv_123",
+    "user_message_id": "msg_user",
+    "assistant_message_id": "msg_assistant",
     "answer_text": "回答正文",
     "answer_type": "grounded",
-    "created_message_id": "msg_123",
     "source_citations": [
       {
         "material_id": "mat_123",
+        "chunk_id": "chk_123",
         "material_name": "chapter-01.pdf",
-        "page": 3,
+        "page": "3",
         "page_index": null,
         "hit_text": "命中文本片段"
       }
-    ]
+    ],
+    "used_material_ids": ["mat_123"]
   },
   "meta": {
     "request_id": "req_123",
@@ -175,8 +180,6 @@ Agent 回答响应示例：
   }
 }
 ```
-
-## 契约变更规则
 
 - API 契约变更前先更新本分区，再实现。
 - 新增字段必须说明默认值、是否可为空和前端展示兜底。
@@ -269,7 +272,40 @@ S03 已实现五个只读 GET 接口，前端可在契约评审后接入：
 
 `GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回当前二级任务所在业务日期的执行上下文。响应 `data` 包含 `course`、`plan`、`execution_date`、当天 `tasks`、`current_subtask_id`、`related_materials`、`handout_content_id` 和 `task_test_content_id`。两个 generated content id 来自当前二级任务最近一次成功生成的 `handout` / `task_test`；没有成功内容时返回 `null`。
 
-### 二级任务完成
+### 执行页任务问答
+
+`POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 在计划执行页围绕当前二级任务发起问答。请求不接受 `material_scope`，后端固定使用当前 `StudySubTask.related_material_ids_json` 构造 `MaterialScope(include_all_parsed_materials=false, material_ids=...)`，并复用 Course QA 的检索、生成、引用保存和消息持久化链路。
+
+请求体：
+
+```json
+{
+  "conversation_id": null,
+  "question": "这一节的关键公式是什么？"
+}
+```
+
+响应 `data` 复用课程问答响应结构，并额外稳定返回实际使用的资料 ID：
+
+```json
+{
+  "conversation_id": "cnv_123",
+  "user_message_id": "msg_user",
+  "assistant_message_id": "msg_assistant",
+  "answer_text": "回答正文",
+  "answer_type": "grounded",
+  "source_citations": [],
+  "used_material_ids": ["mat_123"]
+}
+```
+
+规则：
+
+- 新建对话时保存 `Conversation.source_page = "task_execution"`。
+- 追问只能复用当前用户、当前课程且 `source_page = "task_execution"` 的对话；跨用户、跨课程或复用课程详情页对话均返回 `404 NOT_FOUND`。
+- 用户消息的 `material_scope_json` 保存基础资料范围、`subtask_id`、`task_id` 和本次实际 `used_material_ids`。
+- 当前二级任务关联资料没有 parsed chunk，或本次没有相关命中时返回 `answer_type = "no_source"`、`source_citations = []`、`used_material_ids = []`，不得伪造引用。
+- 任务级问答不修改二级任务完成状态，不汇总一级任务或计划状态，也不写 `checkin_records`。
 
 `PUT /api/v1/study-subtasks/{subtask_id}/completion` 请求体固定为 `{ "completed": boolean }`，表示期望状态，不是 toggle。重复提交同一状态返回 200 和 `changed=false`。取消完成会把二级任务状态改回 `not_started` 并清空 `completed_at`。
 

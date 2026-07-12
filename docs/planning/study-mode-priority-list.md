@@ -99,7 +99,34 @@
 - 未新增 migration，未新增业务表，未引入新依赖。
 - 导出不修改二级任务完成状态，不写 `checkin_records`。
 
-## 新的未完成优先级
+### 轻量化 T3：执行页任务级问答
+
+状态：已完成。
+
+完成日期：2026-07-13。
+
+关键 commit：本次 T3 提交（`feat(study-mode): 接入执行页任务级问答`）。
+
+验证：
+
+- `uv run python -m pytest tests/modules/learning_execution/test_task_qa_api.py -q`：`5 passed in 2.89s`。
+- `uv run python -m pytest tests/modules/learning_execution tests/modules/course_qa -q`：`47 passed in 18.40s`。
+
+已落地：
+
+- 新增 `POST /api/v1/study-subtasks/{subtask_id}/qa/questions`，请求体只包含 `conversation_id` 和 `question`。
+- 复用 Course QA 响应结构，返回 `conversation_id`、`user_message_id`、`assistant_message_id`、`answer_text`、`answer_type`、`source_citations` 和 `used_material_ids`。
+- 资料范围固定为当前二级任务 `related_material_ids_json`，不会接受前端自选 `material_scope`，同课程但不属于当前 subtask 的资料不会进入检索和引用。
+- 新建对话保存 `Conversation.source_page = "task_execution"`；追问只允许复用当前用户、当前课程且来源页同为 `task_execution` 的对话。
+- 用户消息 `material_scope_json` 保存基础资料范围、`subtask_id`、`task_id` 和实际 `used_material_ids`。
+- 当前二级任务没有 parsed 资料或没有相关命中时返回 `answer_type="no_source"`，不伪造引用。
+- 已覆盖跨用户 subtask、跨课程 conversation、课程详情页 conversation 复用拒绝，以及问答不改二级任务状态、不写 `checkin_records`。
+
+限制确认：
+
+- 未新增 migration，未新增业务表。
+- 未创建 task conversation 独立表，继续复用 Course QA 对话模型。
+- 未实现前端执行页 UI。
 
 ### P0：S06 任务测试题生成闭环
 
@@ -290,7 +317,7 @@ P5a 已落地：
 
 ## 并行建议
 
-当前不再推荐 `P0 + P1` 并行，因为 P1 已完成。后续派活建议：
+当前不再推荐 `P0 + P1` 并行，因为 P1 已完成。轻量化 T1/T2/T3 后端收口已完成；后续派活建议：
 
 - `P0：S06 任务测试题生成闭环` 先独立推进，稳定后再接 `P2：任务测试题轻量只读版`。
 - 如果要开第二个窗口，可单独做 `P4：docs / API 契约校正`，但要提前锁定具体文档 owner，避免和 P0/P2 同时改同一份 `docs/domains/study-mode/*.md`。

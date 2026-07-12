@@ -70,6 +70,11 @@ class TaskTestGenerationRequest(BaseModel):
     parameters: TaskTestGenerationParameters = Field(default_factory=TaskTestGenerationParameters)
 
 
+class TaskQAQuestionRequest(BaseModel):
+    conversation_id: str | None = None
+    question: str = Field(min_length=1)
+
+
 class SubTaskCompletionUpdate(BaseModel):
     completed: bool
 

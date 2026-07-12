@@ -475,7 +475,8 @@
       "page_index": 0,
       "hit_text": "Alpha"
     }
-  ]
+  ],
+  "used_material_ids": ["mat_123"]
 }
 ```
 
@@ -488,7 +489,41 @@
 
 追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
 
-### 3.20 生成内容对象字段
+### 3.19.1 执行页任务级问答
+
+`POST /api/v1/study-subtasks/{subtask_id}/qa/questions`
+
+要求：Bearer token。该接口用于计划执行页围绕当前二级任务提问，前端不提交 `material_scope`。后端会从当前二级任务的 `related_material_ids_json` 派生资料范围，并只在该范围内检索引用。
+
+请求：
+
+```json
+{
+  "conversation_id": null,
+  "question": "这一节的关键公式是什么？"
+}
+```
+
+响应 `data` 与课程问答一致：
+
+```json
+{
+  "conversation_id": "cnv_123",
+  "user_message_id": "msg_user",
+  "assistant_message_id": "msg_assistant",
+  "answer_text": "回答正文",
+  "answer_type": "grounded",
+  "source_citations": [],
+  "used_material_ids": ["mat_123"]
+}
+```
+
+前端规则：
+
+- 新建执行页对话时传 `conversation_id = null`；追问时传上一次响应的 `conversation_id`。
+- 执行页不要复用课程详情页的 conversation；后端会拒绝 `source_page = "course_detail"` 的对话。
+- `answer_type = "no_source"` 时展示无资料或无命中兜底，`source_citations` 和 `used_material_ids` 会为空数组。
+- 该接口不会改变二级任务完成状态，也不会触发打卡。 生成内容对象字段
 
 生成内容相关接口返回的 `GeneratedContentRead` 字段如下：
 
@@ -1021,6 +1056,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | 首页大日历 | `GET /api/v1/calendar/month?month=YYYY-MM`、`GET /api/v1/calendar/days/{date}/todos` | 月历摘要与日期弹窗，只读聚合。 |
 | 课程日历 | `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`、`GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 课程详情页日期摘要与今日任务。 |
 | 执行上下文 | `GET /api/v1/study-subtasks/{subtask_id}/execution-context` | 返回当天任务、关联资料、最近成功 `handout_content_id` / `task_test_content_id`。 |
+| 执行页任务问答 | `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` | 请求体只含 `conversation_id` 和 `question`；后端固定使用当前二级任务关联资料范围。 |
 | 二级任务完成 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 请求体为 `{ "completed": boolean }`，不是 toggle。 |
 | 今日讲义生成 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 返回 `GeneratedContentRead`；默认复用最近一次 success，`force_regenerate=true` 重建。 |
 | 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；P2 只读展示通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情。 |
