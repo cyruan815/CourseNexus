@@ -21,3 +21,95 @@
   background: #111c2f;
   border-color: #263750;
 }
+
+:root[data-course-nexus-theme="dark"] .mantine-Button-root,
+:root[data-course-nexus-theme="dark"] .mantine-ActionIcon-root,
+:root[data-course-nexus-theme="dark"] .mantine-Menu-item,
+:root[data-course-nexus-theme="dark"] .material-workspace button {
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Button-root[data-variant="default"],
+:root[data-course-nexus-theme="dark"] .mantine-ActionIcon-root[data-variant="default"],
+:root[data-course-nexus-theme="dark"] .material-workspace button {
+  background: #162235;
+  border-color: #334761;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Button-root[data-variant="filled"] {
+  color: #ffffff;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Button-root:disabled,
+:root[data-course-nexus-theme="dark"] .mantine-ActionIcon-root:disabled,
+:root[data-course-nexus-theme="dark"] .material-workspace button:disabled {
+  color: #9dadbf;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Menu-dropdown,
+:root[data-course-nexus-theme="dark"] .mantine-Modal-content,
+:root[data-course-nexus-theme="dark"] .mantine-Modal-header,
+:root[data-course-nexus-theme="dark"] .material-workspace__upload-dialog-panel,
+:root[data-course-nexus-theme="dark"] .material-workspace__context-menu {
+  background: #111c2f;
+  border-color: #334761;
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Menu-item:hover,
+:root[data-course-nexus-theme="dark"] .material-workspace__context-menu button:hover,
+:root[data-course-nexus-theme="dark"] .material-workspace__folder-title:hover,
+:root[data-course-nexus-theme="dark"] .material-workspace__file-row:hover {
+  background: #1e2b42;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-TextInput-input,
+:root[data-course-nexus-theme="dark"] .mantine-Textarea-input,
+:root[data-course-nexus-theme="dark"] .mantine-Select-input,
+:root[data-course-nexus-theme="dark"] .material-workspace input {
+  background: #0f172a;
+  border-color: #334761;
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Select-option {
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .mantine-Select-option[data-combobox-selected],
+:root[data-course-nexus-theme="dark"] .mantine-Select-option[data-checked] {
+  background: #2b5f86;
+  color: #ffffff;
+}
+
+:root[data-course-nexus-theme="dark"] .home-calendar-card,
+:root[data-course-nexus-theme="dark"] .home-calendar-empty,
+:root[data-course-nexus-theme="dark"] .material-workspace__explorer,
+:root[data-course-nexus-theme="dark"] .material-workspace__toolbar,
+:root[data-course-nexus-theme="dark"] .material-workspace__content {
+  background: #111c2f;
+  border-color: #263750;
+  color: #e5edf7;
+}
+
+:root[data-course-nexus-theme="dark"] .material-workspace__folder-section + .material-workspace__folder-section,
+:root[data-course-nexus-theme="dark"] .material-workspace {
+  border-color: #263750;
+}
+
+:root[data-course-nexus-theme="dark"] .material-workspace__folder-chevron,
+:root[data-course-nexus-theme="dark"] .material-workspace__folder-icon,
+:root[data-course-nexus-theme="dark"] .material-workspace__file-icon,
+:root[data-course-nexus-theme="dark"] .material-workspace__folder-count,
+:root[data-course-nexus-theme="dark"] .material-workspace__empty-row,
+:root[data-course-nexus-theme="dark"] .material-workspace__status {
+  color: #b7c4d4;
+}
+
+:root[data-course-nexus-theme="dark"] .material-workspace__status--parsed {
+  color: #7dd3a8;
+}
+
+:root[data-course-nexus-theme="dark"] .material-workspace__status--parse_failed {
+  color: #f29b9b;
+}
