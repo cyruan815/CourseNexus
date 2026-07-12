@@ -155,4 +155,83 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByRole("button", { name: "第一周" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("第一章.pdf 所属文件夹")).toHaveValue("");
   });
+
+  it("creates a link material from the workspace context menu", async () => {
+    vi.spyOn(window, "prompt")
+      .mockReturnValueOnce("课程网站")
+      .mockReturnValueOnce("https://example.com/course");
+    vi.mocked(materialsApi.createMaterialLink).mockResolvedValue({
+      ...materials[1],
+      id: "mat_link",
+      name: "课程网站",
+      source_type: "url",
+      material_type: "link",
+      file_url: null,
+      source_url: "https://example.com/course",
+    });
+
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByLabelText("资料列表区域"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "添加链接" }));
+
+    await waitFor(() => {
+      expect(materialsApi.createMaterialLink).toHaveBeenCalledWith("crs_1", {
+        name: "课程网站",
+        source_url: "https://example.com/course",
+        folder_id: null,
+      });
+    });
+    expect(screen.getByText("课程网站")).toBeInTheDocument();
+  });
+
+  it("renames a material from its context menu", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("第一章重命名.pdf");
+    vi.mocked(materialsApi.updateMaterial).mockResolvedValue({
+      ...materials[0],
+      name: "第一章重命名.pdf",
+    });
+
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByText("第一章.pdf"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "重命名资料" }));
+
+    await waitFor(() => {
+      expect(materialsApi.updateMaterial).toHaveBeenCalledWith("mat_1", { name: "第一章重命名.pdf" });
+    });
+    expect(screen.getByText("第一章重命名.pdf")).toBeInTheDocument();
+  });
+
+  it("moves a material by dragging it onto a folder", async () => {
+    vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
+
+    render(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.dragStart(await screen.findByText("待解析.md"));
+    fireEvent.drop(screen.getByRole("button", { name: "第一周" }));
+
+    await waitFor(() => {
+      expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
+    });
+    expect(screen.getByLabelText("待解析.md 所属文件夹")).toHaveValue("fld_1");
+  });
 });

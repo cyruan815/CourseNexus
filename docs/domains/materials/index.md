@@ -122,7 +122,7 @@ PDF 解析：
 - 文件夹 CRUD、资料重命名、资料移动、删除回未分类和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、创建后上传提示和删除文件夹后资料回到未分类的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、创建后上传提示、删除文件夹后资料回到未分类、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 
 验证命令：
@@ -137,6 +137,7 @@ pnpm frontend:build
 
 - 2026-07-10 确认文件夹只用于归类，不作为 Agent 范围；该规则覆盖早期文档中的目录选择设计。
 - 2026-07-12 前端确认课程创建成功后由课程详情页资料区弹出可关闭的上传提示；创建课程弹窗本身不承载资料上传。
+- 2026-07-12 前端补齐资料区能用版资源管理器交互：空白区域右键可新建文件夹、上传资料或添加链接；资料右键可重命名、解析或删除；文件夹右键可重命名或删除；资料可拖拽到文件夹或未分类完成移动。当前创建和重命名仍使用浏览器 prompt，后续视觉优化时替换为 Mantine 弹窗。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
