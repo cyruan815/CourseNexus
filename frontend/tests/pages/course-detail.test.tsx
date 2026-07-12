@@ -100,7 +100,9 @@ describe("CourseDetailPage", () => {
     expect(screen.getByRole("region", { name: "资料区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成内容区" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "制定学习计划" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "制定学习计划（待接入）" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看今日待办（待接入）" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看全部（待接入）" })).toBeDisabled();
   });
 
   it("opens a dismissible upload prompt after creating a course", async () => {

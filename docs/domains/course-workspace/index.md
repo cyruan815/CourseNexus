@@ -21,6 +21,7 @@
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`。
 - AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`。
 - 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时只展示“制定学习计划”入口，有计划时展示计划摘要。
+- 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心、今日待办查看、制定学习计划和 AI 生成内容“查看全部”等尚未闭环的入口以待接入禁用态展示。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
 
 未实现：
@@ -56,7 +57,7 @@
 - 资料区：沿用 `materials` 领域状态，包括 loading、empty、error、ready 和 mutating。若从首页创建课程成功后进入详情页，资料区初次挂载时展示“上传课程资料”提示，用户可以上传文件，也可以直接关闭；普通进入课程详情页不自动弹出。
 - 问答区：无回答时展示空态；输入为空或发送中禁用发送；发送成功展示回答和引用；失败时展示工作区错误提示。
 - 生成内容：页面加载时读取列表；点击支持的工具后进入 pending；成功后把返回的 `GeneratedContentRead` 插入列表；失败时展示工作区错误提示。
-- 学习计划：无计划时只展示制定计划入口；有计划时展示第一条计划摘要，不伪造今日任务。
+- 学习计划：无计划时只展示待接入的制定计划入口；有计划时展示第一条计划摘要，不伪造今日任务。
 
 ## 关键决策
 
