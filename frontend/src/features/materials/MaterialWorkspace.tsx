@@ -1,5 +1,5 @@
 import { type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
+import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 
 import { ApiError } from "../../api/errors";
 import {
@@ -26,6 +26,12 @@ type ContextMenu =
 type DeleteTarget =
   | { kind: "folder"; folder: MaterialFolder }
   | { kind: "material"; material: Material }
+  | null;
+type ActionTarget =
+  | { kind: "createFolder" }
+  | { folder: MaterialFolder; kind: "renameFolder" }
+  | { kind: "createLink" }
+  | { kind: "renameMaterial"; material: Material }
   | null;
 
 interface MaterialWorkspaceProps {
@@ -74,6 +80,10 @@ export function MaterialWorkspace({
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [actionTarget, setActionTarget] = useState<ActionTarget>(null);
+  const [actionName, setActionName] = useState("");
+  const [actionUrl, setActionUrl] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,27 +202,84 @@ export function MaterialWorkspace({
     setIsUploadPromptOpen(true);
   }
 
-  function handleCreateFolder() {
-    const name = window.prompt("文件夹名称");
-    if (!name?.trim()) {
-      return;
-    }
-    void mutate(async () => {
-      const folder = await createMaterialFolder(courseId, { name: name.trim() });
-      setFolders((current) => [...current, folder]);
-      setExpandedFolderIds((current) => new Set([...current, folder.id]));
-    });
+  function openCreateFolderModal() {
+    setContextMenu(null);
+    setActionTarget({ kind: "createFolder" });
+    setActionName("");
+    setActionUrl("");
+    setActionError(null);
   }
 
-  function handleRenameFolder(folder: MaterialFolder) {
-    const name = window.prompt("文件夹名称", folder.name);
-    if (!name?.trim() || name.trim() === folder.name) {
-      setContextMenu(null);
+  function openRenameFolderModal(folder: MaterialFolder) {
+    setContextMenu(null);
+    setActionTarget({ folder, kind: "renameFolder" });
+    setActionName(folder.name);
+    setActionUrl("");
+    setActionError(null);
+  }
+
+  function openCreateLinkModal() {
+    setContextMenu(null);
+    setActionTarget({ kind: "createLink" });
+    setActionName("");
+    setActionUrl("");
+    setActionError(null);
+  }
+
+  function openRenameMaterialModal(material: Material) {
+    setContextMenu(null);
+    setActionTarget({ kind: "renameMaterial", material });
+    setActionName(material.name);
+    setActionUrl("");
+    setActionError(null);
+  }
+
+  function closeActionModal() {
+    if (isMutating) {
       return;
     }
+    setActionTarget(null);
+    setActionError(null);
+  }
+
+  function submitActionModal() {
+    if (!actionTarget) {
+      return;
+    }
+
+    const name = actionName.trim();
+    const sourceUrl = actionUrl.trim();
+
+    if (!name) {
+      setActionError(actionTarget.kind === "createLink" ? "资料名称不能为空" : "文件夹名称不能为空");
+      return;
+    }
+    if (actionTarget.kind === "createLink" && !sourceUrl) {
+      setActionError("资料链接不能为空");
+      return;
+    }
+
     void mutate(async () => {
-      const nextFolder = await updateMaterialFolder(folder.id, { name: name.trim() });
-      setFolders((current) => current.map((item) => (item.id === nextFolder.id ? nextFolder : item)));
+      if (actionTarget.kind === "createFolder") {
+        const folder = await createMaterialFolder(courseId, { name });
+        setFolders((current) => [...current, folder]);
+        setExpandedFolderIds((current) => new Set([...current, folder.id]));
+      } else if (actionTarget.kind === "renameFolder") {
+        const nextFolder = await updateMaterialFolder(actionTarget.folder.id, { name });
+        setFolders((current) => current.map((item) => (item.id === nextFolder.id ? nextFolder : item)));
+      } else if (actionTarget.kind === "createLink") {
+        const material = await createMaterialLink(courseId, {
+          name,
+          source_url: sourceUrl,
+          folder_id: null,
+        });
+        setMaterials((current) => [material, ...current]);
+        setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
+      } else if (actionTarget.kind === "renameMaterial") {
+        updateMaterial(await renameMaterial(actionTarget.material.id, { name }));
+      }
+      setActionTarget(null);
+      setActionError(null);
     });
   }
 
@@ -332,42 +399,6 @@ export function MaterialWorkspace({
     setContextMenu({ kind: "material", material, x: event.clientX, y: event.clientY });
   }
 
-  function handleCreateLink() {
-    const name = window.prompt("资料名称");
-    if (!name?.trim()) {
-      setContextMenu(null);
-      return;
-    }
-
-    const sourceUrl = window.prompt("资料链接");
-    if (!sourceUrl?.trim()) {
-      setContextMenu(null);
-      return;
-    }
-
-    void mutate(async () => {
-      const material = await createMaterialLink(courseId, {
-        name: name.trim(),
-        source_url: sourceUrl.trim(),
-        folder_id: null,
-      });
-      setMaterials((current) => [material, ...current]);
-      setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
-    });
-  }
-
-  function handleRenameMaterial(material: Material) {
-    const name = window.prompt("资料名称", material.name);
-    if (!name?.trim() || name.trim() === material.name) {
-      setContextMenu(null);
-      return;
-    }
-
-    void mutate(async () => {
-      updateMaterial(await renameMaterial(material.id, { name: name.trim() }));
-    });
-  }
-
   function handleParse(material: Material) {
     void mutate(async () => {
       updateMaterial(await retryParseMaterial(material.id));
@@ -387,12 +418,21 @@ export function MaterialWorkspace({
         onContextMenu={(event) => openMaterialMenu(event, material)}
         onDragStart={() => setDraggedMaterialId(material.id)}
       >
-        <label className="material-workspace__material-select">
+        <label
+          className="material-workspace__material-select"
+          onClick={(event) => {
+            if (!isParsed) {
+              event.preventDefault();
+              setError("资料需解析成功后才能选择。");
+            }
+          }}
+        >
           <input
             aria-label={`选择资料 ${material.name}`}
             checked={checked}
             disabled={!isParsed}
             onChange={() => toggleMaterial(material.id)}
+            title={isParsed ? "选择资料" : "资料需解析成功后才能选择"}
             type="checkbox"
           />
           <span className="material-workspace__file-icon" aria-hidden>
@@ -467,7 +507,7 @@ export function MaterialWorkspace({
           <p>{materials.length} 份资料，{parsedMaterialIds.length} 份可用于 Agent</p>
         </div>
         <div className="material-workspace__header-actions">
-          <button disabled={isMutating} onClick={handleCreateFolder} type="button">
+          <button disabled={isMutating} onClick={openCreateFolderModal} type="button">
             新建文件夹
           </button>
           <button disabled={isMutating} onClick={() => openUploadDialog(null)} type="button">
@@ -526,13 +566,14 @@ export function MaterialWorkspace({
             </label>
           </div>
 
-          <div
-            aria-label="资料列表区域"
-            className="material-workspace__content"
-            onContextMenu={openWorkspaceMenu}
-          >
+          <div aria-label="资料列表区域" className="material-workspace__content" onContextMenu={openWorkspaceMenu}>
             {renderFolderSection("unfiled", "未分类")}
             {folders.map((folder) => renderFolderSection(folder.id, folder.name, folder))}
+            <div className="material-workspace__context-zone">
+              <Text c="dimmed" size="sm">
+                在这里右键新建文件夹、上传资料或添加链接
+              </Text>
+            </div>
           </div>
         </div>
       ) : null}
@@ -546,7 +587,7 @@ export function MaterialWorkspace({
         >
           {contextMenu.kind === "workspace" ? (
             <>
-              <button onClick={handleCreateFolder} role="menuitem" type="button">
+              <button onClick={openCreateFolderModal} role="menuitem" type="button">
                 新建文件夹
               </button>
               <button
@@ -559,14 +600,14 @@ export function MaterialWorkspace({
               >
                 上传资料
               </button>
-              <button onClick={handleCreateLink} role="menuitem" type="button">
+              <button onClick={openCreateLinkModal} role="menuitem" type="button">
                 添加链接
               </button>
             </>
           ) : null}
           {contextMenu.kind === "folder" ? (
             <>
-              <button onClick={() => handleRenameFolder(contextMenu.folder)} role="menuitem" type="button">
+              <button onClick={() => openRenameFolderModal(contextMenu.folder)} role="menuitem" type="button">
                 重命名文件夹
               </button>
               <button
@@ -586,7 +627,7 @@ export function MaterialWorkspace({
           ) : null}
           {contextMenu.kind === "material" ? (
             <>
-              <button onClick={() => handleRenameMaterial(contextMenu.material)} role="menuitem" type="button">
+              <button onClick={() => openRenameMaterialModal(contextMenu.material)} role="menuitem" type="button">
                 重命名资料
               </button>
               {contextMenu.material.parse_status === "uploaded" || contextMenu.material.parse_status === "parse_failed" ? (
@@ -608,6 +649,17 @@ export function MaterialWorkspace({
         onConfirm={confirmDeleteTarget}
         target={deleteTarget}
       />
+      <ActionModal
+        error={actionError}
+        isSubmitting={isMutating}
+        name={actionName}
+        onChangeName={setActionName}
+        onChangeUrl={setActionUrl}
+        onClose={closeActionModal}
+        onSubmit={submitActionModal}
+        target={actionTarget}
+        url={actionUrl}
+      />
     </section>
   );
 }
@@ -628,7 +680,7 @@ function DeleteConfirmModal({
   const isFolder = target?.kind === "folder";
   const title = isFolder ? "删除文件夹" : "删除资料";
   const message = isFolder
-    ? "删除该文件夹后，文件夹下的所有资料和子文件夹也会被一并删除，且无法恢复。"
+    ? "删除该文件夹后，文件夹下的所有资料也会被一并删除，且无法恢复。"
     : "确定删除该资料吗？删除后将无法恢复。";
 
   return (
@@ -646,6 +698,82 @@ function DeleteConfirmModal({
           </Button>
           <Button color="red" loading={isSubmitting} onClick={onConfirm}>
             确认删除
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function ActionModal({
+  error,
+  isSubmitting,
+  name,
+  onChangeName,
+  onChangeUrl,
+  onClose,
+  onSubmit,
+  target,
+  url,
+}: {
+  error: string | null;
+  isSubmitting: boolean;
+  name: string;
+  onChangeName: (value: string) => void;
+  onChangeUrl: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  target: ActionTarget;
+  url: string;
+}) {
+  const titleMap: Record<NonNullable<ActionTarget>["kind"], string> = {
+    createFolder: "新建文件夹",
+    createLink: "添加链接资料",
+    renameFolder: "重命名文件夹",
+    renameMaterial: "重命名资料",
+  };
+  const isLink = target?.kind === "createLink";
+  const isRenameMaterial = target?.kind === "renameMaterial";
+  const label = isLink || isRenameMaterial ? "资料名称" : "文件夹名称";
+  const canSubmit = Boolean(name.trim()) && (!isLink || Boolean(url.trim())) && !isSubmitting;
+
+  return (
+    <Modal
+      centered
+      onClose={onClose}
+      opened={Boolean(target)}
+      title={target ? titleMap[target.kind] : undefined}
+      transitionProps={{ duration: 0 }}
+    >
+      <Stack gap="md">
+        {error ? (
+          <Alert color="red" role="alert" title="操作失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        <TextInput
+          data-autofocus
+          label={label}
+          maxLength={255}
+          onChange={(event) => onChangeName(event.currentTarget.value)}
+          required
+          value={name}
+        />
+        {isLink ? (
+          <TextInput
+            label="资料链接"
+            maxLength={2048}
+            onChange={(event) => onChangeUrl(event.currentTarget.value)}
+            required
+            value={url}
+          />
+        ) : null}
+        <Group justify="flex-end">
+          <Button disabled={isSubmitting} onClick={onClose} variant="default">
+            取消
+          </Button>
+          <Button disabled={!canSubmit} loading={isSubmitting} onClick={onSubmit}>
+            确认
           </Button>
         </Group>
       </Stack>

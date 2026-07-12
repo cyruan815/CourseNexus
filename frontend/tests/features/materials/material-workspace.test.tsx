@@ -93,10 +93,12 @@ describe("MaterialWorkspace", () => {
       include_all_parsed_materials: false,
       material_ids: ["mat_1"],
     });
+
+    fireEvent.click(screen.getByText("待解析.md"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("资料需解析成功后才能选择。");
   });
 
   it("creates folders and moves a material without selecting the folder", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("考试");
     vi.mocked(materialsApi.createMaterialFolder).mockResolvedValue({ ...folder, id: "fld_2", name: "考试" });
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
@@ -110,6 +112,8 @@ describe("MaterialWorkspace", () => {
 
     await screen.findByText("第一章.pdf");
     fireEvent.click(screen.getByRole("button", { name: "新建文件夹" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /文件夹名称/ }), { target: { value: "考试" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() => {
       expect(materialsApi.createMaterialFolder).toHaveBeenCalledWith("crs_1", { name: "考试" });
@@ -157,7 +161,7 @@ describe("MaterialWorkspace", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "删除文件夹" }));
 
     expect(screen.getByRole("dialog", { name: "删除文件夹" })).toHaveTextContent(
-      "删除该文件夹后，文件夹下的所有资料和子文件夹也会被一并删除，且无法恢复。",
+      "删除该文件夹后，文件夹下的所有资料也会被一并删除，且无法恢复。",
     );
     expect(materialsApi.deleteMaterialFolder).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
@@ -170,9 +174,6 @@ describe("MaterialWorkspace", () => {
   });
 
   it("creates a link material from the workspace context menu", async () => {
-    vi.spyOn(window, "prompt")
-      .mockReturnValueOnce("课程网站")
-      .mockReturnValueOnce("https://example.com/course");
     vi.mocked(materialsApi.createMaterialLink).mockResolvedValue({
       ...materials[1],
       id: "mat_link",
@@ -193,6 +194,11 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.contextMenu(await screen.findByLabelText("资料列表区域"));
     fireEvent.click(screen.getByRole("menuitem", { name: "添加链接" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /资料名称/ }), { target: { value: "课程网站" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /资料链接/ }), {
+      target: { value: "https://example.com/course" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() => {
       expect(materialsApi.createMaterialLink).toHaveBeenCalledWith("crs_1", {
@@ -205,7 +211,6 @@ describe("MaterialWorkspace", () => {
   });
 
   it("renames a material from its context menu", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("第一章重命名.pdf");
     vi.mocked(materialsApi.updateMaterial).mockResolvedValue({
       ...materials[0],
       name: "第一章重命名.pdf",
@@ -221,6 +226,8 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.contextMenu(await screen.findByText("第一章.pdf"));
     fireEvent.click(screen.getByRole("menuitem", { name: "重命名资料" }));
+    fireEvent.change(screen.getByRole("textbox", { name: /资料名称/ }), { target: { value: "第一章重命名.pdf" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() => {
       expect(materialsApi.updateMaterial).toHaveBeenCalledWith("mat_1", { name: "第一章重命名.pdf" });
@@ -295,6 +302,21 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByRole("menuitem", { name: "添加链接" })).not.toBeInTheDocument();
   });
 
+  it("opens the workspace context menu from the bottom blank area", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await screen.findByText("在这里右键新建文件夹、上传资料或添加链接"));
+
+    expect(screen.getByRole("menuitem", { name: "新建文件夹" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "添加链接" })).toBeInTheDocument();
+  });
+
   it("moves a material by dragging it onto a folder", async () => {
     vi.mocked(materialsApi.moveMaterialToFolder).mockResolvedValue({ ...materials[1], folder_id: "fld_1" });
 
@@ -312,6 +334,24 @@ describe("MaterialWorkspace", () => {
     await waitFor(() => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
     });
+    expect(screen.getByText("待解析.md")).toBeInTheDocument();
+  });
+
+  it("keeps material data and shows backend errors when moving fails", async () => {
+    vi.mocked(materialsApi.moveMaterialToFolder).mockRejectedValue(new Error("资料索引配置缺失"));
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.dragStart(await screen.findByText("待解析.md"));
+    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("资料索引配置缺失");
     expect(screen.getByText("待解析.md")).toBeInTheDocument();
   });
 });

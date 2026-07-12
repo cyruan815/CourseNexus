@@ -93,7 +93,8 @@
 }
 
 :root[data-course-nexus-theme="dark"] .material-workspace__folder-section + .material-workspace__folder-section,
-:root[data-course-nexus-theme="dark"] .material-workspace {
+:root[data-course-nexus-theme="dark"] .material-workspace,
+:root[data-course-nexus-theme="dark"] .material-workspace__context-zone {
   border-color: #263750;
 }
 

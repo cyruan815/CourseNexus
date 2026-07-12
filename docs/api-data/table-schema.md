@@ -183,7 +183,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - v0.1 只支持一级目录，不设置 `parent_id`。
 - 目录必须归属于一门课程，且课程必须属于当前用户。
-- 删除目录按“删除目录及其全部内容”处理，目录下资料和子目录一并删除且无法恢复。
+- 删除目录按“删除目录及其全部资料”处理；当前仅支持一级文件夹。
 - 目录只用于资料归类和列表浏览，不属于 Agent `MaterialScope`；资料范围只能使用具体 `material_ids`。
 
 ## course_materials
