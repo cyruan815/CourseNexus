@@ -26,7 +26,18 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `POST /api/v1/study-subtasks/{subtask_id}/task-tests`
 - `GET /api/v1/study-subtasks/{subtask_id}/execution-context`
 
-两个 POST 接口都返回统一成功 envelope，`data` 为 `GeneratedContentRead`。执行上下文会返回最近一次成功生成的 `handout_content_id` 或 `task_test_content_id`；失败记录不会作为执行页内容 ID 返回。
+两个 POST 接口都返回统一成功 envelope，`data` 为 `GeneratedContentRead`。默认重复请求是幂等的：同一个 `study_subtask_id + content_type` 已存在未删除且 `generation_status=success` 的内容时，接口直接返回最近一次成功内容，不调用模型、不新增 `AIGeneratedContent`。请求体可传 `force_regenerate=true` 显式重新生成新内容；failed 记录不会作为幂等命中结果。执行上下文会返回最近一次成功生成的 `handout_content_id` 或 `task_test_content_id`；失败记录不会作为执行页内容 ID 返回。
+
+## 幂等与重新生成
+
+生成入口在完成用户、课程、计划、任务层级和二级任务类型校验后，先查询当前用户下同一 `study_subtask_id + content_type` 最近一次未删除成功内容：
+
+- `force_regenerate=false` 或省略时，命中 success 直接返回该 `GeneratedContentRead`，不会创建新的 `gen_...` 记录，也不会调用 handout / task-test generator 或模型 provider。
+- `force_regenerate=true` 时跳过幂等命中，按正常生成流程创建新的 `AIGeneratedContent(generation_status=success)` 和引用。
+- `generation_status=failed` 只保留失败审计和错误码，不会阻止下一次请求重新生成，也不会被 execution-context 当作内容 ID。
+- execution-context 通过相同的“最近未删除 success”查询返回内容 ID；如果最新记录是 failed，仍返回最近一次 success，若没有 success 则返回 `null`。
+
+幂等命中路径只做一次生成内容查询，模型调用次数为 0；真正生成路径仍按材料批次数调用模型。
 
 ## 数据流
 
@@ -76,7 +87,7 @@ sequenceDiagram
 - `content_type = handout` 或 `task_test`
 - `error_code = 稳定错误码`
 
-保存失败记录后，接口仍返回统一错误 envelope。生成失败不修改二级任务完成状态，不汇总一级任务状态，也不写 `checkin_records`。
+保存失败记录后，接口仍返回统一错误 envelope。失败记录只作为审计和重试依据，不参与幂等命中；下一次默认请求如果没有 success 会重新尝试生成。生成失败不修改二级任务完成状态，不汇总一级任务状态，也不写 `checkin_records`。
 
 ## 错误码
 

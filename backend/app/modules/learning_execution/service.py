@@ -92,6 +92,7 @@ def generate_handout_for_subtask(
     user_id: str,
     subtask_id: str,
     parameters: dict[str, object],
+    force_regenerate: bool,
     model_provider: ModelProvider,
     max_tokens: int,
 ) -> GeneratedContentRead:
@@ -102,6 +103,7 @@ def generate_handout_for_subtask(
         content_type="handout",
         allowed_subtask_types=HANDOUT_SUBTASK_TYPES,
         parameters=parameters,
+        force_regenerate=force_regenerate,
         model_provider=model_provider,
         max_tokens=max_tokens,
     )
@@ -113,6 +115,7 @@ def generate_task_test_for_subtask(
     user_id: str,
     subtask_id: str,
     parameters: dict[str, object],
+    force_regenerate: bool,
     model_provider: ModelProvider,
     max_tokens: int,
 ) -> GeneratedContentRead:
@@ -123,6 +126,7 @@ def generate_task_test_for_subtask(
         content_type="task_test",
         allowed_subtask_types=TASK_TEST_SUBTASK_TYPES,
         parameters=parameters,
+        force_regenerate=force_regenerate,
         model_provider=model_provider,
         max_tokens=max_tokens,
     )
@@ -136,6 +140,7 @@ def _generate_task_content(
     content_type: str,
     allowed_subtask_types: set[str],
     parameters: dict[str, object],
+    force_regenerate: bool,
     model_provider: ModelProvider,
     max_tokens: int,
 ) -> GeneratedContentRead:
@@ -147,6 +152,16 @@ def _generate_task_content(
             status_code=409,
             details={"subtask_type": target.subtask.subtask_type, "content_type": content_type},
         )
+
+    if not force_regenerate:
+        existing_content = repository.get_latest_successful_task_content(
+            db,
+            user_id=user_id,
+            subtask_id=target.subtask.id,
+            content_type=content_type,
+        )
+        if existing_content is not None:
+            return GeneratedContentRead.model_validate(existing_content)
 
     material_ids = _material_ids(target.subtask)
     material_scope = MaterialScope(include_all_parsed_materials=False, material_ids=material_ids)

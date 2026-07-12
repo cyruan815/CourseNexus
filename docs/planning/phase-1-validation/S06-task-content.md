@@ -14,7 +14,10 @@
 - 成功生成会保存 `AIGeneratedContent(generation_status=success)` 和 `SourceCitation`。
 - 进入生成流程后的失败会保存 `AIGeneratedContent(generation_status=failed, error_code=...)`。
 - 引用必须来自本次材料上下文，不允许伪造 fallback。
-- `GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回最近一次成功的 `handout_content_id` / `task_test_content_id`。
+- 默认重复生成请求返回同一二级任务同一内容类型最近一次未删除成功内容，不新增成功记录、不调用模型。
+- `force_regenerate=true` 时允许在已有 success 后重新生成并创建新的成功内容。
+- failed 记录不参与幂等命中，不阻止下一次请求重新尝试生成。
+- `GET /api/v1/study-subtasks/{subtask_id}/execution-context` 返回最近一次成功的 `handout_content_id` / `task_test_content_id`，不返回 failed id。
 - 生成内容不改变二级任务完成状态、一级任务汇总状态或打卡记录。
 - 不新增业务表，不修改 baseline migration，不修改前端。
 
@@ -31,12 +34,9 @@ uv run python -m pytest tests/modules/generation/test_orchestrator_contract.py t
 
 ## 最近结果
 
-- Handout generator：`2 passed`。
-- Task test generator：`2 passed`。
-- S06 task content API：`5 passed`。
-- Learning execution 模块：`16 passed`。
-- S06 集成流 + S04/S05 回归：`27 passed`。
-- G01 orchestrator 回归：`7 passed`。
+- S06 task content API：`18 passed`。
+- S06 集成流：`2 passed`。
+- Handout / task-test generator 回归：`12 passed`。
 
 ## 未涉及范围
 

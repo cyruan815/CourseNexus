@@ -209,6 +209,20 @@ class BrokenModelProvider:
         raise RuntimeError("model unavailable")
 
 
+def _successful_contents(db: Session, *, subtask_id: str, content_type: str) -> list[AIGeneratedContent]:
+    return list(
+        db.execute(
+            select(AIGeneratedContent)
+            .where(
+                AIGeneratedContent.study_subtask_id == subtask_id,
+                AIGeneratedContent.content_type == content_type,
+                AIGeneratedContent.generation_status == "success",
+            )
+            .order_by(AIGeneratedContent.created_at, AIGeneratedContent.id)
+        ).scalars()
+    )
+
+
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
@@ -250,11 +264,135 @@ def test_generate_task_test_for_quiz_subtask_saves_content(api: ApiHarness) -> N
     assert data["content_json"]["questions"][0]["question_type"] == "single_choice"
 
 
-def test_generate_handout_rejects_quiz_subtask(api: ApiHarness) -> None:
+def test_generate_handout_is_idempotent_for_existing_success(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+
+    first_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/handouts",
+        headers=headers,
+        json={"parameters": {"language": "zh-CN", "detail_level": "standard"}},
+    )
+    assert first_response.status_code == 200
+    first = first_response.json()["data"]
+
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: BrokenModelProvider()
+    second_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/handouts",
+        headers=headers,
+        json={"parameters": {"language": "zh-CN", "detail_level": "standard"}},
+    )
+
+    assert second_response.status_code == 200
+    second = second_response.json()["data"]
+    assert second["id"] == first["id"]
+    assert [content.id for content in _successful_contents(api.db, subtask_id=subtask_id, content_type="handout")] == [first["id"]]
+
+
+def test_generate_task_test_is_idempotent_for_existing_success(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
 
+    first_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 1, "question_types": ["single_choice"], "difficulty": "medium"}},
+    )
+    assert first_response.status_code == 200
+    first = first_response.json()["data"]
+
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: BrokenModelProvider()
+    second_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 1, "question_types": ["single_choice"], "difficulty": "medium"}},
+    )
+
+    assert second_response.status_code == 200
+    second = second_response.json()["data"]
+    assert second["id"] == first["id"]
+    assert [content.id for content in _successful_contents(api.db, subtask_id=subtask_id, content_type="task_test")] == [first["id"]]
+
+
+def test_force_regenerate_handout_creates_new_success(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+
+    first_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/handouts",
+        headers=headers,
+        json={"parameters": {"language": "zh-CN", "detail_level": "standard"}},
+    )
+    second_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/handouts",
+        headers=headers,
+        json={"force_regenerate": True, "parameters": {"language": "zh-CN", "detail_level": "standard"}},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    first = first_response.json()["data"]
+    second = second_response.json()["data"]
+    assert second["id"] != first["id"]
+    assert len(_successful_contents(api.db, subtask_id=subtask_id, content_type="handout")) == 2
+
+
+def test_failed_task_test_record_does_not_block_retry(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: BrokenModelProvider()
+
+    failed_response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
+    assert failed_response.status_code == 502
+    failed = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert failed.generation_status == "failed"
+
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    {
+                        "id": "q_1",
+                        "question_type": "single_choice",
+                        "question_text": "主键的作用是什么？",
+                        "options": [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
+                        "correct_answer": "A",
+                        "explanation": "主键用于唯一标识表中的一行。",
+                        "source_citation_ids": ["chunk_api_content"],
+                        "sort_order": 1,
+                    }
+                ],
+            }
+        }
+    )
+    retry_response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
+
+    assert retry_response.status_code == 200
+    retry = retry_response.json()["data"]
+    assert retry["id"] != failed.id
+    assert retry["generation_status"] == "success"
+    assert len(_successful_contents(api.db, subtask_id=subtask_id, content_type="task_test")) == 1
+
+
+@pytest.mark.parametrize("subtask_type", ["quiz", "test"])
+def test_generate_handout_rejects_quiz_and_test_subtasks(api: ApiHarness, subtask_type: str) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type=subtask_type)
+
     response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/handouts", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "STATE_CONFLICT"
+    assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
+
+
+@pytest.mark.parametrize("subtask_type", ["learn", "review"])
+def test_generate_task_test_rejects_learn_and_review_subtasks(api: ApiHarness, subtask_type: str) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type=subtask_type)
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "STATE_CONFLICT"
@@ -284,6 +422,7 @@ def test_generate_task_content_requires_auth(api: ApiHarness) -> None:
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
 
 def test_generate_task_content_returns_not_found_for_missing_subtask(api: ApiHarness) -> None:
     _, headers = _register_and_headers(api)
