@@ -249,6 +249,71 @@ def test_reduce_prompt_uses_exact_course_name_and_quality_rules() -> None:
     assert "quiz/test" in prompt
     assert "最后一个二级任务" in prompt
 
+def test_reduce_prompt_includes_diagnostic_profile_strategy() -> None:
+    payload = _build_request().model_copy(
+        update={
+            "diagnostic_profile": {
+                "question_version": "study_plan_diagnostic_v1",
+                "prior_knowledge_level": "little",
+                "foundation_needed": True,
+                "weak_topics": ["nyquist_shannon", "modulation_coding"],
+                "weak_area": "calculation",
+                "explanation_style": "step_by_step",
+                "diagnostic_note": "希望多讲公式怎么用",
+            }
+        }
+    )
+
+    prompt = planner._build_reduce_prompt(
+        mapped_batches=[_mapped_batch()],
+        payload=payload,
+        expected_material_ids={"mat_net"},
+        course_name="计算机网络",
+    )
+
+    assert "diagnostic_profile" in prompt
+    assert "foundation_needed: true" in prompt
+    assert "第一天或最早可行日期" in prompt
+    assert "weak_topics: nyquist_shannon, modulation_coding" in prompt
+    assert "更靠前、更细" in prompt
+    assert "weak_area: calculation" in prompt
+    assert "公式、步骤推导、计算练习" in prompt
+    assert "explanation_style: step_by_step" in prompt
+    assert "任务描述风格" in prompt
+    assert "希望多讲公式怎么用" in prompt
+
+
+@pytest.mark.parametrize(
+    ("weak_area", "expected_rule"),
+    [
+        ("concept", "加强概念解释"),
+        ("calculation", "加强公式、步骤推导、计算练习"),
+        ("application", "加强例题和应用任务"),
+        ("memorization", "加强重点记忆、回顾、检查"),
+    ],
+)
+def test_reduce_prompt_covers_each_weak_area_rule(weak_area: str, expected_rule: str) -> None:
+    payload = _build_request().model_copy(
+        update={
+            "diagnostic_profile": {
+                "foundation_needed": False,
+                "weak_topics": ["topic_a"],
+                "weak_area": weak_area,
+                "explanation_style": "plain_language",
+            }
+        }
+    )
+
+    prompt = planner._build_reduce_prompt(
+        mapped_batches=[_mapped_batch()],
+        payload=payload,
+        expected_material_ids={"mat_net"},
+        course_name="计算机网络",
+    )
+
+    assert f"weak_area: {weak_area}" in prompt
+    assert expected_rule in prompt
+
 
 def test_validate_preview_requires_quiz_or_test_to_be_last() -> None:
     preview = _preview(

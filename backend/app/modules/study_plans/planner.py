@@ -14,6 +14,89 @@ from app.modules.study_plans.schemas import (
 )
 
 
+_WEAK_AREA_STRATEGY_RULES = {
+    "concept": "加强概念解释：先用通俗语言说清概念含义、边界、因果关系和易混点，再安排检查产出。",
+    "calculation": "加强公式、步骤推导、计算练习：任务要写明公式含义、适用条件、推导或代入步骤，并安排计算练习。",
+    "application": "加强例题和应用任务：用典型例题或真实应用场景引入，再要求学生迁移到新题或新场景。",
+    "memorization": "加强重点记忆、回顾、检查：标出必记结论、易错点和复述或默写检查任务。",
+    "other": "根据 diagnostic_note 和 weak_topics 调整讲解顺序和任务颗粒度。",
+}
+
+_EXPLANATION_STYLE_RULES = {
+    "plain_language": "plain_language：任务描述风格要用通俗短句解释术语，避免只给结论。",
+    "step_by_step": "step_by_step：任务描述风格要按含义 -> 条件 -> 步骤 -> 练习检查的顺序写。",
+    "example_first": "example_first：任务描述风格要先给例题或场景，再抽象概念和规则。",
+    "exam_focused": "exam_focused：任务描述风格要突出重点记忆、易错回顾和可检查产出。",
+}
+
+
+def _diagnostic_profile_prompt_lines(diagnostic_profile: dict[str, object]) -> list[str]:
+    if not diagnostic_profile:
+        return [
+            "diagnostic_profile: none",
+            "诊断生成策略：未提供学前诊断时，按 goal_text、preference、资料难度和每日时间生成。",
+        ]
+
+    foundation_needed = _diagnostic_bool(diagnostic_profile.get("foundation_needed"))
+    weak_topics = _diagnostic_string_list(diagnostic_profile.get("weak_topics"))
+    weak_area = _diagnostic_string(diagnostic_profile.get("weak_area"), default="other")
+    explanation_style = _diagnostic_string(diagnostic_profile.get("explanation_style"), default="plain_language")
+    prior_knowledge_level = _diagnostic_string(diagnostic_profile.get("prior_knowledge_level"), default="unknown")
+    question_version = _diagnostic_string(diagnostic_profile.get("question_version"), default="unknown")
+    diagnostic_note = _diagnostic_string(diagnostic_profile.get("diagnostic_note"), default="")
+    weak_topics_value = ", ".join(weak_topics) if weak_topics else "none"
+
+    lines = [
+        "diagnostic_profile:",
+        f"question_version: {question_version}",
+        f"prior_knowledge_level: {prior_knowledge_level}",
+        f"foundation_needed: {_format_prompt_bool(foundation_needed)}",
+        f"weak_topics: {weak_topics_value}",
+        f"weak_area: {weak_area}",
+        f"explanation_style: {explanation_style}",
+        "诊断生成策略：diagnostic_profile 是 planner 约束，不是仅用于 preview/save 追溯。",
+    ]
+    if diagnostic_note:
+        lines.append(f"diagnostic_note: {diagnostic_note}")
+    if foundation_needed:
+        lines.append("foundation_needed=true 时：计划必须前置安排补基础任务，优先放在第一天或最早可行日期；因现有 schema 的 subtask_type 不新增 foundation，请用 learn/review 类型并在标题或 description 中写明“补基础”。")
+    else:
+        lines.append("foundation_needed=false 时：不强制补基础，但仍要根据 weak_topics 调整顺序和粒度。")
+    lines.extend(
+        [
+            "weak_topics 策略：weak_topics 对应主题必须更靠前、更细，能在任务标题、description 或排序中体现；不要只合并进泛泛章节。",
+            f"weak_area 策略：{_WEAK_AREA_STRATEGY_RULES.get(weak_area, _WEAK_AREA_STRATEGY_RULES['other'])}",
+            f"explanation_style 策略：{_EXPLANATION_STYLE_RULES.get(explanation_style, _EXPLANATION_STYLE_RULES['plain_language'])}",
+        ]
+    )
+    return lines
+
+
+def _diagnostic_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
+
+
+def _format_prompt_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _diagnostic_string(value: object, *, default: str) -> str:
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text or default
+
+
+def _diagnostic_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [text for item in value if (text := str(item).strip())]
+
+
 def map_material_batch(
     *,
     batch: MaterialContextBatch,
@@ -129,6 +212,7 @@ def _build_reduce_prompt(
 ) -> str:
     mapped_json = [batch.model_dump(mode="json") for batch in mapped_batches]
     course_line = f"课程名称：{course_name}" if course_name else "课程名称：未提供，标题必须忠实使用 goal_text 中的课程名"
+    diagnostic_prompt_lines = _diagnostic_profile_prompt_lines(payload.diagnostic_profile)
     return "\n".join(
         [
             "你是 CourseNexus 的学习计划排程器。",
@@ -144,6 +228,7 @@ def _build_reduce_prompt(
             f"goal_text: {payload.goal_text}",
             f"date_range: {payload.start_date.isoformat()} to {payload.end_date.isoformat()}",
             f"daily_available_minutes: {payload.daily_available_minutes}",
+            *diagnostic_prompt_lines,
             "expected_material_ids: " + " ".join(sorted(expected_material_ids)),
             f"mapped_batches: {mapped_json}",
         ]

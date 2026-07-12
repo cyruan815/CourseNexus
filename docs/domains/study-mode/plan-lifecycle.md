@@ -31,8 +31,10 @@
 - 配置解析 prompt 会说明相对日期规则：用户写明“今天是 YYYY年M月D日”且使用“两天学完 / N 天学完”时，可推导 `start_date` 与 `end_date`。`parse_study_plan_config()` 在模型返回后还会用 `_normalize_relative_config()` 做确定性补全，避免明确日期语义被模型漏填。
 - planner map prompt 负责把资料 chunk 按章节/页码顺序抽成细粒度知识单元，要求保留公式、例子、接口、设备、调制/编码/复用、安全隐患等可学习细节，并要求每个知识单元携带 `citation_chunk_ids`。
 - planner reduce prompt 负责把知识单元排成可执行计划。生成标题时必须使用课程名称原文；完成型目标需要尽量利用每日可用时间，并通过复习、练习、输出任务和最终 quiz/test 补足学习闭环。
+- planner reduce prompt 现在会读取 `StudyPlanBuildRequest.diagnostic_profile` 并作为生成策略：`foundation_needed=true` 时要前置补基础，`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt 策略，不新增表、不改前端和结构化输出 schema。
 - `validate_preview()` 除结构校验外，还会校验生成质量底线：`quiz` 和 `test` 都必须位于当天最后；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间，最后一天必须包含综合自测。
 - 资料解析层的公式 OCR、图表理解、图片页补全，以及模型 provider 的 `responses.parse` 兼容配置，不属于 study-mode 生命周期模块职责，后续应分别在 materials/parser 和 model provider 任务中处理。
+
 ## 模型调用兼容性
 
 - 学习计划配置解析和计划生成仍统一依赖 `ModelProvider.generate_structured()`，业务层不直接关心具体模型供应商。
