@@ -675,7 +675,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 ## S02 表结构结论
 
-S02 已实现真实学习计划生命周期；仍不新增业务表，但为保存计划幂等性新增 `study_plans.idempotency_key_hash` 和唯一索引，并通过 `backend/migrations/versions/20260712_0002_add_study_plan_idempotency_key_hash.py` 迁移。baseline migration 不回改。
+S02 已实现真实学习计划生命周期；仍不新增业务表，但为保存计划幂等性新增 `study_plans.idempotency_key_hash` 和唯一索引，并通过 `backend/migrations/versions/20260712_0003_add_study_plan_idempotency_key_hash.py` 迁移。baseline migration 不回改。
 
 - `study_plans.idempotency_key_hash` 保存 `Idempotency-Key` 的 key hash，用 `(user_id, course_id, idempotency_key_hash)` 唯一索引防止并发重复创建；`parsed_config_json` 继续保存偏好、材料范围、coverage、request hash 和任务来源。
 - `study_tasks` 保存日期级一级任务。

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -32,7 +32,7 @@ from app.modules.learning_execution.schemas import (
     SubTaskCompletionResult,
 )
 from app.modules.material_context.coverage import run_material_coverage
-from app.modules.material_context.schemas import MaterialContextBatch, MaterialContextResult, MaterialScope
+from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope
 from app.modules.material_context.service import iter_material_context_batches
 from app.modules.study_plans.models import StudySubTask
 
@@ -156,8 +156,8 @@ def _generate_task_content(
         if not material_ids:
             raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前任务没有关联已解析资料", status_code=400)
 
-        registry = _task_content_registry(model_provider)
-        generator = registry.get(content_type)
+        registry = _task_content_registry()
+        generator = registry.create(content_type, model_provider)
         batches = list(
             iter_material_context_batches(
                 db,
@@ -174,7 +174,8 @@ def _generate_task_content(
             batches=batches,
             expected_material_ids=set(material_ids),
             map_batch=lambda batch: generator.generate(
-                context=MaterialContextResult(chunks=batch.chunks, no_parsed_material=False),
+                batches=(batch,),
+                expected_material_ids=frozenset(batch.material_ids),
                 parameters=parameters,
             ),
             reduce_results=lambda outputs: _reduce_task_content_outputs(content_type=content_type, outputs=outputs),
@@ -195,7 +196,12 @@ def _generate_task_content(
         content.error_code = None
         db.add(content)
         db.flush()
-        _save_task_content_citations(db, generated_content_id=content.id, batches=batches, citation_chunk_ids=output.citation_chunk_ids)
+        _save_task_content_citations(
+            db,
+            generated_content_id=content.id,
+            batches=batches,
+            item_citation_chunk_ids=output.item_citation_chunk_ids,
+        )
         db.commit()
     except CourseNexusError as exc:
         db.rollback()
@@ -228,10 +234,10 @@ def _generate_task_content(
     return GeneratedContentRead.model_validate(content)
 
 
-def _task_content_registry(model_provider: ModelProvider) -> GeneratorRegistry:
+def _task_content_registry() -> GeneratorRegistry:
     registry = GeneratorRegistry()
-    registry.register("handout", build_handout_generator(model_provider))
-    registry.register("task_test", build_task_test_generator(model_provider))
+    registry.register("handout", build_handout_generator)
+    registry.register("task_test", build_task_test_generator)
     return registry
 
 
@@ -317,7 +323,11 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
         "sections": sections,
         "summary": contents[-1].summary,
     }
-    return GeneratorOutput(title="今日讲义", content_json=content_json, citation_chunk_ids=citation_chunk_ids)
+    return GeneratorOutput(
+        title="今日讲义",
+        content_json=content_json,
+        item_citation_chunk_ids=_item_citation_chunk_ids(content_json=content_json, citation_chunk_ids=citation_chunk_ids),
+    )
 
 
 def _reduce_task_test_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
@@ -340,7 +350,41 @@ def _reduce_task_test_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput
         "instructions": contents[0].instructions,
         "questions": questions,
     }
-    return GeneratorOutput(title="任务测试题", content_json=content_json, citation_chunk_ids=citation_chunk_ids)
+    return GeneratorOutput(
+        title="任务测试题",
+        content_json=content_json,
+        item_citation_chunk_ids=_item_citation_chunk_ids(content_json=content_json, citation_chunk_ids=citation_chunk_ids),
+    )
+
+
+def _item_citation_chunk_ids(*, content_json: dict[str, object], citation_chunk_ids: list[str]) -> dict[str, list[str]]:
+    bindings: dict[str, list[str]] = {}
+    for item_id in _collect_content_item_ids(content_json):
+        bindings[item_id] = list(citation_chunk_ids)
+    return bindings
+
+
+def _collect_content_item_ids(value: object) -> list[str]:
+    item_ids: list[str] = []
+    if isinstance(value, dict):
+        item_id = value.get("id")
+        if isinstance(item_id, str):
+            item_ids.append(item_id)
+        for child in value.values():
+            item_ids.extend(_collect_content_item_ids(child))
+    elif isinstance(value, list):
+        for child in value:
+            item_ids.extend(_collect_content_item_ids(child))
+    return list(dict.fromkeys(item_ids))
+
+
+def _ordered_unique_chunk_ids(item_citation_chunk_ids: dict[str, list[str]]) -> list[str]:
+    chunk_ids: list[str] = []
+    for item_chunk_ids in item_citation_chunk_ids.values():
+        for chunk_id in item_chunk_ids:
+            if chunk_id not in chunk_ids:
+                chunk_ids.append(chunk_id)
+    return chunk_ids
 
 
 def _save_task_content_citations(
@@ -348,9 +392,10 @@ def _save_task_content_citations(
     *,
     generated_content_id: str,
     batches: list[MaterialContextBatch],
-    citation_chunk_ids: list[str],
+    item_citation_chunk_ids: dict[str, list[str]],
 ) -> None:
     chunk_by_id = {chunk.chunk_id: chunk for batch in batches for chunk in batch.chunks}
+    citation_chunk_ids = _ordered_unique_chunk_ids(item_citation_chunk_ids)
     selected_chunks = [chunk_by_id[chunk_id] for chunk_id in citation_chunk_ids if chunk_id in chunk_by_id]
     if not selected_chunks:
         raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="生成结果没有有效引用", status_code=500)
