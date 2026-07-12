@@ -184,6 +184,31 @@
   margin: 0;
 }
 
+.material-workspace__context-menu {
+  background: #ffffff;
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  box-shadow: 0 14px 42px rgb(15 23 42 / 18%);
+  display: grid;
+  min-width: 148px;
+  padding: 6px;
+  position: fixed;
+  z-index: 240;
+}
+
+.material-workspace__context-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.material-workspace__context-menu button:hover {
+  background: #eef6ff;
+}
+
 .material-workspace__sr-only {
   clip: rect(0, 0, 0, 0);
   clip-path: inset(50%);

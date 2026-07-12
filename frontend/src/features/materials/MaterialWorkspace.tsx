@@ -1,7 +1,8 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../../api/errors";
 import {
+  createMaterialLink,
   createMaterialFolder,
   deleteMaterial,
   deleteMaterialFolder,
@@ -9,6 +10,7 @@ import {
   listMaterials,
   moveMaterialToFolder,
   retryParseMaterial,
+  updateMaterial as renameMaterial,
   updateMaterialFolder,
   uploadMaterial,
 } from "./api";
@@ -16,6 +18,11 @@ import type { Material, MaterialFolder, MaterialScope } from "./types";
 import "./material-workspace.css";
 
 type FolderView = "all" | "unfiled" | string;
+type ContextMenu =
+  | { kind: "workspace"; x: number; y: number }
+  | { folder: MaterialFolder; kind: "folder"; x: number; y: number }
+  | { kind: "material"; material: Material; x: number; y: number }
+  | null;
 
 interface MaterialWorkspaceProps {
   courseId: string;
@@ -55,6 +62,8 @@ export function MaterialWorkspace({
   const [editingFolderName, setEditingFolderName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploadPromptOpen, setIsUploadPromptOpen] = useState(openUploadPrompt);
+  const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
+  const [draggedMaterialId, setDraggedMaterialId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +114,7 @@ export function MaterialWorkspace({
     setError(null);
     try {
       await action();
+      setContextMenu(null);
     } catch (nextError) {
       setError(errorMessage(nextError));
     } finally {
@@ -195,6 +205,79 @@ export function MaterialWorkspace({
   function handleMove(material: Material, folderId: string | null) {
     void mutate(async () => {
       updateMaterial(await moveMaterialToFolder(material.id, folderId));
+    });
+  }
+
+  function handleCreateFolderFromMenu() {
+    const name = window.prompt("文件夹名称");
+    if (!name?.trim()) {
+      setContextMenu(null);
+      return;
+    }
+
+    void mutate(async () => {
+      const folder = await createMaterialFolder(courseId, { name: name.trim() });
+      setFolders((current) => [...current, folder]);
+    });
+  }
+
+  function handleMoveById(materialId: string, folderId: string | null) {
+    const material = materials.find((item) => item.id === materialId);
+    if (material) {
+      handleMove(material, folderId);
+    }
+  }
+
+  function openWorkspaceMenu(event: MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    setContextMenu({ kind: "workspace", x: event.clientX, y: event.clientY });
+  }
+
+  function openFolderMenu(event: MouseEvent<HTMLElement>, folder: MaterialFolder) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ folder, kind: "folder", x: event.clientX, y: event.clientY });
+  }
+
+  function openMaterialMenu(event: MouseEvent<HTMLElement>, material: Material) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ kind: "material", material, x: event.clientX, y: event.clientY });
+  }
+
+  function handleCreateLink() {
+    const name = window.prompt("资料名称");
+    if (!name?.trim()) {
+      setContextMenu(null);
+      return;
+    }
+
+    const sourceUrl = window.prompt("资料链接");
+    if (!sourceUrl?.trim()) {
+      setContextMenu(null);
+      return;
+    }
+
+    const folderId = folderView !== "all" && folderView !== "unfiled" ? folderView : null;
+    void mutate(async () => {
+      const material = await createMaterialLink(courseId, {
+        name: name.trim(),
+        source_url: sourceUrl.trim(),
+        folder_id: folderId,
+      });
+      setMaterials((current) => [material, ...current]);
+    });
+  }
+
+  function handleRenameMaterial(material: Material) {
+    const name = window.prompt("资料名称", material.name);
+    if (!name?.trim() || name.trim() === material.name) {
+      setContextMenu(null);
+      return;
+    }
+
+    void mutate(async () => {
+      updateMaterial(await renameMaterial(material.id, { name: name.trim() }));
     });
   }
 
@@ -294,6 +377,14 @@ export function MaterialWorkspace({
                   <>
                     <button
                       aria-pressed={folderView === folder.id}
+                      onContextMenu={(event) => openFolderMenu(event, folder)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => {
+                        if (draggedMaterialId) {
+                          handleMoveById(draggedMaterialId, folder.id);
+                          setDraggedMaterialId(null);
+                        }
+                      }}
                       onClick={() => setFolderView(folder.id)}
                       type="button"
                     >
@@ -341,7 +432,11 @@ export function MaterialWorkspace({
             </form>
           </aside>
 
-          <div className="material-workspace__content">
+          <div
+            aria-label="资料列表区域"
+            className="material-workspace__content"
+            onContextMenu={openWorkspaceMenu}
+          >
             <form className="material-workspace__upload" onSubmit={handleUpload}>
               <input
                 id="material-upload-input"
@@ -358,7 +453,12 @@ export function MaterialWorkspace({
                 const checked = isParsed &&
                   (materialScope.include_all_parsed_materials || materialScope.material_ids.includes(material.id));
                 return (
-                  <li key={material.id}>
+                  <li
+                    draggable
+                    key={material.id}
+                    onContextMenu={(event) => openMaterialMenu(event, material)}
+                    onDragStart={() => setDraggedMaterialId(material.id)}
+                  >
                     <label className="material-workspace__material-select">
                       <input
                         aria-label={`选择资料 ${material.name}`}
@@ -397,6 +497,68 @@ export function MaterialWorkspace({
               })}
             </ul>
           </div>
+        </div>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          className="material-workspace__context-menu"
+          role="menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {contextMenu.kind === "workspace" ? (
+            <>
+              <button onClick={handleCreateFolderFromMenu} role="menuitem" type="button">
+                新建文件夹
+              </button>
+              <button
+                onClick={() => {
+                  setContextMenu(null);
+                  setIsUploadPromptOpen(true);
+                }}
+                role="menuitem"
+                type="button"
+              >
+                上传资料
+              </button>
+              <button onClick={handleCreateLink} role="menuitem" type="button">
+                添加链接
+              </button>
+            </>
+          ) : null}
+          {contextMenu.kind === "folder" ? (
+            <>
+              <button
+                onClick={() => {
+                  setEditingFolderId(contextMenu.folder.id);
+                  setEditingFolderName(contextMenu.folder.name);
+                  setContextMenu(null);
+                }}
+                role="menuitem"
+                type="button"
+              >
+                重命名文件夹
+              </button>
+              <button onClick={() => handleDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
+                删除文件夹
+              </button>
+            </>
+          ) : null}
+          {contextMenu.kind === "material" ? (
+            <>
+              <button onClick={() => handleRenameMaterial(contextMenu.material)} role="menuitem" type="button">
+                重命名资料
+              </button>
+              {contextMenu.material.parse_status === "uploaded" || contextMenu.material.parse_status === "parse_failed" ? (
+                <button onClick={() => handleParse(contextMenu.material)} role="menuitem" type="button">
+                  {contextMenu.material.parse_status === "parse_failed" ? "重试解析" : "开始解析"}
+                </button>
+              ) : null}
+              <button onClick={() => handleDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
+                删除资料
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
     </section>
