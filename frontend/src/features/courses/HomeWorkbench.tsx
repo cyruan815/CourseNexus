@@ -67,11 +67,20 @@ type CourseModalMode = "create" | "edit";
 
 interface CalendarDay {
   day: number | null;
+  dateKey: string | null;
   isToday: boolean;
 }
 
 const ALL_TERMS_VALUE = "__all_terms__";
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
+
+function padDatePart(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function getDateKey(year: number, month: number, day: number): string {
+  return `${year}-${padDatePart(month + 1)}-${padDatePart(day)}`;
+}
 
 function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
   const year = referenceDate.getFullYear();
@@ -85,11 +94,12 @@ function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
     const day = index - leadingEmptyCells + 1;
 
     if (day < 1 || day > lastDate) {
-      return { day: null, isToday: false };
+      return { day: null, dateKey: null, isToday: false };
     }
 
     return {
       day,
+      dateKey: getDateKey(year, month, day),
       isToday: day === referenceDate.getDate(),
     };
   });
@@ -250,61 +260,104 @@ function TodayTodoPanel() {
 }
 
 function CalendarPanel() {
-  const referenceDate = new Date();
+  const navigate = useNavigate();
+  const today = new Date();
+  const [referenceDate, setReferenceDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const [isMonthModalOpen, setIsMonthModalOpen] = useState(false);
+  const [draftYear, setDraftYear] = useState(String(referenceDate.getFullYear()));
+  const [draftMonth, setDraftMonth] = useState(String(referenceDate.getMonth()));
   const monthLabel = `${referenceDate.getMonth() + 1} 月`;
   const calendarTitle = `${referenceDate.getFullYear()} 年 ${monthLabel}`;
   const calendarDays = getCalendarDays(referenceDate);
+  const yearOptions = Array.from({ length: 5 }, (_, index) => {
+    const year = today.getFullYear() - 2 + index;
+    return { value: String(year), label: `${year} 年` };
+  });
+  const monthOptions = Array.from({ length: 12 }, (_, index) => ({ value: String(index), label: `${index + 1} 月` }));
+
+  function moveMonth(offset: number) {
+    setReferenceDate((currentDate) => new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
+  }
+
+  function openMonthPicker() {
+    setDraftYear(String(referenceDate.getFullYear()));
+    setDraftMonth(String(referenceDate.getMonth()));
+    setIsMonthModalOpen(true);
+  }
+
+  function applyMonthPicker() {
+    setReferenceDate(new Date(Number(draftYear), Number(draftMonth), 1));
+    setIsMonthModalOpen(false);
+  }
 
   return (
-    <Paper className="home-calendar-panel" radius="md" withBorder>
-      <Stack gap="md" h="100%">
-        <Group justify="space-between">
-          <Title order={2}>日历</Title>
-          <Badge color="blue" variant="light">
-            {monthLabel}
-          </Badge>
-        </Group>
-
-        <Paper className="home-calendar-card" radius="md" withBorder>
+    <>
+      <Paper className="home-calendar-panel" radius="md" withBorder>
+        <Stack gap="md" h="100%">
           <Group justify="space-between">
-            <ActionIcon aria-label="上个月" variant="subtle">
-              <IconChevronLeft size={22} />
-            </ActionIcon>
-            <Text fw={700}>{calendarTitle}</Text>
-            <ActionIcon aria-label="下个月" variant="subtle">
-              <IconChevronRight size={22} />
-            </ActionIcon>
+            <Title order={2}>日历</Title>
+            <Badge color="blue" variant="light">
+              {monthLabel}
+            </Badge>
           </Group>
 
-          <Divider />
+          <Paper className="home-calendar-card" radius="md" withBorder>
+            <Group justify="space-between">
+              <ActionIcon aria-label="上个月" onClick={() => moveMonth(-1)} variant="subtle">
+                <IconChevronLeft size={22} />
+              </ActionIcon>
+              <Button className="home-calendar-title-button" onClick={openMonthPicker} size="compact-sm" variant="subtle">
+                {calendarTitle}
+              </Button>
+              <ActionIcon aria-label="下个月" onClick={() => moveMonth(1)} variant="subtle">
+                <IconChevronRight size={22} />
+              </ActionIcon>
+            </Group>
 
-          <Box className="home-calendar-weekdays" aria-hidden>
-            {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
-              <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
-                {day}
-              </Text>
-            ))}
-          </Box>
+            <Divider />
 
-          <Box aria-label="月历，无学习计划" className="home-calendar-grid" role="grid">
-            {calendarDays.map((calendarDay, index) => (
-              <Box
-                aria-label={calendarDay.day ? String(calendarDay.day) : "空白日期"}
-                className="home-calendar-cell"
-                key={`${calendarDay.day ?? "empty"}-${index}`}
-                role="gridcell"
-              >
-                {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
-                {calendarDay.isToday ? <span className="home-calendar-today">今</span> : null}
-              </Box>
-            ))}
-            <Paper className="home-calendar-empty" radius="md" withBorder>
-              <Text fw={700}>暂无计划</Text>
-            </Paper>
-          </Box>
-        </Paper>
-      </Stack>
-    </Paper>
+            <Box className="home-calendar-weekdays" aria-hidden>
+              {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
+                <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
+                  {day}
+                </Text>
+              ))}
+            </Box>
+
+            <Box aria-label="月历" className="home-calendar-grid" role="grid">
+              {calendarDays.map((calendarDay, index) => (
+                <Box
+                  aria-label={calendarDay.dateKey ? `打开 ${calendarDay.dateKey} 的日历` : "空白日期"}
+                  className={`home-calendar-cell${calendarDay.isToday ? " is-today" : ""}`}
+                  component={calendarDay.dateKey ? "button" : "div"}
+                  key={`${calendarDay.day ?? "empty"}-${index}`}
+                  onClick={calendarDay.dateKey ? () => navigate(`/calendar?date=${calendarDay.dateKey}`) : undefined}
+                  role="gridcell"
+                  type={calendarDay.dateKey ? "button" : undefined}
+                >
+                  {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
+                  {calendarDay.day ? <span aria-hidden className="home-calendar-task-dots" /> : null}
+                </Box>
+              ))}
+            </Box>
+          </Paper>
+        </Stack>
+      </Paper>
+      <Modal centered onClose={() => setIsMonthModalOpen(false)} opened={isMonthModalOpen} title="选择年月" transitionProps={{ duration: 0 }}>
+        <Stack gap="md">
+          <Group grow>
+            <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
+            <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
+          </Group>
+          <Group justify="flex-end">
+            <Button aria-label="关闭年月选择" onClick={() => setIsMonthModalOpen(false)} variant="default">
+              取消
+            </Button>
+            <Button onClick={applyMonthPicker}>应用</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
   );
 }
 
@@ -465,16 +518,7 @@ function CourseLoadingCards() {
 }
 
 function CourseEmptyState() {
-  return (
-    <Grid.Col span={{ base: 12, md: 6, xl: 4 }}>
-      <Paper className="home-course-state-card" radius="md" withBorder>
-        <Stack gap="sm">
-          <Title order={3}>还没有课程</Title>
-          <Text c="dimmed">创建第一门课程后，这里会展示课程资料和学习入口。</Text>
-        </Stack>
-      </Paper>
-    </Grid.Col>
-  );
+  return null;
 }
 
 function CourseErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -679,7 +723,8 @@ function CourseOverview({
         />
       </Group>
 
-      <Grid gap="lg">
+      <Box className="home-course-scroll">
+      <Grid className="home-course-grid" gap="lg">
         {isLoading ? <CourseLoadingCards /> : null}
         {!isLoading && error ? <CourseErrorState message={error} onRetry={onRetry} /> : null}
         {!isLoading && !error && filteredCourses.length === 0 ? <CourseEmptyState /> : null}
@@ -701,6 +746,7 @@ function CourseOverview({
           <AddCourseCard onClick={onAddCourse} />
         </Grid.Col>
       </Grid>
+      </Box>
     </Paper>
   );
 }

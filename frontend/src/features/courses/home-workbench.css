@@ -1,5 +1,9 @@
 .home-workbench {
+  height: 100vh;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background:
     linear-gradient(180deg, #eef6ff 0, #f7fafc 220px),
     #f7fafc;
@@ -7,9 +11,10 @@
 }
 
 .home-header {
+  flex: 0 0 auto;
   border-bottom: 1px solid #e5e7eb;
   background: rgba(255, 255, 255, 0.94);
-  padding: 16px 28px;
+  padding: 12px 22px;
 }
 
 .home-brand-title {
@@ -27,7 +32,7 @@
 .home-user-button {
   border-color: #d6e0eb;
   background: #ffffff;
-  color: #2f80ed;
+  color: #111827;
 }
 
 .home-theme-single-button:hover,
@@ -36,23 +41,28 @@
 }
 
 .home-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
   max-width: none;
-  padding: 20px 24px 28px;
+  padding: 10px;
 }
 
 .home-layout {
   display: grid;
   grid-template-columns: minmax(300px, 28vw) minmax(0, 1fr);
-  gap: 18px;
-  min-height: calc(100vh - 116px);
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
 }
 
 .home-side-panel {
   min-width: 0;
   display: grid;
   grid-template-rows: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
-  gap: 18px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .home-focus-panel,
@@ -69,10 +79,11 @@
 }
 
 .home-main-panel {
-  min-height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  overflow: hidden;
   padding: 24px;
 }
 
@@ -93,6 +104,7 @@
 .home-plan-empty {
   flex: 1;
   justify-content: center;
+  text-align: center;
   min-height: 188px;
   border: 1px solid #bfdbfe;
   border-radius: 8px;
@@ -141,6 +153,11 @@
   padding: 12px 12px 16px;
 }
 
+.home-calendar-title-button {
+  color: #111827;
+  font-weight: 750;
+}
+
 .home-calendar-weekdays,
 .home-calendar-grid {
   display: grid;
@@ -164,6 +181,20 @@
   border-right: 1px solid #e5e7eb;
   border-bottom: 1px solid #e5e7eb;
   background: #ffffff;
+  color: #1f2937;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.home-calendar-cell:hover {
+  background: #f8fbff;
+}
+
+.home-calendar-cell.is-today {
+  border: 2px solid #2563eb;
+  background: #f8fbff;
 }
 
 .home-calendar-day {
@@ -175,32 +206,12 @@
   font-weight: 650;
 }
 
-.home-calendar-today {
+.home-calendar-task-dots {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.home-calendar-empty {
-  position: absolute;
-  left: 28%;
-  top: 38%;
-  width: 44%;
-  min-height: 58px;
-  display: grid;
-  place-items: center;
-  border-color: #93c5fd;
-  background: #e8f2ff;
-  color: #2563eb;
+  left: 8px;
+  bottom: 7px;
+  display: flex;
+  gap: 3px;
 }
 
 .home-term-select {
@@ -214,6 +225,18 @@
   border-color: #d6e0eb;
   color: #1f2937;
   text-decoration: none;
+}
+
+.home-course-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.home-course-grid {
+  min-height: 100%;
+  align-content: flex-start;
 }
 
 .home-course-card {
@@ -349,13 +372,25 @@
   font-weight: 750;
 }
 
+.calendar-placeholder-page {
+  background: #f7fafc;
+}
+
+.calendar-placeholder-shell {
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+}
+
 .home-course-alert {
   border: 1px solid #fecaca;
 }
 
 @media (max-width: 1100px) {
   .home-layout {
+    height: auto;
     grid-template-columns: 1fr;
+    overflow: auto;
   }
 
   .home-side-panel {
@@ -365,7 +400,7 @@
 
 @media (max-width: 720px) {
   .home-header {
-    padding: 16px;
+    padding: 12px 16px;
   }
 
   .home-header > .mantine-Group-root {
@@ -378,7 +413,7 @@
   }
 
   .home-shell {
-    padding: 14px;
+    padding: 8px;
   }
 
   .home-focus-panel,
