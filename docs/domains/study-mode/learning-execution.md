@@ -2,11 +2,11 @@
 
 ## 代码入口
 
-- `backend/app/modules/learning_execution/schemas.py`：执行上下文和 completion DTO。
+- `backend/app/modules/learning_execution/schemas.py`：执行上下文、任务级问答和 completion DTO。
 - `backend/app/modules/learning_execution/repository.py`：二级任务、父任务、计划、课程、同日任务和关联资料查询。
-- `backend/app/modules/learning_execution/service.py`：执行上下文组装、父任务/计划状态汇总和 completion 事务。
-- `backend/app/modules/learning_execution/router.py`：执行上下文和二级任务完成 API。
-- 测试入口：`backend/tests/modules/learning_execution/`、`backend/tests/integration/test_subtask_completion_transaction.py`。
+- `backend/app/modules/learning_execution/service.py`：执行上下文组装、任务级问答资料范围派生、父任务/计划状态汇总和 completion 事务。
+- `backend/app/modules/learning_execution/router.py`：执行上下文、任务级问答和二级任务完成 API。
+- 测试入口：`backend/tests/modules/learning_execution/test_task_qa_api.py`、`backend/tests/modules/learning_execution/`、`backend/tests/integration/test_subtask_completion_transaction.py`。
 
 ## 执行上下文
 
@@ -16,7 +16,20 @@
 
 关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；拿到 `handout_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 下载今日讲义 PDF。导出不改变二级任务完成状态，也不写打卡记录。
 
-## 完成事务
+## 执行页任务级问答
+
+`POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 支持执行页围绕当前二级任务提问。请求体只包含 `conversation_id` 和 `question`，不允许前端覆盖资料范围。服务层先通过 `repository.get_execution_target()` 校验当前用户拥有该二级任务、父任务、计划和课程，再把 `StudySubTask.related_material_ids_json` 转成 `MaterialScope(include_all_parsed_materials=False, material_ids=...)`。
+
+该接口复用 `course_qa.ask_course_question()` 的检索、模型回答、消息保存和引用保存链路，但传入以下任务执行页约束：
+
+- `CourseQuestionCreate.source_page = "task_execution"`，新建 `Conversation.source_page` 固定为 `task_execution`。
+- `allowed_conversation_source_pages = {"task_execution"}`，因此跨课程、跨用户或课程详情页 `course_detail` 对话复用都返回 `NOT_FOUND`。
+- `material_scope_metadata` 写入 `subtask_id` 和 `task_id`；Course QA 保存用户消息后再补写实际 `used_material_ids`。
+- 模型问题会附加课程、计划、一级任务、二级任务标题、类型和描述作为任务上下文；数据库中的用户消息仍保存原始问题。
+
+返回结构复用课程问答响应，包含 `conversation_id`、`user_message_id`、`assistant_message_id`、`answer_text`、`answer_type`、`source_citations` 和 `used_material_ids`。当前二级任务没有 parsed chunk 或没有相关命中时返回 `answer_type="no_source"`，引用和实际使用资料均为空数组，不调用伪引用兜底。
+
+任务级问答只写 `conversations`、`messages` 和有真实命中的 `source_citations`。它不修改二级任务状态，不汇总一级任务或计划状态，也不写 `checkin_records`。
 
 `PUT /api/v1/study-subtasks/{subtask_id}/completion` 接收期望状态：
 
@@ -56,5 +69,5 @@ completion API 不直接写二级任务 `in_progress`。
 
 - 不修改 S02 计划生成逻辑。
 - 不调用 S03 service，也不维护待办/日历缓存。
-- completion API 不生成讲义或任务测试题；S06 按需生成入口和 execution-context 内容 ID 规则见 [task-content.md](task-content.md)。
+- completion API 不生成讲义或任务测试题；S06 按需生成入口和 execution-context 内容 ID 规则见 [task-content.md](task-content.md)。`POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 也不生成 `AIGeneratedContent`，只保存问答对话和真实引用。
 - 不新增 migration，不修改前端。

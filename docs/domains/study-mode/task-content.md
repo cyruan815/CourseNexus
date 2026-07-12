@@ -140,7 +140,11 @@ sequenceDiagram
 
 Handout 模型调用次数等于材料批次数。Task test 模型调用次数固定为 1，prompt 包含当前二级任务允许材料批次中的所有候选 chunk；因此它适合当前 POC 的二级任务范围，后续若要支持更大的测试范围，应先评审候选考点摘要、chunk 级范围追溯或后台任务机制。Task test 结构校验最多处理 20 道题，题干相似度比较为 O(q²)，q 上限由 `question_count <= 20` 控制。导出接口不调用模型、不写数据库；Markdown 渲染复杂度约为 O(q + c)，PDF 渲染复杂度约为 O(s + c + p)，其中 q 为题目数，s 为讲义 section 和文本行数，c 为引用数，p 为分页后的页数。
 
-## 已知限制
+## 与执行页任务级问答的边界
+
+轻量化 T3 新增的 `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 属于 S04 执行页问答能力，不属于 S06 任务内容生成。它复用 Course QA 的 `conversations`、`messages` 和 `source_citations`，资料范围同样来自当前二级任务的 `related_material_ids_json`，但不会创建或更新 `AIGeneratedContent`，也不参与 `handout_content_id` / `task_test_content_id` 的最近成功内容选择。
+
+因此任务内容生成、Markdown/PDF 导出和执行页问答之间的边界是：生成与导出围绕 `ai_generated_contents`；任务级问答围绕对话消息。两者都不得修改二级任务完成状态，也不得写 `checkin_records`。
 
 - 不保存学生作答，作答记录已拆到后续任务。
 - 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，今日讲义支持 PDF 导出。
