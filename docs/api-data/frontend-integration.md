@@ -980,6 +980,24 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 响应 `data`：与学习计划保存接口一致，包含 `plan`、`tasks`、`subtasks`。
 
+### 3.30 学习计划重生成预览
+
+`POST /api/v1/study-plans/{plan_id}/regeneration-previews`
+
+要求：Bearer token。前端只提交用户本次修改的字段即可；后端会从已保存计划继承其余配置，并返回新的 `StudyPlanPreview`，不写数据库、不替换现有任务树。
+
+请求体字段均可选：`goal_text`、`start_date`、`end_date`、`duration_days`、`daily_available_minutes`、`preference`、`diagnostic_profile`、`material_scope`。未传 `diagnostic_profile` 时继承保存计划中的诊断 profile；显式传入新的 `diagnostic_profile` 时覆盖，传 `{}` 表示清空诊断影响。
+
+只修改学习天数时可只传：
+
+```json
+{
+  "duration_days": 3
+}
+```
+
+此时后端会用保存的 `start_date` 重新推导 `end_date`。如果同时覆盖 `start_date` 和 `duration_days`，则用新的 `start_date` 推导 `end_date`。前端不得把旧 `end_date` 和新的 `duration_days` 一起回填，除非两者确实描述同一个日期范围。
+
 ## 4. 已落地的 Study Mode 执行接口入口
 
 以下接口后端已落地。前端接入时必须使用 `/api/v1` 全路径，并按统一成功 / 错误 envelope 处理 loading、empty、failed 与畸形内容兜底。

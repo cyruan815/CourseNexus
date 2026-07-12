@@ -473,3 +473,47 @@ def test_preview_and_save_accept_wizard_metadata_and_exact_tasks(
     assert saved_data["plan"]["parsed_config_json"]["tasks_source"] == "confirmed"
     assert saved_data["plan"]["parsed_config_json"]["task_snapshot"][0]["title"] == preview_data["tasks"][0]["title"]
     assert saved_data["tasks"][0]["title"] == preview_data["tasks"][0]["title"]
+
+
+def test_regeneration_preview_api_accepts_duration_and_diagnostic_profile_override(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "regen_api_merge")
+    course_id = create_course(client, token)
+    material_id = upload_and_parse_material(client, token, course_id)
+    headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "regen-api-save-key"}
+
+    preview = client.post(f"/api/v1/courses/{course_id}/study-plans/preview", headers=headers, json=build_wizard_payload(material_id))
+    assert preview.status_code == 200
+    preview_data = preview.json()["data"]
+    saved = client.post(
+        f"/api/v1/courses/{course_id}/study-plans",
+        headers=headers,
+        json=preview_data | {"client_flow": "wizard_v1"},
+    )
+    assert saved.status_code == 200
+    plan_id = saved.json()["data"]["plan"]["id"]
+    override_profile = {
+        "question_version": "study_plan_diagnostic_v1",
+        "prior_knowledge_level": "some",
+        "foundation_needed": False,
+        "weak_topics": ["api-topic"],
+        "weak_area": "application",
+        "explanation_style": "example_first",
+    }
+
+    regenerated = client.post(
+        f"/api/v1/study-plans/{plan_id}/regeneration-previews",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"duration_days": 3, "diagnostic_profile": override_profile},
+    )
+
+    assert regenerated.status_code == 200
+    data = regenerated.json()["data"]
+    assert data["start_date"] == "2026-07-10"
+    assert data["end_date"] == "2026-07-12"
+    assert data["duration_days"] == 3
+    assert data["diagnostic_profile"] == override_profile
+    assert data["generation_metadata"]["planner_strategy"]["weak_topics"] == ["api-topic"]
+    assert data["generation_metadata"]["planner_strategy"]["explanation_style"] == "example_first"

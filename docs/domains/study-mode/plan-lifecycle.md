@@ -23,7 +23,7 @@
 3. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.planner_strategy` 由当前 `preference + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
 4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
 5. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
-6. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
+6. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
 7. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
 
 ## 计划质量约束
@@ -55,6 +55,7 @@
 
 ## 验证
 
+- `uv run python -m pytest tests/modules/study_plans/test_study_plan_lifecycle.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`50 passed in 18.43s`，覆盖 P10 重生成 preview 继承已保存 `diagnostic_profile`、显式 profile 覆盖、只传 `duration_days` 重新推导 `end_date`，以及 preview 不写计划 / 任务 / 打卡记录。
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_lifecycle_api.py -q`：`37 passed in 15.48s`，覆盖 `client_flow` 默认 `legacy`、`wizard_v1` 缺失 / 空 `tasks` 返回 `PREVIEW_TASKS_REQUIRED`、旧客户端兼容保存和新向导 exact tasks 保存。
 - `uv run python -m alembic upgrade head`：通过，执行 `20260709_0001 -> 20260712_0002 -> 20260712_0003`，其中 `20260712_0003` 新增 `study_plans.idempotency_key_hash` 和唯一索引。
 - `uv run python -m pytest tests/modules/study_plans/test_study_plan_quality.py tests/modules/study_plans/test_study_plan_diagnostic_api.py -q`：覆盖 preference -> planner_strategy 派生、unknown/缺省回落 balanced、fast_track + 基础薄弱仍保留补基础、mastery 高强度、sprint 高测评 / review，以及保存追溯中的 `planner_strategy`。

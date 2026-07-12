@@ -457,14 +457,49 @@ def preview_study_plan_regeneration(
     _assert_replace_allowed(db, plan_id=plan_id)
 
     config = plan.parsed_config_json if isinstance(plan.parsed_config_json, dict) else {}
-    material_scope = payload.material_scope or _material_scope_from_config(config)
+    confirmed_config = _config_dict(config, "confirmed_config") or {}
+    saved_duration_days = (
+        _config_int(confirmed_config, "duration_days")
+        or _config_int(config, "duration_days")
+        or _duration_days_between(plan.start_date, plan.end_date)
+    )
+    start_date = payload.start_date or plan.start_date
+    if payload.duration_days is not None:
+        end_date = payload.end_date
+        duration_days = payload.duration_days
+    elif payload.end_date is not None:
+        end_date = payload.end_date
+        duration_days = None
+    elif payload.start_date is not None:
+        end_date = None
+        duration_days = saved_duration_days
+    else:
+        end_date = plan.end_date
+        duration_days = saved_duration_days
+
+    material_scope = (
+        payload.material_scope
+        or _config_dict(confirmed_config, "material_scope")
+        or _config_dict(config, "material_scope")
+        or {"include_all_parsed_materials": True, "material_ids": []}
+    )
+    saved_diagnostic_profile = _config_dict(confirmed_config, "diagnostic_profile") or _config_dict(config, "diagnostic_profile") or {}
+    diagnostic_profile = payload.diagnostic_profile if payload.diagnostic_profile is not None else saved_diagnostic_profile
+    daily_available_minutes = (
+        payload.daily_available_minutes
+        or _config_int(confirmed_config, "daily_available_minutes")
+        or _config_int(config, "daily_available_minutes")
+        or plan.daily_available_minutes
+    )
+    preference = payload.preference or confirmed_config.get("preference") or config.get("preference") or "balanced"
     build_payload = StudyPlanBuildRequest(
         goal_text=payload.goal_text or plan.goal_text,
-        start_date=payload.start_date or plan.start_date,
-        end_date=payload.end_date or plan.end_date,
-        duration_days=payload.duration_days,
-        daily_available_minutes=payload.daily_available_minutes or plan.daily_available_minutes,
-        preference=payload.preference or config.get("preference", "balanced"),
+        start_date=start_date,
+        end_date=end_date,
+        duration_days=duration_days,
+        daily_available_minutes=daily_available_minutes,
+        preference=preference,
+        diagnostic_profile=diagnostic_profile,
         material_scope=material_scope,
     )
     preview = preview_study_plan(
@@ -1100,6 +1135,15 @@ def _db_expected_updated_at(actual: datetime, expected: datetime) -> datetime:
         return expected_value.replace(tzinfo=None)
     return expected_value
 
+
+def _config_dict(config: dict[str, object], key: str) -> dict[str, object] | None:
+    value = config.get(key)
+    return value if isinstance(value, dict) else None
+
+
+def _config_int(config: dict[str, object], key: str) -> int | None:
+    value = config.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 def _material_scope_from_config(config: dict[str, object]) -> object:
     material_scope = config.get("material_scope")

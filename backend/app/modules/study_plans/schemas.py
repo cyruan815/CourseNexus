@@ -269,6 +269,7 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
     duration_days: int | None = Field(default=None, gt=0)
     daily_available_minutes: int | None = Field(default=None, gt=0)
     preference: PlanPreference | None = None
+    diagnostic_profile: dict[str, object] | None = None
     material_scope: MaterialScope | None = None
 
     @field_validator("daily_available_minutes")
