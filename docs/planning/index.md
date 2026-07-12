@@ -15,6 +15,7 @@
 | [infrastructure-execution-summary.md](infrastructure-execution-summary.md) | 基础设施执行总结、修改文档清单和后续任务分发入口。 | 2026-07-09 |
 | [tech-debt-tracker.md](tech-debt-tracker.md) | 当前已知技术债、影响、优先级和处理状态。 | 2026-07-09 |
 | [information-processing-optimization.md](information-processing-optimization.md) | 资料解析、切片、检索、引用、生成和学习反馈链路优化计划。 | 2026-07-09 |
+| [study-mode-priority-list.md](study-mode-priority-list.md) | Study Mode 已完成项、未完成优先级、轻量任务测试题和并行派活建议。 | 2026-07-12 |
 | [phase-1-task-books/README.md](phase-1-task-books/README.md) | 第一阶段三人并行开发任务书、共享契约、文件所有权和验收索引。 | 2026-07-10 |
 
 ## 相关链接
