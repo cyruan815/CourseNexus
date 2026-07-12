@@ -222,6 +222,74 @@ def test_plan_preference_accepts_sprint_and_normalizes_legacy_advanced() -> None
     assert preference_adapter.validate_python("sprint") == "sprint"
     assert preference_adapter.validate_python("advanced") == "sprint"
 
+
+def test_derive_planner_strategy_maps_each_preference() -> None:
+    assert planner.derive_planner_strategy("fast_track") == {
+        "preference": "fast_track",
+        "content_depth": "concise",
+        "example_intensity": "low",
+        "assessment_intensity": "low",
+        "review_intensity": "low",
+        "foundation_required": False,
+        "weak_topics": [],
+        "weak_area": "other",
+        "explanation_style": "plain_language",
+    }
+    assert planner.derive_planner_strategy("balanced")["content_depth"] == "standard"
+    assert planner.derive_planner_strategy("balanced")["example_intensity"] == "standard"
+    assert planner.derive_planner_strategy("balanced")["assessment_intensity"] == "standard"
+    assert planner.derive_planner_strategy("balanced")["review_intensity"] == "standard"
+    assert planner.derive_planner_strategy("mastery")["content_depth"] == "detailed"
+    assert planner.derive_planner_strategy("mastery")["example_intensity"] == "high"
+    assert planner.derive_planner_strategy("mastery")["assessment_intensity"] == "high"
+    assert planner.derive_planner_strategy("mastery")["review_intensity"] == "high"
+    assert planner.derive_planner_strategy("sprint")["content_depth"] == "focused"
+    assert planner.derive_planner_strategy("sprint")["example_intensity"] == "standard"
+    assert planner.derive_planner_strategy("sprint")["assessment_intensity"] == "high"
+    assert planner.derive_planner_strategy("sprint")["review_intensity"] == "high"
+
+
+def test_derive_planner_strategy_defaults_unknown_preference_to_balanced() -> None:
+    assert planner.derive_planner_strategy(None)["preference"] == "balanced"
+    assert planner.derive_planner_strategy("unknown")["preference"] == "balanced"
+    assert planner.derive_planner_strategy("advanced")["preference"] == "sprint"
+
+
+def test_derive_planner_strategy_keeps_foundation_for_fast_track_diagnostic() -> None:
+    strategy = planner.derive_planner_strategy(
+        "fast_track",
+        {
+            "foundation_needed": True,
+            "weak_topics": ["nyquist_shannon"],
+            "weak_area": "calculation",
+            "explanation_style": "step_by_step",
+        },
+    )
+
+    assert strategy["preference"] == "fast_track"
+    assert strategy["content_depth"] == "concise"
+    assert strategy["example_intensity"] == "low"
+    assert strategy["assessment_intensity"] == "low"
+    assert strategy["review_intensity"] == "low"
+    assert strategy["foundation_required"] is True
+    assert strategy["weak_topics"] == ["nyquist_shannon"]
+    assert strategy["weak_area"] == "calculation"
+    assert strategy["explanation_style"] == "step_by_step"
+
+
+def test_derive_planner_strategy_marks_mastery_and_sprint_intensity() -> None:
+    mastery_strategy = planner.derive_planner_strategy("mastery")
+    sprint_strategy = planner.derive_planner_strategy("sprint")
+
+    assert mastery_strategy["content_depth"] == "detailed"
+    assert mastery_strategy["example_intensity"] == "high"
+    assert mastery_strategy["assessment_intensity"] == "high"
+    assert mastery_strategy["review_intensity"] == "high"
+    assert sprint_strategy["content_depth"] == "focused"
+    assert sprint_strategy["assessment_intensity"] == "high"
+    assert sprint_strategy["review_intensity"] == "high"
+
+
 def test_map_prompt_requires_ordered_detailed_coverage_and_formula_review() -> None:
     prompt = planner._build_map_prompt(batch=_context_batch(), payload=_build_request())
 
@@ -252,6 +320,7 @@ def test_reduce_prompt_uses_exact_course_name_and_quality_rules() -> None:
 def test_reduce_prompt_includes_diagnostic_profile_strategy() -> None:
     payload = _build_request().model_copy(
         update={
+            "preference": "fast_track",
             "diagnostic_profile": {
                 "question_version": "study_plan_diagnostic_v1",
                 "prior_knowledge_level": "little",
@@ -272,8 +341,21 @@ def test_reduce_prompt_includes_diagnostic_profile_strategy() -> None:
     )
 
     assert "diagnostic_profile" in prompt
+    assert "planner_strategy" in prompt
+    assert "content_depth: concise" in prompt
+    assert "example_intensity: low" in prompt
+    assert "assessment_intensity: low" in prompt
+    assert "review_intensity: low" in prompt
+    assert "合并优先级" in prompt
+    assert "1. 用户时间约束" in prompt
+    assert "2. 诊断得出的必要补基础" in prompt
+    assert "3. 学习方式 preference 派生配置" in prompt
+    assert "4. 额外例题、测试、review" in prompt
     assert "foundation_needed: true" in prompt
+    assert "foundation_required: true" in prompt
     assert "第一天或最早可行日期" in prompt
+    assert "即使 preference=fast_track" in prompt
+    assert "fast_track 不能生成过重计划" in prompt
     assert "weak_topics: nyquist_shannon, modulation_coding" in prompt
     assert "更靠前、更细" in prompt
     assert "weak_area: calculation" in prompt

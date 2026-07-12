@@ -3,7 +3,7 @@
 ## 状态
 
 - 日期：2026-07-12
-- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略和诊断后 capacity 闭环已实施。
+- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 已实施入口：每日学习时间规则
@@ -40,6 +40,18 @@
 - 薄弱方向：`concept` 强化概念解释，`calculation` 强化公式、步骤推导和计算练习，`application` 强化例题和应用任务，`memorization` 强化重点记忆、回顾和检查。
 - 解释风格：`explanation_style` 进入 reduce prompt，要求任务 description 匹配 `plain_language`、`step_by_step`、`example_first` 或 `exam_focused` 的描述风格。
 - 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖 reduce prompt 内容和四类 `weak_area` 规则；`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 用同一份资料、不同 diagnostic_profile 验证 preview 传给 planner 的策略不同。
+
+## 已实施入口：学习方式 preference 派生 planner_strategy
+
+2026-07-12 已落地学习方式 preference 到 planner 可用底层策略的稳定派生。范围包含后端派生函数、planner reduce prompt、preview metadata、保存追溯、测试和文档；不新增数据库表、不新增请求字段，不把中文学习方式写入后端契约。
+
+- 派生入口：`backend/app/modules/study_plans/planner.py::derive_planner_strategy` 使用 `_PREFERENCE_PLANNER_STRATEGIES` 将 `fast_track`、`balanced`、`mastery`、`sprint` 派生为 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity`；历史 `advanced` 兼容为 `sprint`，未知或缺省回落 `balanced`。
+- Prompt：`planner.py::_build_reduce_prompt` 会写入 `planner_strategy`，明确要求 planner 使用四个派生字段，并声明合并优先级：用户时间约束 > 诊断得出的必要补基础 > 学习方式 preference 派生配置 > 额外例题、测试、review。
+- 诊断合并：`diagnostic_profile.foundation_needed=true` 会派生为 `foundation_required=true`；即使 `preference=fast_track`，prompt 也要求保留前置补基础任务，压缩拓展讲解和重复练习而不是删除补基础。
+- 追溯：`backend/app/modules/study_plans/service.py::preview_study_plan` 将 `planner_strategy` 写入 `generation_metadata`；`_saved_config` 和 `confirmed_config` 保存同一派生结果，供后续讲义、任务测试和 review 生成直接读取。
+- 前端契约：UI 展示中文“快速通关 / 均衡学习 / 深入掌握 / 冲刺强化”，API 请求和响应仍只使用英文枚举 `fast_track`、`balanced`、`mastery`、`sprint`。
+- 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖映射、unknown/default 回落、mastery/sprint 强度和 prompt；`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖 fast_track/诊断补基础策略可保留补基础和保存追溯。
+
 
 ## 已实施入口：诊断后 capacity 闭环
 
@@ -238,10 +250,10 @@ daily_minutes_source = user_modified
 
 | 前端文案 | 后端值 | 说明 |
 | --- | --- | --- |
-| 快速 | `fast_track` | 快速过一遍，轻讲义、少测试。 |
-| 均衡 | `balanced` | 默认学习方式，讲义、例题、测试适中。 |
-| 深入 | `mastery` | 更详细讲义，更多例题、review 和阶段测试。 |
-| 冲刺 | `sprint` | 面向复习/备考，强调重点回顾、易错点和测试。 |
+| 快速通关 | `fast_track` | 快速过一遍，轻讲义、少测试。 |
+| 均衡学习 | `balanced` | 默认学习方式，讲义、例题、测试适中。 |
+| 深入掌握 | `mastery` | 更详细讲义，更多例题、review 和阶段测试。 |
+| 冲刺强化 | `sprint` | 面向复习/备考，强调重点回顾、易错点和测试。 |
 
 `sprint` 是新写入值。当前后端已有 `advanced` 枚举值，实施时需要兼容读取历史 `advanced`，并在展示和新写入时映射为 `sprint`。历史数据迁移可后续单独处理。
 
@@ -604,7 +616,7 @@ Preview 响应返回：
 }
 ```
 
-`tasks` 应写入正式计划任务表或现有等价结构；`parsed_config_json` 只保留生成上下文和追溯信息。后续讲义、测试、review 生成使用 `confirmed_config`、`diagnostic_profile`、任务类型和来源 topic。
+`tasks` 应写入正式计划任务表或现有等价结构；`parsed_config_json` 只保留生成上下文和追溯信息。后续讲义、测试、review 生成使用 `confirmed_config`、`planner_strategy`、`diagnostic_profile`、任务类型和来源 topic。
 
 ## 状态失效矩阵
 

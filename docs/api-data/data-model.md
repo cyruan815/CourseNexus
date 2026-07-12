@@ -135,10 +135,32 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业
     "recommended_daily_minutes": 60,
     "daily_minutes_source": "system_estimated",
     "preference": "sprint",
+    "planner_strategy": {
+      "preference": "sprint",
+      "content_depth": "focused",
+      "example_intensity": "standard",
+      "assessment_intensity": "high",
+      "review_intensity": "high",
+      "foundation_required": false,
+      "weak_topics": [],
+      "weak_area": "other",
+      "explanation_style": "plain_language"
+    },
     "material_scope": {"include_all_parsed_materials": true, "material_ids": []}
   },
   "recommended_daily_minutes": 60,
   "daily_minutes_source": "system_estimated",
+  "planner_strategy": {
+    "preference": "sprint",
+    "content_depth": "focused",
+    "example_intensity": "standard",
+    "assessment_intensity": "high",
+    "review_intensity": "high",
+    "foundation_required": false,
+    "weak_topics": [],
+    "weak_area": "other",
+    "explanation_style": "plain_language"
+  },
   "capacity": {
     "estimated_total_minutes": 60,
     "available_total_minutes": 60,
@@ -158,6 +180,9 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业
   }
 }
 ```
+
+
+`planner_strategy` 是后端从英文 `preference` 和可选 `diagnostic_profile` 派生的稳定计划生成配置。`advanced` 兼容读取为 `sprint`；未知或缺省 preference 按 `balanced` 派生。`foundation_required=true` 来自诊断的必要补基础，不会被 `fast_track` 删除。
 
 保存计划只创建计划、一级任务和二级任务结构。重生成 preview 不落库；替换计划会在一次事务中删除旧任务树并写入新任务树；删除计划写 `status = deleted` 和 `deleted_at`。
 

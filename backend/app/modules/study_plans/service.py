@@ -21,7 +21,13 @@ from app.modules.material_context.schemas import ContextChunk, MaterialContextBa
 from app.modules.material_context.service import iter_material_context_batches, resolve_material_scope_ids
 from app.modules.study_plans import repository as study_plan_repository
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
-from app.modules.study_plans.planner import map_material_batch, make_coverage, reduce_plan_batches, validate_preview
+from app.modules.study_plans.planner import (
+    derive_planner_strategy,
+    map_material_batch,
+    make_coverage,
+    reduce_plan_batches,
+    validate_preview,
+)
 from app.modules.study_plans.repository import StudyPlanBundle
 from app.modules.study_plans.schemas import (
     DIAGNOSTIC_QUESTION_VERSION,
@@ -260,7 +266,11 @@ def preview_study_plan(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
     )
-    generation_metadata = payload.generation_metadata or _build_generation_metadata(model_provider=model_provider)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    generation_metadata = _with_planner_strategy(
+        payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
+        planner_strategy=planner_strategy,
+    )
     preview = StudyPlanPreview(
         course_id=course_id,
         title=coverage_result.value.title,
@@ -814,7 +824,12 @@ def _build_generation_metadata(*, model_provider: ModelProvider) -> dict[str, ob
     }
 
 
+def _with_planner_strategy(metadata: dict[str, object], *, planner_strategy: dict[str, object]) -> dict[str, object]:
+    return {**metadata, "planner_strategy": planner_strategy}
+
+
 def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int, recommended_daily_minutes: int | None, daily_minutes_source: str | None) -> dict[str, object]:
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
     config: dict[str, object] = {
         "goal_text": payload.goal_text,
         "start_date": payload.start_date.isoformat(),
@@ -822,6 +837,7 @@ def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int
         "duration_days": duration_days,
         "daily_available_minutes": _require_resolved_daily_minutes(payload.daily_available_minutes),
         "preference": _normalize_preference_value(payload.preference),
+        "planner_strategy": planner_strategy,
         "material_scope": payload.material_scope.model_dump(mode="json"),
     }
     if recommended_daily_minutes is not None:
@@ -865,6 +881,7 @@ def _saved_config(
 ) -> dict[str, object]:
     duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
     estimated_total_minutes = _task_previews_total_minutes(tasks_preview)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
     daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
         payload=payload,
         estimated_total_minutes=estimated_total_minutes,
@@ -887,7 +904,10 @@ def _saved_config(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
     )
-    generation_metadata_value = generation_metadata or {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat()}
+    generation_metadata_value = _with_planner_strategy(
+        generation_metadata or {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat()},
+        planner_strategy=planner_strategy,
+    )
     data: dict[str, object] = {
         "schema_version": 1,
         "confirmed_config": confirmed_config,
@@ -901,6 +921,7 @@ def _saved_config(
         "material_scope": payload.material_scope.model_dump(mode="json"),
         "daily_available_minutes": daily_available_minutes,
         "preference": _normalize_preference_value(payload.preference),
+        "planner_strategy": planner_strategy,
         "start_date": payload.start_date.isoformat(),
         "end_date": payload.end_date.isoformat(),
         "duration_days": duration_days,
