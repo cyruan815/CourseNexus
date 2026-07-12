@@ -1,4 +1,4 @@
-﻿# Domains
+# Domains
 
 ## 概述
 
@@ -20,6 +20,7 @@
 | [study-mode/plan-lifecycle.md](study-mode/plan-lifecycle.md) | S02 学习计划生命周期：配置回填、全材料预览、保存幂等、替换、重生成和软删除。 | 2026-07-11 |
 | [study-mode/plan-builder-wizard.md](study-mode/plan-builder-wizard.md) | Study Mode 计划生成向导：目标输入、配置确认、学前诊断、preview 页面和字段契约设计。 | 2026-07-12 |
 | [study-mode/todos-calendar.md](study-mode/todos-calendar.md) | S03 今日待办与日历聚合：五个只读查询、日期摘要、课程分组和零写边界。 | 2026-07-11 |
+| [study-mode/task-content.md](study-mode/task-content.md) | S06 任务讲义与任务测试题：按需生成、幂等复用、材料范围、测试题硬约束和失败记录。 | 2026-07-12 |
 
 ## 相关链接
 

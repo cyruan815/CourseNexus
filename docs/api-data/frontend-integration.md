@@ -587,6 +587,41 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 模型、schema或材料覆盖失败会保存`generation_status="failed"`记录，`error_code`分别为`GENERATION_FAILED`、`GENERATION_SCHEMA_INVALID`或`MATERIAL_COVERAGE_INCOMPLETE`；失败记录的`content_json=null`且`source_citations=[]`。重复请求会创建不同ID，当前没有持久化幂等键或retry-by-id接口。
 
+### 3.23.1 任务内容生成
+
+`POST /api/v1/study-subtasks/{subtask_id}/handouts` 为 `learn` / `review` 二级任务生成今日讲义；`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 为 `quiz` / `test` 二级任务生成任务测试题。两个接口都要求 Bearer token，成功响应 `data` 为 `GeneratedContentRead`，失败响应使用统一 error envelope。
+
+讲义请求：
+
+```json
+{
+  "force_regenerate": false,
+  "parameters": {
+    "language": "zh-CN",
+    "detail_level": "standard"
+  }
+}
+```
+
+任务测试题请求：
+
+```json
+{
+  "force_regenerate": false,
+  "parameters": {
+    "question_count": 5,
+    "question_types": ["single_choice", "short_answer"],
+    "difficulty": "medium"
+  }
+}
+```
+
+默认重复请求会复用当前二级任务最近一次成功内容，不重新调用模型；`force_regenerate=true` 才会生成新内容。failed 记录不阻止重试，也不会被 execution-context 返回为内容 ID。
+
+`task_test` 的 `question_count` 是成功内容硬约束：`content_json.questions.length` 必须严格等于请求值，题型必须来自 `question_types` 白名单，题目 `id` / `sort_order` 必须连续且唯一，选择题 options 和答案必须自洽，重复或高度相似题干会被拒绝。后端会汇总当前二级任务全部材料批次后只生成一套固定题量测试题，不按 batch 拼接多套题；如果模型输出无法满足约束，返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录，不返回部分题目。
+
+主要错误码：`STATE_CONFLICT` 表示二级任务类型不允许生成该内容；`NO_PARSED_MATERIAL` 表示当前二级任务没有可用解析上下文；`MATERIAL_COVERAGE_INCOMPLETE` 表示关联资料覆盖不完整；`GENERATION_SCHEMA_INVALID` 表示模型输出结构、测试题硬约束或引用不符合契约；`GENERATION_FAILED` 表示模型调用或未知生成失败。
+
 ### 3.24 学前诊断问题
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
@@ -715,7 +750,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 - `calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余映射 `plain_language`。
 - `DIAGNOSTIC_STALE` 表示 `question_version` 或 topic 不再匹配当前资料范围；前端应回到诊断步骤重新获取问题和作答。
 
-生成出的 profile 可原样放入 `study-plans/preview` 请求。Preview 会用它影响 planner：`foundation_needed=true` 时前置补基础，`weak_topics` 会更靠前更细，`weak_area` 和 `explanation_style` 会影响例题、测试、review 和 description 风格。
+生成出的 profile 可原样放入 `POST /api/v1/courses/{course_id}/study-plans/preview` 请求。Preview 会用它影响 planner：`foundation_needed=true` 时前置补基础，`weak_topics` 会更靠前更细，`weak_area` 和 `explanation_style` 会影响例题、测试、review 和 description 风格。
 
 ```json
 {
@@ -895,15 +930,21 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 响应 `data`：与学习计划保存接口一致，包含 `plan`、`tasks`、`subtasks`。
 
-## 4. 待后续任务落地的接口入口
+## 4. 已落地的 Study Mode 执行接口入口
 
-以下接口是基础设施计划中的前端接入入口。后端实现完成后，必须在本文件补充请求体、响应 `data`、错误码和前端展示兜底。
+以下接口后端已落地。前端接入时必须使用 `/api/v1` 全路径，并按统一成功 / 错误 envelope 处理 loading、empty、failed 与畸形内容兜底。
 
-| 能力 | 接口入口 |
-| --- | --- |
-| 今日待办聚合 | 待后续计划执行阶段定义 |
-| 首页大日历聚合 | 待后续计划执行阶段定义 |
+| 能力 | 接口入口 | 前端口径 |
+| --- | --- | --- |
+| 今日待办聚合 | `GET /api/v1/todos/today?date=YYYY-MM-DD` | 首页今日任务，只读聚合。 |
+| 首页大日历 | `GET /api/v1/calendar/month?month=YYYY-MM`、`GET /api/v1/calendar/days/{date}/todos` | 月历摘要与日期弹窗，只读聚合。 |
+| 课程日历 | `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`、`GET /api/v1/courses/{course_id}/study-calendar/days/{date}` | 课程详情页日期摘要与今日任务。 |
+| 执行上下文 | `GET /api/v1/study-subtasks/{subtask_id}/execution-context` | 返回当天任务、关联资料、最近成功 `handout_content_id` / `task_test_content_id`。 |
+| 二级任务完成 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 请求体为 `{ "completed": boolean }`，不是 toggle。 |
+| 今日讲义生成 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 返回 `GeneratedContentRead`；默认复用最近一次 success，`force_regenerate=true` 重建。 |
+| 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；P2 只读展示通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情。 |
 
+任务测试题后端生成已实现；当前前端缺口是 P2 轻量只读展示。提交答案、判分、attempt 历史和反馈闭环属于后续 P9 / phase-1 S08，不在 P2 中引入。
 ## 5. 前端最小工作台验收口径
 
 - 前端页面只需要覆盖基础集成路径：登录、课程列表、课程详情选择、资料上传、资料范围选择、问答提交和引用展示。
