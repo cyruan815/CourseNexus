@@ -32,6 +32,27 @@ def _batch() -> MaterialContextBatch:
     return MaterialContextBatch(chunks=context.chunks, material_ids=["mat_1"], estimated_tokens=10)
 
 
+def _question_payload(
+    question_id: str,
+    *,
+    question_type: str = "single_choice",
+    question_text: str = "主键的作用是什么？",
+    options: list[dict[str, str]] | None = None,
+    correct_answer: object = "A",
+    sort_order: int = 1,
+) -> dict[str, object]:
+    return {
+        "id": question_id,
+        "question_type": question_type,
+        "question_text": question_text,
+        "options": options if options is not None else [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
+        "correct_answer": correct_answer,
+        "explanation": "主键用于唯一标识表中的一行。",
+        "source_citation_ids": ["chunk_1"],
+        "sort_order": sort_order,
+    }
+
+
 def test_task_test_generator_returns_questions_and_citations() -> None:
     provider = MockModelProvider(
         structured_outputs={
@@ -63,6 +84,123 @@ def test_task_test_generator_returns_questions_and_citations() -> None:
     assert output.content_json is not None
     assert output.content_json["questions"][0]["correct_answer"] == "A"
     assert output.item_citation_chunk_ids == {"q_1": ["chunk_1"]}
+
+
+def test_task_test_generator_rejects_question_count_mismatch() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload("q_1", sort_order=1),
+                    _question_payload("q_2", question_text="主键能否为空？", correct_answer="B", sort_order=2),
+                ],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1, "question_types": ["single_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+def test_task_test_generator_rejects_question_type_outside_requested_whitelist() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload(
+                        "q_1",
+                        question_type="short_answer",
+                        options=[],
+                        correct_answer="主键用于唯一标识一行。",
+                    ),
+                ],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1, "question_types": ["single_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    "questions",
+    [
+        [_question_payload("q_1", sort_order=1), _question_payload("q_1", question_text="主键能否为空？", sort_order=2)],
+        [_question_payload("q_1", sort_order=1), _question_payload("q_2", question_text="主键能否为空？", sort_order=1)],
+        [_question_payload("q_1", sort_order=1), _question_payload("q_2", question_text="主键能否为空？", sort_order=3)],
+        [_question_payload("q_1", sort_order=1), _question_payload("q_3", question_text="主键能否为空？", sort_order=2)],
+    ],
+)
+def test_task_test_generator_rejects_duplicate_or_non_contiguous_question_identity(questions: list[dict[str, object]]) -> None:
+    provider = MockModelProvider(structured_outputs={TaskTestContent: {"instructions": "完成下列题目。", "questions": questions}})
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 2, "question_types": ["single_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        _question_payload("q_1", correct_answer="C"),
+        _question_payload("q_1", question_type="multiple_choice", correct_answer=["A", "C"]),
+        _question_payload("q_1", question_type="multiple_choice", correct_answer=["A", "A"]),
+        _question_payload("q_1", options=[{"id": "A", "text": "唯一标识一行"}, {"id": "A", "text": "重复选项"}]),
+    ],
+)
+def test_task_test_generator_rejects_invalid_choice_option_contract(question: dict[str, object]) -> None:
+    provider = MockModelProvider(structured_outputs={TaskTestContent: {"instructions": "完成下列题目。", "questions": [question]}})
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1, "question_types": ["single_choice", "multiple_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+def test_task_test_generator_rejects_duplicate_question_texts() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload("q_1", sort_order=1),
+                    _question_payload("q_2", sort_order=2),
+                ],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 2, "question_types": ["single_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
 
 def test_task_test_generator_rejects_choice_question_without_options() -> None:

@@ -22,6 +22,7 @@ from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.learning_execution import router as learning_router
+from app.modules.learning_execution.service import generate_task_test_for_subtask
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -201,6 +202,77 @@ def _add_related_material_without_chunks(db: Session, *, user_id: str, subtask_i
     db.commit()
 
 
+def _add_related_material_with_chunk(db: Session, *, user_id: str, subtask_id: str) -> None:
+    db.add(
+        CourseMaterial(
+            id="mat_api_content_second",
+            user_id=user_id,
+            course_id="crs_api_content",
+            name="索引讲义.pdf",
+            material_type="pdf",
+            source_type="file",
+            file_url="/uploads/index.pdf",
+            parse_status="parsed",
+        )
+    )
+    db.add(
+        MaterialChunk(
+            id="chunk_api_content_second",
+            material_id="mat_api_content_second",
+            course_id="crs_api_content",
+            chunk_index=0,
+            page="2",
+            page_index=1,
+            heading="索引",
+            content_text="索引用于提高查询效率。",
+        )
+    )
+    subtask = db.get(StudySubTask, subtask_id)
+    assert subtask is not None
+    subtask.related_material_ids_json = ["mat_api_content", "mat_api_content_second"]
+    db.add(subtask)
+    db.commit()
+
+
+class CountingTaskTestModelProvider:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
+        raise AssertionError("answer_question should not be called")
+
+    def generate_structured(self, *, prompt, output_schema):
+        self.prompts.append(prompt)
+        assert output_schema is TaskTestContent
+        return TaskTestContent.model_validate(
+            {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    {
+                        "id": "q_1",
+                        "question_type": "single_choice",
+                        "question_text": "主键的作用是什么？",
+                        "options": [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
+                        "correct_answer": "A",
+                        "explanation": "主键用于唯一标识表中的一行。",
+                        "source_citation_ids": ["chunk_api_content"],
+                        "sort_order": 1,
+                    },
+                    {
+                        "id": "q_2",
+                        "question_type": "single_choice",
+                        "question_text": "索引的作用是什么？",
+                        "options": [{"id": "A", "text": "提高查询效率"}, {"id": "B", "text": "删除主键"}],
+                        "correct_answer": "A",
+                        "explanation": "索引用于提高查询效率。",
+                        "source_citation_ids": ["chunk_api_content_second"],
+                        "sort_order": 2,
+                    },
+                ],
+            }
+        )
+
+
 class BrokenModelProvider:
     def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
         raise AssertionError("answer_question should not be called")
@@ -262,6 +334,31 @@ def test_generate_task_test_for_quiz_subtask_saves_content(api: ApiHarness) -> N
     assert data["study_subtask_id"] == subtask_id
     assert data["generation_status"] == "success"
     assert data["content_json"]["questions"][0]["question_type"] == "single_choice"
+
+
+def test_generate_task_test_multi_batch_generates_requested_question_count_once(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    provider = CountingTaskTestModelProvider()
+
+    result = generate_task_test_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"question_count": 2, "question_types": ["single_choice"], "difficulty": "medium"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=1,
+    )
+
+    assert len(provider.prompts) == 1
+    assert "chunk_api_content" in provider.prompts[0]
+    assert "chunk_api_content_second" in provider.prompts[0]
+    assert len(result.content_json["questions"]) == 2
+    assert [question["id"] for question in result.content_json["questions"]] == ["q_1", "q_2"]
+    citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
+    assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
 
 
 def test_generate_handout_is_idempotent_for_existing_success(api: ApiHarness) -> None:
@@ -366,7 +463,11 @@ def test_failed_task_test_record_does_not_block_retry(api: ApiHarness) -> None:
             }
         }
     )
-    retry_response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
+    retry_response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"question_count": 1, "question_types": ["single_choice"], "difficulty": "medium"}},
+    )
 
     assert retry_response.status_code == 200
     retry = retry_response.json()["data"]

@@ -185,17 +185,23 @@ def _generate_task_content(
         if not batches:
             raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前任务没有已解析资料上下文", status_code=400)
 
-        output = run_material_coverage(
-            batches=batches,
-            expected_material_ids=set(material_ids),
-            map_batch=lambda batch: generator.generate(
-                batches=(batch,),
-                expected_material_ids=frozenset(batch.material_ids),
+        if content_type == "task_test":
+            output = generator.generate(
+                batches=tuple(batches),
+                expected_material_ids=frozenset(material_ids),
                 parameters=parameters,
-            ),
-            reduce_results=lambda outputs: _reduce_task_content_outputs(content_type=content_type, outputs=outputs),
-        ).value
-
+            )
+        else:
+            output = run_material_coverage(
+                batches=batches,
+                expected_material_ids=set(material_ids),
+                map_batch=lambda batch: generator.generate(
+                    batches=(batch,),
+                    expected_material_ids=frozenset(batch.material_ids),
+                    parameters=parameters,
+                ),
+                reduce_results=lambda outputs: _reduce_task_content_outputs(content_type=content_type, outputs=outputs),
+            ).value
         content = _new_task_generated_content(
             content_id=content_id,
             user_id=user_id,

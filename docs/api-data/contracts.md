@@ -34,7 +34,7 @@ S01 只固定计划学习模式的子系统契约和数据库审计结论，不�
 
 | 方法与路径 | 状态 | 说明 |
 | --- | --- | --- |
-| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 当前为确定性占位计划，S02 替换为真实全材料生成。 |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料、英文 `preference` 和可选 `diagnostic_profile` 生成真实全材料 preview；响应包含 daily minutes、coverage、planner_strategy 和 capacity。 |
 | `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存计划、一级任务和二级任务结构，S02 继续扩展确认后的任务树保存。 |
 | `GET /api/v1/courses/{course_id}/study-plans` | 已实现 | 查询课程下未删除计划列表。 |
 | `GET /api/v1/study-plans/{plan_id}` | 已实现 | 查询单个计划及任务结构。 |
@@ -122,7 +122,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 
 ## 独立生成公共契约
 
-- `POST /courses/{course_id}/generations`、课程生成历史和生成详情路径保持不变。
+- `POST /api/v1/courses/{course_id}/generations`、`GET /api/v1/courses/{course_id}/generated-contents` 和 `GET /api/v1/generated-contents/{generated_content_id}` 路径保持不变。
 - 生成服务只使用`iter_material_context_batches()`，每份选定parsed资料必须进入至少一个batch。
 - 注册类型固定为`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；G01完成公共链路，具体真实生成由G02-G06分别完成。
 - 每个最终业务条目使用稳定`id`；具体生成器返回“条目ID到chunk ID候选”，公共层过滤越界ID并回填`source_citation_ids`。
@@ -282,7 +282,7 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 }
 ```
 
-`question_count` 范围 1-20；`question_types` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`；`difficulty` 支持 `easy`、`medium`、`hard`。
+`question_count` 范围 1-20；`question_types` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`；`difficulty` 支持 `easy`、`medium`、`hard`。`task_test.content_json.questions.length` 必须严格等于 `question_count`，题型必须来自请求白名单，题目 `id` / `sort_order` 必须从 1 连续，选择题选项和答案必须自洽；不满足时返回 `GENERATION_SCHEMA_INVALID`，不会保存部分成功题目。
 
 成功响应统一为 `{data, meta}`，其中 `data` 是 `GeneratedContentRead`，至少包含 `id`、`course_id`、`study_subtask_id`、`content_type`、`title`、`content_json`、`generation_status`、`error_code`、`created_at` 和 `updated_at`。
 
@@ -292,7 +292,7 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 - `quiz` / `test` 只能调用 task-test endpoint；调用 handout endpoint 返回 `STATE_CONFLICT`。
 - 材料范围严格来自 `StudySubTask.related_material_ids_json`，接口请求体不能覆盖资料范围。
 - 后端使用 `MaterialScope(include_all_parsed_materials=false, material_ids=related_material_ids_json)`。
-- S06 使用 `iter_material_context_batches()` 和 `run_material_coverage()`，不使用 Top-K 检索或旧 `resolve_context()`。
+- S06 使用 `iter_material_context_batches()` 读取当前二级任务材料范围，不使用 Top-K 检索或旧 `resolve_context()`。`handout` 继续按材料批次 `run_material_coverage()` 后合并；`task_test` 汇总当前二级任务的全部材料批次后只调用一次 generator，生成固定 `question_count` 道题，不按 batch 拼接多套测试题。
 - 默认请求幂等：同一 `study_subtask_id + content_type` 已有未删除 success 时直接返回最近成功内容，不调用模型、不新建 `AIGeneratedContent`。
 - `force_regenerate=true` 时即使已有 success 也重新生成，并创建新的成功内容。
 - failed 记录不作为幂等命中结果，也不阻止后续请求重新尝试生成。
