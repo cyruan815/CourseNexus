@@ -52,15 +52,34 @@ git push --force-with-lease origin <自己的固定分支>
 
 ```text
 <type>(<scope>): <subject>
+
+<body>
+
+<footer>
 ```
 
-`description` 可选，须简明扼要（不超过 50 个字符），并以动词开头。
+`subject` 是必填的首行摘要，位于冒号之后，须简明扼要（不超过 50 个字符），并以动词开头。
+
+`body` 是可选正文，与首行之间空一行。出现以下情况时应补充 `body`：
+
+- 改动原因或问题根因无法从 `subject` 直接看出。
+- 存在关键实现约束、取舍或容易误解的非显然行为。
+- 涉及兼容性、数据迁移、配置变化、回滚要求或后续操作。
+- 一个原子提交包含多处必要的协同修改，需要说明它们为何必须一起提交。
+
+简单且自解释的改动不需要 `body`。正文重点解释“为什么改”和评审者必须知道的影响，不重复罗列文件名或逐行复述代码。
+
+`footer` 是可选尾注，与 `body` 之间空一行，适用于：
+
+- 使用 `BREAKING CHANGE:` 说明破坏性变更及迁移要求。
+- 使用 `DEPRECATED:` 说明弃用内容和推荐替代路径。
+- 使用 `Fixes #...`、`Closes #...`、`Refs #...` 关联或关闭 Issue / PR。
 
 规则：
 
 - `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
 - `scope` 可选，使用英文短名标识影响范围。
-- 除模板字段和固定标识外，`subject`、正文和说明性内容使用中文。
+- 除模板字段和固定标识外，`subject`、`body` 和说明性内容使用中文。
 - 文档类提交使用 `docs`，不要使用非 Angular 规范的 `doc`。
 
 示例：
@@ -69,6 +88,25 @@ git push --force-with-lease origin <自己的固定分支>
 - `feat(courses): 新增课程列表骨架`
 - `fix(api): 修正未登录错误响应`
 - `test(tasks): 覆盖任务完成状态流转`
+
+需要正文时：
+
+```text
+fix(materials): 避免部分解析静默标记成功
+
+Docling 可能在部分页面失败后仍返回非空文档。记录解析诊断，供下游区分完整解析和部分解析。
+```
+
+需要尾注时：
+
+```text
+feat(api): 区分资料可用状态和解析质量
+
+保留 parsed 作为可消费状态，并单独暴露解析质量，避免部分成功资料被下游完全排除。
+
+BREAKING CHANGE: material 响应新增 parse_quality 字段
+Refs #123
+```
 
 一次提交只做一类事情，避免混入无关格式化或临时文件。
 

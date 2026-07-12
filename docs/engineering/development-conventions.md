@@ -92,11 +92,14 @@
 - 提交前必须检查 `git status`、`git diff` / `git diff --staged` 和待提交文件清单，确认只包含当前任务相关改动。
 - 提交前必须确认没有真实 `.env`、API Key、`SECRET_KEY`、密码、用户资料正文、完整用户问题正文或其他敏感内容进入暂存区。
 - 如果后续需要整理提交历史，应优先在合并前通过 review 或 rebase 处理，不在开发过程中牺牲小步提交记录。
-- 提交信息使用 Angular / Conventional Commits 结构：`<type>(<scope>): <subject>`。
-- `description` 可选，须简明扼要（不超过 50 个字符），并以动词开头。
+- 提交信息采用 Angular 结构：`<type>(<scope>): <subject>`，可在空行后依次追加 `<body>` 和 `<footer>`。
+- `subject` 必填，是冒号后的首行摘要，须简明扼要（不超过 50 个字符），并以动词开头。
+- `body` 可选，与首行之间空一行。当仅凭 `subject` 无法说明改动原因、关键实现约束、兼容性影响、迁移或回滚要求时，应补充 `body`；简单且自解释的改动不必为了形式添加正文。
+- `body` 重点解释“为什么改”和评审者必须知道的影响，不重复罗列文件名或逐行复述代码。
+- `footer` 可选，与 `body` 之间空一行，用于记录 `BREAKING CHANGE:`、`DEPRECATED:`、关联或关闭 Issue / PR 等结构化信息。
 - `type` 使用英文固定标识，例如 `feat`、`fix`、`docs`、`test`、`refactor`、`chore`、`build`、`ci`、`perf`、`style`、`revert`。
 - `scope` 可选，使用英文短名标识影响范围，例如 `backend`、`frontend`、`docs`、`db`、`materials`、`courses`。
-- 除模板字段和固定标识外，`subject`、正文和说明性内容使用中文。
+- 除模板字段和固定标识外，`subject`、`body` 和说明性内容使用中文。
 - 文档类提交使用 `docs`，不要使用非 Angular 规范的 `doc`。
 - 示例：`docs(engineering): 明确提交信息使用中文说明`、`fix(api): 修正未登录错误响应`。
 
