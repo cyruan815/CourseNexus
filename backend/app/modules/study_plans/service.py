@@ -626,7 +626,10 @@ def _hash_value(value: str) -> str:
 
 
 def _hash_request(payload: StudyPlanSaveRequest) -> str:
-    raw = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    data = payload.model_dump(mode="json")
+    if data.get("client_flow") == "legacy":
+        data.pop("client_flow", None)
+    raw = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return _hash_value(raw)
 
 
