@@ -165,7 +165,8 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: /2026 年 7 月/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /2026 年 7 月/ }));
-    expect(await screen.findByRole("dialog", { name: "选择年月" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "选择年月" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "选择年月" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭年月选择" }));
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));

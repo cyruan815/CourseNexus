@@ -82,7 +82,7 @@ function getDateKey(year: number, month: number, day: number): string {
   return `${year}-${padDatePart(month + 1)}-${padDatePart(day)}`;
 }
 
-function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
+function getCalendarDays(referenceDate = new Date(), today = new Date()): CalendarDay[] {
   const year = referenceDate.getFullYear();
   const month = referenceDate.getMonth();
   const firstDay = new Date(year, month, 1);
@@ -100,7 +100,7 @@ function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
     return {
       day,
       dateKey: getDateKey(year, month, day),
-      isToday: day === referenceDate.getDate(),
+      isToday: year === today.getFullYear() && month === today.getMonth() && day === today.getDate(),
     };
   });
 }
@@ -208,7 +208,7 @@ function Header() {
           </Title>
         </Group>
 
-        <Group gap="md" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
           <ActionIcon
             aria-label={themeLabel}
             className="home-theme-single-button"
@@ -263,12 +263,12 @@ function CalendarPanel() {
   const navigate = useNavigate();
   const today = new Date();
   const [referenceDate, setReferenceDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [isMonthModalOpen, setIsMonthModalOpen] = useState(false);
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [draftYear, setDraftYear] = useState(String(referenceDate.getFullYear()));
   const [draftMonth, setDraftMonth] = useState(String(referenceDate.getMonth()));
   const monthLabel = `${referenceDate.getMonth() + 1} 月`;
   const calendarTitle = `${referenceDate.getFullYear()} 年 ${monthLabel}`;
-  const calendarDays = getCalendarDays(referenceDate);
+  const calendarDays = getCalendarDays(referenceDate, today);
   const yearOptions = Array.from({ length: 5 }, (_, index) => {
     const year = today.getFullYear() - 2 + index;
     return { value: String(year), label: `${year} 年` };
@@ -282,12 +282,12 @@ function CalendarPanel() {
   function openMonthPicker() {
     setDraftYear(String(referenceDate.getFullYear()));
     setDraftMonth(String(referenceDate.getMonth()));
-    setIsMonthModalOpen(true);
+    setIsMonthPickerOpen(true);
   }
 
   function applyMonthPicker() {
     setReferenceDate(new Date(Number(draftYear), Number(draftMonth), 1));
-    setIsMonthModalOpen(false);
+    setIsMonthPickerOpen(false);
   }
 
   return (
@@ -313,6 +313,19 @@ function CalendarPanel() {
                 <IconChevronRight size={22} />
               </ActionIcon>
             </Group>
+
+            {isMonthPickerOpen ? (
+              <Paper aria-label="选择年月" className="home-month-picker" component="section" radius="md" withBorder>
+                <Group align="flex-end" gap="sm" wrap="nowrap">
+                  <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
+                  <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
+                  <Button aria-label="关闭年月选择" onClick={() => setIsMonthPickerOpen(false)} variant="default">
+                    取消
+                  </Button>
+                  <Button onClick={applyMonthPicker}>应用</Button>
+                </Group>
+              </Paper>
+            ) : null}
 
             <Divider />
 
@@ -343,20 +356,6 @@ function CalendarPanel() {
           </Paper>
         </Stack>
       </Paper>
-      <Modal centered onClose={() => setIsMonthModalOpen(false)} opened={isMonthModalOpen} title="选择年月" transitionProps={{ duration: 0 }}>
-        <Stack gap="md">
-          <Group grow>
-            <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
-            <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
-          </Group>
-          <Group justify="flex-end">
-            <Button aria-label="关闭年月选择" onClick={() => setIsMonthModalOpen(false)} variant="default">
-              取消
-            </Button>
-            <Button onClick={applyMonthPicker}>应用</Button>
-          </Group>
-        </Stack>
-      </Modal>
     </>
   );
 }
