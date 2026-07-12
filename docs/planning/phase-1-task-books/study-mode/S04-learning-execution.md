@@ -25,7 +25,7 @@
 3. 左侧任务节点只返回同一计划、同一 `task_date` 下的一级任务和二级任务，不返回完整计划日期树。
 4. 当前二级任务返回类型、描述、状态、完成时间和关联资料摘要。
 5. `related_material_ids_json` 必须是字符串数组；查询时再次校验资料属于当前用户和课程。已删除资料保留 ID 和名称快照能力不足时返回 `availability = deleted`，不得把其他课程资料返回。
-6. S04 响应预留 `handout_content_id`、`task_test_content_id`，本任务固定返回 `null`；S06 合并后通过公共 generated-content 查询填充。前端在非空前保持生成入口状态，不制造内容 ID。
+6. S04 响应预留 `handout_content_id`、`task_test_content_id`；S04 单独验收时固定返回 `null`。当前 S06 已接入，execution-context 通过 generated-content 查询填充当前二级任务最近一次 success 内容 ID；无 success 时为 `null`，failed 记录不作为内容 ID。
 
 ### 2.2 完成状态与汇总
 
@@ -186,7 +186,7 @@
 ### 3.4 后端未实现与占位字段
 
 - S04 合并前两个路径均未实现，前端不得自行直接更新计划详情对象。
-- `handout_content_id`、`task_test_content_id` 在 S06 前始终为 `null`，这是明确的后端未接入状态，不是生成成功。
+- `handout_content_id`、`task_test_content_id` 在 S04 单独验收时为 `null`；S06 合并后由 execution-context 返回当前二级任务最近一次成功生成内容 ID，没有成功内容时才为 `null`。
 - 前端完成按钮必须等 completion 契约合并后再接；不允许用本地计数代替服务端打卡结果。
 
 ## 4. 测试计划

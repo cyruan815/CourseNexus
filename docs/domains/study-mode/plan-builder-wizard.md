@@ -25,7 +25,7 @@
 - Service：`backend/app/modules/study_plans/service.py::build_study_plan_diagnostic_questions` 复用 `iter_material_context_batches()` 校验资料属于当前用户、当前课程且已解析，并从当前 `material_scope` 的 chunk heading / 资料名 / 正文首行中稳定抽取 1 到 3 个 topic，不足 3 个时不补无意义问题。
 - Profile 归纳：`build_study_plan_diagnostic_profile` 校验 `question_version` 和 `topic_id` 是否仍属于当前资料范围；不匹配返回 `DIAGNOSTIC_STALE`。`none` / `heard` 视为弱掌握，弱掌握超过一半时 `foundation_needed=true`，`weak_topics` 保留弱 topic id。
 - 解释风格：`weak_area=calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余为 `plain_language`。
-- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `study-plans/preview`；2026-07-12 起，preview 除透传和保存追溯外，还会把 diagnostic_profile 摘要写入 planner reduce prompt，影响补基础、任务顺序、主题颗粒度和 description 风格。
+- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `POST /api/v1/courses/{course_id}/study-plans/preview`；2026-07-12 起，preview 除透传和保存追溯外，还会把 diagnostic_profile 摘要写入 planner reduce prompt，影响补基础、任务顺序、主题颗粒度和 description 风格。
 - 失败与补偿：无 parsed 资料返回 `NO_PARSED_MATERIAL`；资料范围越界沿用 material context 的 `NOT_FOUND` / 覆盖错误；旧诊断答案或版本不匹配返回 `DIAGNOSTIC_STALE`，前端应回到学前诊断重新作答。
 - 复杂度与资源预算：诊断 topic 抽取只扫描当前资料范围批次，时间复杂度 O(chunks)，最多返回 3 个 topic，不额外调用模型，不写数据库。
 - 测试入口：`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖正常问题生成、少于 3 个 topic、profile 归纳、旧 topic 拒绝、弱基础 profile 和 profile 继续传入 preview。
@@ -137,7 +137,7 @@ goal_input
 后端调用：
 
 ```text
-POST /courses/{course_id}/study-plan-config-parses
+POST /api/v1/courses/{course_id}/study-plan-config-parses
 ```
 
 资料范围约束：
@@ -462,20 +462,19 @@ Preview 页还展示：
 确认保存计划
 ```
 
-## 后端接口契约草案
+## 后端接口契约（已实施）
 
-尽量保留现有端点，只扩展请求和响应字段。
+后端接口统一使用 `/api/v1` 前缀；诊断问题和诊断 profile 已拆成两个端点实现。
 
 ```text
-POST /courses/{course_id}/study-plan-config-parses
-POST /courses/{course_id}/study-plan-diagnostic-questions
-POST /courses/{course_id}/study-plan-diagnostic-profiles
-POST /courses/{course_id}/study-plans/preview
-POST /courses/{course_id}/study-plans
+POST /api/v1/courses/{course_id}/study-plan-config-parses
+POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions
+POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles
+POST /api/v1/courses/{course_id}/study-plans/preview
+POST /api/v1/courses/{course_id}/study-plans
 ```
 
-诊断问题和诊断 profile 可以拆成两个端点，也可以先合并实现；对前端而言，需要能拿到问题列表，并能把答案归纳成 `diagnostic_profile`。
-
+前端需要先获取诊断问题列表，再把答案归纳成 `diagnostic_profile` 并传给 preview。
 ### Preview 请求
 
 计划 preview 请求需要包含确认后的配置和诊断 profile。
@@ -704,15 +703,14 @@ else:
 | --- | --- | --- |
 | 日期或学习天数非法 | `INVALID_DATE_RANGE` | 停在配置确认页，提示修改日期或天数。 |
 | 每日学习时间低于 30 分钟 | `DAILY_MINUTES_TOO_LOW` | 阻止继续，提示最低 30 分钟。 |
-| 没有可用资料 | `NO_PARSED_MATERIALS` | 提示先上传并等待解析完成。 |
-| 资料不属于当前课程或用户 | `MATERIAL_FORBIDDEN` | 移除非法资料并提示重新选择。 |
-| 资料还在解析 | `MATERIAL_STILL_PARSING` | 显示等待解析完成。 |
-| 资料解析失败 | `MATERIAL_PARSE_FAILED` | 提示该资料不可用于生成计划。 |
+| 没有可用资料 | `NO_PARSED_MATERIAL` | 提示先上传并等待解析完成。 |
+| 资料不属于当前课程或用户 | `NOT_FOUND` | 移除非法资料并提示重新选择。 |
+| 资料还在解析或解析失败 | `NO_PARSED_MATERIAL` | 提示等待解析完成或重新上传可解析资料。 |
 | 诊断答案和当前资料快照不匹配 | `DIAGNOSTIC_STALE` | 返回学前诊断重新回答。 |
-| preview 容量超出 | `PLAN_OVER_CAPACITY` | 展示 warning 和调整建议，可以允许用户修改后重试。 |
-| 模型输出枚举或结构非法 | `INVALID_MODEL_OUTPUT` | 后端重试 1 次，仍失败则展示生成失败。 |
-| 保存请求未提交 tasks | `PREVIEW_TASKS_REQUIRED` | 新向导阻止保存；旧客户端走兼容路径。 |
-| 保存请求幂等键重复 | `IDEMPOTENT_REPLAY` | 返回第一次保存的计划。 |
+| preview 容量超出 | `PLAN_OVER_CAPACITY` warning | 展示 warning 和调整建议，可以允许用户修改后重试。 |
+| 模型输出枚举或结构非法 | `GENERATION_SCHEMA_INVALID` | 展示生成失败并允许重新生成。 |
+| 保存请求未提交 tasks | 兼容路径 / 后续 `PREVIEW_TASKS_REQUIRED` | 当前旧客户端仍兼容保存前生成 preview；新向导强制 tasks 属于 P6 口径收紧。 |
+| 保存请求幂等键重复 | 成功返回 / `IDEMPOTENCY_CONFLICT` | 同 key 同请求返回既有计划；同 key 不同请求返回冲突。 |
 
 ## 测试重点
 

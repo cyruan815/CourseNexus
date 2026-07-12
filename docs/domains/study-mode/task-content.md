@@ -51,7 +51,7 @@ sequenceDiagram
     participant MP as ModelProvider
     participant DB as ai_generated_contents / source_citations
 
-    FE->>LE: POST /study-subtasks/{id}/handouts or task-tests
+    FE->>LE: POST /api/v1/study-subtasks/{id}/handouts or /api/v1/study-subtasks/{id}/task-tests
     LE->>LE: verify user, course, plan, task, subtask
     LE->>LE: verify subtask_type matches content_type
     LE->>MC: iter_material_context_batches(MaterialScope from related_material_ids_json)

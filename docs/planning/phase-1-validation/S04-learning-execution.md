@@ -35,4 +35,4 @@ git diff --check
 - 未修改前端。
 - 未新增 migration。
 - 未修改 S03 只读聚合逻辑。
-- 未接入 S06 讲义或任务测试生成；`handout_content_id` 和 `task_test_content_id` 仍为 `null`。
+- 本验收记录产生于 S04 合并时，当时未接入 S06 讲义或任务测试生成；当前 S06 已接入，`execution-context` 会返回最近一次成功生成的 `handout_content_id` / `task_test_content_id`，详见 `docs/domains/study-mode/task-content.md`。

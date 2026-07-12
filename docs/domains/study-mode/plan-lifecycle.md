@@ -18,13 +18,13 @@
 
 ## 数据流
 
-1. 自然语言配置回填：`POST /courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
+1. 自然语言配置回填：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
 2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
 3. 确认保存：新客户端提交调整后的 `tasks`；旧客户端不传 `tasks` 时后端先生成真实 preview 再保存。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.planner_strategy` 由当前 `preference + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
 4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
-5. 替换：`PUT /study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
-6. 重生成：`POST /study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
-7. 删除：`DELETE /study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+5. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
+6. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，合并已保存配置和请求覆盖项，只返回 preview，不写数据库。
+7. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
 
 ## 计划质量约束
 

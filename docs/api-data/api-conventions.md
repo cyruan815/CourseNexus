@@ -31,7 +31,7 @@
 
 - 必填字段由接口契约明确声明。
 - 前端不传空字符串代替缺失值；可选字段缺失时省略或传 `null`，由具体契约约定。
-- 创建、生成、保存计划等可能重复提交的请求应携带 `Idempotency-Key`。
+- 保存学习计划等已声明请求级幂等的接口应携带 `Idempotency-Key`；任务讲义和任务测试题当前使用“最近一次 success 复用 + `force_regenerate=true` 重建”，显式 `Idempotency-Key` 归入后续 P3 增强。
 
 ## 响应格式
 
@@ -106,7 +106,7 @@
 
 ## 幂等约定
 
-- 创建课程、保存计划、生成 AI 内容、生成讲义、生成任务测试题等接口应支持 `Idempotency-Key`。
+- 保存学习计划读取并校验 `Idempotency-Key`；任务讲义和任务测试题当前不读取该 header，默认幂等语义是同一 `study_subtask_id + content_type` 复用最近一次 success，`force_regenerate=true` 时显式重建。
 - 完成或取消完成二级任务必须幂等，重复请求不能重复累计完成数。
 - `CheckinRecord` 按 `user_id + checkin_date` 唯一更新。
 - 幂等冲突返回 `IDEMPOTENCY_CONFLICT`。

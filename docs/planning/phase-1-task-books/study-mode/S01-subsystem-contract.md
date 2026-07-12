@@ -133,7 +133,7 @@ S01 实施禁止：
 
 - `todos_calendar`、`learning_execution`、`exports` 当前只有 `__init__.py`，无 router/service/repository/schema。
 - `checkins` 当前只有 model，无查询或重算 API。
-- `handout`、`task_test` 当前只有包占位，无真实生成器。
+- 历史任务书原始状态：`handout`、`task_test` 当时只有包占位，无真实生成器。当前后端生成器和任务 API 已落地，权威实现状态见 `docs/domains/study-mode/task-content.md`。
 - 上述能力在对应 S03-S07 完成前，前端只能显示 disabled/coming 状态，不得制造本地成功数据。
 
 ## 4. 测试计划

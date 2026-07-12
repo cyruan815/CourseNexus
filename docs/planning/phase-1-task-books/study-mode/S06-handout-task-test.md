@@ -63,7 +63,7 @@
 
 ## 3. 字段与接口
 ### 3.1 当前 API
-- 当前 `/courses/{course_id}/generations` 只注册五类占位/业务生成器；handout/task_test 包为空。
+- 历史任务书原始状态：`/api/v1/courses/{course_id}/generations` 只注册五类占位/业务生成器，handout/task_test 包为空。当前 handout / task_test 后端生成入口已实现；权威实现状态见 `docs/domains/study-mode/task-content.md`。
 - 当前 generated-content list/detail 可读取最终记录，但没有任务专用生成入口。
 
 ### 3.2 新增 API
