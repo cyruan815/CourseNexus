@@ -90,6 +90,8 @@ class MaterialRead(BaseModel):
     mime_type: str | None
     parse_status: str
     parse_error: str | None
+    parse_quality: str
+    parse_diagnostics_json: dict | list | None
     page_count: int | None
     created_at: datetime
     updated_at: datetime

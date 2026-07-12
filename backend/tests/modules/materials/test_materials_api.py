@@ -84,6 +84,8 @@ def test_upload_list_detail_and_delete_file_material(client: TestClient) -> None
     assert material["source_type"] == "file"
     assert material["material_type"] == "markdown"
     assert material["parse_status"] == "uploaded"
+    assert material["parse_quality"] == "unknown"
+    assert material["parse_diagnostics_json"] is None
 
     list_response = client.get(f"/api/v1/courses/{course_id}/materials", headers=headers)
     assert list_response.status_code == 200
@@ -141,8 +143,12 @@ def test_parse_retry_parses_uploaded_text_material(client: TestClient) -> None:
     parse_response = client.post(f"/api/v1/materials/{material_id}/parse-retries", headers=headers)
 
     assert parse_response.status_code == 200
-    assert parse_response.json()["data"]["parse_status"] == "parsed"
-    assert parse_response.json()["data"]["parse_error"] is None
+    parsed = parse_response.json()["data"]
+    assert parsed["parse_status"] == "parsed"
+    assert parsed["parse_error"] is None
+    assert parsed["parse_quality"] == "complete"
+    assert parsed["parse_diagnostics_json"]["parser"] == "plain_text"
+    assert parsed["parse_diagnostics_json"]["warnings"] == []
 
 
 def test_material_detail_does_not_cross_user_boundary(client: TestClient) -> None:

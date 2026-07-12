@@ -14,6 +14,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.parsers.base import ParseDiagnostics, ParseWarning, ParsedChunk, ParsedDocument
 from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
@@ -22,6 +23,28 @@ from app.modules.materials.models import MaterialChunk
 from app.modules.materials.service import delete_material, parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+
+
+class DiagnosticParser:
+    def __init__(self, *, partial: bool) -> None:
+        warning = ParseWarning(code="OCR_MEMORY_ERROR", message="OCR 内存分配失败", page_no=17)
+        self.document = ParsedDocument(
+            chunks=[ParsedChunk(chunk_index=0, content_text="Kept", page="16", page_index=15)],
+            diagnostics=ParseDiagnostics(
+                parser="docling",
+                profile="pdf_text_first",
+                conversion_status="partial_success" if partial else "success",
+                page_count=59,
+                processed_pages=tuple(range(1, 60)),
+                pages_with_content=(16,),
+                pages_with_chunks=(16,),
+                failed_pages=(17,) if partial else (),
+                warnings=(warning,) if partial else (),
+            ),
+        )
+
+    def parse(self, file_path: Path) -> ParsedDocument:
+        return self.document
 
 
 def capture_course_logs(caplog) -> logging.Logger:
@@ -107,6 +130,109 @@ def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Pa
     assert f"material={material.id}" in record.getMessage()
     assert "chunks=1" in record.getMessage()
     assert "cost_ms=" in record.getMessage()
+
+
+def test_parse_material_persists_complete_diagnostics(db: Session, tmp_path: Path) -> None:
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=DiagnosticParser(partial=False),
+        rag_index=FakeRagIndex(),
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parsed"
+    assert parsed.parse_quality == "complete"
+    assert parsed.page_count == 59
+    assert parsed.parse_diagnostics_json["conversion_status"] == "success"
+    assert parsed.parse_diagnostics_json["failed_pages"] == []
+    assert parsed.parse_diagnostics_json["warnings"] == []
+
+
+def test_parse_material_keeps_chunks_and_marks_partial_diagnostics(db: Session, tmp_path: Path) -> None:
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=DiagnosticParser(partial=True),
+        rag_index=FakeRagIndex(),
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parsed"
+    assert parsed.parse_quality == "partial"
+    assert parsed.page_count == 59
+    assert [chunk.content_text for chunk in material_chunks(db, material.id)] == ["Kept"]
+    assert parsed.parse_diagnostics_json["failed_pages"] == [17]
+    assert parsed.parse_diagnostics_json["warnings"][0] == {
+        "code": "OCR_MEMORY_ERROR",
+        "message": "OCR 内存分配失败",
+        "page_no": 17,
+        "component": None,
+        "severity": "warning",
+    }
+
+
+def test_reparse_replaces_previous_partial_diagnostics(db: Session, tmp_path: Path) -> None:
+    user, _, material = create_uploaded_material(db, tmp_path)
+    rag_index = FakeRagIndex()
+    parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=DiagnosticParser(partial=True),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    reparsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=DiagnosticParser(partial=False),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert reparsed.parse_quality == "complete"
+    assert reparsed.parse_diagnostics_json["failed_pages"] == []
+    assert reparsed.parse_diagnostics_json["warnings"] == []
+
+
+def test_parse_failure_clears_previous_diagnostics(db: Session, tmp_path: Path) -> None:
+    class FailingParser:
+        def parse(self, file_path: Path) -> ParsedDocument:
+            raise CourseNexusError(code="PARSE_FAILED", message="解析失败")
+
+    user, _, material = create_uploaded_material(db, tmp_path)
+    rag_index = FakeRagIndex()
+    parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=DiagnosticParser(partial=True),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    failed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=FailingParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert failed.parse_status == "parse_failed"
+    assert failed.parse_quality == "unknown"
+    assert failed.page_count is None
+    assert failed.parse_diagnostics_json is None
 
 
 def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path, caplog) -> None:

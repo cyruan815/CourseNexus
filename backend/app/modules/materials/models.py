@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -48,6 +48,13 @@ class CourseMaterial(Base):
         server_default="uploaded",
     )
     parse_error: Mapped[str | None] = mapped_column(Text)
+    parse_quality: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+    parse_diagnostics_json: Mapped[dict | list | None] = mapped_column(JSON)
     page_count: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -62,6 +69,10 @@ class CourseMaterial(Base):
         CheckConstraint(
             "parse_status in ('uploaded', 'parsing', 'parsed', 'parse_failed', 'deleted')",
             name="course_material_parse_status",
+        ),
+        CheckConstraint(
+            "parse_quality in ('unknown', 'complete', 'partial')",
+            name="course_material_parse_quality",
         ),
         CheckConstraint("source_type != 'file' or file_url is not null", name="course_material_file_url_required"),
         CheckConstraint("source_type != 'url' or source_url is not null", name="course_material_source_url_required"),

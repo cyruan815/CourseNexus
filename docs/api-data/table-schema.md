@@ -112,6 +112,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `material_type` | `pdf`、`ppt`、`word`、`markdown`、`image`、`text`、`link` |
 | `source_type` | `file`、`url` |
 | `parse_status` | `uploaded`、`parsing`、`parsed`、`parse_failed`、`deleted` |
+| `parse_quality` | `unknown`、`complete`、`partial` |
 | `conversation_status` | `active`、`deleted` |
 | `message_role` | `user`、`assistant`、`system` |
 | `answer_type` | `grounded`、`partial_grounded`、`no_source` |
@@ -201,7 +202,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `mime_type` | string | 是 | null |  | MIME 类型。 |
 | `parse_status` | enum `parse_status` | 否 | `uploaded` | INDEX(`course_id`, `parse_status`) | 解析状态。 |
 | `parse_error` | text | 是 | null |  | 解析失败原因。 |
-| `page_count` | integer | 是 | null |  | 页数或页序号数量。 |
+| `parse_quality` | enum `parse_quality` | 否 | `unknown` |  | 当前解析结果的完整性判断。 |
+| `parse_diagnostics_json` | json | 是 | null |  | Parser、profile、页覆盖、失败页和 warning。 |
+| `page_count` | integer | 是 | null |  | Parser 报告的文档总页数；非分页文本为 null。 |
 | `created_at` | datetime | 否 | 当前时间 | INDEX | 上传时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
 | `deleted_at` | datetime | 是 | null | INDEX | 删除时间。 |
@@ -210,7 +213,35 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - `source_type = file` 时 `file_url` 必填；`source_type = url` 时 `source_url` 必填。
 - 只有 `parse_status = parsed` 且未软删除的资料可进入检索、问答、生成和计划上下文。
+- `parse_status = parsed` 可与 `parse_quality = partial` 同时存在：资料有可消费 chunk，但不能据此声称完整覆盖原文档。
+- 历史已解析数据和没有诊断能力的 parser 使用 `parse_quality = unknown`，不得自动回填为 `complete`。
 - 删除资料写入 `deleted_at` 并将 `parse_status` 置为 `deleted`；历史引用继续通过 `source_citations.material_name` 展示快照。
+
+`parse_diagnostics_json` 契约：
+
+```json
+{
+  "parser": "docling",
+  "profile": "pdf_text_first",
+  "conversion_status": "partial_success",
+  "page_count": 59,
+  "processed_pages": [1, 2, 3],
+  "pages_with_content": [1, 2],
+  "pages_with_chunks": [1, 2],
+  "failed_pages": [3],
+  "warnings": [
+    {
+      "code": "OCR_MEMORY_ERROR",
+      "message": "OCR 内存分配失败",
+      "page_no": 3,
+      "component": "rapidocr",
+      "severity": "warning"
+    }
+  ]
+}
+```
+
+页码数组使用一基页码并按升序去重。API 只返回稳定 warning code、安全消息、组件名和页码，不返回本地文件路径或异常堆栈。
 
 ## material_chunks
 

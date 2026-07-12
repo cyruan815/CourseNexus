@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
 from app.integrations.file_storage.base import FileStorage, material_type_for_filename
-from app.integrations.parsers.base import Parser
+from app.integrations.parsers.base import ParseDiagnostics, Parser
 from app.integrations.rag.base import RagChunk, RagIndex
 from app.modules.courses.service import assert_course_owner
 from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
@@ -270,6 +270,9 @@ def parse_material(
     material = get_material_detail(db, user_id, material_id)
     material.parse_status = "parsing"
     material.parse_error = None
+    material.parse_quality = "unknown"
+    material.page_count = None
+    material.parse_diagnostics_json = None
     material.updated_at = datetime.now(timezone.utc)
     save_material(db, material)
 
@@ -348,6 +351,9 @@ def parse_material(
         chunk.embedding_id = chunk.id
     material.parse_status = "parsed"
     material.parse_error = None
+    material.parse_quality = _parse_quality(parsed_document.diagnostics)
+    material.page_count = parsed_document.diagnostics.page_count
+    material.parse_diagnostics_json = _parse_diagnostics_json(parsed_document.diagnostics)
     material.updated_at = datetime.now(timezone.utc)
     db.add_all(chunks)
     db.add(material)
@@ -393,6 +399,9 @@ def _mark_parse_failed(
         _try_delete_material_vectors(rag_index, material.id)
     material.parse_status = "parse_failed"
     material.parse_error = error_code
+    material.parse_quality = "unknown"
+    material.page_count = None
+    material.parse_diagnostics_json = None
     material.updated_at = datetime.now(timezone.utc)
     return replace_material_chunks(db, material=material, chunks=[])
 
@@ -402,3 +411,32 @@ def _try_delete_material_vectors(rag_index: RagIndex, material_id: str) -> None:
         rag_index.delete_material(material_id)
     except Exception:
         pass
+
+
+def _parse_diagnostics_json(diagnostics: ParseDiagnostics) -> dict[str, object]:
+    return {
+        "parser": diagnostics.parser,
+        "profile": diagnostics.profile,
+        "conversion_status": diagnostics.conversion_status,
+        "page_count": diagnostics.page_count,
+        "processed_pages": list(diagnostics.processed_pages),
+        "pages_with_content": list(diagnostics.pages_with_content),
+        "pages_with_chunks": list(diagnostics.pages_with_chunks),
+        "failed_pages": list(diagnostics.failed_pages),
+        "warnings": [
+            {
+                "code": warning.code,
+                "message": warning.message,
+                "page_no": warning.page_no,
+                "component": warning.component,
+                "severity": warning.severity,
+            }
+            for warning in diagnostics.warnings
+        ],
+    }
+
+
+def _parse_quality(diagnostics: ParseDiagnostics) -> str:
+    if diagnostics.parser == "unknown" or diagnostics.conversion_status == "unknown":
+        return "unknown"
+    return "partial" if diagnostics.is_partial else "complete"

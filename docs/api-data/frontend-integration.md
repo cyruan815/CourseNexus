@@ -197,6 +197,8 @@
   "mime_type": "text/markdown",
   "parse_status": "uploaded",
   "parse_error": null,
+  "parse_quality": "unknown",
+  "parse_diagnostics_json": null,
   "page_count": null,
   "created_at": "2026-07-09T12:00:00+00:00",
   "updated_at": "2026-07-09T12:00:00+00:00",
@@ -226,6 +228,16 @@
 | `parsed` | 已解析并写入 `MaterialChunk`。 |
 | `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
 | `deleted` | 已软删除，不进入列表和上下文。 |
+
+`parse_quality` 当前可能值：
+
+| 状态 | 含义 |
+| --- | --- |
+| `unknown` | 尚未解析、解析失败、历史数据或 parser 没有足够诊断信息。 |
+| `complete` | 本轮成功，且 parser 未观察到失败页或 warning。 |
+| `partial` | 存在可用 chunk，但 parser 检测到部分成功、失败页或 warning。 |
+
+`parse_status = "parsed"` 只表示资料内容可消费，不等同于完整解析；完整性统一读取 `parse_quality` 和 `parse_diagnostics_json`。
 
 ### 3.10.1 资料一级文件夹
 
@@ -327,7 +339,7 @@
 
 `POST /api/v1/materials/{material_id}/parse-retries`
 
-要求：Bearer token。当前实现为同步解析本地 `.md` / `.txt` 文件；后续支持后台任务时，响应语义需单独更新。
+要求：Bearer token。当前实现为同步解析本地 `.md`、`.txt`、`.pdf`、`.docx`、`.pptx` 和图片；后续支持后台任务时，响应语义需单独更新。
 
 响应 `data`：`MaterialRead`。
 
@@ -335,6 +347,8 @@
 
 - `parse_status = "parsed"`。
 - `parse_error = null`。
+- `parse_quality` 为 `complete`、`partial` 或 `unknown`。
+- `page_count` 和 `parse_diagnostics_json` 返回 parser 本轮诊断；非分页文本的 `page_count = null` 是正常结果。
 - 后端已写入有序 `MaterialChunk`，供后续资料上下文、问答和计划基础能力使用。
 
 失败时：
@@ -342,6 +356,7 @@
 - HTTP 仍返回成功响应和 `MaterialRead`。
 - `parse_status = "parse_failed"`。
 - `parse_error` 保存稳定错误码，例如 `PARSE_FAILED` 或 `UNSUPPORTED_FILE_TYPE`。
+- `parse_quality = "unknown"`、`page_count = null`、`parse_diagnostics_json = null`，不保留上一轮成功诊断。
 
 前端最小工作台只需要展示 `uploaded`、`parsing`、`parsed`、`parse_failed`、未知状态兜底，以及在 `parse_failed` 时提供重试入口。
 

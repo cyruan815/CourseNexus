@@ -45,6 +45,8 @@ flowchart LR
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
 - 删除文件夹不会删除资料，所有关联资料回到未分类。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。
+- `parse_quality` 是全局解析质量信号：`complete` 表示本轮未观察到失败，`partial` 表示有可用 chunk 但存在失败页或 warning，`unknown` 表示证据不足。
+- `parse_status = parsed` 与 `parse_quality = partial` 可以同时存在；下游仍可读取 chunk，但不能把它解释为完整覆盖。
 - 文件夹、资料和课程必须属于当前用户；跨用户或跨课程统一返回 `NOT_FOUND`。
 - 公开接口和请求字段见 [../../api-data/frontend-integration.md](../../api-data/frontend-integration.md)。
 
@@ -78,6 +80,8 @@ PDF 解析：
 3. 首轮存在有效 chunk 时直接返回，不初始化 OCR converter。
 4. 首轮零 chunk 时使用 `pdf_ocr_fallback` profile 整份重试，并记录 `OCR_FALLBACK_USED` info。
 5. Docling 返回 `partial_success` 时保留有效 chunk，同时记录失败页和 warning；零 chunk 才映射为 `PARSE_FAILED`。
+6. SQLite chunk 和向量索引都成功后，才把 diagnostics、`page_count` 和 `parse_quality` 与 `parsed` 状态一起提交。
+7. 重解析开始时清空上一轮诊断；解析或索引整体失败时清空 chunk、向量和诊断，quality 回到 `unknown`。
 
 创建文件夹：
 

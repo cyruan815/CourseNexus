@@ -40,9 +40,23 @@ def test_key_columns_are_present() -> None:
 
     assert {"username", "password_hash", "status"} <= columns_by_table["users"]
     assert {"user_id", "name", "status", "deleted_at"} <= columns_by_table["courses"]
-    assert {"parse_status", "file_url", "source_url"} <= columns_by_table["course_materials"]
+    assert {
+        "parse_status",
+        "parse_quality",
+        "parse_diagnostics_json",
+        "file_url",
+        "source_url",
+    } <= columns_by_table["course_materials"]
     assert {"message_id", "generated_content_id", "hit_text"} <= columns_by_table["source_citations"]
     assert {"content_type", "content_json", "study_subtask_id"} <= columns_by_table["ai_generated_contents"]
     assert {"task_date", "status", "sort_order"} <= columns_by_table["study_tasks"]
     assert {"subtask_type", "related_material_ids_json", "completed_at"} <= columns_by_table["study_subtasks"]
     assert {"checkin_date", "completion_ratio", "color_level"} <= columns_by_table["checkin_records"]
+
+
+def test_material_parse_quality_is_required_with_unknown_default() -> None:
+    table = Base.metadata.tables["course_materials"]
+    parse_quality = table.columns["parse_quality"]
+
+    assert parse_quality.nullable is False
+    assert str(parse_quality.server_default.arg) == "unknown"
