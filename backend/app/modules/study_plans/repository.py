@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.generated_content.models import AIGeneratedContent
@@ -104,6 +105,43 @@ def list_subtasks_for_plan(db: Session, *, plan_id: str) -> list[StudySubTask]:
         ).scalars()
     )
 
+
+def claim_study_plan_replace(
+    db: Session,
+    *,
+    user_id: str,
+    plan_id: str,
+    expected_updated_at: datetime,
+    title: str,
+    goal_text: str,
+    start_date: date,
+    end_date: date,
+    daily_available_minutes: int,
+    parsed_config_json: dict[str, object],
+    updated_at: datetime,
+) -> bool:
+    result = db.execute(
+        update(StudyPlan)
+        .where(
+            StudyPlan.id == plan_id,
+            StudyPlan.user_id == user_id,
+            StudyPlan.updated_at == expected_updated_at,
+            StudyPlan.deleted_at.is_(None),
+            StudyPlan.status != "deleted",
+        )
+        .values(
+            title=title,
+            goal_text=goal_text,
+            start_date=start_date,
+            end_date=end_date,
+            daily_available_minutes=daily_available_minutes,
+            status="active",
+            parsed_config_json=parsed_config_json,
+            updated_at=updated_at,
+        )
+    )
+    db.flush()
+    return result.rowcount == 1
 
 def delete_tasks_for_plan(db: Session, *, plan_id: str) -> None:
     db.execute(delete(StudySubTask).where(StudySubTask.plan_id == plan_id))

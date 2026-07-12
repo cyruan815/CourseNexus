@@ -203,6 +203,7 @@ def save_study_plan(
         )
 
     plan_id = _new_plan_id()
+    now = datetime.now(timezone.utc)
     plan = StudyPlan(
         id=plan_id,
         user_id=user_id,
@@ -223,6 +224,8 @@ def save_study_plan(
         end_date=save_payload.end_date,
         daily_available_minutes=save_payload.daily_available_minutes,
         status="active",
+        created_at=now,
+        updated_at=now,
     )
     tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=course_id, task_previews=tasks_preview)
     try:
@@ -299,8 +302,36 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         payload=payload,
         task_previews=payload.tasks,
     )
-    old_dates = _task_dates(study_plan_repository.list_tasks_for_plan(db, plan_id=plan_id))
+    parsed_config = _saved_config(
+        payload,
+        coverage=None,
+        capacity=None,
+        generation_metadata=None,
+        tasks_preview=payload.tasks,
+        tasks_source="confirmed",
+        key_hash=None,
+        request_hash=_hash_request(payload),
+    )
+    updated_at = datetime.now(timezone.utc)
     try:
+        claimed = study_plan_repository.claim_study_plan_replace(
+            db,
+            user_id=user_id,
+            plan_id=plan_id,
+            expected_updated_at=_db_expected_updated_at(plan.updated_at, payload.expected_updated_at),
+            title=payload.title,
+            goal_text=payload.goal_text,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            daily_available_minutes=payload.daily_available_minutes,
+            parsed_config_json=parsed_config,
+            updated_at=updated_at,
+        )
+        if not claimed:
+            db.rollback()
+            raise CourseNexusError(code="STATE_CONFLICT", message="学习计划已被更新", status_code=409)
+
+        old_dates = _task_dates(study_plan_repository.list_tasks_for_plan(db, plan_id=plan_id))
         study_plan_repository.delete_tasks_for_plan(db, plan_id=plan_id)
         plan.title = payload.title
         plan.goal_text = payload.goal_text
@@ -308,19 +339,9 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         plan.end_date = payload.end_date
         plan.daily_available_minutes = payload.daily_available_minutes
         plan.status = "active"
-        plan.updated_at = datetime.now(timezone.utc)
-        plan.parsed_config_json = _saved_config(
-            payload,
-            coverage=None,
-            capacity=None,
-            generation_metadata=None,
-            tasks_preview=payload.tasks,
-            tasks_source="confirmed",
-            key_hash=None,
-            request_hash=_hash_request(payload),
-        )
+        plan.updated_at = updated_at
+        plan.parsed_config_json = parsed_config
         tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=plan.course_id, task_previews=payload.tasks)
-        db.add(plan)
         db.add_all(tasks)
         db.add_all(subtasks)
         db.flush()
@@ -677,6 +698,13 @@ def _assert_expected_updated_at(actual: datetime, expected: datetime) -> None:
     expected_value = expected.replace(tzinfo=timezone.utc) if expected.tzinfo is None else expected.astimezone(timezone.utc)
     if actual_value != expected_value:
         raise CourseNexusError(code="STATE_CONFLICT", message="学习计划已被更新", status_code=409)
+
+
+def _db_expected_updated_at(actual: datetime, expected: datetime) -> datetime:
+    expected_value = expected.replace(tzinfo=timezone.utc) if expected.tzinfo is None else expected.astimezone(timezone.utc)
+    if actual.tzinfo is None:
+        return expected_value.replace(tzinfo=None)
+    return expected_value
 
 
 def _material_scope_from_config(config: dict[str, object]) -> object:

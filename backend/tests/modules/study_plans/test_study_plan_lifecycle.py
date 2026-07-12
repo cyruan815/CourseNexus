@@ -741,6 +741,71 @@ def test_replace_study_plan_replaces_task_tree_atomically(db: Session, tmp_path:
     assert [subtask.title for subtask in replaced.subtasks] == ["替换后的测试"]
 
 
+
+def test_replace_study_plan_rejects_stale_expected_updated_at_from_concurrent_session(tmp_path: Path) -> None:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+    setup_db = testing_session()
+    try:
+        user = register_user(setup_db, UserCreate(username="replace-race", password="password123"))
+        course = create_course(setup_db, user.id, CourseCreate(name="Computer Networks"))
+        material_id = create_parsed_material(setup_db, tmp_path, user.id, course.id, "replace-race.txt", b"Reliable transport")
+        saved = save_study_plan(
+            setup_db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+        user_id = user.id
+        plan_id = saved.plan.id
+        expected_updated_at = saved.plan.updated_at
+    finally:
+        setup_db.close()
+
+    first_db = testing_session()
+    second_db = testing_session()
+    verify_db = testing_session()
+    try:
+        stale_bundle = get_study_plan_detail(second_db, user_id=user_id, plan_id=plan_id)
+        assert stale_bundle.plan.updated_at == expected_updated_at
+
+        first_data = _request_data([material_id])
+        first_data["tasks"][0]["title"] = "第一轮替换任务"
+        second_data = _request_data([material_id])
+        second_data["tasks"][0]["title"] = "第二轮替换任务"
+
+        replace_study_plan(
+            first_db,
+            user_id=user_id,
+            plan_id=plan_id,
+            payload=_replace_request_from_data(expected_updated_at, first_data),
+        )
+
+        with pytest.raises(CourseNexusError) as exc_info:
+            replace_study_plan(
+                second_db,
+                user_id=user_id,
+                plan_id=plan_id,
+                payload=_replace_request_from_data(expected_updated_at, second_data),
+            )
+
+        assert exc_info.value.code == "STATE_CONFLICT"
+        current = get_study_plan_detail(verify_db, user_id=user_id, plan_id=plan_id)
+        assert [task.title for task in current.tasks] == ["第一轮替换任务"]
+        assert [subtask.title for subtask in current.subtasks] == ["用户调整后的学习项"]
+    finally:
+        first_db.close()
+        second_db.close()
+        verify_db.close()
+
 def test_replace_study_plan_rejects_progress_and_generated_content(db: Session, tmp_path: Path) -> None:
     user = register_user(db, UserCreate(username="hank", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
