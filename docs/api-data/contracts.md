@@ -131,6 +131,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `quiz` 参数支持 `question_count`、`question_types`、`difficulty` 和 `focus`。成功记录的 `content_json.questions` 使用稳定 `q_001...` ID，并通过每题 `source_citation_ids` 关联顶层 `source_citations`。
 - `flashcard` 参数支持 `card_count`、`card_style`、`include_formulas` 和 `focus`；成功记录写入 `content_json.cards`，`mastery_status` 固定为 `unknown`，逐卡引用通过 `source_citation_ids` 解析。
 - `outline` 参数支持组织方式、章节数量、复习目标和详细度；成功记录写入 `content_json.sections`，不包含学习计划或任务字段。
+- `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`，逐项引用通过 `source_citation_ids` 解析。
 - 每个最终业务条目使用稳定`id`；具体生成器返回“条目ID到chunk ID候选”，公共层过滤越界ID并回填`source_citation_ids`。
 - 生成POST、历史和详情的`GeneratedContentRead`统一包含`source_citations`；无引用固定返回`[]`。
 - 成功内容和引用处于同一数据库事务。模型、schema和覆盖失败保存failed记录，不保存部分JSON或引用。
