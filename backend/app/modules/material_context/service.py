@@ -15,12 +15,15 @@ from app.modules.material_context.repository import (
     list_eligible_material_ids,
     list_parsed_context_chunks,
     list_parsed_context_chunks_for_scope,
+    list_parsed_material_quality_for_scope,
 )
 from app.modules.material_context.schemas import (
     ContextChunk,
     MaterialContextBatch,
     MaterialContextResult,
     MaterialScope,
+    MaterialQualitySummary,
+    MaterialQualityWarning,
 )
 from app.modules.materials.models import MaterialChunk
 
@@ -43,6 +46,38 @@ def resolve_material_scope_ids(
     if resolved_scope.empty_selection:
         return ()
     return resolved_scope.eligible_material_ids
+
+
+def summarize_material_quality_for_scope(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope | None,
+) -> MaterialQualitySummary:
+    resolved_scope = _resolve_scope(db, user_id=user_id, course_id=course_id, material_scope=material_scope)
+    if resolved_scope.empty_selection or not resolved_scope.eligible_material_ids:
+        return MaterialQualitySummary()
+
+    rows = list_parsed_material_quality_for_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_ids=list(resolved_scope.eligible_material_ids),
+    )
+    warnings: list[MaterialQualityWarning] = []
+    for material_id, material_name, parse_quality, diagnostics, page_count in rows:
+        warnings.extend(
+            _warnings_for_material_quality(
+                material_id=material_id,
+                material_name=material_name,
+                parse_quality=parse_quality,
+                diagnostics=diagnostics,
+                page_count=page_count,
+            )
+        )
+    return MaterialQualitySummary(warnings=warnings)
+
 
 def resolve_context(
     db: Session,
@@ -244,3 +279,131 @@ def _estimate_tokens(text: str) -> int:
 
 def _unique_tuple(values: list[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
+
+
+def _warnings_for_material_quality(
+    *,
+    material_id: str,
+    material_name: str,
+    parse_quality: str,
+    diagnostics: dict | list | None,
+    page_count: int | None,
+) -> list[MaterialQualityWarning]:
+    diagnostics_data = diagnostics if isinstance(diagnostics, dict) else {}
+    warnings: list[MaterialQualityWarning] = []
+    details = _material_quality_details(diagnostics_data, page_count=page_count)
+    if parse_quality == "partial":
+        warnings.append(
+            MaterialQualityWarning(
+                code="MATERIAL_PARSE_PARTIAL",
+                message="资料解析不完整，学习计划可能遗漏部分页面或内容",
+                material_id=material_id,
+                material_name=material_name,
+                parse_quality=parse_quality,
+                details=details,
+            )
+        )
+    elif parse_quality == "unknown":
+        warnings.append(
+            MaterialQualityWarning(
+                code="MATERIAL_PARSE_QUALITY_UNKNOWN",
+                message="资料解析质量未知，建议确认资料内容是否完整",
+                material_id=material_id,
+                material_name=material_name,
+                parse_quality=parse_quality,
+                details=details,
+            )
+        )
+
+    warnings.extend(
+        _diagnostic_warning_entries(
+            material_id=material_id,
+            material_name=material_name,
+            parse_quality=parse_quality,
+            diagnostics=diagnostics_data,
+        )
+    )
+    return warnings
+
+
+def _material_quality_details(diagnostics: dict[str, object], *, page_count: int | None) -> dict[str, object]:
+    details: dict[str, object] = {}
+    effective_page_count = page_count if page_count is not None else _optional_int(diagnostics.get("page_count"))
+    if effective_page_count is not None:
+        details["page_count"] = effective_page_count
+    for key in ("parser", "profile", "conversion_status"):
+        value = _optional_str(diagnostics.get(key))
+        if value is not None:
+            details[key] = value
+    for key in ("processed_pages", "pages_with_content", "pages_with_chunks", "failed_pages"):
+        pages = _int_list(diagnostics.get(key))
+        if pages:
+            details[key] = pages
+    return details
+
+
+def _diagnostic_warning_entries(
+    *,
+    material_id: str,
+    material_name: str,
+    parse_quality: str,
+    diagnostics: dict[str, object],
+) -> list[MaterialQualityWarning]:
+    raw_warnings = diagnostics.get("warnings")
+    if not isinstance(raw_warnings, list):
+        return []
+
+    parser = _optional_str(diagnostics.get("parser"))
+    profile = _optional_str(diagnostics.get("profile"))
+    warnings: list[MaterialQualityWarning] = []
+    for raw_warning in raw_warnings:
+        if not isinstance(raw_warning, dict):
+            continue
+        severity = _optional_str(raw_warning.get("severity")) or "warning"
+        if severity != "warning":
+            continue
+        diagnostic_code = _optional_str(raw_warning.get("code")) or "UNKNOWN_PARSE_WARNING"
+        diagnostic_message = _optional_str(raw_warning.get("message")) or "资料解析诊断 warning"
+        details: dict[str, object] = {
+            "diagnostic_code": diagnostic_code,
+            "diagnostic_message": diagnostic_message,
+            "severity": severity,
+        }
+        if parser is not None:
+            details["parser"] = parser
+        if profile is not None:
+            details["profile"] = profile
+        warnings.append(
+            MaterialQualityWarning(
+                code="MATERIAL_PARSE_DIAGNOSTIC_WARNING",
+                message=diagnostic_message,
+                material_id=material_id,
+                material_name=material_name,
+                parse_quality=parse_quality,
+                page_no=_optional_int(raw_warning.get("page_no")),
+                component=_optional_str(raw_warning.get("component")),
+                details=details,
+            )
+        )
+    return warnings
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _int_list(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, int) and not isinstance(item, bool)]

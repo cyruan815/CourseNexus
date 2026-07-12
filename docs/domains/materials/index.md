@@ -18,7 +18,7 @@
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
-`materials` 拥有 `MaterialFolder`、`CourseMaterial` 和 `MaterialChunk`。问答、生成和计划模块只能通过 `material-context` 使用资料，不得直接写这些对象。
+`materials` 拥有 `MaterialFolder`、`CourseMaterial` 和 `MaterialChunk`。问答、生成和计划模块只能通过 `material-context` 使用资料，不得直接写这些对象。P5a 后，`material-context` 还提供同一资料范围内 parsed 资料的只读解析质量摘要，用于下游展示 warning；下游不得直接读取 parser 或 materials 表。
 
 Parser 只向 materials 返回项目内部的 `ParsedDocument`、`ParsedChunk` 和 `ParseDiagnostics`，不得把 Docling 类型暴露到业务模块。诊断页码统一使用一基页码；非分页文本的 `page_count = null` 是正常结果，不表示解析不完整。
 
@@ -47,6 +47,7 @@ flowchart LR
 - 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
 - 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。
+- `material_context.summarize_material_quality_for_scope()` 只读取当前 scope 内 `parse_status = parsed` 的资料，把 `parse_quality` 和 `parse_diagnostics_json` 规整为 `MaterialQualitySummary.warnings`；`severity = "info"` 的 parser 诊断不升级为 warning。
 - `parse_quality` 是全局解析质量信号：`complete` 表示本轮未观察到失败，`partial` 表示有可用 chunk 但存在失败页或 warning，`unknown` 表示证据不足。
 - `parse_status = parsed` 与 `parse_quality = partial` 可以同时存在；下游仍可读取 chunk，但不能把它解释为完整覆盖。
 - 文件夹、资料和课程必须属于当前用户；跨用户或跨课程统一返回 `NOT_FOUND`。

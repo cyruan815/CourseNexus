@@ -10,7 +10,10 @@ from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.material_context.schemas import MaterialScope
-from app.modules.material_context.service import iter_material_context_batches
+from app.modules.material_context.service import (
+    iter_material_context_batches,
+    summarize_material_quality_for_scope,
+)
 from app.modules.materials.service import parse_material, upload_file_material
 
 
@@ -107,3 +110,56 @@ def test_batches_raise_when_selected_parsed_material_has_no_chunks(db: Session, 
         )
 
     assert exc_info.value.code == "MATERIAL_COVERAGE_INCOMPLETE"
+
+
+def test_material_quality_summary_maps_partial_parse_diagnostics_for_scope(db: Session, context_seed) -> None:
+    context_seed.math_material.parse_quality = "partial"
+    context_seed.math_material.page_count = 4
+    context_seed.math_material.parse_diagnostics_json = {
+        "parser": "docling",
+        "profile": "pdf_text_first",
+        "conversion_status": "partial_success",
+        "page_count": 4,
+        "processed_pages": [1, 2, 4],
+        "pages_with_content": [1, 2, 4],
+        "pages_with_chunks": [1, 2],
+        "failed_pages": [3],
+        "warnings": [
+            {
+                "code": "OCR_MEMORY_ERROR",
+                "message": "OCR memory limit hit",
+                "page_no": 3,
+                "component": "ocr",
+                "severity": "warning",
+            },
+            {
+                "code": "OCR_FALLBACK_USED",
+                "message": "OCR fallback used",
+                "severity": "info",
+            },
+        ],
+    }
+    db.add(context_seed.math_material)
+    db.commit()
+
+    summary = summarize_material_quality_for_scope(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        material_scope=MaterialScope(
+            include_all_parsed_materials=False,
+            material_ids=[context_seed.math_material.id],
+        ),
+    )
+
+    warning_codes = [warning.code for warning in summary.warnings]
+    assert warning_codes == ["MATERIAL_PARSE_PARTIAL", "MATERIAL_PARSE_DIAGNOSTIC_WARNING"]
+    partial_warning = summary.warnings[0]
+    assert partial_warning.material_id == context_seed.math_material.id
+    assert partial_warning.material_name == context_seed.math_material.name
+    assert partial_warning.parse_quality == "partial"
+    assert partial_warning.details["failed_pages"] == [3]
+    diagnostic_warning = summary.warnings[1]
+    assert diagnostic_warning.page_no == 3
+    assert diagnostic_warning.component == "ocr"
+    assert diagnostic_warning.details["diagnostic_code"] == "OCR_MEMORY_ERROR"

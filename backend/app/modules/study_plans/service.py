@@ -18,7 +18,11 @@ from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
-from app.modules.material_context.service import iter_material_context_batches, resolve_material_scope_ids
+from app.modules.material_context.service import (
+    iter_material_context_batches,
+    resolve_material_scope_ids,
+    summarize_material_quality_for_scope,
+)
 from app.modules.study_plans import repository as study_plan_repository
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.planner import (
@@ -211,6 +215,12 @@ def preview_study_plan(
     if not batches:
         raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
 
+    material_quality = summarize_material_quality_for_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_scope=payload.material_scope,
+    )
     expected_material_ids = {material_id for batch in batches for material_id in batch.material_ids}
     duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
     resolved_payload: StudyPlanBuildRequest | None = None
@@ -267,9 +277,12 @@ def preview_study_plan(
         available_total_minutes=available_total_minutes,
     )
     planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
-    generation_metadata = _with_planner_strategy(
-        payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
-        planner_strategy=planner_strategy,
+    generation_metadata = _with_material_quality(
+        _with_planner_strategy(
+            payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
+            planner_strategy=planner_strategy,
+        ),
+        material_quality=material_quality.model_dump(mode="json"),
     )
     preview = StudyPlanPreview(
         course_id=course_id,
@@ -870,6 +883,10 @@ def _build_generation_metadata(*, model_provider: ModelProvider) -> dict[str, ob
 
 def _with_planner_strategy(metadata: dict[str, object], *, planner_strategy: dict[str, object]) -> dict[str, object]:
     return {**metadata, "planner_strategy": planner_strategy}
+
+
+def _with_material_quality(metadata: dict[str, object], *, material_quality: dict[str, object]) -> dict[str, object]:
+    return {**metadata, "material_quality": material_quality}
 
 
 def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int, recommended_daily_minutes: int | None, daily_minutes_source: str | None) -> dict[str, object]:
