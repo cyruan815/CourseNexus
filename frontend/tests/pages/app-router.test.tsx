@@ -1,8 +1,8 @@
 ﻿import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { setSessionToken } from "../../src/features/auth/session";
+import { getSessionToken, setSessionToken } from "../../src/features/auth/session";
 import { AppRouter } from "../../src/router/AppRouter";
 
 function renderRouter() {
@@ -111,5 +111,27 @@ describe("AppRouter", () => {
     renderRouter();
 
     expect(await screen.findByRole("heading", { name: "高等数学" })).toBeInTheDocument();
+  });
+
+  it("returns to the public entry when an authenticated request is unauthorized", async () => {
+    setSessionToken("expired-token");
+    window.history.pushState({}, "", "/");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { code: "UNAUTHORIZED", message: "登录已失效", details: {} },
+            meta: { request_id: "req_unauthorized" },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    renderRouter();
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "开始" })).toHaveAttribute("href", "/login"));
+    expect(getSessionToken()).toBeNull();
   });
 });

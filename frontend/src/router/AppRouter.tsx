@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 
-import { getSessionToken } from "../features/auth/session";
+import { getSessionToken, subscribeSessionChange } from "../features/auth/session";
 import { CourseDetailPage } from "../pages/CourseDetailPage";
 import { CourseDetailPreviewPage } from "../pages/CourseDetailPreviewPage";
 import { HomePage } from "../pages/HomePage";
@@ -9,7 +10,13 @@ import { RegisterPage } from "../pages/RegisterPage";
 import { WelcomePage } from "../pages/WelcomePage";
 
 function RequireAuth() {
-  if (!getSessionToken()) {
+  const [hasSession, setHasSession] = useState(() => Boolean(getSessionToken()));
+
+  useEffect(() => {
+    return subscribeSessionChange(() => setHasSession(Boolean(getSessionToken())));
+  }, []);
+
+  if (!hasSession) {
     return <Navigate replace to="/welcome" />;
   }
 

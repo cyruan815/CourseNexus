@@ -12,7 +12,7 @@
 
 非目标：
 
-- 找回密码流程尚未实现，当前仅保留入口文案。
+- 找回密码流程尚未实现，当前不展示可点击入口，避免用户进入无效自循环。
 - 不在本领域实现课程、资料、问答或计划页面。
 
 ## 代码入口
@@ -31,7 +31,7 @@
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/register`
 
-成功响应由 `login()` / `register()` 写入 `course_nexus_token`，随后页面导航到 `/`。受保护路由在没有 token 时跳转到 `/welcome`，由入口页再引导用户进入登录或注册。
+成功响应由 `login()` / `register()` 写入 `course_nexus_token`，随后页面导航到 `/`。受保护路由在没有 token 时跳转到 `/welcome`，由入口页再引导用户进入登录或注册。任意 API 请求收到 401 时，`apiRequest()` 清理 token，`session` 模块发出登录态变化事件，路由守卫重新计算状态并回到公开入口。
 
 页面状态：
 
@@ -48,8 +48,8 @@
 
 ## 测试和验证
 
-- `frontend/tests/pages/app-router.test.tsx` 覆盖匿名跳转 `/welcome`、公开 `/login` 和 `/register`、认证后首页和课程详情路由。
-- `frontend/tests/features/auth/auth-pages.test.tsx` 覆盖登录提交、注册提交、token 写入、成功跳转和错误提示。
+- `frontend/tests/pages/app-router.test.tsx` 覆盖匿名跳转 `/welcome`、公开 `/login` 和 `/register`、认证后首页和课程详情路由，以及 401 后回到公开入口。
+- `frontend/tests/features/auth/auth-pages.test.tsx` 覆盖登录提交、注册提交、token 写入、成功跳转、错误提示和未实现找回密码入口不展示。
 
 匹配验证命令：
 
