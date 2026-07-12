@@ -40,7 +40,6 @@ def calculate_streak_summary(items: list[CheckinRead]) -> CheckinRangeSummaryRea
     longest = 0
     current_run = 0
     previous_date = None
-    last_run = 0
     for item in ordered:
         counts_for_streak = item.total_subtask_count > 0 and item.completed_subtask_count > 0
         if not counts_for_streak:
@@ -52,12 +51,11 @@ def calculate_streak_summary(items: list[CheckinRead]) -> CheckinRangeSummaryRea
         else:
             current_run = 1
         longest = max(longest, current_run)
-        last_run = current_run
         previous_date = item.checkin_date
     return CheckinRangeSummaryRead(
         task_days=task_days,
         completed_days=completed_days,
-        current_streak_days=last_run,
+        current_streak_days=current_run,
         longest_streak_days=longest,
     )
 

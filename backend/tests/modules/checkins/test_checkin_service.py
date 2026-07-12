@@ -81,6 +81,69 @@ def test_streak_counts_any_completed_subtask_day() -> None:
     assert summary.longest_streak_days == 2
 
 
+def test_streak_returns_zero_when_last_task_day_is_incomplete() -> None:
+    summary = calculate_streak_summary(
+        [
+            _checkin(10, total=1, completed=1),
+            _checkin(11, total=1, completed=0),
+        ]
+    )
+
+    assert summary.task_days == 2
+    assert summary.completed_days == 1
+    assert summary.current_streak_days == 0
+    assert summary.longest_streak_days == 1
+
+
+def test_streak_no_task_day_breaks_current_run() -> None:
+    summary = calculate_streak_summary(
+        [
+            _checkin(1, total=1, completed=1),
+            _checkin(2, total=0, completed=0),
+        ]
+    )
+
+    assert summary.task_days == 1
+    assert summary.completed_days == 1
+    assert summary.current_streak_days == 0
+    assert summary.longest_streak_days == 1
+
+
+def test_streak_missing_record_breaks_adjacent_run() -> None:
+    summary = calculate_streak_summary(
+        [
+            _checkin(1, total=1, completed=1),
+            _checkin(3, total=1, completed=1),
+        ]
+    )
+
+    assert summary.current_streak_days == 1
+    assert summary.longest_streak_days == 1
+
+
+def test_streak_counts_new_run_after_interruption() -> None:
+    summary = calculate_streak_summary(
+        [
+            _checkin(1, total=1, completed=1),
+            _checkin(2, total=1, completed=0),
+            _checkin(3, total=1, completed=1),
+            _checkin(4, total=1, completed=1),
+        ]
+    )
+
+    assert summary.current_streak_days == 2
+    assert summary.longest_streak_days == 2
+
+
+def test_streak_empty_result_returns_zeroes() -> None:
+    summary = calculate_streak_summary([])
+
+    assert summary.task_days == 0
+    assert summary.completed_days == 0
+    assert summary.current_streak_days == 0
+    assert summary.longest_streak_days == 0
+
+
 def _seed_user(db: Session, user_id: str = "usr_a", username: str = "alice") -> None:
     db.add(User(id=user_id, username=username, password_hash="hash", status="active"))
 
