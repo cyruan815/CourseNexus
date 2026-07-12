@@ -17,15 +17,22 @@ from app.integrations.model_provider.base import ModelProvider
 from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.coverage import run_material_coverage
-from app.modules.material_context.schemas import ContextChunk
+from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
 from app.modules.material_context.service import iter_material_context_batches, resolve_material_scope_ids
 from app.modules.study_plans import repository as study_plan_repository
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.planner import map_material_batch, make_coverage, reduce_plan_batches, validate_preview
 from app.modules.study_plans.repository import StudyPlanBundle
 from app.modules.study_plans.schemas import (
+    DIAGNOSTIC_QUESTION_VERSION,
     MIN_DAILY_AVAILABLE_MINUTES,
     PlanBatchExtraction,
+    StudyPlanDiagnosticProfileRequest,
+    StudyPlanDiagnosticProfileResponse,
+    StudyPlanDiagnosticQuestion,
+    StudyPlanDiagnosticQuestionOption,
+    StudyPlanDiagnosticQuestionRequest,
+    StudyPlanDiagnosticQuestionsResponse,
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
     StudyPlanParsedConfig,
@@ -70,6 +77,109 @@ def parse_study_plan_config(
     if normalized.daily_available_minutes is not None and normalized.daily_minutes_source is None:
         normalized = normalized.model_copy(update={"daily_minutes_source": "user_text"})
     return normalized.model_copy(update={"material_scope": payload.material_scope})
+
+
+
+def build_study_plan_diagnostic_questions(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanDiagnosticQuestionRequest,
+    max_tokens: int,
+) -> StudyPlanDiagnosticQuestionsResponse:
+    topics = _diagnostic_topics_for_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_scope=payload.material_scope,
+        max_tokens=max_tokens,
+    )
+    questions: list[StudyPlanDiagnosticQuestion] = []
+    for index, topic in enumerate(topics, start=1):
+        questions.append(
+            StudyPlanDiagnosticQuestion(
+                question_id=f"topic_mastery_{topic['topic_id']}",
+                question_type="topic_mastery",
+                question_text=f"你对「{topic['topic_title']}」了解多少？",
+                topic_id=topic["topic_id"],
+                topic_title=topic["topic_title"],
+                options=_mastery_question_options(),
+                sort_order=index,
+            )
+        )
+
+    weak_area_order = len(questions) + 1
+    questions.append(
+        StudyPlanDiagnosticQuestion(
+            question_id="weak_area",
+            question_type="weak_area",
+            question_text="你最担心哪类内容？",
+            options=_weak_area_question_options(),
+            sort_order=weak_area_order,
+        )
+    )
+    questions.append(
+        StudyPlanDiagnosticQuestion(
+            question_id="diagnostic_note",
+            question_type="diagnostic_note",
+            question_text="还有什么想特别补的地方？",
+            required=False,
+            options=[],
+            placeholder="可选填写",
+            sort_order=weak_area_order + 1,
+        )
+    )
+    return StudyPlanDiagnosticQuestionsResponse(
+        question_version=DIAGNOSTIC_QUESTION_VERSION,
+        questions=questions,
+    )
+
+
+def build_study_plan_diagnostic_profile(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanDiagnosticProfileRequest,
+    max_tokens: int,
+) -> StudyPlanDiagnosticProfileResponse:
+    if payload.question_version != DIAGNOSTIC_QUESTION_VERSION:
+        raise CourseNexusError(
+            code="DIAGNOSTIC_STALE",
+            message="诊断问题版本已失效，请重新诊断",
+            status_code=409,
+            details={"question_version": payload.question_version, "expected_question_version": DIAGNOSTIC_QUESTION_VERSION},
+        )
+
+    topics = _diagnostic_topics_for_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_scope=payload.material_scope,
+        max_tokens=max_tokens,
+    )
+    valid_topic_ids = {topic["topic_id"] for topic in topics}
+    invalid_topic_ids = [answer.topic_id for answer in payload.topic_mastery if answer.topic_id not in valid_topic_ids]
+    if invalid_topic_ids:
+        raise CourseNexusError(
+            code="DIAGNOSTIC_STALE",
+            message="诊断答案和当前资料范围不匹配，请重新诊断",
+            status_code=409,
+            details={"invalid_topic_ids": invalid_topic_ids, "valid_topic_ids": sorted(valid_topic_ids)},
+        )
+
+    weak_topics = [answer.topic_id for answer in payload.topic_mastery if answer.mastery_level in {"none", "heard"}]
+    foundation_needed = len(weak_topics) > len(payload.topic_mastery) / 2
+    return StudyPlanDiagnosticProfileResponse(
+        question_version=DIAGNOSTIC_QUESTION_VERSION,
+        prior_knowledge_level=_prior_knowledge_level(payload.topic_mastery, foundation_needed=foundation_needed),
+        foundation_needed=foundation_needed,
+        weak_topics=weak_topics,
+        weak_area=payload.weak_area,
+        explanation_style=_explanation_style_for_weak_area(payload.weak_area),
+        diagnostic_note=payload.diagnostic_note,
+    )
 
 
 def preview_study_plan(
@@ -510,6 +620,113 @@ def _duration_days_between(start_date: date, end_date: date) -> int:
 
 def _normalize_preference_value(value: str | None) -> str | None:
     return "sprint" if value == "advanced" else value
+
+
+
+def _diagnostic_topics_for_scope(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: object,
+    max_tokens: int,
+) -> list[dict[str, str]]:
+    batches = list(
+        iter_material_context_batches(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_scope=material_scope,
+            max_tokens=max_tokens,
+        )
+    )
+    if not batches:
+        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
+
+    topics = _extract_diagnostic_topics(batches)
+    if not topics:
+        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有可用于诊断的资料主题", status_code=400)
+    return topics
+
+
+def _extract_diagnostic_topics(batches: list[MaterialContextBatch]) -> list[dict[str, str]]:
+    topics: list[dict[str, str]] = []
+    seen_titles: set[str] = set()
+    for batch in batches:
+        for chunk in batch.chunks:
+            topic_title = _diagnostic_topic_title(chunk)
+            normalized_title = _normalize_topic_title(topic_title)
+            if not normalized_title or normalized_title in seen_titles:
+                continue
+            seen_titles.add(normalized_title)
+            topics.append(
+                {
+                    "topic_id": _diagnostic_topic_id(chunk=chunk, topic_title=normalized_title),
+                    "topic_title": normalized_title,
+                }
+            )
+            if len(topics) >= 3:
+                return topics
+    return topics
+
+
+def _diagnostic_topic_title(chunk: ContextChunk) -> str:
+    if chunk.heading and chunk.heading.strip():
+        return chunk.heading.strip()
+    material_name = re.sub(r"\.[^.]+$", "", chunk.material_name).strip()
+    if material_name:
+        return material_name
+    first_line = next((line.strip() for line in chunk.content_text.splitlines() if line.strip()), "")
+    return first_line[:40].strip() or "核心知识点"
+
+
+def _normalize_topic_title(topic_title: str) -> str:
+    return re.sub(r"\s+", " ", topic_title.strip().lstrip("#").strip())
+
+
+def _diagnostic_topic_id(*, chunk: ContextChunk, topic_title: str) -> str:
+    basis = f"{chunk.material_id}:{chunk.chunk_id}:{topic_title}"
+    digest = hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
+    return f"topic_{digest}"
+
+
+def _mastery_question_options() -> list[StudyPlanDiagnosticQuestionOption]:
+    return [
+        StudyPlanDiagnosticQuestionOption(value="none", label="完全不了解"),
+        StudyPlanDiagnosticQuestionOption(value="heard", label="听说过，但不清楚"),
+        StudyPlanDiagnosticQuestionOption(value="some", label="了解一些"),
+        StudyPlanDiagnosticQuestionOption(value="familiar", label="比较熟悉"),
+    ]
+
+
+def _weak_area_question_options() -> list[StudyPlanDiagnosticQuestionOption]:
+    return [
+        StudyPlanDiagnosticQuestionOption(value="concept", label="概念理解"),
+        StudyPlanDiagnosticQuestionOption(value="calculation", label="计算推导"),
+        StudyPlanDiagnosticQuestionOption(value="application", label="做题应用"),
+        StudyPlanDiagnosticQuestionOption(value="memorization", label="记忆重点"),
+        StudyPlanDiagnosticQuestionOption(value="other", label="其他"),
+    ]
+
+
+def _prior_knowledge_level(topic_mastery: list[object], *, foundation_needed: bool) -> str:
+    levels = [getattr(answer, "mastery_level") for answer in topic_mastery]
+    if levels and all(level == "none" for level in levels):
+        return "none"
+    if foundation_needed:
+        return "little"
+    familiar_count = sum(1 for level in levels if level == "familiar")
+    if levels and familiar_count >= ceil(len(levels) / 2):
+        return "solid"
+    return "some"
+
+
+def _explanation_style_for_weak_area(weak_area: str) -> str:
+    return {
+        "calculation": "step_by_step",
+        "application": "example_first",
+        "memorization": "exam_focused",
+    }.get(weak_area, "plain_language")
 
 
 def _task_previews_total_minutes(task_previews: list[StudyTaskPreview]) -> int:

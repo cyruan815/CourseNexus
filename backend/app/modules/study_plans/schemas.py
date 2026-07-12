@@ -12,7 +12,12 @@ PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced",
 DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 SubTaskType = Literal["learn", "review", "quiz", "test"]
 MIN_DAILY_AVAILABLE_MINUTES = 30
-
+DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v1"
+MasteryLevel = Literal["none", "heard", "some", "familiar"]
+WeakArea = Literal["concept", "calculation", "application", "memorization", "other"]
+DiagnosticQuestionType = Literal["topic_mastery", "weak_area", "diagnostic_note"]
+PriorKnowledgeLevel = Literal["none", "little", "some", "solid"]
+ExplanationStyle = Literal["plain_language", "step_by_step", "example_first", "exam_focused"]
 
 def _normalize_preference_value(value: str | None) -> str | None:
     if value == "advanced":
@@ -74,6 +79,58 @@ class StudyPlanBuildRequest(BaseModel):
 class StudyPlanConfigParseRequest(BaseModel):
     goal_text: str = Field(min_length=1)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
+
+
+
+class StudyPlanDiagnosticQuestionRequest(BaseModel):
+    goal_text: str = Field(min_length=1)
+    material_scope: MaterialScope = Field(default_factory=MaterialScope)
+
+
+class StudyPlanDiagnosticQuestionOption(BaseModel):
+    value: str
+    label: str
+
+
+class StudyPlanDiagnosticQuestion(BaseModel):
+    question_id: str
+    question_type: DiagnosticQuestionType
+    question_text: str
+    sort_order: int = Field(gt=0)
+    required: bool = True
+    topic_id: str | None = None
+    topic_title: str | None = None
+    options: list[StudyPlanDiagnosticQuestionOption] = Field(default_factory=list)
+    placeholder: str | None = None
+
+
+class StudyPlanDiagnosticQuestionsResponse(BaseModel):
+    question_version: str = DIAGNOSTIC_QUESTION_VERSION
+    questions: list[StudyPlanDiagnosticQuestion]
+
+
+class TopicMasteryAnswer(BaseModel):
+    topic_id: str = Field(min_length=1)
+    topic_title: str = Field(min_length=1)
+    mastery_level: MasteryLevel
+
+
+class StudyPlanDiagnosticProfileRequest(BaseModel):
+    question_version: str = DIAGNOSTIC_QUESTION_VERSION
+    topic_mastery: list[TopicMasteryAnswer] = Field(min_length=1)
+    weak_area: WeakArea
+    diagnostic_note: str | None = None
+    material_scope: MaterialScope = Field(default_factory=MaterialScope)
+
+
+class StudyPlanDiagnosticProfileResponse(BaseModel):
+    question_version: str = DIAGNOSTIC_QUESTION_VERSION
+    prior_knowledge_level: PriorKnowledgeLevel
+    foundation_needed: bool
+    weak_topics: list[str] = Field(default_factory=list)
+    weak_area: WeakArea
+    explanation_style: ExplanationStyle
+    diagnostic_note: str | None = None
 
 
 class StudyPlanParsedConfig(BaseModel):

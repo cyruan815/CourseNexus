@@ -16,6 +16,10 @@ from app.modules.study_plans.schemas import (
     StudyPlanBundleRead,
     StudyPlanConfigParseRequest,
     StudyPlanConfigParseResponse,
+    StudyPlanDiagnosticProfileRequest,
+    StudyPlanDiagnosticProfileResponse,
+    StudyPlanDiagnosticQuestionRequest,
+    StudyPlanDiagnosticQuestionsResponse,
     StudyPlanRead,
     StudyPlanPreview,
     StudyPlanRegenerationPreviewRequest,
@@ -25,6 +29,8 @@ from app.modules.study_plans.schemas import (
     StudyTaskRead,
 )
 from app.modules.study_plans.service import (
+    build_study_plan_diagnostic_profile,
+    build_study_plan_diagnostic_questions,
     delete_study_plan,
     get_study_plan_detail,
     list_study_plans,
@@ -93,6 +99,47 @@ def parse_study_plan_config_endpoint(
         model_provider=model_provider,
     )
     data = StudyPlanConfigParseResponse.model_validate(parsed.model_dump(mode="json")).model_dump(mode="json")
+    return success_response(data, request_id=get_request_id(request))
+
+
+
+@router.post("/courses/{course_id}/study-plan-diagnostic-questions")
+def study_plan_diagnostic_questions_endpoint(
+    course_id: str,
+    payload: StudyPlanDiagnosticQuestionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    settings = get_settings()
+    questions = build_study_plan_diagnostic_questions(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+        max_tokens=settings.material_batch_max_tokens,
+    )
+    data = StudyPlanDiagnosticQuestionsResponse.model_validate(questions).model_dump(mode="json")
+    return success_response(data, request_id=get_request_id(request))
+
+
+@router.post("/courses/{course_id}/study-plan-diagnostic-profiles")
+def study_plan_diagnostic_profiles_endpoint(
+    course_id: str,
+    payload: StudyPlanDiagnosticProfileRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    settings = get_settings()
+    profile = build_study_plan_diagnostic_profile(
+        db,
+        user_id=current_user.id,
+        course_id=course_id,
+        payload=payload,
+        max_tokens=settings.material_batch_max_tokens,
+    )
+    data = StudyPlanDiagnosticProfileResponse.model_validate(profile).model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))
 
 
