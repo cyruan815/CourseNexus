@@ -39,7 +39,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ApiError } from "../../api/errors";
 import { useCourseNexusTheme } from "../../app/theme";
 import type { Course } from "../../types/course";
-import { createCourse, deleteCourse, listCourses, updateCourse } from "./api";
+import { createCourse, deleteCourse, listCourses, listCourseTermOptions, updateCourse } from "./api";
+import type { CourseTermOption } from "./api";
 import "./home-workbench.css";
 
 interface HomeCourse {
@@ -69,14 +70,8 @@ interface CalendarDay {
   isToday: boolean;
 }
 
-const ALL_TERMS_VALUE = "全部学期";
+const ALL_TERMS_VALUE = "__all_terms__";
 const courseToneClasses = ["blue", "mint", "indigo", "violet", "orange"];
-const COURSE_TERM_OPTIONS = [
-  "2025-2026 春季",
-  "2025-2026 秋季",
-  "2026-2027 春季",
-  "2026-2027 秋季",
-];
 
 function getCalendarDays(referenceDate = new Date()): CalendarDay[] {
   const year = referenceDate.getFullYear();
@@ -136,24 +131,6 @@ function optionalText(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
-function normalizeCourseTerm(term: string | null): string | null {
-  const trimmed = term?.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const compact = trimmed.replace(/\s+/g, "");
-  const matchedTerm = compact.match(/^(\d{4})-?(\d{4})(春季?|秋季?)$/);
-
-  if (!matchedTerm) {
-    return trimmed;
-  }
-
-  const season = matchedTerm[3].startsWith("春") ? "春季" : "秋季";
-  return `${matchedTerm[1]}-${matchedTerm[2]} ${season}`;
-}
-
 function buildCoursePayload(values: CourseFormValues) {
   return {
     name: values.name.trim(),
@@ -163,13 +140,42 @@ function buildCoursePayload(values: CourseFormValues) {
   };
 }
 
+function getTermLabel(term: string | null, termOptions: CourseTermOption[]): string {
+  if (!term) {
+    return "未填写学期";
+  }
+
+  return termOptions.find((option) => option.value === term)?.label ?? `${term}（旧学期值）`;
+}
+
+function getTermSummaryLabel(selectedTerm: string, termOptions: CourseTermOption[]): string {
+  if (selectedTerm === ALL_TERMS_VALUE) {
+    return "全部学期";
+  }
+
+  return getTermLabel(selectedTerm, termOptions);
+}
+
+function buildTermSelectData(courses: HomeCourse[], termOptions: CourseTermOption[]) {
+  const optionValues = new Set(termOptions.map((option) => option.value));
+  const legacyTermOptions = Array.from(
+    new Set(
+      courses
+        .map((course) => course.term)
+        .filter((term): term is string => Boolean(term) && !optionValues.has(term)),
+    ),
+  ).map((term) => ({ value: term, label: `${term}（旧学期值）` }));
+
+  return [{ value: ALL_TERMS_VALUE, label: "全部学期" }, ...termOptions, ...legacyTermOptions];
+}
+
 function mapCourseToHomeCourse(course: Course): HomeCourse {
   return {
     id: course.id,
     name: course.name,
     description: course.description,
     teacher: course.teacher,
-    term: normalizeCourseTerm(course.term),
+    term: course.term,
     materialLabel: "资料待接入",
     taskLabel: "今日任务待接入",
     recentActivity: course.description?.trim() || "课程资料待上传",
@@ -307,14 +313,20 @@ function CourseCard({
   onDelete,
   onEdit,
   onOpen,
+  termLabel,
   toneClass,
 }: {
   course: HomeCourse;
   onDelete: (course: HomeCourse) => void;
   onEdit: (course: HomeCourse) => void;
   onOpen: (course: HomeCourse) => void;
+  termLabel: string;
   toneClass: string;
 }) {
+  function stopCardNavigation(event: MouseEvent<HTMLElement>) {
+    event.stopPropagation();
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -343,7 +355,7 @@ function CourseCard({
               </Link>
             </Title>
             <Text c="dimmed" size="sm">
-              {course.teacher ?? "未填写教师"} · {course.term ?? "未填写学期"}
+              {course.teacher ?? "未填写教师"} · {termLabel}
             </Text>
           </Stack>
           <Menu position="bottom-end" shadow="sm" width={160} withinPortal>
@@ -351,17 +363,30 @@ function CourseCard({
               <ActionIcon
                 aria-label={`${course.name} 更多操作`}
                 className="home-card-menu"
-                onClick={(event: MouseEvent<HTMLButtonElement>) => event.stopPropagation()}
+                onClick={stopCardNavigation}
                 variant="subtle"
               >
                 <IconDotsVertical size={22} />
               </ActionIcon>
             </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => onEdit(course)}>
+            <Menu.Dropdown onClick={stopCardNavigation}>
+              <Menu.Item
+                leftSection={<IconEdit size={16} />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(course);
+                }}
+              >
                 编辑课程
               </Menu.Item>
-              <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => onDelete(course)}>
+              <Menu.Item
+                color="red"
+                leftSection={<IconTrash size={16} />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(course);
+                }}
+              >
                 删除课程
               </Menu.Item>
             </Menu.Dropdown>
@@ -474,6 +499,9 @@ function CourseFormModal({
   onClose,
   onSubmit,
   opened,
+  termError,
+  termOptions,
+  isTermLoading,
   values,
   isSubmitting,
 }: {
@@ -483,14 +511,20 @@ function CourseFormModal({
   onClose: () => void;
   onSubmit: () => void;
   opened: boolean;
+  termError: string | null;
+  termOptions: CourseTermOption[];
+  isTermLoading: boolean;
   values: CourseFormValues;
   isSubmitting: boolean;
 }) {
   const isCreate = mode === "create";
-  const canSubmit = values.name.trim().length > 0 && !isSubmitting;
-  const termData = values.term && !COURSE_TERM_OPTIONS.includes(values.term)
-    ? [...COURSE_TERM_OPTIONS, values.term]
-    : COURSE_TERM_OPTIONS;
+  const hasSelectedLegacyTerm = Boolean(
+    values.term && !termOptions.some((option) => option.value === values.term),
+  );
+  const canSubmit = values.name.trim().length > 0 && !isSubmitting && !hasSelectedLegacyTerm;
+  const termData = hasSelectedLegacyTerm
+    ? [...termOptions, { value: values.term, label: `${values.term}（旧学期值，请重新选择或清空）` }]
+    : termOptions;
 
   return (
     <Modal
@@ -531,9 +565,13 @@ function CourseFormModal({
           aria-label="学期"
           clearable
           data={termData}
+          disabled={isTermLoading || Boolean(termError)}
+          error={hasSelectedLegacyTerm ? "旧学期值不能直接保存，请重新选择或清空" : termError}
           label="学期"
+          nothingFoundMessage={isTermLoading ? "正在加载学期" : "暂无学期选项"}
           onChange={(value) => onChange("term", value ?? "")}
           placeholder="请选择学期"
+          searchable
           value={values.term}
         />
         {isCreate ? (
@@ -600,6 +638,8 @@ function CourseOverview({
   onEditCourse,
   onOpenCourse,
   onRetry,
+  termError,
+  termOptions,
 }: {
   courses: HomeCourse[];
   error: string | null;
@@ -609,20 +649,15 @@ function CourseOverview({
   onEditCourse: (course: HomeCourse) => void;
   onOpenCourse: (course: HomeCourse) => void;
   onRetry: () => void;
+  termError: string | null;
+  termOptions: CourseTermOption[];
 }) {
   const [selectedTerm, setSelectedTerm] = useState(ALL_TERMS_VALUE);
-  const termOptions = useMemo(() => {
-    const terms = courses
-      .map((course) => course.term)
-      .filter((term): term is string => Boolean(term));
-
-    return Array.from(new Set([...COURSE_TERM_OPTIONS, ...terms]));
-  }, [courses]);
-  const termData = [ALL_TERMS_VALUE, ...termOptions];
+  const termData = useMemo(() => buildTermSelectData(courses, termOptions), [courses, termOptions]);
   const filteredCourses = selectedTerm === ALL_TERMS_VALUE
     ? courses
     : courses.filter((course) => course.term === selectedTerm);
-  const termSummary = selectedTerm === ALL_TERMS_VALUE ? ALL_TERMS_VALUE : selectedTerm;
+  const termSummary = getTermSummaryLabel(selectedTerm, termOptions);
 
   return (
     <Paper className="home-main-panel" radius="md" withBorder>
@@ -637,6 +672,7 @@ function CourseOverview({
           aria-label="选择学期"
           className="home-term-select"
           data={termData}
+          error={termError}
           onChange={(value) => setSelectedTerm(value ?? ALL_TERMS_VALUE)}
           rightSection={<IconChevronDown size={18} />}
           value={selectedTerm}
@@ -655,6 +691,7 @@ function CourseOverview({
                   onDelete={onDeleteCourse}
                   onEdit={onEditCourse}
                   onOpen={onOpenCourse}
+                  termLabel={getTermLabel(course.term, termOptions)}
                   toneClass={getCourseToneClass(index)}
                 />
               </Grid.Col>
@@ -674,6 +711,9 @@ export function HomeWorkbench() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
+  const [termOptions, setTermOptions] = useState<CourseTermOption[]>([]);
+  const [termOptionsError, setTermOptionsError] = useState<string | null>(null);
+  const [isTermOptionsLoading, setIsTermOptionsLoading] = useState(true);
   const [courseModalMode, setCourseModalMode] = useState<CourseModalMode>("create");
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<HomeCourse | null>(null);
@@ -713,6 +753,35 @@ export function HomeWorkbench() {
     };
   }, [reloadKey]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    setIsTermOptionsLoading(true);
+    setTermOptionsError(null);
+
+    listCourseTermOptions()
+      .then((options) => {
+        if (!ignore) {
+          setTermOptions(options);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setTermOptions([]);
+          setTermOptionsError(getErrorMessage(nextError));
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsTermOptionsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   function openCreateCourseModal() {
     setCourseModalMode("create");
     setEditingCourse(null);
@@ -724,7 +793,10 @@ export function HomeWorkbench() {
   function openEditCourseModal(course: HomeCourse) {
     setCourseModalMode("edit");
     setEditingCourse(course);
-    setCourseFormValues(createCourseFormFromCourse(course));
+    setCourseFormValues({
+      ...createCourseFormFromCourse(course),
+      term: course.term && termOptions.some((option) => option.value === course.term) ? course.term : "",
+    });
     setCourseFormError(null);
     setIsCourseModalOpen(true);
   }
@@ -827,6 +899,8 @@ export function HomeWorkbench() {
             onEditCourse={openEditCourseModal}
             onOpenCourse={(course) => navigate(`/courses/${course.id}`)}
             onRetry={() => setReloadKey((currentKey) => currentKey + 1)}
+            termError={termOptionsError}
+            termOptions={termOptions}
           />
         </Box>
       </Container>
@@ -838,6 +912,9 @@ export function HomeWorkbench() {
         onClose={closeCourseModal}
         onSubmit={submitCourseForm}
         opened={isCourseModalOpen}
+        termError={termOptionsError}
+        termOptions={termOptions}
+        isTermLoading={isTermOptionsLoading}
         values={courseFormValues}
       />
       <DeleteCourseModal

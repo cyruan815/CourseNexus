@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createCourse, deleteCourse, fetchCourse, listCourses, updateCourse } from "../../../src/features/courses/api";
+import {
+  createCourse,
+  deleteCourse,
+  fetchCourse,
+  listCourses,
+  listCourseTermOptions,
+  updateCourse,
+} from "../../../src/features/courses/api";
 
 const course = {
   id: "crs_123",
@@ -8,7 +15,7 @@ const course = {
   name: "高等数学",
   description: "期末复习",
   teacher: "王老师",
-  term: "2026 Spring",
+  term: "2025-2026-spring",
   status: "active",
   created_at: "2026-07-09T12:00:00+00:00",
   updated_at: "2026-07-09T12:00:00+00:00",
@@ -47,6 +54,20 @@ describe("courses api", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123", expect.any(Object));
   });
 
+  it("lists course term options", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: termOptions, meta: { request_id: "req_1" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listCourseTermOptions()).resolves.toEqual(termOptions);
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/course-terms", expect.any(Object));
+  });
+
+
   it("creates a course with metadata fields", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: course, meta: { request_id: "req_1" } }), {
@@ -61,7 +82,7 @@ describe("courses api", () => {
         name: "高等数学",
         description: "期末复习",
         teacher: "王老师",
-        term: "2026 Spring",
+        term: "2025-2026-spring",
       }),
     ).resolves.toEqual(course);
     expect(fetchMock).toHaveBeenCalledWith(
@@ -72,7 +93,7 @@ describe("courses api", () => {
           name: "高等数学",
           description: "期末复习",
           teacher: "王老师",
-          term: "2026 Spring",
+          term: "2025-2026-spring",
         }),
       }),
     );
@@ -113,3 +134,7 @@ describe("courses api", () => {
     );
   });
 });
+const termOptions = [
+  { value: "2025-2026-spring", label: "2025-2026 春季" },
+  { value: "2025-2026-autumn", label: "2025-2026 秋季" },
+];
