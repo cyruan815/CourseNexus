@@ -1,11 +1,20 @@
-﻿# Study Mode 计划生成向导设计
+# Study Mode 计划生成向导设计
 
 ## 状态
 
 - 日期：2026-07-12
-- 状态：设计已确认，待实施。
+- 状态：设计已确认；后端每日学习时间自动估算规则已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
+## 已实施入口：每日学习时间规则
+
+2026-07-12 已落地后端 daily minutes 规则，范围仅包含 `recommended_daily_minutes` / `daily_available_minutes` / `daily_minutes_source`、capacity 和保存追溯，不包含每日测试任务、诊断向导前端、讲义或测试题幂等。
+
+- Schema：`backend/app/modules/study_plans/schemas.py` 中 `StudyPlanBuildRequest.daily_available_minutes` 允许省略；传入时后端校验最低 30 分钟。
+- Preview 服务：`backend/app/modules/study_plans/service.py::preview_study_plan` 在资料 map 之后按 `max(30, ceil(estimated_total_minutes / duration_days))` 计算新的 `recommended_daily_minutes`；未传每日时间时采用推荐值，传入 `user_modified` 时保留前端值。
+- Prompt 边界：`backend/app/modules/study_plans/planner.py::_build_map_prompt` 在每日时间尚未解析时标记为 `auto`，reduce 阶段只接收已解析的最终每日时间。
+- 保存追溯：`StudyPlan.parsed_config_json` 写入 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source` 和 `capacity`；`study_plans.daily_available_minutes` 存最终采用值。
+- 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py`、`test_study_plan_lifecycle.py`、`test_study_plan_lifecycle_api.py`。
 ## 目标
 
 计划生成向导要把“用户想怎么学”和“用户现在会多少”分开处理。

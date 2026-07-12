@@ -304,6 +304,75 @@ def build_wizard_payload(material_id: str = "mat_api") -> dict[str, object]:
 
 
 
+def build_auto_minutes_wizard_payload() -> dict[str, object]:
+    return {
+        "goal_text": "期末复习",
+        "start_date": "2026-07-10",
+        "duration_days": 1,
+        "preference": "sprint",
+        "diagnostic_profile": {"question_version": "study_plan_diagnostic_v1"},
+        "material_scope": {
+            "include_all_parsed_materials": True,
+            "material_ids": [],
+        },
+    }
+
+
+def test_preview_without_daily_minutes_estimates_and_save_traces_capacity(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "auto_daily_minutes")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "auto-daily-minutes-key"}
+    upload_and_parse_material(client, token, course_id)
+
+    preview = client.post(
+        f"/api/v1/courses/{course_id}/study-plans/preview",
+        headers=headers,
+        json=build_auto_minutes_wizard_payload(),
+    )
+
+    assert preview.status_code == 200
+    preview_data = preview.json()["data"]
+    assert preview_data["daily_available_minutes"] == 60
+    assert preview_data["recommended_daily_minutes"] == 60
+    assert preview_data["daily_minutes_source"] == "system_estimated"
+    assert preview_data["capacity"]["estimated_total_minutes"] == 60
+    assert preview_data["capacity"]["available_total_minutes"] == 60
+    assert preview_data["capacity"]["feasibility_status"] == "tight"
+
+    saved = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=preview_data)
+
+    assert saved.status_code == 200
+    parsed_config = saved.json()["data"]["plan"]["parsed_config_json"]
+    assert parsed_config["confirmed_config"]["daily_available_minutes"] == 60
+    assert parsed_config["confirmed_config"]["recommended_daily_minutes"] == 60
+    assert parsed_config["confirmed_config"]["daily_minutes_source"] == "system_estimated"
+    assert parsed_config["recommended_daily_minutes"] == 60
+    assert parsed_config["daily_minutes_source"] == "system_estimated"
+    assert parsed_config["capacity"]["available_total_minutes"] == 60
+def test_preview_preserves_user_modified_daily_minutes(
+    api_context: tuple[TestClient, ConfigParseProvider],
+) -> None:
+    client, _ = api_context
+    token = register_and_token(client, "manual_daily_minutes")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    upload_and_parse_material(client, token, course_id)
+    payload = build_auto_minutes_wizard_payload() | {
+        "daily_available_minutes": 75,
+        "daily_minutes_source": "user_modified",
+    }
+
+    preview = client.post(f"/api/v1/courses/{course_id}/study-plans/preview", headers=headers, json=payload)
+
+    assert preview.status_code == 200
+    preview_data = preview.json()["data"]
+    assert preview_data["daily_available_minutes"] == 75
+    assert preview_data["recommended_daily_minutes"] == 60
+    assert preview_data["daily_minutes_source"] == "user_modified"
+    assert preview_data["capacity"]["available_total_minutes"] == 75
 def test_preview_and_save_accept_wizard_metadata_and_exact_tasks(
     api_context: tuple[TestClient, ConfigParseProvider],
 ) -> None:
@@ -318,7 +387,8 @@ def test_preview_and_save_accept_wizard_metadata_and_exact_tasks(
     assert preview.status_code == 200
     preview_data = preview.json()["data"]
     assert preview_data["duration_days"] == 2
-    assert preview_data["recommended_daily_minutes"] == 60
+    assert preview_data["daily_available_minutes"] == 60
+    assert preview_data["recommended_daily_minutes"] == 30
     assert preview_data["daily_minutes_source"] == "system_estimated"
     assert preview_data["diagnostic_profile"]["question_version"] == "study_plan_diagnostic_v1"
     assert preview_data["capacity"]["feasibility_status"] == "ok"

@@ -11,6 +11,7 @@ from app.modules.material_context.schemas import MaterialScope
 PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced", "sprint"]
 DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 SubTaskType = Literal["learn", "review", "quiz", "test"]
+MIN_DAILY_AVAILABLE_MINUTES = 30
 
 
 def _normalize_preference_value(value: str | None) -> str | None:
@@ -25,7 +26,7 @@ class StudyPlanBuildRequest(BaseModel):
     start_date: date
     end_date: date | None = None
     duration_days: int | None = Field(default=None, gt=0)
-    daily_available_minutes: int = Field(gt=0)
+    daily_available_minutes: int | None = None
     recommended_daily_minutes: int | None = Field(default=None, gt=0)
     daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference = "balanced"
@@ -35,6 +36,13 @@ class StudyPlanBuildRequest(BaseModel):
     capacity: dict[str, object] = Field(default_factory=dict)
     generation_metadata: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
+
+    @field_validator("daily_available_minutes")
+    @classmethod
+    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
+        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
+            raise ValueError("daily_available_minutes must be at least 30")
+        return value
 
     @field_validator("preference", mode="after")
     @classmethod
@@ -84,6 +92,13 @@ class StudyPlanParsedConfig(BaseModel):
     generation_metadata: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     unresolved_fields: list[str] = Field(default_factory=list)
+
+    @field_validator("daily_available_minutes")
+    @classmethod
+    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
+        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
+            raise ValueError("daily_available_minutes must be at least 30")
+        return value
 
     @field_validator("preference", mode="after")
     @classmethod
@@ -169,6 +184,13 @@ class StudyPlanPreview(BaseModel):
     generation_metadata: dict[str, object] = Field(default_factory=dict)
     tasks: list[StudyTaskPreview]
 
+    @field_validator("daily_available_minutes")
+    @classmethod
+    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
+        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
+            raise ValueError("daily_available_minutes must be at least 30")
+        return value
+
     @field_validator("preference", mode="after")
     @classmethod
     def normalize_preference(cls, value: PlanPreference) -> PlanPreference:
@@ -189,6 +211,13 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
     daily_available_minutes: int | None = Field(default=None, gt=0)
     preference: PlanPreference | None = None
     material_scope: MaterialScope | None = None
+
+    @field_validator("daily_available_minutes")
+    @classmethod
+    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
+        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
+            raise ValueError("daily_available_minutes must be at least 30")
+        return value
 
     @field_validator("preference", mode="after")
     @classmethod

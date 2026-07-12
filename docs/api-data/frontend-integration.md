@@ -591,22 +591,46 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/study-plans/preview`
 
-要求：Bearer token。当前实现为确定性基础规则，不调用模型，不代表最终 AI 计划算法。
+要求：Bearer token。后端基于当前资料范围生成 preview；请求允许省略 `daily_available_minutes`，后端会在资料 map 后计算新的 `recommended_daily_minutes` 和最终采用的 `daily_available_minutes`。
 
-请求：
+请求（未指定每日时间时）：
 
 ```json
 {
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
-  "end_date": "2026-07-12",
-  "daily_available_minutes": 60,
+  "duration_days": 1,
+  "preference": "sprint",
   "material_scope": {
     "include_all_parsed_materials": true,
     "material_ids": []
   }
 }
 ```
+
+请求（前端手动修改每日时间时）：
+
+```json
+{
+  "goal_text": "期末复习",
+  "start_date": "2026-07-10",
+  "duration_days": 1,
+  "daily_available_minutes": 75,
+  "daily_minutes_source": "user_modified",
+  "preference": "sprint",
+  "material_scope": {
+    "include_all_parsed_materials": true,
+    "material_ids": []
+  }
+}
+```
+
+规则：
+
+- 后端始终按 `max(30, ceil(estimated_total_minutes / duration_days))` 返回新的 `recommended_daily_minutes`。
+- 未传 `daily_available_minutes` 时，`daily_available_minutes = recommended_daily_minutes`，`daily_minutes_source = "system_estimated"`。
+- 传入 `daily_available_minutes` 时，后端保留该最终采用值；若 `daily_minutes_source = "user_modified"`，capacity 使用前端传入值计算。
+- 旧客户端继续可以传 `daily_available_minutes`；低于 30 分钟的请求会被校验拒绝。
 
 响应 `data`：
 
@@ -616,11 +640,21 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
   "title": "Linear Algebra 学习计划",
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
-  "end_date": "2026-07-12",
+  "end_date": "2026-07-10",
+  "duration_days": 1,
   "daily_available_minutes": 60,
+  "recommended_daily_minutes": 60,
+  "daily_minutes_source": "system_estimated",
+  "preference": "sprint",
   "material_scope": {
     "include_all_parsed_materials": true,
     "material_ids": []
+  },
+  "capacity": {
+    "estimated_total_minutes": 60,
+    "available_total_minutes": 60,
+    "feasibility_status": "tight",
+    "warnings": []
   },
   "tasks": [
     {
@@ -633,6 +667,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
           "subtask_type": "learn",
           "description": "Alpha",
           "related_material_ids": ["mat_123"],
+          "estimated_minutes": 60,
           "sort_order": 1
         }
       ]
@@ -647,12 +682,13 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | --- | --- |
 | `NO_PARSED_MATERIAL` | 当前资料范围没有可用 parsed chunk。 |
 | `NOT_FOUND` | 课程或显式资料范围不属于当前用户。 |
+| `VALIDATION_ERROR` | 日期范围、资料范围或每日学习时间不合法，例如低于 30 分钟。 |
 
 ### 3.25 学习计划保存
 
 `POST /api/v1/courses/{course_id}/study-plans`
 
-要求：Bearer token。请求体同预览接口。保存时只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
+要求：Bearer token。新向导保存时提交 preview 中展示过的配置和 `tasks`；后端保存 exact tasks，并在 `StudyPlan.parsed_config_json` 追溯 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity`、资料快照和生成元数据。旧客户端省略 `tasks` 时仍走保存前生成 preview 的兼容路径。保存阶段只写 `StudyPlan`、`StudyTask`、`StudySubTask`，不提前生成今日讲义或任务测试题内容。
 
 响应 `data`：
 

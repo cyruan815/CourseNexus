@@ -196,13 +196,13 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | 方法与路径 | 状态 | 说明 |
 | --- | --- | --- |
 | `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 已实现 | 自然语言配置回填；不写数据库。 |
-| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料生成 preview，返回 `coverage`。 |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料生成 preview；请求可省略 `daily_available_minutes`，响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage` 和 `capacity`。 |
 | `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；支持旧客户端省略 `tasks` 时先生成 preview。 |
 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 已实现 | 生成新 preview，不写数据库。 |
 | `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |
 | `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
 
-保存接口支持 `Idempotency-Key`：key hash 写入 `study_plans.idempotency_key_hash`，request hash 保留在 `parsed_config_json.idempotency`；数据库通过 `(user_id, course_id, idempotency_key_hash)` 唯一索引兜底，同键同请求返回同一 plan bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`，已软删除计划占用的 key 不可复用。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口通过数据库条件 UPDATE 原子校验 `expected_updated_at`，在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`；失败请求不得删除或部分修改旧任务树和打卡记录。S02 不新增业务表，不在保存阶段生成讲义或任务测试题。
+保存接口支持 `Idempotency-Key`：key hash 写入 `study_plans.idempotency_key_hash`，request hash 保留在 `parsed_config_json.idempotency`；数据库通过 `(user_id, course_id, idempotency_key_hash)` 唯一索引兜底，同键同请求返回同一 plan bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`，已软删除计划占用的 key 不可复用。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口通过数据库条件 UPDATE 原子校验 `expected_updated_at`，在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`；失败请求不得删除或部分修改旧任务树和打卡记录。S02 不新增业务表，不在保存阶段生成讲义或任务测试题。保存后的 `parsed_config_json` 追溯 `confirmed_config`、`recommended_daily_minutes`、`daily_minutes_source`、`capacity` 和任务快照，`study_plans.daily_available_minutes` 保存最终采用的每日学习时间。
 ## 计划学习模式 S03 今日待办与日历契约
 
 S03 已实现五个只读 GET 接口，前端可在契约评审后接入：

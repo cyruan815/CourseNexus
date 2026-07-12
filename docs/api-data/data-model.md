@@ -125,15 +125,33 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业
 
 ```json
 {
-  "material_scope": {"include_all_parsed_materials": true, "material_ids": []},
-  "daily_available_minutes": 60,
-  "preference": "fast_track",
-  "tasks_source": "confirmed",
+  "schema_version": 1,
+  "confirmed_config": {
+    "goal_text": "期末复习",
+    "start_date": "2026-07-10",
+    "end_date": "2026-07-10",
+    "duration_days": 1,
+    "daily_available_minutes": 60,
+    "recommended_daily_minutes": 60,
+    "daily_minutes_source": "system_estimated",
+    "preference": "sprint",
+    "material_scope": {"include_all_parsed_materials": true, "material_ids": []}
+  },
+  "recommended_daily_minutes": 60,
+  "daily_minutes_source": "system_estimated",
+  "capacity": {
+    "estimated_total_minutes": 60,
+    "available_total_minutes": 60,
+    "feasibility_status": "tight",
+    "warnings": []
+  },
   "coverage": {
     "expected_material_ids": ["mat_1"],
     "processed_material_ids": ["mat_1"],
     "batch_count": 1
   },
+  "tasks_source": "confirmed",
+  "task_snapshot": [],
   "idempotency": {
     "key_hash": "sha256(...) ",
     "request_hash": "sha256(...)"

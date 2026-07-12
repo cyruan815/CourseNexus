@@ -141,6 +141,32 @@ def test_build_request_derives_end_date_from_duration_days() -> None:
         )
 
 
+def test_build_request_allows_missing_daily_minutes_for_auto_estimate() -> None:
+    request = StudyPlanBuildRequest.model_validate(
+        {
+            "goal_text": "两天学完物理层",
+            "start_date": "2026-07-12",
+            "duration_days": 2,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+        }
+    )
+
+    assert request.daily_available_minutes is None
+    assert request.end_date == date(2026, 7, 13)
+    assert request.duration_days == 2
+
+
+def test_build_request_rejects_daily_minutes_below_minimum() -> None:
+    with pytest.raises(ValidationError):
+        StudyPlanBuildRequest.model_validate(
+            {
+                "goal_text": "两天学完物理层",
+                "start_date": "2026-07-12",
+                "duration_days": 2,
+                "daily_available_minutes": 20,
+                "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            }
+        )
 def test_study_plan_preview_carries_wizard_metadata() -> None:
     preview = StudyPlanPreview.model_validate(
         {
