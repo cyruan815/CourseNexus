@@ -14,7 +14,7 @@ const backendCourses = [
     name: "离散数学",
     description: "图论和组合数学复习",
     teacher: "周老师",
-    term: "2025-2026 春季",
+    term: "2025-2026-spring",
     status: "active",
     created_at: "2026-07-09T12:00:00+00:00",
     updated_at: "2026-07-09T12:00:00+00:00",
@@ -38,13 +38,43 @@ const backendCourses = [
     name: "算法设计",
     description: "图算法和复杂度分析",
     teacher: "李老师",
-    term: "2025-2026 秋季",
+    term: "2025-2026-autumn",
     status: "active",
     created_at: "2026-07-11T12:00:00+00:00",
     updated_at: "2026-07-11T12:00:00+00:00",
     deleted_at: null,
   },
 ];
+
+const backendTermOptions = [
+  { value: "2027-2028-autumn", label: "2027-2028 秋季" },
+  { value: "2027-2028-spring", label: "2027-2028 春季" },
+  { value: "2026-2027-autumn", label: "2026-2027 秋季" },
+  { value: "2026-2027-spring", label: "2026-2027 春季" },
+  { value: "2025-2026-autumn", label: "2025-2026 秋季" },
+  { value: "2025-2026-spring", label: "2025-2026 春季" },
+  { value: "2024-2025-autumn", label: "2024-2025 秋季" },
+  { value: "2024-2025-spring", label: "2024-2025 春季" },
+];
+
+function jsonResponse(data: unknown, requestId = "req_test") {
+  return Promise.resolve(
+    new Response(JSON.stringify({ data, meta: { request_id: requestId } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+function createHomeFetchMock(courses = backendCourses) {
+  return vi.fn((input: RequestInfo | URL) => {
+    if (String(input) === "/api/v1/course-terms") {
+      return jsonResponse(backendTermOptions, "req_terms");
+    }
+
+    return jsonResponse(courses, "req_courses");
+  });
+}
 
 function LocationProbe() {
   const location = useLocation();
@@ -80,12 +110,7 @@ describe("HomePage", () => {
 
   it("loads courses from the backend and renders real course links", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const fetchMock = createHomeFetchMock();
     vi.stubGlobal("fetch", fetchMock);
 
     renderHomePage();
@@ -109,6 +134,12 @@ describe("HomePage", () => {
         headers: expect.objectContaining({ Authorization: "Bearer token-home" }),
       }),
     );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/course-terms",
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer token-home" }),
+      }),
+    );
     expect(screen.getByText("今天还没有学习计划")).toBeInTheDocument();
     expect(screen.queryByText("1 项待安排")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "生成今日计划" })).not.toBeInTheDocument();
@@ -119,15 +150,7 @@ describe("HomePage", () => {
 
   it("filters courses by the selected term", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    vi.stubGlobal("fetch", createHomeFetchMock());
 
     renderHomePage();
 
@@ -143,15 +166,7 @@ describe("HomePage", () => {
 
   it("enters a course when clicking the course card body", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    vi.stubGlobal("fetch", createHomeFetchMock());
 
     renderHomePage();
 
@@ -162,15 +177,7 @@ describe("HomePage", () => {
 
   it("toggles the persisted color scheme from the home header", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    vi.stubGlobal("fetch", createHomeFetchMock());
 
     renderHomePage();
 
@@ -190,7 +197,7 @@ describe("HomePage", () => {
       name: "线性代数",
       description: "矩阵和向量空间复习",
       teacher: "王老师",
-      term: "2025-2026 春季",
+      term: "2025-2026-spring",
       status: "active",
       created_at: "2026-07-12T12:00:00+00:00",
       updated_at: "2026-07-12T12:00:00+00:00",
@@ -198,20 +205,14 @@ describe("HomePage", () => {
     };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/v1/courses" && init?.method === "POST") {
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: createdCourse, meta: { request_id: "req_create" } }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
+        return jsonResponse(createdCourse, "req_create");
       }
 
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+      if (String(input) === "/api/v1/course-terms") {
+        return jsonResponse(backendTermOptions, "req_terms");
+      }
+
+      return jsonResponse(backendCourses, "req_courses");
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -237,7 +238,7 @@ describe("HomePage", () => {
           name: "线性代数",
           description: "矩阵和向量空间复习",
           teacher: "王老师",
-          term: "2025-2026 春季",
+          term: "2025-2026-spring",
         }),
       }),
     );
@@ -252,32 +253,18 @@ describe("HomePage", () => {
     };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/v1/courses/crs_discrete_math" && init?.method === "PATCH") {
-        return Promise.resolve(
-          new Response(JSON.stringify({ data: updatedCourse, meta: { request_id: "req_update" } }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
+        return jsonResponse(updatedCourse, "req_update");
       }
 
       if (String(input) === "/api/v1/courses/crs_discrete_math" && init?.method === "DELETE") {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ data: { ...updatedCourse, status: "deleted" }, meta: { request_id: "req_delete" } }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-        );
+        return jsonResponse({ ...updatedCourse, status: "deleted" }, "req_delete");
       }
 
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: backendCourses, meta: { request_id: "req_courses" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
+      if (String(input) === "/api/v1/course-terms") {
+        return jsonResponse(backendTermOptions, "req_terms");
+      }
+
+      return jsonResponse(backendCourses, "req_courses");
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -310,15 +297,7 @@ describe("HomePage", () => {
   });
 
   it("renders an empty course state when the backend returns no courses", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: [], meta: { request_id: "req_empty" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    vi.stubGlobal("fetch", createHomeFetchMock([]));
 
     renderHomePage();
 
@@ -329,15 +308,21 @@ describe("HomePage", () => {
   it("renders backend errors without showing mock courses", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            error: { code: "HTTP_ERROR", message: "课程列表加载失败", details: {} },
-            meta: { request_id: "req_error" },
-          }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input) === "/api/v1/course-terms") {
+          return jsonResponse(backendTermOptions, "req_terms");
+        }
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: { code: "HTTP_ERROR", message: "课程列表加载失败", details: {} },
+              meta: { request_id: "req_error" },
+            }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }),
     );
 
     renderHomePage();

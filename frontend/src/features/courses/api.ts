@@ -8,8 +8,17 @@ export interface CourseMutationPayload {
   term?: string | null;
 }
 
+export interface CourseTermOption {
+  value: string;
+  label: string;
+}
+
 export function listCourses(): Promise<Course[]> {
   return apiRequest<Course[]>("/api/v1/courses");
+}
+
+export function listCourseTermOptions(): Promise<CourseTermOption[]> {
+  return apiRequest<CourseTermOption[]>("/api/v1/course-terms");
 }
 
 export function fetchCourse(courseId: string): Promise<Course> {
