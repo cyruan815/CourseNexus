@@ -130,6 +130,7 @@ PDF 解析：
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
 - 基础前端归类与逐文件复选、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
+- 真实 PDF 从上传、Docling 解析、Chroma 写入到资料/文件夹物理删除的端到端验证：[validation/real-pdf-permanent-deletion-e2e-2026-07-13.md](validation/real-pdf-permanent-deletion-e2e-2026-07-13.md)。
 
 验证命令：
 
