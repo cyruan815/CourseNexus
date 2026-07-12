@@ -152,7 +152,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `name` | string | 否 | 无 | INDEX(`user_id`, `name`) | 课程名称。 |
 | `description` | text | 是 | null |  | 课程简介。 |
 | `teacher` | string | 是 | null |  | 教师。 |
-| `term` | string | 是 | null |  | 学期。 |
+| `term` | string | 是 | null |  | 学期标准值；API 仅允许课程学期选项接口返回的值或 `null`。 |
 | `status` | enum `course_status` | 否 | `active` | INDEX | 课程状态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
@@ -162,6 +162,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - `material_count` 是查询派生字段，不在 `courses` 表持久化。
 - 当前用户下课程名允许重复，前端通过教师、学期、创建时间等信息辅助区分。
+- `term` 默认且允许为 `null`。当前标准值为 `2024-2025` 至 `2027-2028` 学年的 `autumn`、`spring` 编码；数据库保持字符串列以便后续扩展，规范性由创建和更新 API 校验。
 - 删除课程写入 `deleted_at` 并将 `status` 置为 `deleted`；关联资料、对话、生成内容、计划和任务默认隐藏。
 
 ## material_folders

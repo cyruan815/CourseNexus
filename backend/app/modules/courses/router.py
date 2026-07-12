@@ -6,12 +6,26 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_required_user
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.courses.schemas import CourseCreate, CourseRead, CourseUpdate
+from app.modules.courses.schemas import CourseCreate, CourseRead, CourseTermOptionRead, CourseUpdate
 from app.modules.courses.service import create_course, delete_course, get_course_detail, list_courses, update_course
+from app.modules.courses.terms import COURSE_TERM_OPTIONS
 from app.modules.users.models import User
 from app.shared.responses import success_response
 
 router = APIRouter(prefix="/courses", tags=["courses"])
+term_router = APIRouter(prefix="/course-terms", tags=["courses"])
+
+
+@term_router.get("")
+def list_course_term_options_endpoint(
+    request: Request,
+    _current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    data = [
+        CourseTermOptionRead(value=value, label=label).model_dump(mode="json")
+        for value, label in COURSE_TERM_OPTIONS
+    ]
+    return success_response(data, request_id=get_request_id(request))
 
 
 @router.get("")

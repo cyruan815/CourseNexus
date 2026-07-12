@@ -6,6 +6,7 @@
 - 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation 和 Study Plans。
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
+- 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
 - 成功响应统一包含 `data` 和 `meta`。
 - 错误响应统一包含 `error.code`、`error.message`、`error.details` 和 `meta.request_id`。
 - 前端根据 HTTP status 与 `error.code` 决定交互，不解析中文错误文案。

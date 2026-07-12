@@ -16,6 +16,7 @@
 | [courses/index.md](courses/index.md) | 课程首页工作台和后续课程管理实现。 | 2026-07-11 |
 | [course-workspace/index.md](course-workspace/index.md) | 课程详情工作台、资料范围、问答、生成内容和学习计划入口实现。 | 2026-07-12 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
+| [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
 
 ## 相关链接
 

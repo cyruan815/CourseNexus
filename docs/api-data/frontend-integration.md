@@ -116,7 +116,7 @@
     "name": "高等数学",
     "description": "微积分与线性代数复习",
     "teacher": "王老师",
-    "term": "2026 Spring",
+    "term": "2025-2026-spring",
     "status": "active",
     "created_at": "2026-07-09T12:00:00+00:00",
     "updated_at": "2026-07-09T12:00:00+00:00",
@@ -138,11 +138,36 @@
   "name": "高等数学",
   "description": "微积分与线性代数复习",
   "teacher": "王老师",
-  "term": "2026 Spring"
+  "term": "2025-2026-spring"
 }
 ```
 
 响应 `data`：`CourseRead`，字段同课程列表单项。
+
+`term` 可省略或提交 `null`；前端创建表单默认显示“未选择”并提交 `null`，不得提供自由文本输入。
+
+### 3.6.1 课程学期选项
+
+`GET /api/v1/course-terms`
+
+要求：Bearer token。
+
+响应 `data`：
+
+```json
+[
+  { "value": "2027-2028-autumn", "label": "2027-2028 秋季" },
+  { "value": "2027-2028-spring", "label": "2027-2028 春季" },
+  { "value": "2026-2027-autumn", "label": "2026-2027 秋季" },
+  { "value": "2026-2027-spring", "label": "2026-2027 春季" },
+  { "value": "2025-2026-autumn", "label": "2025-2026 秋季" },
+  { "value": "2025-2026-spring", "label": "2025-2026 春季" },
+  { "value": "2024-2025-autumn", "label": "2024-2025 秋季" },
+  { "value": "2024-2025-spring", "label": "2024-2025 春季" }
+]
+```
+
+`value` 是课程接口保存和筛选使用的稳定值，`label` 用于界面展示。选项增加时前端必须以接口结果为准。
 
 ### 3.7 课程详情
 
@@ -165,11 +190,13 @@
   "name": "高等数学复习",
   "description": "期末复习资料",
   "teacher": "王老师",
-  "term": "2026 Spring"
+  "term": "2025-2026-spring"
 }
 ```
 
 响应 `data`：`CourseRead`。
+
+`term` 可提交 `null` 以清除已选学期；提交非选项值返回 `422 VALIDATION_ERROR`。
 
 ### 3.9 删除课程
 
