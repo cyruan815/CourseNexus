@@ -128,17 +128,12 @@ function AuthForm({ mode }: { mode: AuthMode }) {
 
             <Box className="auth-form-row">
               {isLogin ? (
-                <>
-                  <Anchor component={Link} to="/login">
-                    找回密码
+                <Text span>
+                  没有账户？{" "}
+                  <Anchor component={Link} to="/register">
+                    点击注册
                   </Anchor>
-                  <Text span>
-                    没有账户？{" "}
-                    <Anchor component={Link} to="/register">
-                      点击注册
-                    </Anchor>
-                  </Text>
-                </>
+                </Text>
               ) : (
                 <>
                   <Text span>

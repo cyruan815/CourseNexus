@@ -122,4 +122,10 @@ describe("auth pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("账号或密码不正确");
     expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
   });
+
+  it("does not show a password reset link before the flow exists", () => {
+    renderAuthPage("login");
+
+    expect(screen.queryByRole("link", { name: "找回密码" })).not.toBeInTheDocument();
+  });
 });
