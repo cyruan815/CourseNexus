@@ -628,6 +628,13 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 前端调用前应先通过 execution-context 获取 `task_test_content_id`，或通过 `GET /api/v1/generated-contents/{generated_content_id}` 确认内容为当前用户可访问的成功 `task_test`。错误响应仍使用统一 error envelope：`EXPORT_UNSUPPORTED_CONTENT_TYPE` 表示不是任务测试题；`EXPORT_CONTENT_NOT_READY` 表示生成未成功；`EXPORT_CONTENT_INVALID` 表示历史内容结构畸形；`NOT_FOUND` 表示内容不存在或不属于当前用户。
 
+
+### 3.23.3 今日讲义 PDF 导出
+
+`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 导出已成功生成的 `handout` PDF 文件。接口要求 Bearer token，成功时直接返回 `application/pdf` 文件流，`Content-Disposition` 文件名为 `handout-{generated_content_id}.pdf`，不包统一 `{data, meta}` envelope。
+
+前端调用前应先通过 execution-context 获取 `handout_content_id`，或通过 `GET /api/v1/generated-contents/{generated_content_id}` 确认内容为当前用户可访问的成功 `handout`。轻量阶段测试题不走 PDF；`task_test` 调用该接口会返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`。`EXPORT_CONTENT_NOT_READY` 表示生成未成功；`EXPORT_CONTENT_INVALID` 表示历史讲义结构畸形；`EXPORT_FAILED` 表示 PDF 渲染失败。
+
 ### 3.24 学前诊断问题
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
@@ -1018,6 +1025,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | 今日讲义生成 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 返回 `GeneratedContentRead`；默认复用最近一次 success，`force_regenerate=true` 重建。 |
 | 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；P2 只读展示通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情。 |
 | 任务测试题 Markdown 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 返回 Markdown 文件流；只支持成功的 `task_test`，不保存作答、不判分、不生成 PDF。 |
+| 今日讲义 PDF 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 返回 PDF 文件流；只支持成功的 `handout`，不保存导出历史，不支持任务测试题 PDF。 |
 
 任务测试题后端生成和 Markdown 文件导出已实现；当前前端缺口是 P2 轻量只读展示。提交答案、判分、attempt 历史和反馈闭环属于后续 P9 / phase-1 S08，不在 P2 中引入。
 ## 5. 前端最小工作台验收口径

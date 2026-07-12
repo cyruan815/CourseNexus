@@ -58,7 +58,13 @@ def _register_user_and_headers(api: ApiHarness, *, username: str = "alice") -> t
     return user_id, {"Authorization": f"Bearer {token}"}
 
 
-def _seed_task_content_plan(api: ApiHarness, *, user_id: str, suffix: str = "exports") -> str:
+def _seed_task_content_plan(
+    api: ApiHarness,
+    *,
+    user_id: str,
+    suffix: str = "exports",
+    subtask_type: str = "quiz",
+) -> str:
     course_id = f"crs_{suffix}"
     task_id = f"task_{suffix}"
     subtask_id = f"sub_{suffix}"
@@ -107,7 +113,7 @@ def _seed_task_content_plan(api: ApiHarness, *, user_id: str, suffix: str = "exp
             plan_id=f"sp_{suffix}",
             course_id=course_id,
             title="任务测试",
-            subtask_type="quiz",
+            subtask_type=subtask_type,
             description="完成测试题",
             related_material_ids_json=[f"mat_{suffix}"],
             status="not_started",
@@ -136,6 +142,30 @@ def _task_test_json(*, source_citation_ids: list[str] | None = None) -> dict[str
     }
 
 
+def _handout_json(*, source_citation_ids: list[str] | None = None) -> dict[str, object]:
+    return {
+        "overview": "学习关系模型。",
+        "learning_objectives": ["解释主键和关系"],
+        "sections": [
+            {
+                "id": "sec_1",
+                "title": "主键",
+                "body": "主键用于唯一标识表中的一行。",
+                "key_points": ["唯一标识"],
+                "source_citation_ids": ["cit_task_test"] if source_citation_ids is None else source_citation_ids,
+                "sort_order": 1,
+            }
+        ],
+        "summary": "完成主键概念学习。",
+    }
+
+
+def _default_content_json(content_type: str) -> dict[str, object]:
+    if content_type == "handout":
+        return _handout_json()
+    return _task_test_json()
+
+
 def _seed_generated_content(
     api: ApiHarness,
     *,
@@ -155,9 +185,9 @@ def _seed_generated_content(
         course_id=subtask.course_id,
         study_subtask_id=subtask_id,
         content_type=content_type,
-        title="任务测试题",
+        title="今日讲义" if content_type == "handout" else "任务测试题",
         content=None,
-        content_json=_task_test_json() if content_json is None else content_json,
+        content_json=_default_content_json(content_type) if content_json is None else content_json,
         generation_status=generation_status,
         material_scope_json={"include_all_parsed_materials": False, "material_ids": subtask.related_material_ids_json},
     )
@@ -271,3 +301,114 @@ def test_export_markdown_uses_unavailable_when_question_citation_is_missing(api:
 
     assert response.status_code == 200
     assert "Sources: unavailable" in response.text
+
+
+def test_export_handout_pdf_success(api: ApiHarness) -> None:
+    user_id, headers = _register_user_and_headers(api)
+    subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        content_id="gen_handout",
+        content_type="handout",
+    )
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"] == 'attachment; filename="handout-gen_handout.pdf"'
+    assert response.content.startswith(b"%PDF-1.4")
+    assert b"/Type /Catalog" in response.content
+    assert b"%%EOF" in response.content
+
+
+def test_export_handout_pdf_returns_not_found_for_cross_user_content(api: ApiHarness) -> None:
+    alice_id, _ = _register_user_and_headers(api, username="alice")
+    _, bob_headers = _register_user_and_headers(api, username="bob")
+    subtask_id = _seed_task_content_plan(api, user_id=alice_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=alice_id,
+        subtask_id=subtask_id,
+        content_id="gen_handout",
+        content_type="handout",
+    )
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=bob_headers)
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_export_pdf_rejects_task_test_content(api: ApiHarness) -> None:
+    user_id, headers = _register_user_and_headers(api)
+    subtask_id = _seed_task_content_plan(api, user_id=user_id)
+    content_id = _seed_generated_content(api, user_id=user_id, subtask_id=subtask_id)
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "EXPORT_UNSUPPORTED_CONTENT_TYPE"
+
+
+@pytest.mark.parametrize("generation_status", ["generating", "failed"])
+def test_export_pdf_rejects_non_success_handout_content(api: ApiHarness, generation_status: str) -> None:
+    user_id, headers = _register_user_and_headers(api)
+    subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        content_id="gen_handout",
+        content_type="handout",
+        generation_status=generation_status,
+    )
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "EXPORT_CONTENT_NOT_READY"
+
+
+def test_export_pdf_rejects_invalid_handout_content(api: ApiHarness) -> None:
+    user_id, headers = _register_user_and_headers(api)
+    subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        content_id="gen_handout",
+        content_type="handout",
+        content_json={"overview": "学习关系模型。", "sections": []},
+    )
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "EXPORT_CONTENT_INVALID"
+
+
+def test_export_pdf_returns_export_failed_when_renderer_fails(api: ApiHarness, monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id, headers = _register_user_and_headers(api)
+    subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        content_id="gen_handout",
+        content_type="handout",
+    )
+
+    from app.modules.exports import service as export_service
+
+    def broken_renderer(content: object) -> bytes:
+        raise RuntimeError("pdf unavailable")
+
+    monkeypatch.setattr(export_service, "render_handout_pdf", broken_renderer)
+
+    response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "EXPORT_FAILED"
