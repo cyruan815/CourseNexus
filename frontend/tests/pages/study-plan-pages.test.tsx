@@ -109,7 +109,7 @@ function successResponse(data: unknown, requestId = "req_1") {
 }
 
 function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new") {
-  render(
+  return render(
     <MantineProvider>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
@@ -119,6 +119,17 @@ function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new")
       </MemoryRouter>
     </MantineProvider>,
   );
+}
+
+function requestIdempotencyKey(call: [RequestInfo | URL, RequestInit | undefined]): string | undefined {
+  const headers = call[1]?.headers;
+  if (headers instanceof Headers) {
+    return headers.get("Idempotency-Key") ?? undefined;
+  }
+  if (Array.isArray(headers)) {
+    return headers.find(([name]) => name === "Idempotency-Key")?.[1];
+  }
+  return (headers as Record<string, string> | undefined)?.["Idempotency-Key"];
 }
 
 describe("study plan pages", () => {
@@ -186,6 +197,7 @@ describe("study plan pages", () => {
               include_all_parsed_materials: true,
               material_ids: [],
             },
+            title: preview.title,
             client_flow: "wizard_v1",
             tasks: preview.tasks,
           }),
@@ -196,6 +208,84 @@ describe("study plan pages", () => {
         }),
       );
     });
+  });
+
+  it("reuses the same idempotency key for unchanged preview retries and resets it after a new preview", async () => {
+    let saveAttempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
+        saveAttempts += 1;
+        if (saveAttempts <= 2) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: { message: "network timeout" } }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }),
+          );
+        }
+        return Promise.resolve(successResponse(savedDetail, "req_save"));
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = renderStudyPlanRoutes();
+    await screen.findByRole("heading", { level: 1 });
+
+    const goalInput = container.querySelector("textarea");
+    const dateInputs = container.querySelectorAll('input[type="date"]');
+    const minutesInput = container.querySelector('input[type="number"]');
+    expect(goalInput).not.toBeNull();
+    expect(dateInputs).toHaveLength(2);
+    expect(minutesInput).not.toBeNull();
+
+    fireEvent.change(goalInput!, { target: { value: preview.goal_text } });
+    fireEvent.change(dateInputs[0], { target: { value: "2026-07-13" } });
+    fireEvent.change(dateInputs[1], { target: { value: "2026-07-15" } });
+    fireEvent.change(minutesInput!, { target: { value: "60" } });
+
+    const actionButtons = () => Array.from(container.querySelectorAll("button")).slice(-2);
+    const previewButton = () => actionButtons()[0] as HTMLButtonElement;
+    const saveButton = () => actionButtons()[1] as HTMLButtonElement;
+
+    fireEvent.click(previewButton());
+    await waitFor(() => expect(saveButton()).toBeEnabled());
+
+    fireEvent.click(saveButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("network timeout");
+
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(saveAttempts).toBe(2));
+
+    fireEvent.change(minutesInput!, { target: { value: "75" } });
+    expect(saveButton()).toBeDisabled();
+
+    fireEvent.click(previewButton());
+    await waitFor(() => expect(saveButton()).toBeEnabled());
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(saveAttempts).toBe(3));
+
+    const saveCalls = fetchMock.mock.calls.filter(([input, init]) => (
+      String(input).endsWith("/courses/crs_123/study-plans") && init?.method === "POST"
+    )) as [RequestInfo | URL, RequestInit | undefined][];
+    expect(saveCalls).toHaveLength(3);
+    expect(saveCalls[0]?.[1]?.headers).toEqual(expect.objectContaining({
+      "Idempotency-Key": expect.stringMatching(/^study-plan-crs_123-/),
+    }));
+    expect(requestIdempotencyKey(saveCalls[1])).toBe(requestIdempotencyKey(saveCalls[0]));
+    expect(requestIdempotencyKey(saveCalls[2])).toMatch(/^study-plan-crs_123-/);
+    expect(requestIdempotencyKey(saveCalls[2])).not.toBe(requestIdempotencyKey(saveCalls[0]));
   });
 
   it("renders readonly detail from the detail endpoint", async () => {

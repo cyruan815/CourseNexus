@@ -16,7 +16,7 @@
 - `preference` 当前固定发送英文枚举 `balanced`；学情诊断后端契约已存在，但本基础页暂不接入诊断向导。
 - 点击“生成预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`。
 - 前端保存产生预览时的请求快照；若表单字段在预览后变化，旧预览标记为过期并禁用保存。
-- 点击“保存计划”调用 `POST /api/v1/courses/{course_id}/study-plans`，请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"` 与 preview 中展示过的 `tasks`；保存成功后跳转计划详情页。
+- 点击“保存计划”调用 `POST /api/v1/courses/{course_id}/study-plans`，请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview 中展示过的 `tasks`；保存成功后跳转计划详情页。同一份未变化 preview 的保存重试复用同一个幂等键，只有重新生成 preview 后才创建新的保存幂等键。
 
 ## 详情页状态流转
 
