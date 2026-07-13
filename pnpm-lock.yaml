@@ -44,6 +44,9 @@ importers:
       dayjs:
         specifier: ^1.11.21
         version: 1.11.21
+      markmap-view:
+        specifier: 0.18.12
+        version: 0.18.12(markmap-common@0.18.9)
       react:
         specifier: ^19.0.0
         version: 19.2.7
