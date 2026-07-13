@@ -7,7 +7,7 @@
     "frontend:dev": "pnpm --dir frontend dev",
     "frontend:build": "pnpm --dir frontend build",
     "frontend:test": "pnpm --dir frontend test -- --run",
-    "backend:dev": "cd backend && conda run -n course-nexus python -m uvicorn app.main:app --reload",
+    "backend:dev": "cd backend && conda run --no-capture-output -n course-nexus python -m uvicorn app.main:app --reload",
     "backend:test": "cd backend && conda run -n course-nexus python -m pytest",
     "backend:migrate": "cd backend && conda run -n course-nexus python -m alembic upgrade head",
     "test": "pnpm backend:test && pnpm frontend:test"

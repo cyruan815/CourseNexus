@@ -104,6 +104,8 @@ pnpm backend:migrate
 pnpm backend:dev
 ```
 
+该脚本会固定使用 `course-nexus` Conda 环境，通过 Uvicorn 启动 FastAPI，并启用代码热更新和实时终端日志。服务运行期间终端会持续被占用；按 `Ctrl+C` 停止后端。
+
 终端 2：
 
 ```powershell
@@ -233,7 +235,7 @@ pnpm backend:migrate
 pnpm test
 ```
 
-根目录 `backend:*` 和 `test` 脚本会通过 `conda run -n course-nexus` 使用项目专属 Python 3.12 环境，避免调用系统 Python。
+根目录 `backend:*` 和 `test` 脚本会通过 `conda run -n course-nexus` 使用项目专属 Python 3.12 环境，避免调用系统 Python；其中 `backend:dev` 额外启用 `--no-capture-output`，实时显示 Uvicorn 启动信息和后端日志。
 
 也可以进入子目录运行：
 

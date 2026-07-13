@@ -73,6 +73,7 @@
 
 - 根目录 `package.json` 提供跨前后端常用脚本，例如 `frontend:dev`、`frontend:build`、`frontend:test`、`backend:dev`、`backend:test`、`backend:migrate` 和 `test`。
 - 根目录 `backend:*` 和 `test` 脚本必须通过 `conda run -n course-nexus` 调用后端 Python，避免误用系统 Python 或其他 Conda base 环境。
+- `backend:dev` 必须为 `conda run` 启用 `--no-capture-output`，确保 Uvicorn 启动信息、请求摘要和异常日志实时显示在开发终端。
 - 前端包管理使用 pnpm，workspace 配置位于根目录 `pnpm-workspace.yaml`，锁文件为根目录 `pnpm-lock.yaml`。
 - 前端依赖声明只放在 `frontend/package.json`。
 - 后端依赖声明以 `backend/pyproject.toml` 为准；conda 环境示例位于 `backend/environment.yml`。

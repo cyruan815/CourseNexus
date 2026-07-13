@@ -70,6 +70,8 @@ pnpm backend:test
 pnpm backend:migrate
 ```
 
+`pnpm backend:dev` 会固定使用 `course-nexus` Conda 环境，通过 Uvicorn 启动 FastAPI，启用代码热更新，并实时显示启动信息和后端日志。服务运行期间终端会持续被占用；按 `Ctrl+C` 停止后端。
+
 也可以在已激活 `course-nexus` 环境的 `backend/` 目录运行：
 
 ```powershell
