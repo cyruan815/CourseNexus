@@ -35,7 +35,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 
-今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用内置最小 PDF 生成器，不新增依赖、不保存导出历史，内容包含标题、overview、learning objectives、sections、key points、summary 和引用来源；渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
+今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，并通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
 
 ## 幂等与重新生成
 
@@ -166,9 +166,13 @@ Handout 生成参数由 learning-execution 注入当前二级任务上下文，�
 
 ### PDF renderer 契约
 
-今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`。中文和其他 CJK 字符使用 `STSong-Light`；ASCII、数字、英文术语和公式片段使用 `Helvetica`，内容流按字符 run 切换字体，避免 `Overview`、`Nyquist/Shannon`、`C = B log2(1 + S/N)` 等英文/公式被中文 CID 字体逐字拉开。回归测试需至少确认内容流包含 Helvetica 英文 run 和 STSong 中文 run。
+今日讲义 PDF renderer 采用 `content_json -> Markdown -> HTML -> Playwright Chromium -> PDF` 链路。`backend/app/modules/exports/renderer.py` 使用 `markdown-it-py` 渲染标题、列表、表格和代码块，用内置 Jinja2 模板和 print CSS 控制 A4 边距、中文字体、表格宽度、代码换行和标题分页；`render_handout_pdf()` 保持同步接口并由 `exports.service` 将未知异常包装为 `EXPORT_FAILED`。
 
-今日讲义 PDF 只在开头 title 后展示一行来源说明，格式为 `来源说明：本讲义根据《资料名.pdf》《补充资料.pdf》中“知识点”相关内容生成。`。资料名来自 `GeneratedContentRead.source_citations[].material_name` 去重；知识点短期从 handout section 标题合并推导，后续若导出层可取得 subtask title 应优先使用 subtask title。PDF 不再在每个 section 下展示 `Sources`，不生成文末 `Source Details`，也不展示 `hit_text`，避免 `<!-- formula-not-decoded -->`、``、`` 等解析残留进入学生讲义正文。`source_citations` 仍保留在 API 返回和数据库中供内部追溯。
+结构化 `handout` 导出只在标题后展示一行来源说明，格式为 `来源说明：本讲义根据《资料名.pdf》《补充资料.pdf》中“知识点”相关内容生成。`。资料名来自 `GeneratedContentRead.source_citations[].material_name` 去重；知识点短期从 handout section 标题合并推导，后续若导出层可取得 subtask title 应优先使用 subtask title。PDF 不在每个 section 下展示 `Sources`，不生成文末 `Source Details`，也不展示 `hit_text`。
+
+独立 Markdown 回归转换会清洗 `Sources` 段中的 parser/OCR 残留：命中 `formula-not-decoded`、``、``、`` 时保留资料名和页码前缀，隐藏不安全摘录或延续行，避免解析残留进入学生讲义 PDF。`source_citations` 仍保留在 API 返回和数据库中供内部追溯。
+
+当前未捆绑 KaTeX 静态资源；物理层公式先保持为可换行文本，由浏览器字体和 CSS 保证不截断。后续接入本地 KaTeX 资源时，应在同一 HTML 模板中等待公式和字体加载完成，并在打印前检查 `.katex-error`。
 
 ### task-test 默认参数
 

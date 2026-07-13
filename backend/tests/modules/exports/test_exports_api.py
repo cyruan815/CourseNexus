@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +16,7 @@ from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
-from app.modules.exports.renderer import _render_handout_pdf_lines
+from app.modules.exports.renderer import _render_handout_pdf_lines, render_markdown_pdf, render_markdown_pdf_html
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentCitationRead
@@ -329,13 +330,9 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.headers["content-disposition"] == 'attachment; filename="handout-gen_handout.pdf"'
-    assert response.content.startswith(b"%PDF-1.4")
-    assert b"/Type /Catalog" in response.content
-    assert b"%%EOF" in response.content
-    assert b"/F2 13 Tf" in response.content
-    assert b"/F1 10 Tf" in response.content
-    assert "Overview".encode().hex().upper().encode() in response.content
-    assert "Nyquist/Shannon".encode().hex().upper().encode() in response.content
+    assert response.content.startswith(b"%PDF-")
+    assert b"%%EOF" in response.content[-2048:]
+    assert len(response.content) > 8_000
 
 
 def test_render_handout_pdf_lines_uses_source_notice_without_section_sources() -> None:
@@ -377,6 +374,24 @@ def test_render_handout_pdf_lines_uses_source_notice_without_section_sources() -
     assert "" not in rendered
     assert "不应展示的详细摘录" not in rendered
 
+
+def test_render_real_handout_markdown_pdf() -> None:
+    markdown_path = Path(__file__).resolve().parents[2] / "fixtures" / "exports" / "physical-layer-handout.md"
+    markdown = markdown_path.read_text(encoding="utf-8")
+
+    html = render_markdown_pdf_html(markdown, title="今日讲义")
+    assert "<table>" in html
+    assert "Chap7 物理层.pdf, p.9" in html
+    assert "formula-not-decoded" not in html
+    assert "" not in html
+    assert "" not in html
+    assert "" not in html
+
+    pdf = render_markdown_pdf(markdown, title="今日讲义")
+
+    assert pdf.startswith(b"%PDF-")
+    assert b"%%EOF" in pdf[-2048:]
+    assert len(pdf) > 10_000
 
 def test_export_handout_pdf_returns_not_found_for_cross_user_content(api: ApiHarness) -> None:
     alice_id, _ = _register_user_and_headers(api, username="alice")
