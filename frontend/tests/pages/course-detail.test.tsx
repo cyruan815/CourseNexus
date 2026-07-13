@@ -1,6 +1,6 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, type InitialEntry } from "react-router-dom";
+import { MemoryRouter, Route, Routes, type InitialEntry, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CourseDetailPage } from "../../src/pages/CourseDetailPage";
@@ -51,12 +51,26 @@ const studyPlan = {
   deleted_at: null,
 };
 
+function LocationStateProbe() {
+  const location = useLocation();
+
+  return <span data-testid="location-state">{JSON.stringify(location.state ?? null)}</span>;
+}
+
 function renderDetailPage(path: InitialEntry = "/courses/crs_123") {
   render(
     <MantineProvider>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route element={<CourseDetailPage />} path="/courses/:courseId" />
+          <Route
+            element={(
+              <>
+                <CourseDetailPage />
+                <LocationStateProbe />
+              </>
+            )}
+            path="/courses/:courseId"
+          />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -130,6 +144,7 @@ describe("CourseDetailPage", () => {
     renderDetailPage({ pathname: "/courses/crs_123", state: { openUploadPrompt: true } });
 
     expect(await screen.findByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("location-state")).toHaveTextContent("null"));
     fireEvent.click(screen.getByRole("button", { name: "暂不上传" }));
 
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();

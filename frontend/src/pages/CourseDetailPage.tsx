@@ -31,7 +31,7 @@ import {
   IconSun,
   IconUser,
 } from "@tabler/icons-react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { useCourseNexusTheme } from "../app/theme";
@@ -497,7 +497,9 @@ export function CourseDetailWorkbench({
 export function CourseDetailPage() {
   const { courseId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const shouldOpenUploadPrompt = Boolean((location.state as { openUploadPrompt?: boolean } | null)?.openUploadPrompt);
+  const [shouldOpenUploadPromptOnce] = useState(shouldOpenUploadPrompt);
   const [course, setCourse] = useState<Course | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -513,6 +515,12 @@ export function CourseDetailPage() {
     include_all_parsed_materials: true,
     material_ids: [],
   });
+
+  useEffect(() => {
+    if (shouldOpenUploadPrompt) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, navigate, shouldOpenUploadPrompt]);
 
   useEffect(() => {
     let ignore = false;
@@ -673,7 +681,7 @@ export function CourseDetailPage() {
             courseId={course.id}
             materialScope={materialScope}
             onMaterialScopeChange={setMaterialScope}
-            openUploadPrompt={shouldOpenUploadPrompt}
+            openUploadPrompt={shouldOpenUploadPromptOnce}
           />
         )}
         onGenerate={handleGenerateContent}
