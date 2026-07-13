@@ -32,6 +32,62 @@ def _batch() -> MaterialContextBatch:
     return MaterialContextBatch(chunks=context.chunks, material_ids=["mat_1"], estimated_tokens=10)
 
 
+def _valid_handout_v2_payload() -> dict:
+    return {
+        "schema_version": 2,
+        "title": "信道容量讲义",
+        "overview": "围绕信道容量建立公式和直觉。",
+        "difficulty": "medium",
+        "estimated_minutes": 40,
+        "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
+        "prerequisites": [],
+        "sections": [
+            {
+                "id": "sec_1",
+                "title": "Shannon 公式",
+                "lead": "有噪声信道的容量由带宽和信噪比共同限制。",
+                "source_citation_ids": ["chunk_1"],
+                "blocks": [
+                    {
+                        "type": "formula",
+                        "title": "Shannon 公式",
+                        "latex": "C = W \\\\log_2(1 + S/N)",
+                        "purpose": "计算理论最大数据率。",
+                        "variables": [
+                            {"symbol": "C", "meaning": "最大数据率", "unit": "bps"},
+                            {"symbol": "W", "meaning": "带宽", "unit": "Hz"},
+                        ],
+                        "conditions": ["有噪声信道"],
+                        "limitations": ["理论上限"],
+                        "source_citation_ids": ["chunk_1"],
+                    }
+                ],
+                "key_points": ["不要把 dB 直接代入 S/N。"],
+                "sort_order": 1,
+            }
+        ],
+        "knowledge_map": {
+            "type": "mindmap",
+            "title": "关系图",
+            "root": {"label": "信道容量", "children": []},
+            "source_citation_ids": ["chunk_1"],
+        },
+        "formula_cards": [],
+        "exam_focus": [],
+        "self_check": [],
+        "summary": "按条件选公式。",
+    }
+
+
+def test_handout_content_v2_accepts_structured_formula_and_mindmap_blocks() -> None:
+    content = HandoutContent.model_validate(_valid_handout_v2_payload())
+
+    assert content.schema_version == 2
+    assert content.title == "信道容量讲义"
+    assert content.sections[0].blocks[0].type == "formula"
+    assert content.knowledge_map.type == "mindmap"
+
+
 class PromptCapturingModelProvider(MockModelProvider):
     def __init__(self, structured_outputs: dict[type[HandoutContent], dict]) -> None:
         super().__init__(structured_outputs=structured_outputs)
