@@ -9,12 +9,45 @@ class HandoutGenerationParameters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     language: str = "zh-CN"
-    detail_level: Literal["brief", "standard", "deep"] = "standard"
-    subtask_title: str | None = None
-    subtask_description: str | None = None
+    content_depth: Literal["concise", "standard", "detailed"] = "standard"
+    example_intensity: Literal["low", "standard", "high"] = "standard"
+    assessment_intensity: Literal["low", "standard", "high"] = "standard"
+    review_intensity: Literal["low", "standard", "high"] = "standard"
+    course_name: str | None = None
     plan_goal: str | None = None
-    diagnostic_weak_area: str | None = None
-    diagnostic_explanation_style: str | None = None
+    task_title: str | None = None
+    subtask_title: str | None = None
+    subtask_type: Literal["learn", "review"] | None = None
+    subtask_description: str | None = None
+    estimated_minutes: int | None = Field(default=None, ge=1, le=480)
+    diagnostic_foundation_needed: bool | None = None
+    diagnostic_weak_area: Literal["concept", "calculation", "application", "memorization", "other"] | None = None
+    diagnostic_weak_topics: list[str] = Field(default_factory=list)
+    diagnostic_note: str | None = None
+    teaching_strategy_hint: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_detail_level(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        detail_level = normalized.pop("detail_level", None)
+        if "content_depth" not in normalized and isinstance(detail_level, str):
+            normalized["content_depth"] = {
+                "brief": "concise",
+                "standard": "standard",
+                "deep": "detailed",
+            }.get(detail_level, detail_level)
+        return normalized
+
+    @field_validator("diagnostic_weak_topics")
+    @classmethod
+    def _weak_topics_non_empty(cls, value: list[str]) -> list[str]:
+        stripped = [item.strip() for item in value if isinstance(item, str)]
+        if len(stripped) != len(value) or any(not item for item in stripped):
+            raise ValueError("diagnostic_weak_topics must contain non-empty strings")
+        return list(dict.fromkeys(stripped))
 
 
 class CitationBoundModel(BaseModel):

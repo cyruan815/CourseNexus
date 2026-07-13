@@ -110,7 +110,9 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
     return (
         "你是 CourseNexus 的计划学习讲义生成器。只能使用给定资料，不得编造来源。"
         "输出必须符合 HandoutContent schema。\n"
-        f"语言：{params.language}；详细程度：{params.detail_level}。\n\n"
+        f"语言：{params.language}；内容深度：{params.content_depth}；"
+        f"例题强度：{params.example_intensity}；测试强度：{params.assessment_intensity}；"
+        f"复习强度：{params.review_intensity}。\n\n"
         f"{task_context}\n\n"
         f"{requirements}\n\n"
         "资料片段：\n"
@@ -121,14 +123,29 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
 def _task_context_lines(params: HandoutGenerationParameters) -> list[str]:
     lines = [
         "任务上下文：",
+        f"- 课程名称：{_context_value(params.course_name)}",
         f"- 学习计划目标：{_context_value(params.plan_goal)}",
+        f"- 一级任务标题：{_context_value(params.task_title)}",
         f"- 当前二级任务标题：{_context_value(params.subtask_title)}",
+        f"- 当前二级任务类型：{_context_value(params.subtask_type)}",
         f"- 当前二级任务描述：{_context_value(params.subtask_description)}",
+        f"- 内容深度：{params.content_depth}",
+        f"- 例题强度：{params.example_intensity}",
+        f"- 测试强度：{params.assessment_intensity}",
+        f"- 复习强度：{params.review_intensity}",
     ]
+    if params.estimated_minutes is not None:
+        lines.append(f"- 预计学习时间：{params.estimated_minutes} 分钟")
+    if params.diagnostic_foundation_needed is not None:
+        lines.append(f"- 是否需要补基础：{'是' if params.diagnostic_foundation_needed else '否'}")
     if params.diagnostic_weak_area:
         lines.append(f"- 诊断薄弱方向：{params.diagnostic_weak_area}")
-    if params.diagnostic_explanation_style:
-        lines.append(f"- 建议讲解风格：{params.diagnostic_explanation_style}")
+    if params.diagnostic_weak_topics:
+        lines.append(f"- 薄弱知识点：{'、'.join(params.diagnostic_weak_topics)}")
+    if params.diagnostic_note:
+        lines.append(f"- 诊断补充说明：{params.diagnostic_note}")
+    if params.teaching_strategy_hint:
+        lines.append(f"- 教学策略提示：{params.teaching_strategy_hint}")
     return lines
 
 

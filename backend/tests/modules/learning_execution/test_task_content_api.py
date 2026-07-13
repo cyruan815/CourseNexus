@@ -514,6 +514,71 @@ def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) ->
     assert [citation.chunk_id for citation in citations] == ["chunk_api_content"]
 
 
+def test_generate_handout_passes_planner_and_diagnostic_context_to_prompt(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    plan = api.db.get(StudyPlan, "sp_api_content")
+    assert plan is not None
+    plan.parsed_config_json = {
+        "diagnostic_profile": {
+            "foundation_needed": True,
+            "weak_area": "calculation",
+            "weak_topics": ["Nyquist / Shannon 公式"],
+            "diagnostic_note": "希望多讲公式怎么用。",
+            "explanation_style": "step_by_step",
+        },
+        "generation_metadata": {
+            "planner_strategy": {
+                "content_depth": "detailed",
+                "example_intensity": "high",
+                "assessment_intensity": "high",
+                "review_intensity": "standard",
+            }
+        },
+        "task_snapshot": [
+            {
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "sort_order": 1,
+                        "estimated_minutes": 45,
+                        "citation_chunk_ids": ["chunk_api_content"],
+                    }
+                ],
+            }
+        ],
+    }
+    api.db.add(plan)
+    api.db.commit()
+    provider = CountingHandoutModelProvider()
+
+    generate_handout_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"language": "zh-CN"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    prompt = provider.prompts[0]
+    assert "课程名称：数据库" in prompt
+    assert "一级任务标题：学习主键" in prompt
+    assert "当前二级任务类型：learn" in prompt
+    assert "预计学习时间：45 分钟" in prompt
+    assert "内容深度：detailed" in prompt
+    assert "例题强度：high" in prompt
+    assert "测试强度：high" in prompt
+    assert "复习强度：standard" in prompt
+    assert "诊断薄弱方向：calculation" in prompt
+    assert "薄弱知识点：Nyquist / Shannon 公式" in prompt
+    assert "诊断补充说明：希望多讲公式怎么用。" in prompt
+    assert "教学策略提示：加强公式变量、单位、适用条件、代入步骤和计算例题。" in prompt
+    assert "建议讲解风格" not in prompt
+    assert "step_by_step" not in prompt
+
+
 def test_generate_handout_without_stored_citation_scope_keeps_material_scope(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
