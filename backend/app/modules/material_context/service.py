@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+import tiktoken
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
@@ -195,6 +196,10 @@ def resolve_generation_context(
         course_id=course_id,
         material_scope=material_scope,
     )
+    if resolved_scope.material_ids and set(resolved_scope.material_ids) != set(
+        resolved_scope.eligible_material_ids
+    ):
+        raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
     if resolved_scope.empty_selection or not resolved_scope.eligible_material_ids:
         return None
 
@@ -209,7 +214,7 @@ def resolve_generation_context(
         return None
 
     text = _format_generation_context(chunks)
-    estimated_tokens = _estimate_tokens(text)
+    estimated_tokens = _count_generation_tokens(text)
     if estimated_tokens > max(1, max_tokens):
         raise CourseNexusError(
             code="MATERIAL_CONTEXT_TOO_LARGE",
@@ -339,6 +344,10 @@ def _to_context_chunk(chunk: MaterialChunk, material_name: str, *, score: float 
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
+
+
+def _count_generation_tokens(text: str) -> int:
+    return max(1, len(tiktoken.get_encoding("cl100k_base").encode_ordinary(text)))
 
 
 def _unique_tuple(values: list[str]) -> tuple[str, ...]:
