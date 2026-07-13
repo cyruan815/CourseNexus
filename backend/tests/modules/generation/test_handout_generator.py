@@ -157,21 +157,43 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
         expected_material_ids=frozenset({"mat_1"}),
         parameters={
             "language": "zh-CN",
-            "detail_level": "standard",
+            "content_depth": "detailed",
+            "example_intensity": "high",
+            "assessment_intensity": "high",
+            "review_intensity": "standard",
+            "course_name": "计算机网络",
+            "task_title": "物理层核心概念",
             "subtask_title": "物理层概念与通信基础",
+            "subtask_type": "learn",
             "subtask_description": "理解物理层基本概念和通信模型。",
+            "estimated_minutes": 45,
             "plan_goal": "两天内深度学习计算机网络物理层。",
+            "diagnostic_foundation_needed": True,
             "diagnostic_weak_area": "calculation",
-            "diagnostic_explanation_style": "step_by_step",
+            "diagnostic_weak_topics": ["Nyquist / Shannon 公式"],
+            "diagnostic_note": "希望多讲公式怎么用。",
+            "teaching_strategy_hint": "加强公式变量、单位、适用条件、代入步骤和计算例题。",
         },
     )
 
     prompt = provider.prompts[0]
+    assert "课程名称：计算机网络" in prompt
+    assert "一级任务标题：物理层核心概念" in prompt
     assert "当前二级任务标题：物理层概念与通信基础" in prompt
+    assert "当前二级任务类型：learn" in prompt
     assert "当前二级任务描述：理解物理层基本概念和通信模型。" in prompt
+    assert "预计学习时间：45 分钟" in prompt
+    assert "内容深度：detailed" in prompt
+    assert "例题强度：high" in prompt
+    assert "测试强度：high" in prompt
+    assert "复习强度：standard" in prompt
     assert "学习计划目标：两天内深度学习计算机网络物理层。" in prompt
     assert "诊断薄弱方向：calculation" in prompt
-    assert "建议讲解风格：step_by_step" in prompt
+    assert "薄弱知识点：Nyquist / Shannon 公式" in prompt
+    assert "诊断补充说明：希望多讲公式怎么用。" in prompt
+    assert "教学策略提示：加强公式变量、单位、适用条件、代入步骤和计算例题。" in prompt
+    assert "建议讲解风格" not in prompt
+    assert "diagnostic_explanation_style" not in prompt
     assert "不生成整章摘要" in prompt
     assert "适用条件和变量含义" in prompt
     assert "source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个" in prompt

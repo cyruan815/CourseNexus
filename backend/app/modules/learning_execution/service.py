@@ -381,18 +381,29 @@ def _has_request_question_type_counts(parameters: dict[str, object]) -> bool:
 
 def _handout_task_context_parameters(target: repository.ExecutionTarget) -> dict[str, object]:
     diagnostic_profile = _stored_diagnostic_profile(target)
-    context: dict[str, object] = {
-        "subtask_title": target.subtask.title,
-        "subtask_description": target.subtask.description or "",
-        "plan_goal": target.plan.goal_text or "",
-    }
+    planner_strategy = _stored_planner_strategy(target)
     weak_area = _optional_string(diagnostic_profile.get("weak_area"))
-    explanation_style = _optional_string(diagnostic_profile.get("explanation_style"))
-    if weak_area:
-        context["diagnostic_weak_area"] = weak_area
-    if explanation_style:
-        context["diagnostic_explanation_style"] = explanation_style
-    return context
+    weak_topics = _optional_string_list(diagnostic_profile.get("weak_topics"))
+    return {
+        "course_name": target.course.name,
+        "plan_goal": target.plan.goal_text or "",
+        "task_title": target.task.title,
+        "subtask_title": target.subtask.title,
+        "subtask_type": target.subtask.subtask_type,
+        "subtask_description": target.subtask.description or "",
+        "estimated_minutes": _stored_subtask_estimated_minutes(target),
+        "content_depth": _content_depth_for_handout(planner_strategy),
+        "example_intensity": _intensity_for_handout(planner_strategy, "example_intensity"),
+        "assessment_intensity": _intensity_for_handout(planner_strategy, "assessment_intensity"),
+        "review_intensity": _intensity_for_handout(planner_strategy, "review_intensity"),
+        "diagnostic_foundation_needed": diagnostic_profile.get("foundation_needed")
+        if isinstance(diagnostic_profile.get("foundation_needed"), bool)
+        else None,
+        "diagnostic_weak_area": weak_area,
+        "diagnostic_weak_topics": weak_topics,
+        "diagnostic_note": _optional_string(diagnostic_profile.get("diagnostic_note")),
+        "teaching_strategy_hint": _teaching_strategy_hint(weak_area),
+    }
 
 
 def _stored_diagnostic_profile(target: repository.ExecutionTarget) -> dict[str, object]:
@@ -416,6 +427,73 @@ def _optional_string(value: object) -> str | None:
     stripped = value.strip()
     return stripped or None
 
+
+def _optional_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    strings = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return list(dict.fromkeys(strings))
+
+
+def _stored_planner_strategy(target: repository.ExecutionTarget) -> dict[str, object]:
+    config = target.plan.parsed_config_json
+    if not isinstance(config, dict):
+        return {}
+    generation_metadata = config.get("generation_metadata")
+    if isinstance(generation_metadata, dict):
+        planner_strategy = generation_metadata.get("planner_strategy")
+        if isinstance(planner_strategy, dict):
+            return planner_strategy
+    planner_strategy = config.get("planner_strategy")
+    return planner_strategy if isinstance(planner_strategy, dict) else {}
+
+
+def _stored_subtask_estimated_minutes(target: repository.ExecutionTarget) -> int | None:
+    subtask_snapshot = _stored_subtask_snapshot(target)
+    value = subtask_snapshot.get("estimated_minutes")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _stored_subtask_snapshot(target: repository.ExecutionTarget) -> dict[str, object]:
+    config = target.plan.parsed_config_json
+    if not isinstance(config, dict):
+        return {}
+    task_snapshot = config.get("task_snapshot")
+    if not isinstance(task_snapshot, list):
+        return {}
+    for task in task_snapshot:
+        if not isinstance(task, dict) or task.get("sort_order") != target.task.sort_order:
+            continue
+        subtasks = task.get("subtasks")
+        if not isinstance(subtasks, list):
+            return {}
+        for subtask in subtasks:
+            if isinstance(subtask, dict) and subtask.get("sort_order") == target.subtask.sort_order:
+                return subtask
+    return {}
+
+
+def _content_depth_for_handout(planner_strategy: dict[str, object]) -> str:
+    value = planner_strategy.get("content_depth")
+    if value in {"concise", "standard", "detailed"}:
+        return str(value)
+    return {"brief": "concise", "focused": "concise", "deep": "detailed"}.get(str(value), "standard")
+
+
+def _intensity_for_handout(planner_strategy: dict[str, object], key: str) -> str:
+    value = planner_strategy.get(key)
+    return str(value) if value in {"low", "standard", "high"} else "standard"
+
+
+def _teaching_strategy_hint(weak_area: object) -> str:
+    return {
+        "concept": "加强概念边界、直觉解释和相似概念对比。",
+        "calculation": "加强公式变量、单位、适用条件、代入步骤和计算例题。",
+        "application": "加强场景例子、输入输出、实际应用和迁移题。",
+        "memorization": "加强核心结论、易错判断、口诀式总结和快速自测。",
+    }.get(str(weak_area), "保持清晰、专业、耐心的一对一讲解风格。")
 
 def _stored_task_generation_parameters(
     *,
