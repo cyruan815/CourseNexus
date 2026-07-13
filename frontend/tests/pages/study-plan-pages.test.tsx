@@ -195,6 +195,7 @@ function requestIdempotencyKey(call: [RequestInfo | URL, RequestInit | undefined
 describe("study plan pages", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
@@ -328,6 +329,86 @@ describe("study plan pages", () => {
               material_ids: [],
             },
             diagnostic_profile: diagnosticProfile,
+          }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("keeps the plan draft after refreshing the create page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+          return Promise.resolve(successResponse(course, "req_course"));
+        }
+        return Promise.resolve(successResponse({}));
+      }),
+    );
+
+    const { unmount } = renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "三天完成线性代数第一章复习" },
+    });
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+
+    unmount();
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    expect(screen.getByLabelText("学习目标")).toHaveValue("三天完成线性代数第一章复习");
+    expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13");
+    expect(screen.getByLabelText("结束日期")).toHaveValue("2026-07-15");
+    expect(screen.getByLabelText("每日可用学习时长")).toHaveValue(60);
+  });
+
+  it("previews without a diagnostic profile because diagnosis is optional", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    expect(screen.getByText("学情诊断可跳过，生成预览时会按基础配置直接生成计划。")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "三天完成线性代数第一章复习" },
+    });
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plans/preview",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: "三天完成线性代数第一章复习",
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
+            daily_available_minutes: 60,
+            preference: "balanced",
+            material_scope: {
+              include_all_parsed_materials: true,
+              material_ids: [],
+            },
           }),
           method: "POST",
         }),

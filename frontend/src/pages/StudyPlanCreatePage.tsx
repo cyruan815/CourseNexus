@@ -46,9 +46,42 @@ const defaultScope = {
 const defaultPreference = "balanced" as const;
 const minimumDailyMinutes = 30;
 
+interface StudyPlanCreateDraftStorage {
+  goalText?: string;
+  startDate?: string;
+  endDate?: string;
+  dailyMinutes?: string;
+  diagnosticProfile?: StudyPlanDiagnosticProfile | null;
+}
+
 function createStudyPlanIdempotencyKey(courseId: string): string {
   const randomPart = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return `study-plan-${courseId}-${randomPart}`;
+}
+
+function createDraftStorageKey(courseId: string): string {
+  return `course-nexus:study-plan-create:${courseId}`;
+}
+
+function readCreateDraft(courseId: string): StudyPlanCreateDraftStorage | null {
+  try {
+    const rawDraft = window.localStorage.getItem(createDraftStorageKey(courseId));
+    if (!rawDraft) {
+      return null;
+    }
+    return JSON.parse(rawDraft) as StudyPlanCreateDraftStorage;
+  } catch {
+    window.localStorage.removeItem(createDraftStorageKey(courseId));
+    return null;
+  }
+}
+
+function writeCreateDraft(courseId: string, draft: StudyPlanCreateDraftStorage) {
+  window.localStorage.setItem(createDraftStorageKey(courseId), JSON.stringify(draft));
+}
+
+function clearCreateDraft(courseId: string) {
+  window.localStorage.removeItem(createDraftStorageKey(courseId));
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -162,7 +195,41 @@ export function StudyPlanCreatePage() {
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!courseId) {
+      setIsDraftHydrated(true);
+      return;
+    }
+
+    const storedDraft = readCreateDraft(courseId);
+    setGoalText(storedDraft?.goalText ?? "");
+    setStartDate(storedDraft?.startDate ?? "");
+    setEndDate(storedDraft?.endDate ?? "");
+    setDailyMinutes(storedDraft?.dailyMinutes ?? "");
+    setDiagnosticProfile(storedDraft?.diagnosticProfile ?? null);
+    setPreview(null);
+    setPreviewSnapshot(null);
+    setPreviewSaveIdempotencyKey(null);
+    setIsPreviewStale(false);
+    setIsDraftHydrated(true);
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId || !isDraftHydrated) {
+      return;
+    }
+
+    writeCreateDraft(courseId, {
+      goalText,
+      startDate,
+      endDate,
+      dailyMinutes,
+      diagnosticProfile,
+    });
+  }, [courseId, dailyMinutes, diagnosticProfile, endDate, goalText, isDraftHydrated, startDate]);
 
   useEffect(() => {
     let ignore = false;
@@ -313,6 +380,7 @@ export function StudyPlanCreatePage() {
         },
         previewSaveIdempotencyKey,
       );
+      clearCreateDraft(courseId);
       navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
     } catch (nextError) {
       setError(errorMessage(nextError, "保存计划失败"));

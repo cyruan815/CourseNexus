@@ -769,6 +769,8 @@ else:
 
 ## 2026-07-13 前端 C2 诊断向导落地
 
-`/courses/:courseId/study-plans/new` 已接入 Step 3 的最小闭环：创建页内嵌 `DiagnosticWizard`，先请求后端诊断题，再提交答案生成 `diagnostic_profile`，最后把该 profile 合入 preview 请求。当前第一版仍固定 `material_scope = { include_all_parsed_materials: true, material_ids: [] }`，不提供资料范围选择；因此前端在 `goal_text` 变化或重新获取诊断题时主动清空诊断结果，日期和每日时长变化只标记 preview 过期。
+`/courses/:courseId/study-plans/new` 已接入 Step 3 的最小闭环：创建页内嵌 `DiagnosticWizard`，先请求后端诊断题，再提交答案生成 `diagnostic_profile`，最后把该 profile 合入 preview 请求。诊断是可跳过的可选增强项；未生成 profile 时，preview 请求只携带基础配置和资料范围。当前第一版仍固定 `material_scope = { include_all_parsed_materials: true, material_ids: [] }`，不提供资料范围选择；因此前端在 `goal_text` 变化或重新获取诊断题时主动清空诊断结果，日期和每日时长变化只标记 preview 过期。
 
 前端不会在本地推导 `prior_knowledge_level`、`foundation_needed`、`weak_topics` 或 `explanation_style`，这些字段必须来自 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 的响应。若后端返回 `NO_PARSED_MATERIAL` 或 `DIAGNOSTIC_STALE`，向导停留在诊断区域并提示用户上传/等待解析或重新获取题目。
+
+创建页会将当前表单草稿按 courseId 写入浏览器 `localStorage`，刷新后恢复目标、日期、每日时长和已生成的诊断 profile；保存成功后清理草稿。preview 结果仍只保存在页面内存中，后续如需刷新后继续等待同一次生成，应把 preview 改造成后端异步任务或持久化 draft/preview 资源。
