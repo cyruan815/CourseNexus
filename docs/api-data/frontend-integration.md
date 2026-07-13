@@ -1011,6 +1011,8 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `client_flow = "wizard_v1"` 但缺少 `tasks` 或提交 `tasks = []` 时，后端返回 `422 PREVIEW_TASKS_REQUIRED`。旧客户端兼容路径只适用于未声明新向导的保存请求。
 
+前端基础创建页采用 `wizard_v1` 保存：保存按钮只在 preview 未过期时可用，请求体提交当前表单配置、preview 中展示过的 exact `tasks`，并携带 `Idempotency-Key`。诊断问题、诊断 profile、重生成、替换和删除接口虽已具备后端契约，但对应前端向导 / 编辑视图不在基础创建页内伪造。
+
 响应 `data`：
 
 ```json

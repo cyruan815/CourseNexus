@@ -1,9 +1,10 @@
 import { apiRequest } from "../../api/client";
 import type {
   StudyPlanDetail,
-  StudyPlanDraftRequest,
   StudyPlanPreview,
+  StudyPlanPreviewRequest,
   StudyPlanRead,
+  StudyPlanSaveRequest,
 } from "./types";
 
 export function listStudyPlans(courseId: string): Promise<StudyPlanRead[]> {
@@ -12,7 +13,7 @@ export function listStudyPlans(courseId: string): Promise<StudyPlanRead[]> {
 
 export function previewStudyPlan(
   courseId: string,
-  payload: StudyPlanDraftRequest,
+  payload: StudyPlanPreviewRequest,
 ): Promise<StudyPlanPreview> {
   return apiRequest<StudyPlanPreview>(`/api/v1/courses/${courseId}/study-plans/preview`, {
     method: "POST",
@@ -22,10 +23,14 @@ export function previewStudyPlan(
 
 export function saveStudyPlan(
   courseId: string,
-  payload: StudyPlanDraftRequest,
+  payload: StudyPlanSaveRequest,
+  idempotencyKey: string,
 ): Promise<StudyPlanDetail> {
   return apiRequest<StudyPlanDetail>(`/api/v1/courses/${courseId}/study-plans`, {
     method: "POST",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: payload,
   });
 }

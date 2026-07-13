@@ -1,18 +1,27 @@
 import type { MaterialScope } from "../materials/types";
 
-export interface StudyPlanDraftRequest {
+export type PlanPreference = "balanced" | "fast_track" | "mastery" | "sprint";
+export type StudyPlanClientFlow = "legacy" | "wizard_v1";
+export type StudySubtaskType = "learn" | "review" | "quiz" | "test";
+
+export interface StudyPlanPreviewRequest {
   goal_text: string;
   start_date: string;
   end_date: string;
   daily_available_minutes: number;
+  preference: PlanPreference;
+  diagnostic_profile?: Record<string, unknown>;
   material_scope: MaterialScope;
 }
 
 export interface StudyPlanPreviewSubtask {
   title: string;
-  subtask_type: string;
+  subtask_type: StudySubtaskType;
   description: string | null;
   related_material_ids: string[];
+  estimated_minutes: number;
+  citation_chunk_ids: string[];
+  generation_parameters: Record<string, unknown>;
   sort_order: number;
 }
 
@@ -29,8 +38,23 @@ export interface StudyPlanPreview {
   goal_text: string;
   start_date: string;
   end_date: string;
+  duration_days?: number | null;
   daily_available_minutes: number;
+  recommended_daily_minutes?: number | null;
+  daily_minutes_source?: string | null;
+  preference?: PlanPreference;
+  diagnostic_profile?: Record<string, unknown>;
+  material_snapshot?: Record<string, unknown>;
   material_scope: MaterialScope;
+  coverage?: Record<string, unknown>;
+  capacity?: Record<string, unknown>;
+  generation_metadata?: Record<string, unknown>;
+  tasks: StudyPlanPreviewTask[];
+}
+
+export interface StudyPlanSaveRequest extends StudyPlanPreviewRequest {
+  client_flow: StudyPlanClientFlow;
+  title?: string;
   tasks: StudyPlanPreviewTask[];
 }
 
@@ -58,8 +82,6 @@ export interface StudyTaskRead {
   task_date: string;
   status: string;
   sort_order: number;
-  start_time: string | null;
-  end_time: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,7 +92,7 @@ export interface StudySubtaskRead {
   plan_id: string;
   course_id: string;
   title: string;
-  subtask_type: string;
+  subtask_type: StudySubtaskType;
   description: string | null;
   related_material_ids_json?: string[];
   related_material_ids?: string[];

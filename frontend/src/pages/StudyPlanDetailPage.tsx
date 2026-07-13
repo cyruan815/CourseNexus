@@ -58,6 +58,7 @@ function statusColor(status: string): string {
 function subtaskTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     learn: "学习",
+    quiz: "练习",
     review: "复习",
     test: "测试",
   };
@@ -67,6 +68,7 @@ function subtaskTypeLabel(type: string): string {
 function subtaskTypeColor(type: string): string {
   const colors: Record<string, string> = {
     learn: "violet",
+    quiz: "blue",
     review: "grape",
     test: "orange",
   };

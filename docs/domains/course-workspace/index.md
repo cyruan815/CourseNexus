@@ -9,6 +9,7 @@
 - 2026-07-13: Course detail headers render readable academic terms by mapping `AUTUMN` / `autumn` to `秋季` and `SPRING` / `spring` to `春季`, while keeping the year prefix. The course description is intentionally omitted from this page header.
 - 2026-07-13: The Q&A card is a fixed work surface: the conversation area owns scrolling, and the material-scope line plus question input stay anchored at the card bottom. The question textarea starts at about two rows, grows up to about five rows, then scrolls internally.
 - 2026-07-13: The study-plan area shows at most one plan, selected by latest `updated_at` / `created_at`. Existing plans render as a rounded bordered summary card that links to `/courses/{course_id}/study-plans/{plan_id}`; the action row stays right-aligned and includes a blue "查看更多" entry to `/calendar?courseId={course_id}`. The calendar route is an integration point for later course-filtered calendar behavior, not a fully closed study-mode calendar in this task.
+- 2026-07-13: The study-plan create page now saves through the new wizard contract: `client_flow = "wizard_v1"`, exact preview `tasks`, and an `Idempotency-Key` header. The page still keeps diagnostic, regeneration, replacement, execution, and calendar views as follow-up front-end work instead of pretending those flows are complete.
 
 ## 概述
 
@@ -32,7 +33,7 @@
 - 课程详情页顶部不展示课程简介；学期字段在前端统一转换为用户可读季节标签。
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；支持生成的工具以整张卡片作为操作入口，不再额外显示内嵌“生成”按钮。
 - AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`，列表记录整张卡片可进入生成内容详情页 `/generated-contents/:generatedContentId`。
-- 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时展示“制定学习计划”入口，有计划时按 `updated_at` / `created_at` 优先展示最近更新的一条计划摘要，摘要以圆角边框卡片形式链接到计划详情，不在卡片内展开多计划列表。“查看更多”入口跳转 `/calendar?courseId={course_id}`，等待大日历本课程筛选闭环。
+- 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时展示“制定学习计划”入口，有计划时按 `updated_at` / `created_at` 优先展示最近更新的一条计划摘要，摘要以圆角边框卡片形式链接到计划详情，不在卡片内展开多计划列表。“查看更多”入口跳转 `/calendar?courseId={course_id}`，等待前端大日历本课程筛选视图闭环。
 - 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心和制定学习计划入口仍以待接入禁用态展示。今日待办查看和 AI 生成内容“查看全部”在没有真实页面或接口闭环前不渲染占位按钮。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
 
@@ -41,7 +42,7 @@
 - 资料预览视图和引用点击定位。
 - 对话历史选择、会话管理完整 UI 和跨会话切换。
 - Quiz、Flashcard、Mindmap、复习提纲、知识点清单的最终专属学习交互页；当前仅有生成内容基础详情页。
-- 学习计划创建页、计划预览 / 保存表单、本课程计划学习模式日历。
+- 本课程计划学习模式日历。
 - 计划今日待办的真实当日任务聚合和任务执行入口。
 - 保存回答为笔记入口。
 
@@ -91,12 +92,12 @@
 
 - 对话列表和消息列表 API 已有，但前端尚未提供会话列表、历史消息切换和完整连续追问 UI。
 - 生成内容详情 API 已接入基础详情页，但尚未提供各内容类型的最终专属学习交互。
-- 学习计划预览、保存、列表和详情 API 已有；课程详情页已接入计划列表摘要、创建入口和详情入口，大日历本课程筛选仍待后续接入。
+- 学习计划预览、保存、列表和详情 API 已有；课程详情页已接入计划列表摘要、创建入口和详情入口，创建页保存已使用 `wizard_v1` 确认任务树契约，大日历本课程筛选仍待后续接入。
 
 PRD 要求但当前后端能力不足或未形成完整接口：
 
 - 资料预览和引用定位视图需要前后端进一步定义可打开的资料预览 URL、页码定位和片段定位协议。
-- 本课程计划学习模式日历、首页大日历聚合、全局当日待办弹窗、计划执行页和任务完成同步仍缺前端页面及完整聚合接口。
+- 本课程计划学习模式日历、首页大日历、全局当日待办弹窗、计划执行页和任务完成同步仍缺前端页面；对应聚合接口以后端 `todos-calendar` 契约为准。
 - Quiz、Flashcard、Mindmap、复习提纲、知识点清单当前后端生成器是占位实现，未达到 PRD 中专属结构化结果和交互页面要求。
 - 保存回答为笔记的前端入口和后端专用操作尚未形成完整闭环；数据模型支持 `note`，但课程详情页暂未接。
 
