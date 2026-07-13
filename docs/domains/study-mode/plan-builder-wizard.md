@@ -790,3 +790,11 @@ else:
 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加配置解析回填用例；当前本地 Vitest 仍可能被 `entities ./decode` exports 问题挡在收集前，验证时需如实记录。
 
 资料范围选择尚未在 C3 完成；当前创建页仍固定使用全部已解析资料。该能力属于 C4 完整创建向导的配置确认范围，或可作为 C4 前置小提交先落地，提交给后端时必须使用 `MaterialScope` 的资料 ID 结构，不能使用文件夹作为 Agent 范围。
+
+## 2026-07-14 前端 C4 资料范围选择落地
+
+`/courses/:courseId/study-plans/new` 已接入资料范围选择。创建页通过 `listMaterials(courseId)` 获取课程资料，`StudyPlanMaterialScopeSelector` 只允许选择 `parse_status = "parsed"` 的资料；解析中、待解析和解析失败资料不可勾选。用户可以选择“全部已解析资料”，也可以选择具体资料 ID，前端始终提交 `MaterialScope`，不提交文件夹 ID。
+
+C4 后，`POST /study-plan-config-parses`、`POST /study-plan-diagnostic-questions`、`POST /study-plan-diagnostic-profiles`、`POST /study-plans/preview` 和保存请求都复用创建页当前 `materialScope`。资料范围变化会清空配置解析未补齐提示、清空已有 `diagnostic_profile`，并把现有 preview 标记为过期以禁用保存。创建页草稿同时持久化 `materialScope`，刷新后恢复。
+
+测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 覆盖指定已解析资料进入 parse 和 preview 请求。当前本地 Vitest 仍受 `entities ./decode` exports 问题影响，可能在收集测试前失败；`frontend:build` 可用于验证 TS/Vite 编译。

@@ -19,7 +19,6 @@ import {
   IconArrowLeft,
   IconCalendarStats,
   IconClipboardCheck,
-  IconLock,
   IconRefresh,
   IconSparkles,
 } from "@tabler/icons-react";
@@ -27,12 +26,15 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { fetchCourse } from "../features/courses/api";
+import { listMaterials } from "../features/materials/api";
+import type { Material, MaterialScope } from "../features/materials/types";
 import {
   parseStudyPlanConfig,
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
 import { DiagnosticWizard } from "../features/study-plans/components/DiagnosticWizard";
+import { StudyPlanMaterialScopeSelector } from "../features/study-plans/components/StudyPlanMaterialScopeSelector";
 import type {
   PlanPreference,
   StudyPlanDiagnosticProfile,
@@ -43,7 +45,7 @@ import type {
 import type { Course } from "../types/course";
 import "./study-plan.css";
 
-const defaultScope = {
+const defaultScope: MaterialScope = {
   include_all_parsed_materials: true,
   material_ids: [],
 };
@@ -56,6 +58,7 @@ interface StudyPlanCreateDraftStorage {
   endDate?: string;
   dailyMinutes?: string;
   preference?: PlanPreference;
+  materialScope?: MaterialScope;
   diagnosticProfile?: StudyPlanDiagnosticProfile | null;
 }
 
@@ -268,6 +271,8 @@ export function StudyPlanCreatePage() {
   const [endDate, setEndDate] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preference, setPreference] = useState<PlanPreference>(defaultPreference);
+  const [materialScope, setMaterialScope] = useState<MaterialScope>(defaultScope);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [diagnosticProfile, setDiagnosticProfile] = useState<StudyPlanDiagnosticProfile | null>(null);
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
@@ -278,8 +283,11 @@ export function StudyPlanCreatePage() {
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+  const [hasLoadedMaterials, setHasLoadedMaterials] = useState(false);
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [materialsError, setMaterialsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!courseId) {
@@ -293,6 +301,7 @@ export function StudyPlanCreatePage() {
     setEndDate(storedDraft?.endDate ?? "");
     setDailyMinutes(storedDraft?.dailyMinutes ?? "");
     setPreference(storedDraft?.preference ?? defaultPreference);
+    setMaterialScope(storedDraft?.materialScope ?? defaultScope);
     setDiagnosticProfile(storedDraft?.diagnosticProfile ?? null);
     setPreview(null);
     setPreviewSnapshot(null);
@@ -313,9 +322,20 @@ export function StudyPlanCreatePage() {
       endDate,
       dailyMinutes,
       preference,
+      materialScope,
       diagnosticProfile,
     });
-  }, [courseId, dailyMinutes, diagnosticProfile, endDate, goalText, isDraftHydrated, preference, startDate]);
+  }, [
+    courseId,
+    dailyMinutes,
+    diagnosticProfile,
+    endDate,
+    goalText,
+    isDraftHydrated,
+    materialScope,
+    preference,
+    startDate,
+  ]);
 
   useEffect(() => {
     let ignore = false;
@@ -350,6 +370,70 @@ export function StudyPlanCreatePage() {
     };
   }, [courseId]);
 
+  useEffect(() => {
+    let ignore = false;
+
+    if (!courseId) {
+      setMaterials([]);
+      setMaterialsError(null);
+      setIsLoadingMaterials(false);
+      setHasLoadedMaterials(false);
+      return;
+    }
+
+    setIsLoadingMaterials(true);
+    setHasLoadedMaterials(false);
+    setMaterialsError(null);
+    listMaterials(courseId)
+      .then((nextMaterials) => {
+        if (!ignore) {
+          setMaterials(Array.isArray(nextMaterials) ? nextMaterials : []);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setMaterials([]);
+          setMaterialsError(errorMessage(nextError, "资料加载失败"));
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoadingMaterials(false);
+          setHasLoadedMaterials(true);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!hasLoadedMaterials || isLoadingMaterials || materialScope.include_all_parsed_materials) {
+      return;
+    }
+
+    const parsedMaterialIds = materials
+      .filter((material) => material.parse_status === "parsed")
+      .map((material) => material.id);
+    const nextMaterialIds = materialScope.material_ids.filter((id) => parsedMaterialIds.includes(id));
+
+    if (nextMaterialIds.length === materialScope.material_ids.length) {
+      return;
+    }
+
+    setMaterialScope(
+      nextMaterialIds.length > 0
+        ? { include_all_parsed_materials: false, material_ids: nextMaterialIds }
+        : defaultScope,
+    );
+    setUnresolvedFields([]);
+    setDiagnosticProfile(null);
+    if (preview) {
+      setIsPreviewStale(true);
+    }
+  }, [hasLoadedMaterials, isLoadingMaterials, materialScope, materials, preview]);
+
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
     if (!goalText.trim() || !startDate || !endDate || Number.isNaN(minutes)) {
@@ -362,7 +446,7 @@ export function StudyPlanCreatePage() {
       end_date: endDate,
       daily_available_minutes: minutes,
       preference,
-      material_scope: defaultScope,
+      material_scope: materialScope,
     };
 
     if (diagnosticProfile) {
@@ -373,7 +457,7 @@ export function StudyPlanCreatePage() {
     }
 
     return baseDraft;
-  }, [dailyMinutes, diagnosticProfile, endDate, goalText, preference, startDate]);
+  }, [dailyMinutes, diagnosticProfile, endDate, goalText, materialScope, preference, startDate]);
 
   function validationMessage(): string | null {
     if (!goalText.trim()) {
@@ -430,7 +514,7 @@ export function StudyPlanCreatePage() {
     try {
       const parsedConfig = await parseStudyPlanConfig(courseId, {
         goal_text: trimmedGoalText,
-        material_scope: defaultScope,
+        material_scope: materialScope,
       });
       const nextEndDate = parsedConfig.end_date ?? resolveEndDate(parsedConfig.start_date, parsedConfig.duration_days);
 
@@ -471,6 +555,15 @@ export function StudyPlanCreatePage() {
       setError(errorMessage(nextError, "解析配置失败"));
     } finally {
       setIsParsingConfig(false);
+    }
+  }
+
+  function handleMaterialScopeChange(nextScope: MaterialScope) {
+    setMaterialScope(nextScope);
+    setUnresolvedFields([]);
+    setDiagnosticProfile(null);
+    if (preview) {
+      setIsPreviewStale(true);
     }
   }
 
@@ -614,6 +707,7 @@ export function StudyPlanCreatePage() {
             <Group justify="space-between" wrap="nowrap">
               <Text c="dimmed" size="sm">保存为 goal_text，并随请求发送当前学习方式。</Text>
               <Button
+                data-testid="study-plan-parse-config"
                 leftSection={<IconSparkles size={16} />}
                 loading={isParsingConfig}
                 onClick={handleParseConfig}
@@ -672,23 +766,18 @@ export function StudyPlanCreatePage() {
               </Alert>
             ) : null}
 
-            <Paper className="study-plan-scope" radius="md" withBorder>
-              <Group justify="space-between" wrap="nowrap">
-                <Stack gap={2}>
-                  <Text fw={750}>资料范围</Text>
-                  <Text c="dimmed" size="sm">当前固定为全部已解析资料。</Text>
-                </Stack>
-                <Badge color="teal" variant="light">全部已解析资料</Badge>
-              </Group>
-              <Button disabled leftSection={<IconLock size={16} />} variant="light">
-                选择具体资料（待接入）
-              </Button>
-            </Paper>
+            <StudyPlanMaterialScopeSelector
+              error={materialsError}
+              isLoading={isLoadingMaterials}
+              materialScope={materialScope}
+              materials={materials}
+              onMaterialScopeChange={handleMaterialScopeChange}
+            />
 
             <DiagnosticWizard
               courseId={courseId}
               goalText={goalText}
-              materialScope={defaultScope}
+              materialScope={materialScope}
               onProfileCleared={handleDiagnosticProfileCleared}
               onProfileReady={handleDiagnosticProfileReady}
               profile={diagnosticProfile}
@@ -698,6 +787,7 @@ export function StudyPlanCreatePage() {
 
             <Group justify="space-between">
               <Button
+                data-testid="study-plan-preview"
                 leftSection={<IconRefresh size={16} />}
                 loading={isPreviewing}
                 onClick={handlePreview}
@@ -706,6 +796,7 @@ export function StudyPlanCreatePage() {
                 生成预览
               </Button>
               <Button
+                data-testid="study-plan-save"
                 disabled={!previewSnapshot || !previewSaveIdempotencyKey || isPreviewStale}
                 leftSection={<IconClipboardCheck size={16} />}
                 loading={isSaving}
