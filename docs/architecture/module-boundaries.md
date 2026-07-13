@@ -28,7 +28,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 
 - `users` / `courses`：提供本地账号、token 校验、当前用户依赖和课程归属校验。
 - `materials`：拥有资料元数据、本地文件存储、上传校验、解析状态和 `MaterialChunk` 写入。
-- `material-context`：作为问答、生成、学习计划共用的资料范围与上下文入口；已提供“相关性检索”和“全材料分批读取”两个接口。调用方不得绕过它直接查询 Chroma 或拼装 chunk。
+- `material-context`：作为问答、生成、学习计划共用的资料范围与上下文入口；已提供相关性检索、五类独立生成完整上下文和全材料分批读取三个接口。调用方不得绕过它直接查询 Chroma 或拼装 chunk。
 - `course-qa`：拥有会话、消息和课程问答引用保存；已通过 `retrieve_relevant_context()` 接入课程资料相关性检索，不负责 Flashcard、Mindmap、Quiz 或学习计划。
 - `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI-compatible 调用统一集中在 OpenAI SDK provider 实现中，并读取当前业务用途的独立 endpoint 配置。
 - `generation-orchestrator`：负责课程归属与注册类型校验、用途模型注入、完整材料上下文交付、总 token 检查、生成器工厂调用和 `AIGeneratedContent` 保存；五类 POC 不创建 `SourceCitation`，具体题型、卡片、导图、提纲或知识点规则仍由各生成器拥有。
@@ -95,7 +95,7 @@ flowchart TB
     GC --> EX
 ```
 
-一句话读图：课程和资料提供上下文；生成编排把上下文交给各独立 AI 生成模块；生成结果统一落到 `AIGeneratedContent` 和 `SourceCitation`；学习计划和执行链路使用生成能力，但不把生成逻辑内嵌到计划模块。
+一句话读图：课程和资料提供上下文；生成编排把上下文交给各独立 AI 生成模块；结果统一落到 `AIGeneratedContent`，需要追溯的能力额外保存 `SourceCitation`；学习计划和执行链路使用生成能力，但不把生成逻辑内嵌到计划模块。
 
 ## 3. 模块分层
 
@@ -117,14 +117,14 @@ flowchart TB
 | `users` | 注册、登录、退出、修改密码、当前用户识别。 | `User`、登录态。 | 当前用户上下文、登录状态。 | 不查询课程、资料、计划等业务对象。 |
 | `courses` | 课程创建、编辑、删除、列表、详情、课程归属校验。 | `Course`。 | 可访问课程、课程基础信息、课程归属判断。 | 不解析资料，不生成内容，不处理任务状态。 |
 | `materials` | 文件 / 链接资料、一级目录归类、上传状态、Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`；触发可重建向量索引。 | 已解析且已索引资料、逐文件资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划；文件夹不作为 Agent 资料范围。 |
-| `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为指定材料生成按顺序提供全量分批上下文。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`iter_material_context_batches()`、`ContextChunk`、引用候选。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |
+| `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为五类独立 POC 提供完整上下文；为其他消费者提供全量批次。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`resolve_generation_context()`、`iter_material_context_batches()`、`ContextChunk`。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |
 | `generation-orchestrator` | 接收生成请求、校验权限、校验资料范围、处理幂等、维护生成状态、调用具体生成模块。 | 生成请求状态，可复用 `AIGeneratedContent.generation_status`。 | 生成任务状态、错误码、生成模块调用结果。 | 不写具体业务算法，不直接渲染结果。 |
 | `course-qa` | 基于课程资料问答，保存对话消息和引用来源。 | `Conversation`、`Message`、`SourceCitation`。 | `answer_text`、`answer_type`、引用列表。 | 不生成 Flashcard、Mindmap 或学习计划。 |
-| `quiz-generator` | 基于资料范围生成课程自测 Quiz。 | `AIGeneratedContent(content_type=quiz)`、`SourceCitation`。 | 题目、选项、答案、解析、引用。 | 不处理任务测试题入口。 |
-| `flashcard-generator` | 基于资料范围生成记忆卡片。 | `AIGeneratedContent(content_type=flashcard)`、`SourceCitation`。 | 卡片正面、背面、标签、引用。 | 不处理 Mindmap、Quiz、计划任务。 |
-| `mindmap-generator` | 基于资料范围生成知识结构图。 | `AIGeneratedContent(content_type=mindmap)`、`SourceCitation`。 | 节点、边、层级、引用。 | 不关心前端图形库实现。 |
-| `outline-generator` | 基于资料范围生成复习提纲。 | `AIGeneratedContent(content_type=outline)`、`SourceCitation`。 | 章节化提纲、重点、复习建议、引用。 | 不生成计划任务。 |
-| `knowledge-list-generator` | 基于资料范围生成知识点清单。 | `AIGeneratedContent(content_type=knowledge_list)`、`SourceCitation`。 | 知识点、解释、重要程度、引用。 | 不维护学习掌握度模型。 |
+| `quiz-generator` | 基于完整资料上下文生成课程自测 Quiz。 | `AIGeneratedContent(content_type=quiz)`。 | 题目、选项、答案、解析。 | 不处理任务测试题入口，不保存逐题引用。 |
+| `flashcard-generator` | 基于完整资料上下文生成记忆卡片。 | `AIGeneratedContent(content_type=flashcard)`。 | 卡片正面、背面、标签。 | 不处理 Mindmap、Quiz、计划任务，不保存逐卡引用。 |
+| `mindmap-generator` | 基于完整资料上下文生成知识结构图。 | `AIGeneratedContent(content_type=mindmap)`。 | 节点、边、层级、Markmap 数据。 | 不保存逐节点引用。 |
+| `outline-generator` | 基于完整资料上下文生成复习提纲。 | `AIGeneratedContent(content_type=outline)`。 | 章节化提纲、重点、复习建议。 | 不生成计划任务，不保存逐节引用。 |
+| `knowledge-list-generator` | 基于完整资料上下文生成知识点清单。 | `AIGeneratedContent(content_type=knowledge_list)`。 | 知识点、解释、重要程度。 | 不维护学习掌握度模型，不保存逐条引用。 |
 | `handout-generator` | 基于当前二级任务和关联资料生成今日讲义。 | `AIGeneratedContent(content_type=handout)`、`SourceCitation`。 | 讲义正文、重点解释、引用。 | 不更新二级任务完成状态。 |
 | `task-test-generator` | 基于测试类二级任务和关联资料生成任务测试题。 | `AIGeneratedContent(content_type=task_test)`、`SourceCitation`。 | 测试题、答案、解析、引用。 | 不等同课程自测 Quiz。 |
 | `generated-content` | 统一保存和查询 AI 生成内容、内容类型、生成状态、结构化 JSON 和引用。 | `AIGeneratedContent`、`SourceCitation`。 | 生成内容详情、历史记录、引用来源。 | 不决定具体生成算法，不更新任务完成状态。 |
@@ -147,11 +147,11 @@ sequenceDiagram
     participant Store as generated-content
 
     Caller->>Orchestrator: submit(course_id, material_scope, params, idempotency_key)
-    Orchestrator->>Context: iter_material_context_batches(course_id, material_scope, token_budget)
-    Context-->>Orchestrator: all eligible chunks in ordered batches
-    Orchestrator->>Generator: generate(chunks, params)
-    Generator-->>Orchestrator: structured_content + citations
-    Orchestrator->>Store: save AIGeneratedContent + SourceCitation
+    Orchestrator->>Context: resolve_generation_context(course_id, material_scope, total_token_limit)
+    Context-->>Orchestrator: one ordered MaterialGenerationContext
+    Orchestrator->>Generator: generate(context, params)
+    Generator-->>Orchestrator: final structured_content
+    Orchestrator->>Store: save AIGeneratedContent
     Store-->>Caller: content_id + generation_status
 ```
 
@@ -159,10 +159,10 @@ sequenceDiagram
 
 - 生成模块不能直接读未校验权限的数据。
 - 生成模块不能绕过 `material-context` 使用资料。
-- 问答必须调用 `retrieve_relevant_context(query, material_scope)`；指定材料生成必须调用 `iter_material_context_batches(material_scope)`，不能用一次 Top-K 检索代替全部材料。
+- 问答调用 `retrieve_relevant_context()`；五类独立 POC 调用 `resolve_generation_context()`；学习计划和任务内容等批处理消费者调用 `iter_material_context_batches()`。任何路径都不能用普通 Top-K 检索替代全材料覆盖。
 - 生成模块不能直接写其他模块状态。
 - 生成结果必须结构化保存，不能只返回临时文本。
-- 新引用必须落到带真实资料来源的 `SourceCitation`；资料被用户永久删除后只清空外键，保留历史引用快照。
+- 声明提供引用的能力必须把真实来源保存到 `SourceCitation`；五类独立 POC 当前不声明逐条引用。资料被用户永久删除后只清空外键，保留历史引用快照。
 - 生成失败必须保存或返回 `generation_status = failed` 和稳定错误码。
 
 ## 6. 依赖方向
@@ -173,7 +173,8 @@ sequenceDiagram
 - `materials -> integrations/docling + integrations/rag(llama-index/chroma)`
 - `materials -> course-qa.citations.detach_material_references`（仅用于资料物理删除前解除历史引用外键，不删除问答或生成内容）
 - `course-qa -> material-context.retrieve_relevant_context`
-- `generation-orchestrator / study-plans -> material-context.iter_material_context_batches`
+- `generation-orchestrator -> material-context.resolve_generation_context`
+- `study-plans -> material-context.iter_material_context_batches`
 - `courses -> study-plans -> learning-execution -> checkins`
 - `learning-execution -> material-context.iter_material_context_batches -> handout-generator / task-test-generator -> generated-content`
 - `study-plans -> todos-calendar`

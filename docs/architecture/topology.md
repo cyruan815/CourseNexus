@@ -132,6 +132,6 @@ flowchart LR
 - 不允许具体生成模块直接访问未校验权限的资料。
 - 不允许 adapter 写业务表，业务状态必须由 domain service 统一保存。
 - 不允许业务模块直接 import `docling`、`llama_index`、`chromadb` 或 `openai`。
-- 不允许把指定材料生成简化为一次普通 Top-K 检索；所有选中且可用的资料必须参与分批处理。
+- 不允许用普通 Top-K 检索替代指定材料全覆盖；五类独立 POC 合并全部选中资料后单次调用模型，学习计划和任务内容可继续分批处理。
 - 不允许日历聚合模块写计划或任务主状态。
 - 不允许把外部模型返回直接作为可信数据写入引用来源；引用必须能回到真实 `CourseMaterial` / `MaterialChunk`。

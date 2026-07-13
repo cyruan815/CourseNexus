@@ -1,5 +1,7 @@
 # ADR 0003: Local Material Context and RAG Stack
 
+> 范围说明：本 ADR 的全材料分批约束继续适用于学习计划、handout、task_test 等批处理消费者。Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 的当前 POC 策略由 [ADR 0005](0005-simplified-generation-poc.md) 覆盖。
+
 ## Status
 
 Accepted.
