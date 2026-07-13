@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+import re
 
 from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
@@ -128,14 +129,24 @@ def _planner_strategy_prompt_lines(strategy: dict[str, object]) -> list[str]:
         "3. 学习方式 preference 派生配置：planner 必须显式使用 content_depth、example_intensity、assessment_intensity、review_intensity 控制任务描述、例题、自测和复习强度。",
         "4. 额外例题、测试、review：只在前三级约束满足且时间允许时，根据对应 intensity 增补。",
     ]
+    lines.append("上述最终有效策略已经包含用户局部覆盖；不得再次使用学习方式的默认值覆盖 content_depth、example_intensity、assessment_intensity 或 review_intensity。")
     if preference == "fast_track":
-        lines.append("fast_track 不能生成过重计划：content_depth=concise，例题/测评/review 保持 low；除必要补基础外，优先压缩拓展讲解和重复练习。")
+        lines.append(
+            "fast_track 以最终有效策略控制计划轻重；除必要补基础外，优先压缩拓展讲解和重复练习，"
+            f"但必须保留当前 content_depth={strategy['content_depth']}。"
+        )
     elif preference == "mastery":
-        lines.append("mastery 应更详细：content_depth=detailed，并安排更充分例题、更频繁 review 和阶段测评。")
+        lines.append(
+            "mastery 以最终有效策略安排讲义、例题、review 和阶段测评；"
+            f"当前 content_depth={strategy['content_depth']}，example_intensity={strategy['example_intensity']}。"
+        )
     elif preference == "sprint":
-        lines.append("sprint 应明显偏回顾和测试：content_depth=focused，assessment_intensity=high，review_intensity=high，压缩铺垫但保留必要补基础。")
+        lines.append(
+            "sprint 以最终有效策略偏向回顾和测试，压缩铺垫但保留必要补基础；"
+            f"当前 assessment_intensity={strategy['assessment_intensity']}，review_intensity={strategy['review_intensity']}。"
+        )
     else:
-        lines.append("balanced 使用标准深度和标准例题/测评/review 强度，保持日常学习节奏。")
+        lines.append("balanced 使用最终有效策略保持日常学习节奏。")
     return lines
 
 
@@ -271,6 +282,11 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
                     raise _invalid_generation("自测任务必须排在当天最后")
                 if task.task_date == final_task_date:
                     final_task_has_assessment = True
+            else:
+                if "task_test" in subtask.generation_parameters:
+                    raise _invalid_generation("学习或复习任务不能携带测试题生成参数")
+                if _has_assessment_quantity_text(subtask.title, subtask.description):
+                    raise _invalid_generation("学习或复习任务不能包含测试题量要求")
             if not subtask.citation_chunk_ids:
                 raise _invalid_generation("二级任务必须引用资料 chunk")
             related_material_ids = set(subtask.related_material_ids)
@@ -333,7 +349,11 @@ def _build_reduce_prompt(
             "如果目标包含“学完/掌握/精通/冲刺”等完成型意图，且材料足够，至少使用每日可用时间的 80%。",
             "学习任务时长不足时，用复习、练习、输出任务或自测补足，而不是留下大段空闲。",
             "所有 mapped units 都必须进入某个二级任务；可合并相近单元，但 description 里要说明覆盖内容。",
-            "每天任务要具体可执行，包含可检查产出，例如公式默写、例题练习、对比表、错题回顾或口头复述。",
+            "每天任务要具体可执行，包含可检查产出，例如公式默写、要点回顾、对比表、错题回顾或口头复述。",
+            "任务类型边界：learn 是学习讲义任务，用于学习新内容；review 是复习讲义任务，只能回顾此前已经安排学习过的内容，不能引入新知识点；quiz/test 是测试题任务。",
+            "learn/review 不得填写 generation_parameters.task_test，也不得在 title 或 description 中写“几道选择题、几道计算题”等明确测试题量。",
+            "目录页、主要内容页、版权页、感谢页、章节小结页不能作为普通 learn 任务的 citation_chunk_ids；小结页只可作为 review 或 quiz/test 的辅助引用。",
+            "如果 learn 任务已引用正文 chunk，必须排除目录、小结、版权、感谢等元信息 chunk，避免第一天讲义提前混入后续主题。",
             "最后一天必须安排综合 quiz/test；quiz/test 必须是当天最后一个二级任务。",
             "如果 goal_text、diagnostic_note 或任务描述要求具体测试题量，例如 10 道选择题和 3 道计算题，quiz/test subtask 必须在 description 保留题量文字，并填写 generation_parameters.task_test；选择题映射 single_choice，计算题映射 short_answer，question_count 为总题数。",
             "每个 subtask 的 citation_chunk_ids 必须来自 mapped units，不能留空。",
@@ -359,6 +379,11 @@ def _has_over_capacity_warning(preview: StudyPlanPreview) -> bool:
 
 def _is_assessment_type(subtask_type: str) -> bool:
     return subtask_type in {"quiz", "test"}
+
+
+def _has_assessment_quantity_text(title: str, description: str | None) -> bool:
+    text = " ".join(part for part in (title, description or "") if part)
+    return bool(re.search(r"([一二两三四五六七八九十\d]+)\s*道\s*(单选题|多选题|选择题|判断题|简答题|问答题|计算题|证明题)", text))
 
 
 def _requires_completion_quality(goal_text: str) -> bool:

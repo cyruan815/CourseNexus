@@ -54,7 +54,7 @@
   -> router.parse_study_plan_config_endpoint
   -> service.parse_study_plan_config
   -> ModelProvider.generate_structured(output_schema=StudyPlanParsedConfig)
-  -> _normalize_relative_config 只补显式今天 + N 天
+  -> _resolve_config_dates 做相对日期和显式今天 + N 天的确定性补全
   -> 如 daily_available_minutes 有值但 source 为空，补 daily_minutes_source=user_text
   -> 回显 material_scope
 ```
@@ -89,14 +89,14 @@ API 始终使用英文枚举：`fast_track`、`balanced`、`mastery`、`sprint`�
 | --- | --- | --- |
 | `fast_track` | 快速过一遍、快速通关、时间紧、先建立框架、少讲一点、抓重点即可 | 减少展开讲义、例题、测试和复习。 |
 | `balanced` | 正常学、按正常节奏、均衡、日常学习、没有明显强度偏好 | 默认均衡节奏，但只有在用户意图确实中性时由模型输出。 |
-| `mastery` | 深度学习、深入掌握、讲义详细、讲细一点、多讲公式适用条件、多给例题、真正掌握 | 增加讲义深度、例题、review 和测评强度。 |
+| `mastery` | 深度学习、深入掌握、深度掌握、系统掌握、真正掌握、讲透整个章节 | 表示整体学习方式偏深入；讲义详细、公式适用条件、多给例题等局部要求进入 `preference_overrides`，不单独提升整体 preference。 |
 | `sprint` | 冲刺、考前复习、查漏补缺、强化测试、重点回顾、易错点、最后检验 | 面向复习和验收，强调重点回顾和测试。 |
 
 冲突处理：
 
 - 用户同时说“快速”和“详细掌握”时，优先保留用户显式时间约束，再按句子主目标判断。如果无法判断，`preference=null` 并加入 `unresolved_fields`。
 - 用户只是要求“最后安排测试题”，不等于 `sprint`；只有出现冲刺、考前、查漏补缺、强化等复习语义时才输出 `sprint`。
-- 用户说“深度学习”即使没有说“掌握”，也应倾向 `mastery`。
+- 用户说“深度学习”即使没有说“掌握”，也可倾向 `mastery`；但“讲义详细一点、多给例题、多讲公式适用条件”只表示局部覆盖，不应单独把整体 `preference` 提升为 `mastery`。
 - 用户没有学习方式表达时，不在配置回填阶段默认 `balanced`；由配置确认页展示默认建议并让用户确认。
 
 ## Prompt 设计要求
@@ -110,7 +110,7 @@ prompt 必须包含：
 你的任务是把用户自然语言回填为可编辑配置字段，不生成计划。
 
 preference 只能输出 fast_track、balanced、mastery、sprint 或 null：
-- 深度学习、详细讲义、多例题、真正掌握 -> mastery
+- 深度学习、深入掌握、真正掌握、讲透整个章节 -> mastery
 - 快速过一遍、快速通关、时间紧、少讲 -> fast_track
 - 冲刺、考前、查漏补缺、强化测试、易错点 -> sprint
 - 正常节奏、均衡、日常学习 -> balanced
@@ -123,7 +123,7 @@ recommended_daily_minutes 不是用户输入字段，保持 null。
 
 prompt 示例至少覆盖：
 
-- “今天是 2026 年 7 月 13 日，我想用 2 天深度学习物理层，讲义详细一点，多给公式和例题” -> `preference=mastery`。
+- “今天是 2026 年 7 月 13 日，我想用 2 天深度学习物理层，讲义详细一点，多给公式和例题” -> `preference=mastery`，并提取 `preference_overrides.content_depth=detailed`、`example_intensity=high`。`讲义详细一点，多给例题` 若没有整体学习方式，应保持 `preference=null`，只填局部覆盖。
 - “我想明天快速过一遍第七章” -> `preference=fast_track`。
 - “考前冲刺，帮我查漏补缺并多安排测试” -> `preference=sprint`。
 - “两周正常学习传输层，每天 60 分钟” -> `preference=balanced`、`daily_available_minutes=60`、`daily_minutes_source=user_text`。
@@ -145,8 +145,8 @@ prompt 示例至少覆盖：
 
 3. 极窄兜底安全网：
    - 仅当模型返回 `preference=null`，且用户文本出现强信号词时才触发。
-   - 强信号词示例：`深度学习`、`深入掌握`、`讲义详细`、`多给例题` -> `mastery`；`快速过一遍`、`快速通关` -> `fast_track`；`考前冲刺`、`查漏补缺` -> `sprint`。
-   - 兜底触发时必须写入 `generation_metadata.config_parse.preference_resolution="rule_guardrail"`，便于后续统计 prompt 是否仍不稳定。
+   - 整体 preference 兜底只识别整体学习方式强信号，例如 `深度学习`、`深入掌握`、`系统掌握` -> `mastery`；`快速过一遍`、`快速通关` -> `fast_track`；`考前冲刺`、`查漏补缺` -> `sprint`。`讲义详细`、`多给例题`、`多给公式` 等由单独的 `preference_overrides` 兜底补入 `content_depth` 或 `example_intensity`，不得借此修改整体 preference。
+   - 整体 preference 兜底触发时必须写入 `generation_metadata.config_parse.preference_resolution="rule_guardrail"`；局部覆盖兜底触发时写入 `preference_overrides_resolution="rule_guardrail"`，便于后续统计 prompt 是否仍不稳定。
    - 正常模型识别时写入 `preference_resolution="model"`；仍无法确定时写入 `preference_resolution="unresolved"`。
 
 ## 前端与 preview 衔接
@@ -174,11 +174,11 @@ prompt 示例至少覆盖：
 
 ### 单元测试
 
-- prompt 测试：断言 `_build_config_parse_prompt()` 包含 preference 枚举、中文映射、`recommended_daily_minutes` 不由用户输入推断、每日时间不猜测。
+- prompt 测试：断言 `_build_config_parse_prompt()` 包含 preference 枚举、局部 `preference_overrides` 映射、`recommended_daily_minutes` 不由用户输入推断、每日时间不猜测。
 - 日期归一测试：`今天是2026年7月13日 + 2天` 返回 `start_date=2026-07-13`、`end_date=2026-07-14`、`duration_days=2`。
 - unresolved 测试：`recommended_daily_minutes` 不出现在 `unresolved_fields`。
 - preference 后处理测试：`advanced` 归一为 `sprint`，非法值触发错误或重试。
-- 兜底追踪测试：模型返回 `preference=null` 且文本含“深度学习”时，兜底输出 `mastery`，并写入 `generation_metadata.config_parse.preference_resolution="rule_guardrail"`。
+- 兜底追踪测试：模型返回 `preference=null` 且文本含“深度学习”时，兜底输出 `mastery`；文本仅含“讲义详细一点、多给例题”时保持 `preference=null`，补 `preference_overrides` 并写入 `preference_overrides_resolution="rule_guardrail"`。
 
 ### API 测试
 
@@ -216,4 +216,4 @@ prompt 示例至少覆盖：
 
 ## 与学前诊断的边界
 
-学前诊断题当前直接从 chunk heading 抽取，不属于本计划修复范围。后续应单独设计“LLM 诊断题生成器”，用 `goal_text + material_scope + chunk excerpts` 选择 1 到 3 个真正有诊断价值的主题，并同步改造 diagnostic_profile 的 topic 校验逻辑，避免模型选出的 topic 被旧的前 3 heading 校验误判为失效。
+学前诊断题已由 [diagnostic-questions.md](diagnostic-questions.md) 单独承接。当前边界是：配置回填仍只解析学习设置和缺失字段；学前诊断题使用独立 `study_plan_diagnostic` purpose，根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择资料内 topic，后端固定输出 3 道 `topic_mastery` 并用 fallback 补足。配置解析不得补问或生成诊断题，诊断模型也不得补问 `start_date`、`duration_days`、`preference` 或每日时间。

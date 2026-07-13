@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
@@ -17,7 +17,7 @@ DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 StudyPlanClientFlow = Literal["legacy", "wizard_v1"]
 SubTaskTypeLiteral = Literal["learn", "review", "quiz", "test"]
 MIN_DAILY_AVAILABLE_MINUTES = 30
-DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v1"
+DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v2"
 MasteryLevel = Literal["none", "heard", "some", "familiar"]
 WeakArea = Literal["concept", "calculation", "application", "memorization", "other"]
 DiagnosticQuestionType = Literal["topic_mastery", "weak_area", "diagnostic_note"]
@@ -144,9 +144,36 @@ class StudyPlanConfigExtraction(BaseModel):
     def normalize_nullable_ambiguous_fields(cls, value: object) -> object:
         return [] if value is None else value
 
+class StudyPlanDiagnosticConfirmedConfig(BaseModel):
+    start_date: date | None = None
+    duration_days: int | None = Field(default=None, gt=0)
+    preference: PlanPreference | None = None
+    daily_available_minutes: int | None = None
+    daily_minutes_source: DailyMinutesSource | None = None
+
+    @field_validator("daily_available_minutes")
+    @classmethod
+    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
+        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
+            raise ValueError("daily_available_minutes must be at least 30")
+        return value
+
+
+class StudyPlanDiagnosticTopicCandidate(BaseModel):
+    topic_title: str = Field(min_length=1)
+    diagnostic_value: str | None = None
+    question_text: str | None = None
+    source_chunk_id: str | None = None
+
+
+class StudyPlanDiagnosticTopicExtraction(BaseModel):
+    topics: list[StudyPlanDiagnosticTopicCandidate] = Field(default_factory=list)
+
+
 class StudyPlanDiagnosticQuestionRequest(BaseModel):
     goal_text: str = Field(min_length=1)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
+    confirmed_config: StudyPlanDiagnosticConfirmedConfig = Field(default_factory=StudyPlanDiagnosticConfirmedConfig)
 
 
 class StudyPlanDiagnosticQuestionOption(BaseModel):
@@ -157,6 +184,7 @@ class StudyPlanDiagnosticQuestionOption(BaseModel):
 class StudyPlanDiagnosticQuestion(BaseModel):
     question_id: str
     question_type: DiagnosticQuestionType
+    question_type_label: str | None = None
     question_text: str
     sort_order: int = Field(gt=0)
     required: bool = True
@@ -169,6 +197,7 @@ class StudyPlanDiagnosticQuestion(BaseModel):
 class StudyPlanDiagnosticQuestionsResponse(BaseModel):
     question_version: str = DIAGNOSTIC_QUESTION_VERSION
     questions: list[StudyPlanDiagnosticQuestion]
+    generation_metadata: dict[str, object] = Field(default_factory=dict)
 
 
 class TopicMasteryAnswer(BaseModel):
@@ -179,11 +208,18 @@ class TopicMasteryAnswer(BaseModel):
 
 class StudyPlanDiagnosticProfileRequest(BaseModel):
     question_version: str = DIAGNOSTIC_QUESTION_VERSION
-    topic_mastery: list[TopicMasteryAnswer] = Field(min_length=1)
+    topic_mastery: list[TopicMasteryAnswer] = Field(min_length=3, max_length=3)
     weak_area: WeakArea
     diagnostic_note: str | None = None
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
 
+
+    @model_validator(mode="after")
+    def validate_unique_topic_mastery(self) -> "StudyPlanDiagnosticProfileRequest":
+        topic_ids = [answer.topic_id for answer in self.topic_mastery]
+        if len(set(topic_ids)) != len(topic_ids):
+            raise ValueError("topic_mastery topic_id values must be unique")
+        return self
 
 class StudyPlanDiagnosticProfileResponse(BaseModel):
     question_version: str = DIAGNOSTIC_QUESTION_VERSION
@@ -213,6 +249,10 @@ class StudyPlanParsedConfig(BaseModel):
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     unresolved_fields: list[str] = Field(default_factory=list)
     needs_confirmation_fields: list[str] = Field(default_factory=list)
+    field_labels: dict[str, str] = Field(default_factory=dict)
+    unresolved_field_prompts: list[dict[str, str]] = Field(default_factory=list)
+    needs_confirmation_field_prompts: list[dict[str, str]] = Field(default_factory=list)
+    field_options: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
 
     @field_validator("diagnostic_profile", "material_snapshot", "coverage", "capacity", "generation_metadata", mode="before")
     @classmethod

@@ -141,6 +141,32 @@ sequenceDiagram
     TC-->>FE: next query shows tasks in calendars
 ```
 
+### 4.1 学前诊断题 v2 链路
+
+学习计划新建流程中，配置回填和学前诊断分属两个模型 purpose。前端可以把它们展示在同一个“开始前设置”页面，但后端不能把配置补问交给诊断模型处理。
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant SP as study-plans
+    participant CTX as material-context
+    participant DIAG as study_plan_diagnostic model
+
+    FE->>SP: parse config(goal_text, material_scope)
+    SP-->>FE: parsed config + unresolved fields
+    FE->>SP: diagnostic questions(goal_text, material_scope, confirmed_config)
+    SP->>CTX: iter selected parsed material batches
+    SP->>DIAG: structured topic candidates
+    DIAG-->>SP: topics
+    SP->>SP: validate topics against chunks + fallback to exactly 3
+    SP-->>FE: 3 topic_mastery + weak_area + diagnostic_note
+    FE->>SP: diagnostic profile answers(exactly 3 topic_mastery)
+    SP->>SP: validate deterministic topic ids + summarize profile
+    SP-->>FE: diagnostic_profile
+    FE->>SP: preview(confirmed config + diagnostic_profile)
+```
+
+该链路不新增数据库表，不持久化诊断 session。题目生成正常路径调用一次 `study_plan_diagnostic` 模型；模型失败或输出无法映射到资料时，后端基于当前资料内容 fallback 补足 3 道 topic，并在 `generation_metadata.diagnostic_questions` 中记录来源。
 规则：
 
 - `StudyPlan` 只绑定一个 `course_id`。

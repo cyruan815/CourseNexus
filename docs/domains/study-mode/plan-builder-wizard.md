@@ -1,8 +1,8 @@
-# Study Mode 计划生成向导设计
+﻿# Study Mode 计划生成向导设计
 
 ## 状态
 
-- 日期：2026-07-12
+- 日期：2026-07-13
 - 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
@@ -18,18 +18,19 @@
 
 ## 已实施入口：学前诊断后端接口
 
-2026-07-12 已落地后端学前诊断问题和诊断 profile 归纳接口，范围包含后端 API、schema、资料范围校验、确定性归纳规则、测试和文档；不包含诊断向导前端。diagnostic_profile 对 planner 的影响策略见下方独立实施入口。
+2026-07-13 已升级为学前诊断题 v2，范围包含后端 API、schema、独立模型 purpose、资料范围校验、模型输出校验、确定性 fallback、profile 归纳和文档；不包含开始前设置页前端 UI，不新增诊断 session 表。详细设计见 [diagnostic-questions.md](diagnostic-questions.md)。
 
 - Router：`backend/app/modules/study_plans/router.py` 暴露 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` 和 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`。
-- Schema：`backend/app/modules/study_plans/schemas.py` 定义 `StudyPlanDiagnosticQuestionRequest`、`StudyPlanDiagnosticQuestionsResponse`、`StudyPlanDiagnosticProfileRequest` 和 `StudyPlanDiagnosticProfileResponse`；`question_version` 固定为 `study_plan_diagnostic_v1`。
-- Service：`backend/app/modules/study_plans/service.py::build_study_plan_diagnostic_questions` 复用 `iter_material_context_batches()` 校验资料属于当前用户、当前课程且已解析，并从当前 `material_scope` 的 chunk heading / 资料名 / 正文首行中稳定抽取 1 到 3 个 topic，不足 3 个时不补无意义问题。
-- Profile 归纳：`build_study_plan_diagnostic_profile` 校验 `question_version` 和 `topic_id` 是否仍属于当前资料范围；不匹配返回 `DIAGNOSTIC_STALE`。`none` / `heard` 视为弱掌握，弱掌握超过一半时 `foundation_needed=true`，`weak_topics` 保留弱 topic id。
-- 解释风格：`weak_area=calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余为 `plain_language`。
-- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `POST /api/v1/courses/{course_id}/study-plans/preview`；2026-07-12 起，preview 除透传和保存追溯外，还会把 diagnostic_profile 摘要写入 planner reduce prompt，影响补基础、任务顺序、主题颗粒度和 description 风格。
+- Schema：`backend/app/modules/study_plans/schemas.py` 定义 `StudyPlanDiagnosticQuestionRequest`、`StudyPlanDiagnosticQuestionsResponse`、`StudyPlanDiagnosticProfileRequest` 和 `StudyPlanDiagnosticProfileResponse`；`question_version` 固定为 `study_plan_diagnostic_v2`。
+- 模型配置：新增 purpose `study_plan_diagnostic`，使用 `STUDY_PLAN_DIAGNOSTIC_API_KEY`、`STUDY_PLAN_DIAGNOSTIC_BASE_URL`、`STUDY_PLAN_DIAGNOSTIC_MODEL`，不得复用 parser 或 planner 配置。
+- Service：`backend/app/modules/study_plans/service.py::build_study_plan_diagnostic_questions` 复用 `iter_material_context_batches()` 校验资料属于当前用户、当前课程且已解析；正常路径由 LLM 根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 topic 候选，后端映射回当前 chunk、去重并固定输出 3 道 `topic_mastery`。
+- Fallback：模型失败、输出不足 3 个、重复或无法映射到当前资料范围时，后端从模型已通过校验的 seed、chunk heading、正文片段和首个 chunk 拆分补足到 3 道；`generation_metadata.diagnostic_questions` 记录 `source` 和 `fallback_reason`。
+- Profile 归纳：`build_study_plan_diagnostic_profile` 要求 exactly 3 个 `topic_mastery` 答案，校验 `question_version` 和 `topic_id` 是否仍属于当前资料范围；不匹配返回 `DIAGNOSTIC_STALE`。`none` / `heard` 视为弱掌握，弱掌握超过一半时 `foundation_needed=true`，`weak_topics` 保留弱 topic id。
+- 薄弱方向：前端只展示 `weak_area` 问题，不展示讲课风格选择。后端可继续从 `weak_area` 派生内部 `explanation_style` 供现有 planner 兼容使用，不能把它当作用户选择的讲课风格。
+- 数据流：诊断 profile 响应可直接作为 `StudyPlanBuildRequest.diagnostic_profile` 传给 `POST /api/v1/courses/{course_id}/study-plans/preview`；preview 会把 diagnostic_profile 摘要写入 planner reduce prompt，影响补基础、任务顺序、主题颗粒度、薄弱方向强化和 description 表达。
 - 失败与补偿：无 parsed 资料返回 `NO_PARSED_MATERIAL`；资料范围越界沿用 material context 的 `NOT_FOUND` / 覆盖错误；旧诊断答案或版本不匹配返回 `DIAGNOSTIC_STALE`，前端应回到学前诊断重新作答。
-- 复杂度与资源预算：诊断 topic 抽取只扫描当前资料范围批次，时间复杂度 O(chunks)，最多返回 3 个 topic，不额外调用模型，不写数据库。
-- 测试入口：`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖正常问题生成、少于 3 个 topic、profile 归纳、旧 topic 拒绝、弱基础 profile 和 profile 继续传入 preview。
-
+- 复杂度与资源预算：正常路径 1 次结构化模型调用；topic 校验和 fallback 扫描当前资料范围批次，时间复杂度 O(chunks + fragments)，最多返回 3 个 topic，不写数据库。
+- 测试入口：任务七前只做编译级验证；密钥配置后应补充 `backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 对模型正常、模型失败 fallback、exactly 3、旧 topic 拒绝和 profile 继续传入 preview 的覆盖。
 ## 已实施入口：diagnostic_profile 影响 planner
 
 2026-07-12 已落地 diagnostic_profile 到 planner reduce prompt 的策略注入。范围仅包含后端 planner prompt、preview 链路测试和领域文档；不新增数据库表，不改前端，不新增核心依赖，不绕过 `ModelProvider.generate_structured()` 和现有 map/reduce 流程。
@@ -162,6 +163,8 @@ POST /api/v1/courses/{course_id}/study-plan-config-parses
 资料范围可以修改，但它不是普通本地字段。资料范围变化后必须重新解析配置并重新估算学习时间，因为资料范围影响知识点数量、预计总学习时长、学前诊断题目和最终计划内容。
 
 ### 前端展示字段
+
+配置确认页所有用户可见文案必须使用中文。API 内部字段名和枚举值继续保留英文契约，但前端不得直接展示 `start_date`、`duration_days`、`daily_available_minutes`、`preference`、`material_scope`、`balanced`、`include_all_parsed_materials` 等内部值。配置解析响应会额外返回中文展示辅助字段：`field_labels`、`unresolved_field_prompts`、`needs_confirmation_field_prompts` 和 `field_options`，前端应优先使用这些中文 label、message 和 option label。
 
 | 字段 | 是否可编辑 | 说明 |
 | --- | --- | --- |
@@ -313,30 +316,34 @@ daily_minutes_source = user_modified
 
 学前诊断每次新建计划都要做，不需要 `diagnostic_required` 字段。
 
-学前诊断只问用户当前掌握程度，不问学习偏好、资料范围、是否全量讲解，也不问资料知识小题。
+学前诊断只问用户当前掌握程度和薄弱方向，不问学习偏好、资料范围、是否全量讲解，也不出资料知识测验题。
+
+在产品页面上，前端可以把配置补问、学前诊断、薄弱方向和可选补充合并为“开始前设置”。但接口职责仍然拆开：学习设置缺失项由配置确认页和 `study-plan-config-parses` 处理；诊断题由 `study-plan-diagnostic-questions` 处理。
 
 页面标题建议：
 
 ```text
-开始前，先了解一下你的基础
+开始前设置
 ```
 
 ### 诊断问题结构
 
-第一版使用：
+学前诊断所有用户可见文案必须使用中文。`question_type`、`topic_id`、`mastery_level`、`weak_area` 等字段仍是英文机器契约；前端展示问题类型时使用后端返回的 `question_type_label`，展示选项时使用 `options[].label`，不得直接展示英文枚举值。
+
+v2 固定使用：
 
 ```text
-1 到 3 个核心知识点掌握问题
+3 个核心知识点掌握问题
 1 个薄弱方向问题
 1 个可选补充输入
 ```
 
-知识点掌握问题来自资料分析得到的核心知识点，不是考试题。默认选 3 个核心知识点；如果当前资料范围只能稳定提取 1 到 2 个核心知识点，则允许只问 1 到 2 个，不要凑无意义问题。
+知识点掌握问题由 LLM 根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 topic 候选，后端负责校验、映射和 fallback。最终前端永远接收 3 道 `topic_mastery`；即使资料较少，也允许后端从同一 chunk 拆出 3 个偏泛但资料内的主题。
 
 示例：
 
 ```text
-你对「物理层的基本功能」了解多少？
+你对「Nyquist / Shannon 公式」了解多少？
 A. 完全不了解
 B. 听说过，但不清楚
 C. 了解一些
@@ -360,21 +367,45 @@ E. 其他
 还有什么想特别补的地方？
 ```
 
+### 诊断问题请求
+
+```json
+{
+  "goal_text": "我想三天深度掌握物理层",
+  "material_scope": {
+    "include_all_parsed_materials": false,
+    "material_ids": ["mat_xxx"]
+  },
+  "confirmed_config": {
+    "start_date": "2026-07-13",
+    "duration_days": 3,
+    "preference": "mastery",
+    "daily_available_minutes": null,
+    "daily_minutes_source": null
+  }
+}
+```
+
 ### 前端诊断输出
 
 ```json
 {
-  "question_version": "study_plan_diagnostic_v1",
+  "question_version": "study_plan_diagnostic_v2",
   "topic_mastery": [
     {
-      "topic_id": "physical_layer_basics",
+      "topic_id": "topic_physical_layer_basics",
       "topic_title": "物理层的基本功能",
       "mastery_level": "heard"
     },
     {
-      "topic_id": "nyquist_shannon",
+      "topic_id": "topic_nyquist_shannon",
       "topic_title": "Nyquist / Shannon 公式",
       "mastery_level": "none"
+    },
+    {
+      "topic_id": "topic_signal_encoding",
+      "topic_title": "编码与调制",
+      "mastery_level": "some"
     }
   ],
   "weak_area": "calculation",
@@ -395,22 +426,23 @@ E. 其他
 
 ```json
 {
-  "question_version": "study_plan_diagnostic_v1",
+  "question_version": "study_plan_diagnostic_v2",
   "prior_knowledge_level": "little",
   "foundation_needed": true,
-  "weak_topics": ["nyquist_shannon"],
+  "weak_topics": ["topic_nyquist_shannon"],
   "weak_area": "calculation",
   "explanation_style": "step_by_step"
 }
 ```
 
+`explanation_style` 是后端从 `weak_area` 派生的内部兼容字段，不是前端新增讲课风格选择。
+
 诊断结果影响：
 
 - 第一个任务是否需要补基础；
-- 讲义详细程度；
-- 例题数量；
-- 测试题数量；
-- 后续生成内容的解释风格。
+- 弱掌握 topic 是否更靠前、更细；
+- 薄弱方向对应的概念、计算、应用或记忆强化；
+- 后续生成内容的 description 表达。
 
 ### 诊断复用和失效
 
@@ -424,7 +456,6 @@ E. 其他
 - 后端检测到诊断答案里的 `topic_id` 不属于当前资料快照。
 
 日期、学习天数、每日学习时间和学习方式变化时，诊断答案默认保留，但 preview 需要重新生成。
-
 ## Step 4：计划预览
 
 Preview 页展示同一组核心配置：
@@ -493,10 +524,10 @@ POST /api/v1/courses/{course_id}/study-plans
     "material_ids": ["mat_xxx"]
   },
   "diagnostic_profile": {
-    "question_version": "study_plan_diagnostic_v1",
+    "question_version": "study_plan_diagnostic_v2",
     "prior_knowledge_level": "little",
     "foundation_needed": true,
-    "weak_topics": ["nyquist_shannon"],
+    "weak_topics": ["topic_nyquist_shannon"],
     "weak_area": "calculation",
     "explanation_style": "step_by_step"
   }
@@ -572,10 +603,10 @@ Preview 响应返回：
     "snapshot_hash": "sha256:..."
   },
   "diagnostic_profile": {
-    "question_version": "study_plan_diagnostic_v1",
+    "question_version": "study_plan_diagnostic_v2",
     "prior_knowledge_level": "little",
     "foundation_needed": true,
-    "weak_topics": ["nyquist_shannon"],
+    "weak_topics": ["topic_nyquist_shannon"],
     "weak_area": "calculation",
     "explanation_style": "step_by_step"
   },
@@ -721,7 +752,7 @@ else:
 - 资料范围变化会重新解析配置，并使诊断问题和 preview 失效。
 - `include_all_parsed_materials=true` 使用当前已解析资料快照，后续上传资料不改变旧计划。
 - 非当前课程资料、解析中资料和解析失败资料不能进入生成流程。
-- 学前诊断允许 1 到 2 个 topic 问题，不强行凑满 3 个。
+- 学前诊断固定返回 3 个 topic 问题；模型不足或失败时由后端基于资料内容 fallback 补足。
 - 学前诊断只包含掌握程度和薄弱方向，不包含学习方式或资料范围问题。
 - `fast_track`、`balanced`、`mastery`、`sprint` 映射到正确的底层生成 profile。
 - 历史 `advanced` 能被读取并展示为冲刺，新写入使用 `sprint`。

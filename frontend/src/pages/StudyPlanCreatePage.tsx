@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
@@ -342,7 +342,7 @@ export function StudyPlanCreatePage() {
             <Group justify="space-between" wrap="nowrap">
               <Stack gap={2}>
                 <Title order={2}>计划配置</Title>
-                <Text c="dimmed" size="sm">当前使用 balanced 策略，保存采用 wizard_v1 契约。</Text>
+                <Text c="dimmed" size="sm">当前使用“均衡学习”策略，保存会提交已确认的预览任务树。</Text>
               </Stack>
               <Badge color="orange" variant="outline">学情诊断后续接入</Badge>
             </Group>
@@ -354,7 +354,7 @@ export function StudyPlanCreatePage() {
               placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
               value={goalText}
             />
-            <Text c="dimmed" size="sm">保存为 goal_text，并随请求发送默认 balanced 策略。</Text>
+            <Text c="dimmed" size="sm">保存为学习目标，并随请求发送默认“均衡学习”策略。</Text>
 
             <Group align="flex-start" grow>
               <TextInput
@@ -387,7 +387,7 @@ export function StudyPlanCreatePage() {
                   <Text fw={750}>资料范围</Text>
                   <Text c="dimmed" size="sm">当前固定为全部已解析资料。</Text>
                 </Stack>
-                <Badge color="teal" variant="light">include_all_parsed_materials</Badge>
+                <Badge color="teal" variant="light">全部已解析资料</Badge>
               </Group>
               <Button disabled leftSection={<IconLock size={16} />} variant="light">
                 选择具体资料（待接入）
@@ -400,7 +400,7 @@ export function StudyPlanCreatePage() {
                   <Text fw={750}>学情诊断</Text>
                   <Text c="dimmed" size="sm">后端诊断接口已具备，本页先不进入诊断向导。</Text>
                 </Stack>
-                <Badge color="gray" variant="light">disabled</Badge>
+                <Badge color="gray" variant="light">待接入</Badge>
               </Group>
             </Paper>
 

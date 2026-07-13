@@ -25,6 +25,7 @@ from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.learning_execution import router as learning_router
 from app.modules.learning_execution.service import (
+    _merge_task_test_parameters,
     _reduce_task_content_outputs,
     generate_handout_for_subtask,
     generate_task_test_for_subtask,
@@ -1053,3 +1054,54 @@ def test_generate_handout_material_coverage_incomplete_saves_failed_record(api: 
     assert content.study_subtask_id == subtask_id
     assert content.generation_status == "failed"
     assert content.error_code == "MATERIAL_COVERAGE_INCOMPLETE"
+
+
+def _stored_task_test_parameters_with_counts() -> dict[str, object]:
+    return {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
+        "difficulty": "medium",
+    }
+
+
+def test_merge_task_test_parameters_keeps_stored_question_type_counts_for_difficulty_override() -> None:
+    merged = _merge_task_test_parameters(
+        stored_parameters=_stored_task_test_parameters_with_counts(),
+        request_parameters={"difficulty": "hard"},
+    )
+
+    assert merged["question_type_counts"] == [
+        {"question_type": "single_choice", "question_count": 10},
+        {"question_type": "short_answer", "question_count": 3},
+    ]
+    assert merged["question_count"] == 13
+    assert merged["difficulty"] == "hard"
+
+
+def test_merge_task_test_parameters_clears_stored_question_type_counts_for_legacy_override() -> None:
+    merged = _merge_task_test_parameters(
+        stored_parameters=_stored_task_test_parameters_with_counts(),
+        request_parameters={"question_count": 1, "question_types": ["single_choice"]},
+    )
+
+    assert "question_type_counts" not in merged
+    assert merged["question_count"] == 1
+    assert merged["question_types"] == ["single_choice"]
+
+
+def test_merge_task_test_parameters_replaces_stored_question_type_counts_for_per_type_override() -> None:
+    merged = _merge_task_test_parameters(
+        stored_parameters=_stored_task_test_parameters_with_counts(),
+        request_parameters={
+            "question_type_counts": [{"question_type": "short_answer", "question_count": 1}],
+        },
+    )
+
+    assert merged == {
+        "question_type_counts": [{"question_type": "short_answer", "question_count": 1}],
+        "difficulty": "medium",
+    }

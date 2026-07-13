@@ -17,6 +17,7 @@ ModelPurpose = Literal[
     "outline",
     "knowledge_list",
     "study_plan_parser",
+    "study_plan_diagnostic",
     "study_plan_generator",
     "handout",
     "task_test",
@@ -81,6 +82,10 @@ class Settings(BaseSettings):
     study_plan_parser_api_key: str | None = None
     study_plan_parser_base_url: str | None = None
     study_plan_parser_model: str = "gpt-5.4-mini"
+
+    study_plan_diagnostic_api_key: str | None = None
+    study_plan_diagnostic_base_url: str | None = None
+    study_plan_diagnostic_model: str = "gpt-5.4-mini"
 
     study_plan_generator_api_key: str | None = None
     study_plan_generator_base_url: str | None = None

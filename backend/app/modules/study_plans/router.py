@@ -73,6 +73,13 @@ def get_plan_generator_provider() -> ModelProvider:
     )
 
 
+def get_plan_diagnostic_provider() -> ModelProvider:
+    return _model_provider_for_purpose(
+        purpose="study_plan_diagnostic",
+        api_key_env_name="STUDY_PLAN_DIAGNOSTIC_API_KEY",
+    )
+
+
 def _bundle_data(bundle: StudyPlanBundle) -> dict[str, object]:
     data = StudyPlanBundleRead(
         plan=StudyPlanRead.model_validate(bundle.plan),
@@ -110,6 +117,7 @@ def study_plan_diagnostic_questions_endpoint(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
+    model_provider: ModelProvider = Depends(get_plan_diagnostic_provider),
 ) -> dict[str, object]:
     settings = get_settings()
     questions = build_study_plan_diagnostic_questions(
@@ -117,6 +125,7 @@ def study_plan_diagnostic_questions_endpoint(
         user_id=current_user.id,
         course_id=course_id,
         payload=payload,
+        model_provider=model_provider,
         max_tokens=settings.material_batch_max_tokens,
     )
     data = StudyPlanDiagnosticQuestionsResponse.model_validate(questions).model_dump(mode="json")
