@@ -23,6 +23,7 @@
 | TD-013 | 指定材料生成的具体 schema、提示词和业务质量尚未实现。 | Flashcard、Quiz、Mindmap 仍需后续业务团队基于基础设施分别开发。 | 中 | 后续业务阶段 |
 | TD-014 | AI 学习计划仍为确定性占位。 | S02 已接入全材料 map/reduce、保存幂等、替换、重生成和软删除。 | 高 | 已关闭（2026-07-11） |
 | TD-015 | 公共 `OpenAIModelProvider.answer_question()` 固定调用 Responses API，尚未兼容仅提供 Chat Completions API 的 OpenAI-compatible 服务。 | DeepSeek 等不支持 `/responses` 的服务会让课程问答和 Study Mode 任务级问答稳定返回 `GENERATION_FAILED`；支持 Responses API 的模型不受影响。 | 高 | 待合并后统一修复 |
+| TD-016 | 讲义 PDF 的 Markdown/HTML/Playwright 渲染链路尚未限制外部网络请求。 | 当前本地 POC 不阻塞使用；未来部署到共享服务或处理不可信生成内容时，Markdown 图片可能让后端 Chromium 请求内网或外部地址。 | 中 | 待处理（本地 POC 后置） |
 
 ## TD-015：问答模型接口兼容
 
@@ -54,6 +55,30 @@
 - 当前决定：允许业务 PR 合并后统一完成 provider 协议适配；合并前对候选回退至少验证不破坏 Responses API provider、能覆盖真实 DeepSeek 问答、且不会把 401、403、429、5xx 或网络错误误回退。
 - 后续公共基础设施应提供显式协议模式（建议 `responses`、`chat_completions`、`auto`），使已知 provider 可直接选择正确 endpoint；`auto` 仅可在可确认的 endpoint 不支持场景下回退，并应按 `base_url + model` 缓存已探测的能力，避免每次请求重复试错。
 - 设计/实现时需记录实际选择的协议和回退原因，但不得记录 API key、完整 prompt、资料正文或用户问题；若新增公共配置字段或 provider 策略，应同步更新配置契约、相关领域文档，并评估是否需要 ADR。
+
+## TD-016：讲义 PDF 渲染网络访问边界
+
+### 当前行为与接受范围
+
+- PR #7 将讲义 PDF 导出改为 Markdown -> HTML -> Playwright Chromium 打印。`markdown-it-py` 默认允许 Markdown 图片语法，浏览器加载本地 HTML 时会继续请求图片中的 `http://` 或 `https://` 地址。
+- 当前阶段只运行本地 POC，开发者主动导出自己课程中的生成内容；该风险暂不阻塞 PR #7 的本地功能验收，也不要求本轮修改 renderer。
+- 该接受仅适用于本地、可信开发环境，不表示共享部署环境可以继续开放任意网络访问。
+
+### 后续处理触发条件
+
+满足下列任一条件时，必须在部署或开放使用前处理本技术债：
+
+- 后端部署到可访问内网服务、云元数据地址或其他敏感网络资源的机器。
+- 平台开放给非开发者、多用户或其他不完全可信用户使用。
+- 讲义正文、引用摘录或其他 Markdown 输入可被上传资料、模型输出或用户输入间接控制。
+- PDF 导出改为后台任务、批量任务或自动触发，用户不再逐次确认导出。
+
+### 建议方案与完成标准
+
+- 首选在 Playwright page 创建后注册请求拦截，只允许当前本地 HTML 文档及明确审核过的静态资源；默认拒绝 `http://`、`https://` 和其他非必要协议。
+- 如果产品明确需要远程图片，应由后端受控下载器执行协议、域名、DNS 解析结果、重定向、文件大小、超时和 MIME 类型校验，再以本地资源交给浏览器；不得让 Chromium 直接访问任意 URL。
+- 增加自动化测试，至少证明环回地址、私网地址、云元数据地址和重定向目标不会收到请求，同时正常纯文本、表格和本地可信资源仍能导出 PDF。
+- 修复后同步更新 `docs/architecture/adr/0006-handout-pdf-rendering.md`、Study Mode 领域文档和本条状态。
 
 ## 更新规则
 
