@@ -150,3 +150,10 @@ pnpm frontend:build
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
+
+## 8. Frontend Interaction Notes
+
+- 2026-07-13: `MaterialWorkspace` keeps the course-creation upload prompt as a dismissible UI affordance, but `CourseDetailPage` clears the route state after the first render so browser refreshes do not reopen the upload dialog.
+- 2026-07-13: The upload dialog exposes a top-right close button, removes the old "skip upload" action, supports selecting files by click or drag-and-drop, and uses copy that explains uploaded files enter parsing automatically.
+- 2026-07-13: After a file upload returns `parse_status = uploaded`, the frontend immediately shows the material as `parsing` and calls the retry-parse API. Parse API failure keeps the uploaded material visible and surfaces the backend error.
+- 2026-07-13: Material row actions are opened from a three-dot left-click button. The material menu keeps rename and delete, and only exposes "retry parse" for `parse_failed`; it no longer asks users to manually start parsing for newly uploaded materials.

@@ -1,6 +1,6 @@
 import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
-import { IconUpload, IconX } from "@tabler/icons-react";
+import { IconDotsVertical, IconUpload, IconX } from "@tabler/icons-react";
 
 import { ApiError } from "../../api/errors";
 import {
@@ -366,13 +366,23 @@ export function MaterialWorkspace({
     }
     void mutate(async () => {
       const material = await uploadMaterial(courseId, uploadFile, uploadTargetFolderId);
-      setMaterials((current) => [material, ...current]);
+      const insertedMaterial: Material =
+        material.parse_status === "uploaded" ? { ...material, parse_status: "parsing" } : material;
+      setMaterials((current) => [insertedMaterial, ...current]);
       setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
       setIsUploadPromptOpen(false);
       setUploadFile(null);
       const input = document.getElementById("material-upload-input") as HTMLInputElement | null;
       if (input) {
         input.value = "";
+      }
+      if (material.parse_status === "uploaded") {
+        try {
+          updateMaterial(await retryParseMaterial(material.id));
+        } catch (parseError) {
+          updateMaterial(material);
+          setError(errorMessage(parseError));
+        }
       }
     });
   }
@@ -413,7 +423,8 @@ export function MaterialWorkspace({
   function openMaterialMenu(event: MouseEvent<HTMLElement>, material: Material) {
     event.preventDefault();
     event.stopPropagation();
-    setContextMenu({ kind: "material", material, x: event.clientX, y: event.clientY });
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu({ kind: "material", material, x: Math.max(8, rect.right - 148), y: rect.bottom + 4 });
   }
 
   function handleParse(material: Material) {
@@ -432,7 +443,6 @@ export function MaterialWorkspace({
         className="material-workspace__file-row"
         draggable
         key={material.id}
-        onContextMenu={(event) => openMaterialMenu(event, material)}
         onDragStart={() => setDraggedMaterialId(material.id)}
       >
         <label
@@ -460,6 +470,15 @@ export function MaterialWorkspace({
         <span className={`material-workspace__status material-workspace__status--${material.parse_status}`}>
           {statusText(material.parse_status)}
         </span>
+        <button
+          aria-label={`${material.name} 更多操作`}
+          className="material-workspace__file-actions"
+          disabled={isMutating}
+          onClick={(event) => openMaterialMenu(event, material)}
+          type="button"
+        >
+          <IconDotsVertical size={18} stroke={1.8} />
+        </button>
       </li>
     );
   }
@@ -676,9 +695,9 @@ export function MaterialWorkspace({
               <button onClick={() => openRenameMaterialModal(contextMenu.material)} role="menuitem" type="button">
                 重命名资料
               </button>
-              {contextMenu.material.parse_status === "uploaded" || contextMenu.material.parse_status === "parse_failed" ? (
+              {contextMenu.material.parse_status === "parse_failed" ? (
                 <button onClick={() => handleParse(contextMenu.material)} role="menuitem" type="button">
-                  {contextMenu.material.parse_status === "parse_failed" ? "重试解析" : "开始解析"}
+                  重试解析
                 </button>
               ) : null}
               <button onClick={() => requestDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
