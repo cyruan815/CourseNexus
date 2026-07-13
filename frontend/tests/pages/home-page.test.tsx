@@ -69,8 +69,17 @@ function jsonResponse(data: unknown, requestId = "req_test") {
 
 function createHomeFetchMock(courses = backendCourses) {
   return vi.fn((input: RequestInfo | URL) => {
-    if (String(input) === "/api/v1/course-terms") {
+    const url = String(input);
+    if (url === "/api/v1/course-terms") {
       return jsonResponse(backendTermOptions, "req_terms");
+    }
+
+    if (url.startsWith("/api/v1/todos/today")) {
+      return jsonResponse({ date: "2026-07-14", tasks: [] }, "req_today_todos");
+    }
+
+    if (url.startsWith("/api/v1/calendar/month")) {
+      return jsonResponse({ month: "2026-07", days: [] }, "req_month_calendar");
     }
 
     return jsonResponse(courses, "req_courses");
@@ -148,6 +157,70 @@ describe("HomePage", () => {
     expect(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" })).toBeInTheDocument();
     expect(screen.queryByText("暂无计划")).not.toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
+  });
+
+  it("loads today's todos from the backend and links tasks to study plans", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/v1/course-terms") {
+        return jsonResponse(backendTermOptions, "req_terms");
+      }
+      if (url === "/api/v1/courses") {
+        return jsonResponse(backendCourses, "req_courses");
+      }
+      if (url.startsWith("/api/v1/calendar/month")) {
+        return jsonResponse({ month: "2026-07", days: [] }, "req_month_calendar");
+      }
+      if (url.startsWith("/api/v1/todos/today")) {
+        return jsonResponse({
+          date: "2026-07-14",
+          tasks: [
+            {
+              task_id: "task_1",
+              plan_id: "plan_1",
+              course_id: "crs_discrete_math",
+              course_name: "离散数学",
+              title: "图论复习",
+              task_date: "2026-07-14",
+              status: "in_progress",
+              derived_status: "in_progress",
+              completed_subtask_count: 1,
+              total_subtask_count: 3,
+              first_incomplete_subtask_id: "subtask_2",
+              subtasks: [
+                {
+                  subtask_id: "subtask_1",
+                  title: "学习: 图的基本概念",
+                  subtask_type: "learn",
+                  description: "整理定义",
+                  status: "completed",
+                  sort_order: 1,
+                  execution_url: null,
+                },
+              ],
+            },
+          ],
+        }, "req_today_todos");
+      }
+
+      return jsonResponse([], "req_fallback");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "查看今日任务 图论复习" })).toHaveAttribute(
+      "href",
+      "/courses/crs_discrete_math/study-plans/plan_1",
+    );
+    expect(screen.getByText("离散数学")).toBeInTheDocument();
+    expect(screen.getByText("1/3 个二级任务完成")).toBeInTheDocument();
+    expect(screen.queryByText("今天还没有学习计划")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/todos/today?date=2026-07-14",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("shows material and task status on course cards without the created status text", async () => {

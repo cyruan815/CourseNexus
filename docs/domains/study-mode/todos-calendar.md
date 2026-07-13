@@ -17,7 +17,8 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 | tests | `backend/tests/modules/todos_calendar/` | service/API 覆盖权限、软删除、空集合、日期边界、摘要限制和零写入。 |
 | integration | `backend/tests/integration/test_plan_calendar_flow.py` | 验证 S02 保存的真实计划能被 S03 聚合读取，并继续复用计划详情。 |
 | frontend page | `frontend/src/pages/CalendarPage.tsx` | 识别 `/calendar?courseId={course_id}` 并展示单课程月历和选中日期任务。 |
-| frontend adapter | `frontend/src/features/study-plans/api.ts` | 封装 `fetchCourseStudyCalendar` 和 `fetchCourseStudyCalendarDay` 两个课程日历只读接口。 |
+| frontend home | `frontend/src/features/courses/HomeWorkbench.tsx` | 首页今日待办读取 `GET /api/v1/todos/today`，只读展示并链接计划详情。 |
+| frontend adapter | `frontend/src/features/study-plans/api.ts` | 封装 `fetchTodayTodos`、`fetchCourseStudyCalendar` 和 `fetchCourseStudyCalendarDay` 只读接口。 |
 
 ## API
 
@@ -37,6 +38,13 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 - 点击日期后加载 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`，在右侧展示当天一级任务、二级任务、状态和完成数。
 - 任务操作只提供“查看计划”链接到 `/courses/{course_id}/study-plans/{plan_id}`；执行页、完成/取消完成、讲义和任务测试题仍留给 C8/C9。
 - 页面覆盖 loading、empty、error、month view 和 day selected 状态；不创建前端日历写模型，也不从计划详情接口自行拼月历。
+
+2026-07-14 C6 已将首页今日待办接到真实聚合接口。
+
+- `HomeWorkbench` 的 `TodayTodoPanel` 调用 `GET /api/v1/todos/today?date=YYYY-MM-DD`，日期使用当前浏览器自然日字符串。
+- 面板展示一级任务标题、课程名、二级任务完成数和 `derived_status`；任务卡只链接到 `/courses/{course_id}/study-plans/{plan_id}`。
+- 空列表继续展示“今天还没有学习计划”；接口失败只影响今日待办面板，不阻断课程列表、课程创建或首页日历。
+- 首页课程卡片仍只读取 `GET /api/v1/courses` 的 `material_count` 与 `today_task_status`，不逐课程请求学习计划。
 
 ## 数据流
 

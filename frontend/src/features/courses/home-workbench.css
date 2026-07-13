@@ -145,6 +145,26 @@
   color: #7c3aed;
 }
 
+.home-todo-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.home-todo-item {
+  border-color: #dbeafe;
+  background: #fbfdff;
+  color: #1f2937;
+  padding: 12px;
+  text-decoration: none;
+}
+
+.home-todo-item:hover {
+  border-color: #2f80ed;
+  background: #f8fbff;
+}
+
 .home-calendar-card {
   flex: 1;
   min-height: 0;

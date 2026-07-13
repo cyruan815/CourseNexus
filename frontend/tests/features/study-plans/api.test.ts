@@ -5,6 +5,7 @@ import {
   deleteStudyPlan,
   fetchCourseStudyCalendar,
   fetchCourseStudyCalendarDay,
+  fetchTodayTodos,
   fetchStudyPlan,
   fetchDiagnosticQuestions,
   listStudyPlans,
@@ -121,6 +122,7 @@ describe("study plans api", () => {
     await deleteStudyPlan("plan_1");
     await fetchCourseStudyCalendar("crs_1", "2026-07");
     await fetchCourseStudyCalendarDay("crs_1", "2026-07-14");
+    await fetchTodayTodos("2026-07-14");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -204,6 +206,11 @@ describe("study plans api", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       12,
       "/api/v1/courses/crs_1/study-calendar/days/2026-07-14",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      13,
+      "/api/v1/todos/today?date=2026-07-14",
       expect.objectContaining({ method: "GET" }),
     );
   });
