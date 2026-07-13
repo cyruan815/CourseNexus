@@ -7,6 +7,8 @@ def build_knowledge_prompt(context: MaterialGenerationContext, *, parameters: Kn
         "Generate the final knowledge-point list using only the complete material context below. "
         f"Return at most {parameters.item_count} unique items. Extraction focus: {parameters.extraction_focus}. "
         f"Minimum importance: {parameters.minimum_importance}. User focus: {parameters.focus or 'none'}. "
-        "Preserve a useful learning order and do not return source IDs or citations.\n\n"
+        "Prioritize concepts, principles, formula conditions, and common misconceptions. Do not turn ordinary headings, "
+        "document labels, or generic overview phrases into knowledge items. Preserve a useful learning order and "
+        "do not return source IDs or citations.\n\n"
         + context.text
     )

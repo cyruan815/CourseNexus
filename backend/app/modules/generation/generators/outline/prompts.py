@@ -7,6 +7,8 @@ def build_outline_prompt(context: MaterialGenerationContext, *, parameters: Outl
         "Generate the final review outline using only the complete material context below. "
         f"Return at most {parameters.section_count} sections in the requested order. "
         f"Organization: {parameters.organization}. Review goal: {parameters.review_goal or 'none'}. "
-        f"Detail: {parameters.detail_level}. Do not return source IDs, source order keys, or citations.\n\n"
+        f"Detail: {parameters.detail_level}. Give every section a distinct learning purpose, avoid repeated summaries, "
+        "and provide an actionable review suggestion. Do not create calendar events, tasks, deadlines, or study-plan fields. "
+        "Do not return source IDs, source order keys, or citations.\n\n"
         + context.text
     )

@@ -31,6 +31,8 @@ def test_mindmap_validates_complete_graph_and_persists_markmap_data() -> None:
     assert output.content_json["nodes"][0]["id"] == "node_001"
     assert output.content_json["markmap_data"]["root"]["content"] == "Root"
     assert "source_citation_ids" not in output.content_json["nodes"][0]
+    assert "generic meta nodes" in provider.calls[0][0]
+    assert "concise labels" in provider.calls[0][0]
 
 
 def test_mindmap_uses_the_actual_root_for_title_when_model_order_differs() -> None:
@@ -50,3 +52,25 @@ def test_mindmap_uses_the_actual_root_for_title_when_model_order_differs() -> No
 
     assert output.title == "Knowledge Mindmap: Root"
     assert output.content_json["root_node_id"] == "node_002"
+
+
+def test_mindmap_derives_levels_from_child_edges_instead_of_model_levels() -> None:
+    provider = RecordingStructuredModelProvider({
+        "root_node_id": "root",
+        "nodes": [
+            {"id": "root", "label": "Root", "summary": "", "level": 1},
+            {"id": "child", "label": "Child", "summary": "", "level": 4},
+            {"id": "grandchild", "label": "Grandchild", "summary": "", "level": 2},
+        ],
+        "edges": [
+            {"from": "root", "to": "child", "relation": "child"},
+            {"from": "child", "to": "grandchild", "relation": "child"},
+        ],
+    })
+    context = MaterialGenerationContext(chunks=[], material_ids=["m1"], text="COMPLETE", estimated_tokens=4)
+
+    output = MindmapGenerator(model_provider=provider, markmap_preprocessor=FakePreprocessor()).generate(
+        context=context, parameters={"max_nodes": 10, "max_depth": 3}
+    )
+
+    assert [node["level"] for node in output.content_json["nodes"]] == [1, 2, 3]

@@ -42,7 +42,7 @@ class QuizGenerator:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Quiz structure is invalid") from exc
         return GeneratorOutput(
             title=f"Course Quiz ({len(questions)} questions)",
-            content_json=content.model_dump(mode="json"),
+            content_json=content.model_dump(mode="json", exclude_none=True),
         )
 
 

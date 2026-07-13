@@ -17,3 +17,8 @@ def test_flashcard_trims_text_and_deduplicates_tags() -> None:
     assert card.tags == ["OS"]
     with pytest.raises(ValidationError):
         FlashcardDraft(front="   ", back="Definition")
+
+
+def test_flashcard_accepts_optional_trimmed_explanation() -> None:
+    assert FlashcardDraft(front="Q", back="A").explanation is None
+    assert FlashcardDraft(front="Q", back="A", explanation="  Common trap. ").explanation == "Common trap."
