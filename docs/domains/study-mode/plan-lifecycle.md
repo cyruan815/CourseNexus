@@ -53,7 +53,7 @@
 - 计划保存不生成 `handout`、`task_test` 或任何 `ai_generated_contents`。
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
 - 每份范围内已解析资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
-- Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；超出容量时必须返回 `PLAN_OVER_CAPACITY` warning。
+- Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；总时长超出总容量或任一天任务时长超过 `daily_available_minutes` 时，都必须返回 `PLAN_OVER_CAPACITY` warning。
 - Preview 的资料解析质量 warning 以当前 material-context scope 内 parsed 资料为事实来源，只进入 `generation_metadata.material_quality.warnings`；不得改变 capacity 计算，也不得把显式未 parsed 资料升级为新的 P5a 阻断。
 
 ## 验证
@@ -68,3 +68,12 @@
 - `uv run python -m pytest tests/modules/study_plans tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/integration -q`：`125 passed in 28.53s`，覆盖计划、执行、打卡、日历和集成链路。
 - `uv run python -m pytest -q`：`316 passed in 41.41s`。
 - 历史真实模型验收报告保留在 `docs/planning/phase-1-validation/`，但不属于本次幂等修复提交范围。
+## 2026-07-13 计划保存参数快照补充
+
+- 保存和替换计划时，`parsed_config_json.task_snapshot` 会保存每个二级任务的排序、类型、关联资料和必要生成参数；quiz/test 子任务额外保存 `generation_parameters.task_test`。
+- 该参数快照用于后续 task-test 按需生成的默认参数，避免计划写着“10 道选择题和 3 道计算题”但实际请求只生成 3 题。
+- Preview 在结构校验前会确定性归一化同一天的二级任务顺序：`learn/review` 保持在前，`quiz/test` 移到当天最后并重排 `sort_order`；质量门仍保留“自测任务必须排在当天最后”的兜底校验。
+- 真实模型输出的二级任务类型别名会在 schema 层归一化为规范枚举：`practice` / `exercise` / `drill` / `assessment` 归一到 `quiz`，`exam` / `final-test` / `comprehensive-test` 归一到 `test`；入库和 API 响应仍只保存 `learn` / `review` / `quiz` / `test`。
+- 保存计划阶段仍只写 `study_plans`、`study_tasks` 和 `study_subtasks`，不创建 `AIGeneratedContent`、`SourceCitation` 或导出文件。
+- `generation_parameters.task_test` 接受规范对象，也兼容模型常见别名：按题型计数对象 `{"single_choice": 10, "short_answer": 3}`、题型计数列表 `[{"question_count": 10, "question_type": "single_choice"}, {"question_count": 3, "question_type": "short_answer"}]`、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象并可带 `total_question_count`，以及题量文案映射 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}`；保存快照前统一归一化为 `question_count`、`question_types`、`difficulty`。
+- 非法 `generation_parameters.task_test` 在保存/替换时返回 `VALIDATION_ERROR`；旧计划中若存在脏默认参数，运行 task-test 生成时返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 生成记录。

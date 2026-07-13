@@ -73,6 +73,7 @@ erDiagram
 - 首页今日待办和首页大日历按日期合并展示多个单课程计划的任务。
 - `SourceCitation` 可关联 `Message` 或 `AIGeneratedContent`，并保留资料名快照。
 - 生成内容与其`SourceCitation`必须在一个事务中提交；失败记录不允许保留部分结构或引用。
+- `handout` / `task_test` 生成器内部使用 chunk id 做材料覆盖和引用校验；落库成功后必须创建 `SourceCitation` 行，并把 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`，导出层不得再把 chunk id 当成 citation id 使用。
 - 当前引用位置数据库约束保持不变；无分页来源使用`page_index=0`表示未知位置，API调用方不得将其解释为真实页码。
 
 ## 数据归属原则
@@ -173,7 +174,24 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业
     "batch_count": 1
   },
   "tasks_source": "confirmed",
-  "task_snapshot": [],
+  "task_snapshot": [
+    {
+      "sort_order": 1,
+      "subtasks": [
+        {
+          "sort_order": 2,
+          "subtask_type": "test",
+          "generation_parameters": {
+            "task_test": {
+              "question_count": 13,
+              "question_types": ["single_choice", "short_answer"],
+              "difficulty": "medium"
+            }
+          }
+        }
+      ]
+    }
+  ],
   "idempotency": {
     "key_hash": "sha256(...) ",
     "request_hash": "sha256(...)"
@@ -185,6 +203,8 @@ S02 继续复用 `study_plans`、`study_tasks`、`study_subtasks`，不新增业
 `planner_strategy` 是后端从英文 `preference` 和可选 `diagnostic_profile` 派生的稳定计划生成配置。`advanced` 兼容读取为 `sprint`；未知或缺省 preference 按 `balanced` 派生。`foundation_required=true` 来自诊断的必要补基础，不会被 `fast_track` 删除。
 
 保存计划只创建计划、一级任务和二级任务结构。重生成 preview 不落库；替换计划会在一次事务中删除旧任务树并写入新任务树；删除计划写 `status = deleted` 和 `deleted_at`。
+
+保存计划只追溯 quiz/test 子任务的 `generation_parameters.task_test` 默认值，不提前生成 `AIGeneratedContent`；后续 task-test 生成在请求未显式覆盖参数时读取该默认值。
 
 保存计划携带 `Idempotency-Key` 时，key hash 写入 `study_plans.idempotency_key_hash`，request hash 仍写入 `parsed_config_json.idempotency.request_hash`。同 key 同请求返回原计划；同 key 不同请求、并发唯一约束冲突且 request hash 不一致、或旧计划已软删除但 key 被占用时，均返回 `IDEMPOTENCY_CONFLICT`。
 

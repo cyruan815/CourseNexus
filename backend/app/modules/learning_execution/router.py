@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
@@ -82,7 +82,7 @@ def generate_handout_endpoint(
         db,
         user_id=current_user.id,
         subtask_id=subtask_id,
-        parameters=payload.parameters.model_dump(mode="json"),
+        parameters=payload.parameters.model_dump(mode="json", exclude_unset=True),
         force_regenerate=payload.force_regenerate,
         model_provider=model_provider,
         max_tokens=settings.material_batch_max_tokens,
@@ -104,7 +104,7 @@ def generate_task_test_endpoint(
         db,
         user_id=current_user.id,
         subtask_id=subtask_id,
-        parameters=payload.parameters.model_dump(mode="json"),
+        parameters=payload.parameters.model_dump(mode="json", exclude_unset=True),
         force_regenerate=payload.force_regenerate,
         model_provider=model_provider,
         max_tokens=settings.material_batch_max_tokens,

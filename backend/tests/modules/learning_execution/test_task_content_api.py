@@ -562,6 +562,38 @@ def test_generate_task_content_rejects_invalid_request_parameters(api: ApiHarnes
     assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
 
 
+
+
+def test_generate_task_test_with_stale_invalid_saved_parameters_saves_failed_record(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    plan = api.db.get(StudyPlan, "sp_api_content")
+    assert plan is not None
+    plan.parsed_config_json = {
+        "task_snapshot": [
+            {
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "sort_order": 1,
+                        "generation_parameters": {"task_test": {"question_count": 0}},
+                    }
+                ],
+            }
+        ]
+    }
+    api.db.add(plan)
+    api.db.commit()
+
+    response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/task-tests", headers=headers, json={"parameters": {}})
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "GENERATION_SCHEMA_INVALID"
+    content = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert content.content_type == "task_test"
+    assert content.study_subtask_id == subtask_id
+    assert content.generation_status == "failed"
+    assert content.error_code == "GENERATION_SCHEMA_INVALID"
 def test_generate_handout_schema_invalid_saves_failed_record(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")

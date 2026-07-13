@@ -730,3 +730,8 @@ else:
 - preview 保存时提交 exact tasks，后端不重新生成任务。
 - 同一个 `idempotency_key` 重复保存不会创建重复计划。
 - 生成出的每日任务分钟数尊重 `daily_available_minutes`，不足或超出时返回结构化 warning。
+## 2026-07-13 task-test 默认参数追溯补充
+
+保存 preview exact tasks 时，后端会为 quiz/test 子任务写入 `generation_parameters.task_test`。若任务描述包含“10 道选择题和 3 道计算题”等明确数量，保存前会解析为结构化默认参数，例如 `question_count=13`、`question_types=["single_choice", "short_answer"]`、`difficulty="medium"`。如果模型已经输出 `{ "single_choice": 10, "short_answer": 3 }` 这类题型计数字段，保存前会归一化为同一标准结构。该参数只用于后续任务测试题按需生成的默认值，保存计划阶段不生成测试题正文，也不写 `AIGeneratedContent`。
+
+后续 `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 省略 `parameters` 时使用计划默认值；请求显式传入字段时覆盖默认值。非法 `generation_parameters.task_test` 在保存/替换阶段返回 `VALIDATION_ERROR`，不会落入 500。

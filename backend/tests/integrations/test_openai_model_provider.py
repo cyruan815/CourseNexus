@@ -9,17 +9,42 @@ from app.modules.material_context.schemas import ContextChunk
 
 
 class FakeResponses:
-    def __init__(self) -> None:
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.error = error
         self.calls: list[dict[str, object]] = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
         return type("Response", (), {"output_text": "OpenAI answer"})()
 
 
+class FakeChatCompletions:
+    def __init__(self, *, content: str) -> None:
+        self.content = content
+        self.calls: list[dict[str, object]] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = type("Message", (), {"content": self.content})()
+        choice = type("Choice", (), {"message": message})()
+        return type("ChatCompletion", (), {"choices": [choice]})()
+
+
+class FakeChat:
+    def __init__(self, completions: FakeChatCompletions) -> None:
+        self.completions = completions
+
+
 class FakeClient:
-    def __init__(self) -> None:
-        self.responses = FakeResponses()
+    def __init__(self, responses: FakeResponses | None = None, *, chat: FakeChat | None = None) -> None:
+        self.responses = responses or FakeResponses()
+        self.chat = chat
+
+
+class FakeResponsesApiNotFoundError(Exception):
+    status_code = 404
 
 
 def capture_course_logs(caplog) -> logging.Logger:
@@ -70,3 +95,30 @@ def test_openai_model_provider_uses_sdk_client(caplog) -> None:
     assert "chunks=1" in record.getMessage()
     assert "What is Alpha?" not in record.getMessage()
     assert "OpenAI answer" not in record.getMessage()
+
+
+def test_openai_model_provider_falls_back_to_chat_completions_for_answer_question() -> None:
+    responses = FakeResponses(error=FakeResponsesApiNotFoundError("not found"))
+    chat_completions = FakeChatCompletions(content="Chat answer")
+    chunk = ContextChunk(
+        material_id="mat_1",
+        chunk_id="chk_1",
+        material_name="notes.md",
+        page=None,
+        page_index=0,
+        heading="Intro",
+        content_text="Alpha",
+    )
+    provider = OpenAIModelProvider(
+        api_key="test-key",
+        model="gpt-test",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    answer = provider.answer_question(question="What is Alpha?", context_chunks=[chunk])
+
+    assert answer.answer_text == "Chat answer"
+    assert answer.citation_chunk_ids == ["chk_1"]
+    assert responses.calls[0]["model"] == "gpt-test"
+    assert chat_completions.calls[0]["model"] == "gpt-test"
+    assert chat_completions.calls[0]["messages"][0]["role"] == "system"

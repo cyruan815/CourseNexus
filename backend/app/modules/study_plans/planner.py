@@ -315,6 +315,7 @@ def _build_reduce_prompt(
             "所有 mapped units 都必须进入某个二级任务；可合并相近单元，但 description 里要说明覆盖内容。",
             "每天任务要具体可执行，包含可检查产出，例如公式默写、例题练习、对比表、错题回顾或口头复述。",
             "最后一天必须安排综合 quiz/test；quiz/test 必须是当天最后一个二级任务。",
+            "如果 goal_text、diagnostic_note 或任务描述要求具体测试题量，例如 10 道选择题和 3 道计算题，quiz/test subtask 必须在 description 保留题量文字，并填写 generation_parameters.task_test；选择题映射 single_choice，计算题映射 short_answer，question_count 为总题数。",
             "每个 subtask 的 citation_chunk_ids 必须来自 mapped units，不能留空。",
             f"goal_text: {payload.goal_text}",
             f"date_range: {payload.start_date.isoformat()} to {payload.end_date.isoformat()}",

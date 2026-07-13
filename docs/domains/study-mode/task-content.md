@@ -150,3 +150,20 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，今日讲义支持 PDF 导出。
 - 不新增 chunk 级任务范围持久化字段；当前只保证生成时引用来自当前二级任务相关资料的当次 material-context 批次。
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
+## 2026-07-13 引用、PDF 和默认参数修复补充
+
+### 引用链契约
+
+Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 `content_json.sections[].source_citation_ids` / `content_json.questions[].source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
+
+### PDF renderer 契约
+
+今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`。中文和其他 CJK 字符使用 `STSong-Light`；ASCII、数字、英文术语和公式片段使用 `Helvetica`，内容流按字符 run 切换字体，避免 `Overview`、`Nyquist/Shannon`、`C = B log2(1 + S/N)` 等英文/公式被中文 CID 字体逐字拉开。回归测试需至少确认内容流包含 Helvetica 英文 run 和 STSong 中文 run。
+
+### task-test 默认参数
+
+计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 合并参数时以计划默认值为底、本次请求为覆盖；因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题。模型若输出 `{ "single_choice": 10, "short_answer": 3 }` 这类题型计数别名，会归一化为 `question_count=13` 和对应 `question_types`；真正非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
+
+### 术语质量校验
+
+物理层讲义生成后会扫描已知术语误拼，当前包括 `Nyquest -> Nyquist`、`Shanon -> Shannon`、`bandwith -> bandwidth`。命中明显错拼时返回 `GENERATION_SCHEMA_INVALID`，不静默落库，后续可扩展为课程领域 glossary。

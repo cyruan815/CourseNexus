@@ -17,7 +17,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 
-GOAL_TEXT = "我要两天内深度学习计算机网络物理层的知识点，今天是2026年7月13日"
+GOAL_TEXT = "我要两天内深度学习计算机网络物理层的知识点，今天是2026年7月13日；最后安排 10 道选择题和 3 道计算题检验 Nyquist/Shannon 公式、编码和调制。"
 SOURCE_PDF_LABEL = "<local validation PDF>"
 
 
@@ -168,6 +168,64 @@ def _find_subtask(saved: dict[str, object], allowed_types: set[str]) -> dict[str
     return None
 
 
+def _planned_generation_parameters(saved: dict[str, object], subtask: dict[str, object], content_type: str) -> dict[str, object]:
+    data = saved.get("data")
+    if not isinstance(data, dict):
+        return {}
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list):
+        return {}
+    task_by_id = {task.get("id"): task for task in tasks if isinstance(task, dict)}
+    task = task_by_id.get(subtask.get("task_id"))
+    if not isinstance(task, dict):
+        return {}
+    plan = data.get("plan")
+    config = plan.get("parsed_config_json") if isinstance(plan, dict) else None
+    task_snapshot = config.get("task_snapshot") if isinstance(config, dict) else None
+    if not isinstance(task_snapshot, list):
+        return {}
+    for task_item in task_snapshot:
+        if not isinstance(task_item, dict) or task_item.get("sort_order") != task.get("sort_order"):
+            continue
+        subtasks = task_item.get("subtasks")
+        if not isinstance(subtasks, list):
+            return {}
+        for subtask_item in subtasks:
+            if not isinstance(subtask_item, dict) or subtask_item.get("sort_order") != subtask.get("sort_order"):
+                continue
+            generation_parameters = subtask_item.get("generation_parameters")
+            if not isinstance(generation_parameters, dict):
+                return {}
+            content_parameters = generation_parameters.get(content_type)
+            return content_parameters if isinstance(content_parameters, dict) else {}
+    return {}
+
+
+def _run_warnings(context: dict[str, object]) -> list[dict[str, object]]:
+    warnings: list[dict[str, object]] = []
+    capacity = context.get("plan_capacity")
+    if isinstance(capacity, dict) and "PLAN_OVER_CAPACITY" in capacity.get("warnings", []):
+        warnings.append(
+            {
+                "code": "PLAN_OVER_CAPACITY",
+                "message": "\u8ba1\u5212\u4f30\u7b97\u603b\u65f6\u957f\u8d85\u8fc7\u53ef\u7528\u603b\u65f6\u957f\u3002",
+                "estimated_total_minutes": capacity.get("estimated_total_minutes"),
+                "available_total_minutes": capacity.get("available_total_minutes"),
+                "suggestions": ["\u589e\u52a0\u6bcf\u65e5\u65f6\u95f4", "\u589e\u52a0\u5b66\u4e60\u5929\u6570", "\u6539\u7528\u5feb\u901f\u6a21\u5f0f", "\u51cf\u5c11\u6d4b\u8bd5\u6216 review \u5f3a\u5ea6"],
+            }
+        )
+    request_parameters = context.get("task_test_request_parameters")
+    if isinstance(request_parameters, dict) and request_parameters:
+        warnings.append(
+            {
+                "code": "TASK_TEST_PARAMETERS_OVERRIDDEN",
+                "message": "\u672c\u6b21 task-test \u8bf7\u6c42\u663e\u5f0f\u8986\u76d6\u4e86\u8ba1\u5212\u5efa\u8bae\u53c2\u6570\u3002",
+                "request_parameters": request_parameters,
+            }
+        )
+    return warnings
+
+
 def _diagnostic_answers(questions_payload: dict[str, object]) -> dict[str, object]:
     data = questions_payload["data"]
     assert isinstance(data, dict)
@@ -220,10 +278,14 @@ def _build_save_payload(preview_payload: dict[str, object]) -> dict[str, object]
 
 
 def _validate_pdf(path: Path) -> dict[str, object]:
+    payload = path.read_bytes()
     result: dict[str, object] = {
         "path": str(path),
         "bytes": path.stat().st_size,
-        "starts_with_pdf_header": path.read_bytes().startswith(b"%PDF"),
+        "starts_with_pdf_header": payload.startswith(b"%PDF"),
+        "uses_helvetica_font_resource": b"/F2" in payload,
+        "uses_helvetica_text_runs": b"/F2 " in payload and b" Tf" in payload,
+        "uses_stsong_text_runs": b"/F1 " in payload and b" Tf" in payload,
     }
     try:
         from pypdf import PdfReader
@@ -300,6 +362,24 @@ def _write_report(
         "",
         "```json",
         _json(context.get("pdf_validation", {})),
+        "```",
+        "",
+        "## Markdown 验证",
+        "",
+        "```json",
+        _json(context.get("markdown_validation", {})),
+        "```",
+        "",
+        "## Warnings",
+        "",
+        "```json",
+        _json(context.get("warnings", [])),
+        "```",
+        "",
+        "## PDF 导出问题页证据",
+        "",
+        "```json",
+        _json(context.get("pdf_issue_evidence", {})),
         "```",
         "",
         "## 运行日志摘录",
@@ -436,6 +516,8 @@ def run(args: argparse.Namespace) -> int:
             },
         )
         _write_json(run_dir / "plan_preview.json", preview)
+        preview_data = preview["data"]
+        context["plan_capacity"] = preview_data.get("capacity", {}) if isinstance(preview_data, dict) else {}
 
         save_payload = _build_save_payload(preview)
         saved = _api_json(
@@ -451,15 +533,20 @@ def run(args: argparse.Namespace) -> int:
         context["plan_id"] = saved["data"]["plan"]["id"]
 
         learn_subtask = _find_subtask(saved, {"learn", "review"})
-        quiz_subtask = _find_subtask(saved, {"quiz", "test"})
+        quiz_subtask = _find_subtask(saved, {"test"}) or _find_subtask(saved, {"quiz"})
         if learn_subtask is None:
             raise RuntimeError("saved plan did not contain a learn/review subtask")
         if quiz_subtask is None:
             raise RuntimeError("saved plan did not contain a quiz/test subtask")
         context["learn_subtask_id"] = learn_subtask["id"]
         context["quiz_subtask_id"] = quiz_subtask["id"]
+        planned_task_test_parameters = _planned_generation_parameters(saved, quiz_subtask, "task_test")
+        context["planned_task_test_parameters"] = planned_task_test_parameters
+        context["task_test_request_parameters"] = {}
         context["plan_summary"] = {
             "title": saved["data"]["plan"]["title"],
+            "capacity": context.get("plan_capacity", {}),
+            "planned_task_test_parameters": planned_task_test_parameters,
             "task_count": len(saved["data"]["tasks"]),
             "subtask_count": len(saved["data"]["subtasks"]),
             "subtasks": [
@@ -502,14 +589,7 @@ def run(args: argparse.Namespace) -> int:
             path=f"/api/v1/study-subtasks/{quiz_subtask['id']}/task-tests",
             step="generate task test with model",
             headers=headers,
-            json={
-                "force_regenerate": True,
-                "parameters": {
-                    "question_count": 3,
-                    "question_types": ["single_choice", "short_answer"],
-                    "difficulty": "medium",
-                },
-            },
+            json={"force_regenerate": True, "parameters": {}},
         )
         _write_json(run_dir / "handout_content.json", handout)
         _write_json(run_dir / "task_test_content.json", task_test)
@@ -524,7 +604,17 @@ def run(args: argparse.Namespace) -> int:
             "task_test_title": task_test["data"].get("title"),
             "task_test_status": task_test["data"].get("generation_status"),
             "task_test_questions": len(task_test["data"].get("content_json", {}).get("questions", [])),
+            "planned_task_test_parameters": planned_task_test_parameters,
+            "task_test_request_parameters": context.get("task_test_request_parameters", {}),
         }
+
+        planned_question_count = planned_task_test_parameters.get("question_count")
+        actual_question_count = context["content_summary"]["task_test_questions"]
+        if isinstance(planned_question_count, int) and actual_question_count != planned_question_count:
+            raise RuntimeError(
+                f"task_test question count mismatch: planned={planned_question_count}, actual={actual_question_count}"
+            )
+
 
         handout_pdf = run_dir / f"handout-{handout_id}.pdf"
         task_test_md = run_dir / f"task-test-{task_test_id}.md"
@@ -547,14 +637,46 @@ def run(args: argparse.Namespace) -> int:
         context["handout_pdf"] = handout_pdf.name
         context["task_test_markdown"] = task_test_md.name
         context["pdf_validation"] = _validate_pdf(handout_pdf)
+        markdown_text = task_test_md.read_text(encoding="utf-8")
+        context["markdown_validation"] = {
+            "bytes": task_test_md.stat().st_size,
+            "contains_sources_unavailable": "Sources: unavailable" in markdown_text,
+        }
+        pdf_validation = context["pdf_validation"]
+        if (
+            not pdf_validation.get("starts_with_pdf_header")
+            or not pdf_validation.get("uses_helvetica_text_runs")
+            or not pdf_validation.get("uses_stsong_text_runs")
+        ):
+            raise RuntimeError(f"handout pdf font validation failed: {_json(pdf_validation)}")
+        if context["markdown_validation"]["contains_sources_unavailable"]:
+            raise RuntimeError("task-test markdown contains Sources: unavailable")
+
+        first_section = (handout["data"].get("content_json", {}).get("sections") or [{}])[0]
+        context["pdf_issue_evidence"] = {
+            "issue": "PDF export previously routed CJK, ASCII, numbers, and formulas through STSong-Light, which made Overview and Nyquist/Shannon-style ASCII render with abnormal spacing.",
+            "source_pdf": str(args.pdf),
+            "fixed_export_pdf": handout_pdf.name,
+            "handout_content_fragment": {
+                "title": first_section.get("title"),
+                "body_excerpt": str(first_section.get("body", ""))[:500],
+                "source_citation_ids": first_section.get("source_citation_ids", []),
+            },
+            "content_stream_evidence": {
+                "uses_helvetica_text_runs": context["pdf_validation"].get("uses_helvetica_text_runs"),
+                "uses_stsong_text_runs": context["pdf_validation"].get("uses_stsong_text_runs"),
+            },
+        }
+        context["warnings"] = _run_warnings(context)
 
         summary_path = run_dir / "summary.json"
         context["summary_json"] = summary_path.name
         _write_json(summary_path, context)
+        report_status = "PASS_WITH_WARNINGS" if context["warnings"] else "PASS"
         report = _write_report(
             run_dir=run_dir,
             logger=logger,
-            status="PASS",
+            status=report_status,
             started_at=started_at,
             context=context,
         )

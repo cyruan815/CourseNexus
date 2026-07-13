@@ -71,3 +71,8 @@ completion API 不直接写二级任务 `in_progress`。
 - 不调用 S03 service，也不维护待办/日历缓存。
 - completion API 不生成讲义或任务测试题；S06 按需生成入口和 execution-context 内容 ID 规则见 [task-content.md](task-content.md)。`POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 也不生成 `AIGeneratedContent`，只保存问答对话和真实引用。
 - 不新增 migration，不修改前端。
+## 2026-07-13 执行页生成与 QA 兼容补充
+
+- 执行页任务级问答仍只接受 `conversation_id` 和 `question`。`OpenAIModelProvider.answer_question()` 优先走 Responses API；当兼容模型服务对 `/responses` 返回 404 时，后端自动回退 Chat Completions。非 404 错误、JSON/schema 失败和无资料兜底语义保持不变。
+- task-test 生成参数读取顺序为：计划 `parsed_config_json.task_snapshot` 中的 `generation_parameters.task_test` 默认值先入底，再由本次请求 `parameters` 显式字段覆盖。
+- 若历史计划中的默认参数已损坏，生成入口返回 `GENERATION_SCHEMA_INVALID`，并写入一条 `AIGeneratedContent(generation_status=failed, error_code=GENERATION_SCHEMA_INVALID)`，便于执行页重试和报告追踪。

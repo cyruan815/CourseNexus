@@ -501,7 +501,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       "title": "章节标题",
       "body": "讲义正文",
       "key_points": ["重点 1"],
-      "source_citation_ids": ["chunk_..."],
+      "source_citation_ids": ["cit_..."],
       "sort_order": 1
     }
   ],
@@ -532,7 +532,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       ],
       "correct_answer": "A",
       "explanation": "答案解析",
-      "source_citation_ids": ["chunk_..."],
+      "source_citation_ids": ["cit_..."],
       "sort_order": 1
     }
   ]
@@ -681,6 +681,7 @@ S02 已实现真实学习计划生命周期；仍不新增业务表，但为保�
 - `study_tasks` 保存日期级一级任务。
 - `study_subtasks` 保存二级任务、任务类型和关联资料 ID 数组。
 - `ai_generated_contents` 只在 S06 按需生成讲义或任务测试题时写入；S02 保存计划阶段不写该表。
+- `parsed_config_json.task_snapshot[].subtasks[].generation_parameters` 用于保存 quiz/test 子任务默认生成参数，不新增列、不提前生成内容。
 ## S03 表结构结论
 
 S03 已实现今日待办与日历聚合，但表结构结论不变：不新增业务表、不新增列、不修改 baseline migration。
@@ -702,4 +703,5 @@ S06 已实现任务讲义和任务测试题按需生成，表结构结论不变�
 - `handout` 和 `task_test` 复用 `ai_generated_contents`。
 - S06 生成记录必须写入 `study_subtask_id`，用于绑定二级任务和执行上下文最近成功内容查询。
 - `source_citations.generated_content_id` 关联生成内容引用来源，不允许没有材料来源的伪引用。
+- S06 生成器输出仍以 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation`，并将 `handout` / `task_test` 的 `content_json.source_citation_ids` 回绑为 `SourceCitation.id`。
 - 不创建 `handouts`、`task_tests`、`task_test_questions` 或 `generation_jobs`。

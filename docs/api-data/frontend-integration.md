@@ -1070,3 +1070,10 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 - 每个核心能力必须先有后端 service/router 测试，再用前端测试验证接入边界。
 - 前端组件测试优先验证请求参数、状态兜底、错误码处理和路由跳转，不以视觉完整度作为基础设施阶段验收重点。
 - 若前端展示与后端契约不一致，以本分区和后端 schema 为准，并优先修正文档或接口契约。
+## 6. 2026-07-13 Study Mode 修复接入口径
+
+- Course QA 和执行页任务级 QA 的前端接口、请求体和响应体不变；后端在 `/responses` 404 时会自动回退 Chat Completions，前端不需要区分模型接口形态。
+- 学习计划保存后的 `parsed_config_json.task_snapshot` 会保留 quiz/test 子任务的 `generation_parameters.task_test` 默认参数。前端后续调用 task-test 生成时可省略 `parameters`，后端会使用计划默认值；若前端显式传入字段，则以请求值覆盖默认值。
+- `GeneratedContentRead.source_citations` 始终是导出引用的事实来源。`handout.content_json.sections[].source_citation_ids` 和 `task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id；前端展示引用时按 `source_citations[].id` 建映射。
+- 任务测试题 Markdown 导出在有效引用存在时不应出现 `Sources: unavailable`；若出现该文本，应视为引用链断裂或历史坏数据。
+- 今日讲义 PDF 混排由后端 renderer 处理：中文使用 `STSong-Light`，英文、数字、公式和 `Overview`、`Nyquist/Shannon` 等术语使用 `Helvetica`。前端只按文件流下载或预览，不需要自行修复字体。

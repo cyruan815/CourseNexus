@@ -42,9 +42,12 @@ class OpenAIModelProvider:
         try:
             response = self.client.responses.create(model=self.model, input=prompt)
         except Exception as exc:
-            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+            if not _is_not_found_error(exc):
+                raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+            answer_text = self._answer_question_with_chat(prompt=prompt)
+        else:
+            answer_text = getattr(response, "output_text", None) or ""
 
-        answer_text = getattr(response, "output_text", None) or ""
         answer = ModelAnswer(
             answer_text=answer_text,
             citation_chunk_ids=[chunk.chunk_id for chunk in context_chunks[:1]],
@@ -56,6 +59,7 @@ class OpenAIModelProvider:
             (perf_counter() - started_at) * 1000,
         )
         return answer
+
 
     def generate_structured(
         self,
@@ -91,6 +95,20 @@ class OpenAIModelProvider:
             (perf_counter() - started_at) * 1000,
         )
         return result
+
+    def _answer_question_with_chat(self, *, prompt: str) -> str:
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You answer using only the provided course context."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+        return _first_chat_content(response)
+
 
     def _generate_structured_with_chat(
         self,

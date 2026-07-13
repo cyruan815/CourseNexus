@@ -417,3 +417,13 @@ PDF 内容包含标题、overview、learning objectives、sections、key points�
 - 409 `EXPORT_CONTENT_NOT_READY`：当前 `generation_status` 不是 `success`。
 - 500 `EXPORT_CONTENT_INVALID`：`content_json` 不是合法的今日讲义结构。
 - 500 `EXPORT_FAILED`：PDF 渲染或写出失败，不影响原 generated content。
+## 2026-07-13 任务内容修复契约补充
+
+- 学习计划保存和替换会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 中追溯 quiz/test 子任务默认测试题参数；保存阶段只保存参数，不提前生成 `AIGeneratedContent`。
+- 计划预览的模型输出可接受常见二级任务类型别名并在服务端归一化；对外响应、保存快照和数据库仍只使用规范值 `learn`、`review`、`quiz`、`test`。
+- `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 的请求 `parameters` 省略或为空时，后端优先读取计划快照中的 `task_test` 默认值；请求显式传入的字段覆盖计划默认值。非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
+- 保存计划时会把模型输出的任务测试题参数别名归一化后写入快照；支持按题型计数对象、题型计数列表、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象，以及题量文案到题型的映射，最终对外仍表现为规范 `question_count`、`question_types`、`difficulty`。
+- `handout` / `task_test` 生成器内部仍使用 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation` 行，并将 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`。Markdown/PDF 导出只按 `SourceCitation.id` 匹配来源；存在有效引用时不得输出 `Sources: unavailable`。
+- 执行页 QA 的 `OpenAIModelProvider.answer_question()` 在兼容服务对 `/responses` 返回 404 时回退 Chat Completions；非 404 的鉴权、网络、限流或服务端错误语义不变。
+- 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`：中文/CJK run 使用 `STSong-Light`，ASCII、数字、英文术语和公式 run 使用 `Helvetica`，避免 `Overview`、`Nyquist/Shannon` 等英文被中文 CID 字体逐字排版。
+- 物理层讲义生成后会扫描已知术语误拼，例如 `Nyquest`、`Shanon`、`bandwith`；命中时按 `GENERATION_SCHEMA_INVALID` 拒绝，不静默落库。

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.core.errors import CourseNexusError
@@ -7,6 +8,13 @@ from app.integrations.model_provider.base import ModelProvider
 from app.modules.generation.generators.handout.schemas import HandoutContent, HandoutGenerationParameters
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialContextBatch, MaterialContextResult
+
+
+_KNOWN_TERM_CORRECTIONS = {
+    "Nyquest": "Nyquist",
+    "Shanon": "Shannon",
+    "bandwith": "bandwidth",
+}
 
 
 class HandoutGenerator:
@@ -28,6 +36,7 @@ class HandoutGenerator:
         allowed_chunk_ids = {chunk.chunk_id for chunk in context.chunks}
         prompt = _build_prompt(context=context, params=params)
         content = self.model_provider.generate_structured(prompt=prompt, output_schema=HandoutContent)
+        _assert_no_known_terminology_errors(content)
         item_citation_chunk_ids = _collect_item_citation_chunk_ids(content)
         citation_chunk_ids = {chunk_id for chunk_ids in item_citation_chunk_ids.values() for chunk_id in chunk_ids}
         if not citation_chunk_ids or not citation_chunk_ids.issubset(allowed_chunk_ids):
@@ -39,6 +48,25 @@ class HandoutGenerator:
         )
 
 
+
+
+def _assert_no_known_terminology_errors(content: HandoutContent) -> None:
+    for text in _handout_text_fragments(content):
+        for term, expected in _KNOWN_TERM_CORRECTIONS.items():
+            if re.search(rf"\b{re.escape(term)}\b", text, flags=re.IGNORECASE):
+                raise CourseNexusError(
+                    code="GENERATION_SCHEMA_INVALID",
+                    message="讲义包含明显术语错拼",
+                    status_code=500,
+                    details={"term": term, "expected": expected},
+                )
+
+
+def _handout_text_fragments(content: HandoutContent) -> list[str]:
+    fragments = [content.overview, *content.learning_objectives, content.summary]
+    for section in content.sections:
+        fragments.extend([section.title, section.body, *section.key_points])
+    return fragments
 def build_generator(model_provider: ModelProvider) -> HandoutGenerator:
     return HandoutGenerator(model_provider=model_provider)
 

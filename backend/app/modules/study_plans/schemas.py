@@ -11,7 +11,7 @@ from app.modules.material_context.schemas import MaterialScope
 PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced", "sprint"]
 DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 StudyPlanClientFlow = Literal["legacy", "wizard_v1"]
-SubTaskType = Literal["learn", "review", "quiz", "test"]
+SubTaskTypeLiteral = Literal["learn", "review", "quiz", "test"]
 MIN_DAILY_AVAILABLE_MINUTES = 30
 DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v1"
 MasteryLevel = Literal["none", "heard", "some", "familiar"]
@@ -26,6 +26,32 @@ def _normalize_preference_value(value: str | None) -> str | None:
     return value
 PlanPreference = Annotated[PlanPreferenceLiteral, BeforeValidator(_normalize_preference_value)]
 
+
+def _normalize_subtask_type(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "study": "learn",
+        "learning": "learn",
+        "read": "learn",
+        "recap": "review",
+        "revision": "review",
+        "practice": "quiz",
+        "exercise": "quiz",
+        "exercises": "quiz",
+        "drill": "quiz",
+        "self_test": "quiz",
+        "assessment": "quiz",
+        "exam": "test",
+        "final": "test",
+        "final_test": "test",
+        "comprehensive_test": "test",
+    }
+    return aliases.get(normalized, normalized)
+
+
+SubTaskType = Annotated[SubTaskTypeLiteral, BeforeValidator(_normalize_subtask_type)]
 
 class StudyPlanBuildRequest(BaseModel):
     goal_text: str = Field(min_length=1)
@@ -151,6 +177,12 @@ class StudyPlanParsedConfig(BaseModel):
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     unresolved_fields: list[str] = Field(default_factory=list)
 
+    @field_validator("diagnostic_profile", "material_snapshot", "coverage", "capacity", "generation_metadata", mode="before")
+    @classmethod
+    def normalize_nullable_dict_fields(cls, value: object) -> object:
+        return {} if value is None else value
+
+
     @field_validator("daily_available_minutes")
     @classmethod
     def validate_daily_available_minutes(cls, value: int | None) -> int | None:
@@ -201,6 +233,7 @@ class StudySubTaskPreview(BaseModel):
     related_material_ids: list[str] = Field(min_length=1)
     estimated_minutes: int = Field(default=1, gt=0)
     citation_chunk_ids: list[str] = Field(default_factory=list)
+    generation_parameters: dict[str, object] = Field(default_factory=dict)
     sort_order: int
 
 

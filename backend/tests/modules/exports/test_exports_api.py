@@ -144,14 +144,14 @@ def _task_test_json(*, source_citation_ids: list[str] | None = None) -> dict[str
 
 def _handout_json(*, source_citation_ids: list[str] | None = None) -> dict[str, object]:
     return {
-        "overview": "学习关系模型。",
+        "overview": "Overview: Nyquist/Shannon 公式 C = B log2(1 + S/N)。",
         "learning_objectives": ["解释主键和关系"],
         "sections": [
             {
                 "id": "sec_1",
-                "title": "主键",
-                "body": "主键用于唯一标识表中的一行。",
-                "key_points": ["唯一标识"],
+                "title": "Overview 与 Nyquist/Shannon",
+                "body": "中文说明后接 ASCII: Overview, Nyquist/Shannon, C = B log2(1 + S/N)。",
+                "key_points": ["唯一标识", "Nyquist/Shannon formula"],
                 "source_citation_ids": ["cit_task_test"] if source_citation_ids is None else source_citation_ids,
                 "sort_order": 1,
             }
@@ -322,6 +322,10 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
     assert response.content.startswith(b"%PDF-1.4")
     assert b"/Type /Catalog" in response.content
     assert b"%%EOF" in response.content
+    assert b"/F2 13 Tf" in response.content
+    assert b"/F1 10 Tf" in response.content
+    assert "Overview".encode().hex().upper().encode() in response.content
+    assert "Nyquist/Shannon".encode().hex().upper().encode() in response.content
 
 
 def test_export_handout_pdf_returns_not_found_for_cross_user_content(api: ApiHarness) -> None:
