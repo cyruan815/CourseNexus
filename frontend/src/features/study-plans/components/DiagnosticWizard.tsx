@@ -165,7 +165,7 @@ export function DiagnosticWizard({
       <Group justify="space-between" wrap="nowrap">
         <Stack gap={2}>
           <Text fw={750}>学情诊断</Text>
-          <Text c="dimmed" size="sm">根据资料与目标生成诊断题，并把后端画像用于计划预览。</Text>
+          <Text c="dimmed" size="sm">学情诊断可跳过，生成预览时会按基础配置直接生成计划。</Text>
         </Stack>
         <Badge color={profile ? "teal" : "blue"} variant="light">
           {profile ? "画像已生成" : "可选"}
