@@ -59,13 +59,15 @@ def api() -> Generator[ApiHarness, None, None]:
     app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             HandoutContent: {
+                "schema_version": 2,
+                "title": "主键讲义",
                 "overview": "学习关系模型。",
                 "learning_objectives": ["解释主键和关系"],
                 "sections": [
                     {
                         "id": "sec_1",
                         "title": "主键",
-                        "body": "主键用于唯一标识表中的一行。",
+                        "blocks": [{"type": "paragraph", "text": "主键用于唯一标识表中的一行。"}],
                         "key_points": ["唯一标识"],
                         "source_citation_ids": ["chunk_api_content"],
                         "sort_order": 1,
@@ -274,13 +276,15 @@ class CountingHandoutModelProvider:
         assert output_schema is HandoutContent
         return HandoutContent.model_validate(
             {
+                "schema_version": 2,
+                "title": "任务知识点讲义",
                 "overview": "学习任务范围内的知识点。",
                 "learning_objectives": ["解释当前任务知识点"],
                 "sections": [
                     {
                         "id": "sec_1",
                         "title": "任务知识点",
-                        "body": "根据任务范围生成讲义。",
+                        "blocks": [{"type": "paragraph", "text": "根据任务范围生成讲义。"}],
                         "key_points": ["只使用任务范围内的引用"],
                         "source_citation_ids": [self.citation_chunk_id],
                         "sort_order": 1,
@@ -480,6 +484,40 @@ def test_reduce_handout_outputs_preserves_v2_blocks_and_schema() -> None:
     assert [section["id"] for section in reduced.content_json["sections"]] == ["sec_1", "sec_2"]
     assert reduced.content_json["sections"][0]["blocks"][0]["type"] == "formula"
     assert reduced.item_citation_chunk_ids == {"sec_1": ["chunk_primary"], "sec_2": ["chunk_secondary"]}
+
+
+def test_reduce_handout_outputs_rejects_mixed_schema_result() -> None:
+    legacy_output = _handout_output(
+        overview="旧版概览",
+        summary="旧版总结",
+        sections=[
+            {
+                "id": "legacy_section",
+                "title": "旧版章节",
+                "body": "旧版正文",
+                "key_points": ["旧版重点"],
+                "source_citation_ids": ["chunk_legacy"],
+                "sort_order": 1,
+            }
+        ],
+        item_citation_chunk_ids={"legacy_section": ["chunk_legacy"]},
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        _reduce_task_content_outputs(
+            content_type="handout",
+            outputs=[
+                legacy_output,
+                _v2_handout_output(
+                    section_id="sec_v2",
+                    section_title="新版章节",
+                    chunk_id="chunk_v2",
+                    latex="C = W",
+                ),
+            ],
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
 
 def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: ApiHarness) -> None:
@@ -996,13 +1034,15 @@ def test_generate_handout_schema_invalid_saves_failed_record(api: ApiHarness) ->
     app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             HandoutContent: {
+                "schema_version": 2,
+                "title": "主键讲义",
                 "overview": "学习关系模型。",
                 "learning_objectives": ["解释主键"],
                 "sections": [
                     {
                         "id": "sec_1",
                         "title": "主键",
-                        "body": "主键用于唯一标识表中的一行。",
+                        "blocks": [{"type": "paragraph", "text": "主键用于唯一标识表中的一行。"}],
                         "key_points": ["唯一标识"],
                         "source_citation_ids": ["chunk_not_in_context"],
                         "sort_order": 1,

@@ -111,25 +111,8 @@ class PromptCapturingModelProvider(MockModelProvider):
 
 
 def test_handout_generator_returns_structured_output_and_citations() -> None:
-    provider = MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "overview": "学习关系模型的基本组成。",
-                "learning_objectives": ["解释关系、属性和元组"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "关系模型",
-                        "body": "关系模型用二维表组织数据。",
-                        "key_points": ["关系对应表", "元组对应行"],
-                        "source_citation_ids": ["chunk_1"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "本任务完成关系模型入门。",
-            }
-        }
-    )
+    payload = _valid_handout_v2_payload()
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
 
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
@@ -139,8 +122,25 @@ def test_handout_generator_returns_structured_output_and_citations() -> None:
 
     assert output.title == "今日讲义"
     assert output.content_json is not None
-    assert output.content_json["overview"] == "学习关系模型的基本组成。"
+    assert output.content_json["schema_version"] == 2
+    assert output.content_json["overview"] == payload["overview"]
     assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
+
+
+def test_handout_generator_rejects_output_without_explicit_v2_schema_version() -> None:
+    payload = _valid_handout_v2_payload()
+    payload.pop("schema_version")
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        HandoutGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details == {"schema_version": 1, "expected_schema_version": 2}
 
 
 def test_handout_generator_uses_section_citations_only_for_v2_blocks() -> None:
@@ -176,24 +176,9 @@ def test_handout_generator_uses_section_citations_only_for_v2_blocks() -> None:
     assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
 
 def test_handout_generator_prompt_includes_task_context_and_quality_requirements() -> None:
+    payload = _valid_handout_v2_payload()
     provider = PromptCapturingModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "overview": "学习关系模型的基本组成。",
-                "learning_objectives": ["解释关系、属性和元组"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "关系模型",
-                        "body": "关系模型用二维表组织数据。",
-                        "key_points": ["关系对应表", "元组对应行"],
-                        "source_citation_ids": ["chunk_1"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "本任务完成关系模型入门。",
-            }
-        }
+        structured_outputs={HandoutContent: payload}
     )
 
     HandoutGenerator(model_provider=provider).generate(
@@ -262,25 +247,9 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
 
 
 def test_handout_generator_rejects_schema_without_citation() -> None:
-    provider = MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "overview": "概览",
-                "learning_objectives": ["目标"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "无引用章节",
-                        "body": "正文",
-                        "key_points": ["重点"],
-                        "source_citation_ids": [],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "总结",
-            }
-        }
-    )
+    payload = _valid_handout_v2_payload()
+    payload["sections"][0]["source_citation_ids"] = []
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
 
     with pytest.raises(CourseNexusError) as exc_info:
         HandoutGenerator(model_provider=provider).generate(
@@ -293,25 +262,9 @@ def test_handout_generator_rejects_schema_without_citation() -> None:
 
 
 def test_handout_generator_rejects_known_physical_layer_term_misspelling() -> None:
-    provider = MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "overview": "Nyquest criterion is a physical layer formula.",
-                "learning_objectives": ["Distinguish Nyquest and Shannon"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "Nyquest and Shannon",
-                        "body": "Nyquest should be spelled Nyquist in physical layer materials.",
-                        "key_points": ["Nyquest is a misspelling"],
-                        "source_citation_ids": ["chunk_1"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "Fix Nyquest before saving the handout.",
-            }
-        }
-    )
+    payload = _valid_handout_v2_payload()
+    payload["overview"] = "Nyquest criterion is a physical layer formula."
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
 
     with pytest.raises(CourseNexusError) as exc_info:
         HandoutGenerator(model_provider=provider).generate(

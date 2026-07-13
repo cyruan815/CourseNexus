@@ -36,6 +36,13 @@ class HandoutGenerator:
         allowed_chunk_ids = {chunk.chunk_id for chunk in context.chunks}
         prompt = _build_prompt(context=context, params=params)
         content = self.model_provider.generate_structured(prompt=prompt, output_schema=HandoutContent)
+        if content.schema_version != 2:
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="新生成讲义必须使用 HandoutContent v2",
+                status_code=500,
+                details={"schema_version": content.schema_version, "expected_schema_version": 2},
+            )
         _assert_no_known_terminology_errors(content)
         item_citation_chunk_ids = _collect_item_citation_chunk_ids(content)
         citation_chunk_ids = {chunk_id for chunk_ids in item_citation_chunk_ids.values() for chunk_id in chunk_ids}

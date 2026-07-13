@@ -180,6 +180,7 @@ v2 讲义的字段语义：
 - `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课。
 - `sections[].blocks[]` 是正文主体；旧版 `sections[].body` 在 v2 中被 typed blocks 替代。
 - `sections[].source_citation_ids` 为第一版强制引用字段；模型输出阶段必须引用本次 material-context 中的 chunk id，保存成功后由 learning-execution 回绑为 `SourceCitation.id`。`blocks[]` 默认继承所在 section 的来源，prompt 明确要求第一版不要在 block 内单独填写 `source_citation_ids`；如果未来兼容字段出现，后端暂不依赖它。
+- 新生成讲义只接受显式 `schema_version=2`；省略版本或返回 v1 时按 `GENERATION_SCHEMA_INVALID` 失败，不允许把 typed blocks 作为 v1 success 落库。多批次 reducer 在返回前必须重新用 `HandoutContent` 校验最终合并结果，拒绝 v1/v2 混合产生的畸形结构。历史已保存且版本缺失的 v1 内容仍由读取和导出兼容路径处理。
 - `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空；第一版默认继承所有 section 来源，展示时不单独显示引用。
 - `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
 - `exam_focus[]` 用于保存考试或测验常见考法、易错点和解题提醒。

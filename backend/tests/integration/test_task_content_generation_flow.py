@@ -51,13 +51,15 @@ def api() -> Generator[ApiHarness, None, None]:
     app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             HandoutContent: {
+                "schema_version": 2,
+                "title": "数据库约束讲义",
                 "overview": "学习数据库约束。",
                 "learning_objectives": ["解释主键", "解释外键"],
                 "sections": [
                     {
                         "id": "sec_1",
                         "title": "主键与外键",
-                        "body": "主键唯一标识一行，外键表达表之间的关系。",
+                        "blocks": [{"type": "paragraph", "text": "主键唯一标识一行，外键表达表之间的关系。"}],
                         "key_points": ["主键唯一", "外键关联"],
                         "source_citation_ids": ["chunk_flow_1", "chunk_flow_2"],
                         "sort_order": 1,
