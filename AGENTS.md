@@ -27,6 +27,7 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - 提交前必须运行与本次小改动匹配的验证命令；如果只是文档变更，应至少说明未运行测试的原因。
 - Agent 可以在完成一个可验证小改动并通过验证后自动 commit；commit 前必须检查 `git status`、`git diff` / `git diff --staged`、待提交文件范围、敏感文件和测试 / 验证结果。
 - `git push`、`git push --force-with-lease`、创建 PR 和合并 PR 都属于远程仓库操作，必须由开发者明确下达指令后才能执行；Agent 不得自动 push、强推、创建或合并 PR。
+- Agent 审查 PR 时可以拉取、检查和本地验证，但必须先向开发者报告完整审查结论；只有获得开发者对具体操作的明确确认后，才能在 GitHub 提交 review、评论、批准、请求修改、关闭或撤回 review / comment。仅“审查 PR”不构成任何远程写操作授权。
 - 不要把长期决策只留在聊天记录里。
 - 不要不读 docs 就直接修改代码。
 - 不要引入核心依赖但不写 ADR。
