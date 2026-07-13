@@ -1,5 +1,7 @@
 import { apiRequest } from "../../api/client";
 import type {
+  CourseStudyCalendarDay,
+  CourseStudyCalendarMonth,
   StudyPlanConfigParseRequest,
   StudyPlanConfigParseResponse,
   StudyPlanDetail,
@@ -102,4 +104,22 @@ export function replaceStudyPlan(
 
 export function deleteStudyPlan(planId: string): Promise<StudyPlanRead> {
   return apiRequest<StudyPlanRead>(`/api/v1/study-plans/${planId}`, { method: "DELETE" });
+}
+
+export function fetchCourseStudyCalendar(
+  courseId: string,
+  month: string,
+): Promise<CourseStudyCalendarMonth> {
+  return apiRequest<CourseStudyCalendarMonth>(`/api/v1/courses/${courseId}/study-calendar?month=${month}`, {
+    method: "GET",
+  });
+}
+
+export function fetchCourseStudyCalendarDay(
+  courseId: string,
+  date: string,
+): Promise<CourseStudyCalendarDay> {
+  return apiRequest<CourseStudyCalendarDay>(`/api/v1/courses/${courseId}/study-calendar/days/${date}`, {
+    method: "GET",
+  });
 }

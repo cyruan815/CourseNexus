@@ -16,6 +16,8 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 | schemas | `backend/app/modules/todos_calendar/schemas.py` | 今日待办、课程分组、月历摘要和课程日历响应模型。 |
 | tests | `backend/tests/modules/todos_calendar/` | service/API 覆盖权限、软删除、空集合、日期边界、摘要限制和零写入。 |
 | integration | `backend/tests/integration/test_plan_calendar_flow.py` | 验证 S02 保存的真实计划能被 S03 聚合读取，并继续复用计划详情。 |
+| frontend page | `frontend/src/pages/CalendarPage.tsx` | 识别 `/calendar?courseId={course_id}` 并展示单课程月历和选中日期任务。 |
+| frontend adapter | `frontend/src/features/study-plans/api.ts` | 封装 `fetchCourseStudyCalendar` 和 `fetchCourseStudyCalendarDay` 两个课程日历只读接口。 |
 
 ## API
 
@@ -26,6 +28,15 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 - `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`：课程详情页今日任务数据源；前端传今天，不在 S03 提供日期切换。
 
 计划详情按钮不由 S03 新增接口实现，前端使用返回的 `plan_id` 调用 S02 `GET /api/v1/study-plans/{plan_id}`。
+
+## 前端 C5 接入状态
+
+2026-07-14 C5 已将课程详情页的 `/calendar?courseId={course_id}` 入口接到真实课程日历。页面保留无 `courseId` 时的全局大日历占位，避免提前实现 C7。
+
+- 月视图加载 `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`，展示日期摘要、首条一级任务标题和完成进度。
+- 点击日期后加载 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`，在右侧展示当天一级任务、二级任务、状态和完成数。
+- 任务操作只提供“查看计划”链接到 `/courses/{course_id}/study-plans/{plan_id}`；执行页、完成/取消完成、讲义和任务测试题仍留给 C8/C9。
+- 页面覆盖 loading、empty、error、month view 和 day selected 状态；不创建前端日历写模型，也不从计划详情接口自行拼月历。
 
 ## 数据流
 
@@ -92,3 +103,13 @@ cd D:\Projects\CourseNexus\backend
 uv run python -m pytest tests/modules/todos_calendar -q
 uv run python -m pytest tests/integration/test_plan_calendar_flow.py -q
 ```
+
+前端 C5 验证入口：
+
+```powershell
+corepack pnpm@11.7.0 --dir frontend test --run tests/features/study-plans/api.test.ts
+corepack pnpm@11.7.0 --dir frontend test --run tests/pages/calendar-page.test.tsx
+corepack pnpm@11.7.0 frontend:build
+```
+
+当前本地 Vitest 可能在测试收集前遇到 `entities ./decode` exports 问题；该问题阻塞测试运行时，应保留失败输出并以 build 作为 TypeScript/打包兜底验证。
