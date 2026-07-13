@@ -13,6 +13,8 @@ import {
   fetchDiagnosticQuestions,
   generateSubtaskHandout,
   generateSubtaskTaskTest,
+  exportGeneratedContentMarkdown,
+  exportGeneratedContentPdf,
   listStudyPlans,
   parseStudyPlanConfig,
   previewStudyPlan,
@@ -135,6 +137,8 @@ describe("study plans api", () => {
     await updateSubtaskCompletion("subtask_1", true);
     await generateSubtaskHandout("subtask_1", { force_regenerate: false });
     await generateSubtaskTaskTest("subtask_2", { force_regenerate: true, parameters: {} });
+    await exportGeneratedContentMarkdown("gen_task_test_1");
+    await exportGeneratedContentPdf("gen_handout_1");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -263,6 +267,16 @@ describe("study plans api", () => {
         body: JSON.stringify({ force_regenerate: true, parameters: {} }),
         method: "POST",
       }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      20,
+      "/api/v1/generated-contents/gen_task_test_1/exports/markdown",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      21,
+      "/api/v1/generated-contents/gen_handout_1/exports/pdf",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });

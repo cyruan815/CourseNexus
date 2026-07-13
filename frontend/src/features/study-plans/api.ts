@@ -1,4 +1,7 @@
 import { apiRequest } from "../../api/client";
+import { ApiError } from "../../api/errors";
+import type { ApiErrorResponse } from "../../api/types";
+import { clearSessionToken, getSessionToken } from "../auth/session";
 import type {
   CourseStudyCalendarDay,
   CourseStudyCalendarMonth,
@@ -24,6 +27,74 @@ import type {
   TaskTestGenerationRequest,
   TodayTodos,
 } from "./types";
+
+function buildApiPath(path: string): string {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  return `${apiBaseUrl}${path}`;
+}
+
+function isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "error" in payload &&
+    typeof (payload as ApiErrorResponse).error?.code === "string"
+  );
+}
+
+function filenameFromDisposition(disposition: string | null, fallback: string): string {
+  if (!disposition) {
+    return fallback;
+  }
+
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ""));
+  }
+
+  const asciiMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  return asciiMatch?.[1]?.trim() || fallback;
+}
+
+async function apiFileRequest(path: string, fallbackFilename: string): Promise<DownloadedFile> {
+  const headers: Record<string, string> = {};
+  const token = getSessionToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(buildApiPath(path), {
+    method: "GET",
+    headers,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearSessionToken();
+    }
+
+    const payload = await response.json().catch(() => undefined);
+    if (isApiErrorResponse(payload)) {
+      throw new ApiError(payload.error, response.status);
+    }
+
+    throw new ApiError(
+      {
+        code: "HTTP_ERROR",
+        message: `Request failed with status ${response.status}`,
+      },
+      response.status,
+    );
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackFilename),
+  };
+}
 
 export function parseStudyPlanConfig(
   courseId: string,
@@ -178,4 +249,23 @@ export function generateSubtaskTaskTest(
     method: "POST",
     body: payload,
   });
+}
+
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+export function exportGeneratedContentMarkdown(generatedContentId: string): Promise<DownloadedFile> {
+  return apiFileRequest(
+    `/api/v1/generated-contents/${generatedContentId}/exports/markdown`,
+    `task-test-${generatedContentId}.md`,
+  );
+}
+
+export function exportGeneratedContentPdf(generatedContentId: string): Promise<DownloadedFile> {
+  return apiFileRequest(
+    `/api/v1/generated-contents/${generatedContentId}/exports/pdf`,
+    `handout-${generatedContentId}.pdf`,
+  );
 }

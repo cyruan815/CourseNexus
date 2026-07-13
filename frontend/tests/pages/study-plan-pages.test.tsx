@@ -268,6 +268,11 @@ const quizExecutionContext = {
   task_test_content_id: null,
 };
 
+const quizExecutionContextWithTaskTest = {
+  ...quizExecutionContext,
+  task_test_content_id: "gen_task_test_1",
+};
+
 const completedResult = {
   changed: true,
   subtask: {
@@ -473,6 +478,17 @@ function requestIdempotencyKey(call: [RequestInfo | URL, RequestInit | undefined
     return headers.find(([name]) => name === "Idempotency-Key")?.[1];
   }
   return (headers as Record<string, string> | undefined)?.["Idempotency-Key"];
+}
+
+function installDownloadMocks() {
+  Object.defineProperty(window.URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:course-nexus-export"),
+  });
+  Object.defineProperty(window.URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
 }
 
 describe("study plan pages", () => {
@@ -1151,6 +1167,78 @@ describe("study plan pages", () => {
       "/generated-contents/gen_handout_1",
     );
     expect(screen.queryByRole("button", { name: "生成今日讲义" })).not.toBeInTheDocument();
+  });
+
+  it("exports an existing handout as a PDF file", async () => {
+    installDownloadMocks();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1/exports/pdf")) {
+        return Promise.resolve(
+          new Response(new Blob(["%PDF"], { type: "application/pdf" }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/pdf",
+              "Content-Disposition": 'attachment; filename="handout-gen_handout_1.pdf"',
+            },
+          }),
+        );
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "导出PDF" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_handout_1/exports/pdf",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+  });
+
+  it("exports an existing task test as a Markdown file", async () => {
+    installDownloadMocks();
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_2/execution-context")) {
+        return Promise.resolve(successResponse(quizExecutionContextWithTaskTest, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_task_test_1/exports/markdown")) {
+        return Promise.resolve(
+          new Response(new Blob(["# 测试题"], { type: "text/markdown;charset=utf-8" }), {
+            status: 200,
+            headers: {
+              "Content-Type": "text/markdown; charset=utf-8",
+              "Content-Disposition": 'attachment; filename="task-test-gen_task_test_1.md"',
+            },
+          }),
+        );
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_2");
+
+    expect(await screen.findByRole("heading", { name: "练习: 基础题" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "导出Markdown" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_task_test_1/exports/markdown",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
   });
 
   it("generates a handout for learn and review subtasks", async () => {
