@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, type InitialEntry, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import courseDetailSource from "../../src/pages/CourseDetailPage.tsx?raw";
 import { CourseDetailPage } from "../../src/pages/CourseDetailPage";
 
 const course = {
@@ -50,6 +51,46 @@ const studyPlan = {
   updated_at: "2026-07-09T12:00:00+00:00",
   deleted_at: null,
 };
+const parsedMaterials = [
+  {
+    id: "mat_1",
+    course_id: "crs_123",
+    user_id: "usr_123",
+    folder_id: null,
+    name: "计算机网络期末考试.pdf",
+    material_type: "pdf",
+    source_type: "file",
+    file_url: "stored/network.pdf",
+    source_url: null,
+    file_size: 100,
+    mime_type: "application/pdf",
+    parse_status: "parsed",
+    parse_error: null,
+    page_count: 10,
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-10T00:00:00Z",
+    deleted_at: null,
+  },
+  {
+    id: "mat_2",
+    course_id: "crs_123",
+    user_id: "usr_123",
+    folder_id: null,
+    name: "演示资料.md",
+    material_type: "markdown",
+    source_type: "file",
+    file_url: "stored/demo.md",
+    source_url: null,
+    file_size: 20,
+    mime_type: "text/markdown",
+    parse_status: "parsed",
+    parse_error: null,
+    page_count: null,
+    created_at: "2026-07-10T00:00:00Z",
+    updated_at: "2026-07-10T00:00:00Z",
+    deleted_at: null,
+  },
+];
 
 function LocationStateProbe() {
   const location = useLocation();
@@ -58,7 +99,7 @@ function LocationStateProbe() {
 }
 
 function renderDetailPage(path: InitialEntry = "/courses/crs_123") {
-  render(
+  return render(
     <MantineProvider>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
@@ -84,9 +125,26 @@ function successResponse(data: unknown, requestId = "req_1") {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 describe("CourseDetailPage", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("keeps course detail source copy readable instead of unicode escapes or mojibake", () => {
+    expect(courseDetailSource).not.toMatch(/\\u[0-9a-fA-F]{4}/);
+    expect(courseDetailSource).not.toContain("璺?");
+    expect(courseDetailSource).toContain('placeholder="输入你的问题..."');
   });
 
   it("renders course header and reserved workspace sections", async () => {
@@ -114,12 +172,101 @@ describe("CourseDetailPage", () => {
     expect(screen.getByText("王老师")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资料区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "生成内容区" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "AI 生成内容区" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "制定学习计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/new");
     expect(screen.queryByRole("button", { name: "查看今日待办（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByText("生成入口")).not.toBeInTheDocument();
     expect(screen.queryByText("保存入口")).not.toBeInTheDocument();
+  });
+
+  it("shows readable course terms in the detail header without rendering the description", async () => {
+    let courseRequestCount = 0;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+
+      courseRequestCount += 1;
+      return Promise.resolve(successResponse({
+        ...course,
+        description: "Do not render this description",
+        name: courseRequestCount === 1 ? "Course A" : "Course B",
+        teacher: "Teacher A",
+        term: courseRequestCount === 1 ? "2026-2027-AUTUMN" : "2026-2027-SPRING",
+      }));
+    }));
+
+    const view = renderDetailPage();
+
+    expect(await screen.findByRole("heading", { name: "Course A" })).toBeInTheDocument();
+    expect(screen.getByText("2026-2027 秋季")).toBeInTheDocument();
+    expect(screen.getByText("Teacher A")).toBeInTheDocument();
+    expect(screen.queryByText("Do not render this description")).not.toBeInTheDocument();
+    expect(screen.queryByText("课程已创建")).not.toBeInTheDocument();
+
+    view.unmount();
+    renderDetailPage();
+
+    expect(await screen.findByRole("heading", { name: "Course B" })).toBeInTheDocument();
+    expect(screen.getByText("2026-2027 春季")).toBeInTheDocument();
+    expect(screen.queryByText("2026-2027-SPRING")).not.toBeInTheDocument();
+  });
+
+  it("shows the latest study plan as a linked summary with calendar access", async () => {
+    const olderPlan = {
+      ...studyPlan,
+      id: "plan_old",
+      title: "旧学习计划",
+      created_at: "2026-07-09T12:00:00+00:00",
+      updated_at: "2026-07-10T12:00:00+00:00",
+    };
+    const latestPlan = {
+      ...studyPlan,
+      id: "plan_latest",
+      title: "最新学习计划",
+      start_date: "2026-07-13",
+      end_date: "2026-07-19",
+      created_at: "2026-07-11T12:00:00+00:00",
+      updated_at: "2026-07-12T12:00:00+00:00",
+    };
+
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([olderPlan, latestPlan], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage();
+
+    const summaryLink = await screen.findByRole("link", { name: /查看学习计划 最新学习计划/ });
+    expect(summaryLink).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_latest");
+    expect(summaryLink).toHaveTextContent("2026-07-13 - 2026-07-19");
+    expect(screen.queryByText("旧学习计划")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "新建学习计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/new");
+    expect(screen.getByRole("link", { name: "查看更多" })).toHaveAttribute("href", "/calendar?courseId=crs_123");
   });
 
   it("opens a dismissible upload prompt after creating a course", async () => {
@@ -168,6 +315,12 @@ describe("CourseDetailPage", () => {
       ],
       user_message_id: "msg_user",
     };
+    const markdownAnswer = {
+      ...answer,
+      answer_text: "**模型**用途：\n\n- 描述现象\n- 解释规律",
+      assistant_message_id: "msg_assistant_2",
+      user_message_id: "msg_user_2",
+    };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
@@ -183,7 +336,8 @@ describe("CourseDetailPage", () => {
         return Promise.resolve(successResponse([], "req_conversations"));
       }
       if (url.endsWith("/qa/questions") && init?.method === "POST") {
-        return Promise.resolve(successResponse(answer, "req_answer"));
+        const body = JSON.parse(String(init.body));
+        return Promise.resolve(successResponse(body.question.includes("第二") ? markdownAnswer : answer, "req_answer"));
       }
 
       return Promise.resolve(successResponse(course));
@@ -194,7 +348,7 @@ describe("CourseDetailPage", () => {
 
     expect(await screen.findByText("期末复习提纲")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看生成内容 期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
-    expect(screen.getByRole("link", { name: "高等数学期末计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_1");
+    expect(screen.getByRole("link", { name: "查看学习计划 高等数学期末计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_1");
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {
       target: { value: "什么是模型？" },
@@ -203,6 +357,8 @@ describe("CourseDetailPage", () => {
 
     expect(await screen.findByText("模型用于描述和解释现象。")).toBeInTheDocument();
     expect(screen.getByText("理论模型概述.pdf · 12")).toBeInTheDocument();
+    expect(screen.getByText("引用来源")).toBeInTheDocument();
+    expect(screen.queryByText(/寮|鏉|簮|锟/)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/v1/courses/crs_123/qa/questions",
@@ -217,6 +373,280 @@ describe("CourseDetailPage", () => {
         }),
       );
     });
+  });
+
+  it("syncs the visible material scope and question payload as selections change", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders")) {
+        return Promise.resolve(successResponse([], "req_folders"));
+      }
+      if (url.endsWith("/materials")) {
+        return Promise.resolve(successResponse(parsedMaterials, "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      if (url.endsWith("/qa/questions") && init?.method === "POST") {
+        return Promise.resolve(successResponse({
+          answer_text: "回答",
+          answer_type: "no_source",
+          assistant_message_id: `assistant_${fetchMock.mock.calls.length}`,
+          conversation_id: "cnv_1",
+          source_citations: [],
+          user_message_id: `user_${fetchMock.mock.calls.length}`,
+        }, "req_answer"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetailPage();
+
+    expect(await screen.findByText("资料范围：当前课程全部已解析资料")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("输入你的问题"), { target: { value: "默认全资料问答" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/qa/questions",
+        expect.objectContaining({
+          body: JSON.stringify({
+            conversation_id: null,
+            material_scope: { include_all_parsed_materials: true, material_ids: [] },
+            question: "默认全资料问答",
+            source_page: "course_detail",
+          }),
+          method: "POST",
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "全部已解析资料" }));
+    expect(screen.getByText("资料范围：当前课程全部已解析资料")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("输入你的问题"), { target: { value: "全资料问答" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/qa/questions",
+        expect.objectContaining({
+          body: JSON.stringify({
+            conversation_id: "cnv_1",
+            material_scope: { include_all_parsed_materials: true, material_ids: [] },
+            question: "全资料问答",
+            source_page: "course_detail",
+          }),
+          method: "POST",
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择资料 计算机网络期末考试.pdf" }));
+    expect(screen.getByText("资料范围：已选择")).toBeInTheDocument();
+    expect(screen.getByText("共 1 份资料")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("输入你的问题"), { target: { value: "部分资料问答" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/qa/questions",
+        expect.objectContaining({
+          body: JSON.stringify({
+            conversation_id: "cnv_1",
+            material_scope: { include_all_parsed_materials: false, material_ids: ["mat_2"] },
+            question: "部分资料问答",
+            source_page: "course_detail",
+          }),
+          method: "POST",
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择资料 演示资料.md" }));
+    expect(screen.getByText("资料范围：当前课程全部已解析资料")).toBeInTheDocument();
+  });
+
+  it("keeps a continuous qa conversation and renders assistant markdown", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      if (url.endsWith("/qa/questions") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body));
+        return Promise.resolve(successResponse({
+          answer_text: body.question.includes("Second")
+            ? "# Review focus\n\n**Model** uses:\n\n- describe facts\n- explain rules\n\n```ts\nconst model = \"network\";\n```\n\n<script>alert('xss')</script>"
+            : "First answer",
+          answer_type: "grounded",
+          assistant_message_id: body.question.includes("Second") ? "msg_assistant_2" : "msg_assistant_1",
+          conversation_id: "cnv_1",
+          source_citations: [],
+          user_message_id: body.question.includes("Second") ? "msg_user_2" : "msg_user_1",
+        }, "req_answer"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = renderDetailPage();
+    const textbox = await screen.findByRole("textbox");
+    const sendButton = view.container.querySelector(".course-detail-send-button") as HTMLElement;
+
+    fireEvent.change(textbox, { target: { value: "First question" } });
+    fireEvent.click(sendButton);
+    expect(await screen.findByText("First question")).toBeInTheDocument();
+    expect(await screen.findByText("First answer")).toBeInTheDocument();
+
+    fireEvent.change(textbox, { target: { value: "Second question" } });
+    fireEvent.click(sendButton);
+    expect(await screen.findByText("Second question")).toBeInTheDocument();
+    expect(screen.getByText("First question")).toBeInTheDocument();
+    expect(screen.getByText("First answer")).toBeInTheDocument();
+    expect(screen.getByText("Model").tagName).toBe("STRONG");
+    expect(screen.getByText("describe facts").tagName).toBe("LI");
+    expect(screen.getByText("explain rules").tagName).toBe("LI");
+    expect(screen.getByRole("heading", { level: 1, name: "Review focus" })).toBeInTheDocument();
+    expect(screen.getByText('const model = "network";').tagName).toBe("CODE");
+    expect(document.querySelector("script")).not.toBeInTheDocument();
+  });
+
+  it("shows sending state without a thinking row", async () => {
+    const pendingAnswer = deferred<Response>();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      if (url.endsWith("/qa/questions") && init?.method === "POST") {
+        return pendingAnswer.promise;
+      }
+
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = renderDetailPage();
+    const textbox = await screen.findByRole("textbox");
+    const sendButton = view.container.querySelector(".course-detail-send-button") as HTMLButtonElement;
+
+    fireEvent.change(textbox, { target: { value: "Pending question" } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => expect(screen.getAllByText("Pending question").length).toBeGreaterThanOrEqual(2));
+    expect(sendButton).toBeDisabled();
+    expect(screen.queryByText("AI 助教正在思考...")).not.toBeInTheDocument();
+
+    pendingAnswer.resolve(successResponse({
+      answer_text: "Done",
+      answer_type: "grounded",
+      assistant_message_id: "msg_assistant_pending",
+      conversation_id: "cnv_1",
+      source_citations: [],
+      user_message_id: "msg_user_pending",
+    }, "req_answer"));
+
+    expect(await screen.findByText("Done")).toBeInTheDocument();
+  });
+
+  it("keeps the qa input anchored while long input scrolls inside the textarea", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    }));
+
+    const view = renderDetailPage();
+    const qaRegion = await screen.findByRole("region", { name: "问答区" });
+    const textbox = screen.getByLabelText("输入你的问题");
+    const inputArea = view.container.querySelector(".course-detail-qa-input-area");
+    const conversation = view.container.querySelector(".course-detail-conversation");
+
+    expect(qaRegion).toHaveClass("course-detail-qa");
+    expect(inputArea).toBeInTheDocument();
+    expect(conversation).toBeInTheDocument();
+    expect(textbox).toHaveAttribute("rows", "2");
+
+    fireEvent.change(textbox, {
+      target: { value: Array.from({ length: 20 }, (_, index) => `第 ${index + 1} 行长输入`).join("\n") },
+    });
+
+    expect((textbox as HTMLTextAreaElement).value).toContain("第 20 行长输入");
+    expect(inputArea).toContainElement(textbox);
+  });
+
+  it("keeps the user message and shows an assistant error bubble when qa fails", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      if (url.endsWith("/qa/questions") && init?.method === "POST") {
+        return Promise.reject(new Error("Network failed"));
+      }
+
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const view = renderDetailPage();
+    const textbox = await screen.findByRole("textbox");
+    const sendButton = view.container.querySelector(".course-detail-send-button") as HTMLElement;
+
+    fireEvent.change(textbox, { target: { value: "失败时不要丢掉我" } });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => expect(screen.getAllByText("失败时不要丢掉我").length).toBeGreaterThanOrEqual(2));
+    expect(await screen.findByText("回答生成失败，请稍后重试。")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("renders loading and error states", async () => {

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -17,6 +17,7 @@ import {
 } from "@mantine/core";
 import {
   IconBrain,
+  IconCalendarStats,
   IconCards,
   IconChecklist,
   IconCube,
@@ -31,6 +32,7 @@ import {
   IconSun,
   IconUser,
 } from "@tabler/icons-react";
+import ReactMarkdown from "react-markdown";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
@@ -39,12 +41,13 @@ import {
   askCourseQuestion,
   generateCourseContent,
   listCourseConversations,
+  listConversationMessages,
   listGeneratedContents,
 } from "../features/course-workspace/api";
-import type { CourseAnswer, GeneratedContent, StudyPlan } from "../features/course-workspace/types";
+import type { CourseAnswer, GeneratedContent, Message, SourceCitation, StudyPlan } from "../features/course-workspace/types";
 import { fetchCourse } from "../features/courses/api";
 import { MaterialWorkspace } from "../features/materials/MaterialWorkspace";
-import type { MaterialScope } from "../features/materials/types";
+import type { Material, MaterialScope } from "../features/materials/types";
 import { listStudyPlans } from "../features/study-plans/api";
 import type { Course } from "../types/course";
 import "./course-detail.css";
@@ -55,6 +58,24 @@ function errorMessage(error: unknown): string {
   }
 
   return "课程加载失败";
+}
+
+function readableCourseTerm(term: string | null | undefined): string | null {
+  if (!term) {
+    return null;
+  }
+
+  return term
+    .replace(/[-_\s]?AUTUMN$/i, " 秋季")
+    .replace(/[-_\s]?SPRING$/i, " 春季")
+    .trim();
+}
+
+function resizeQuestionTextarea(textarea: HTMLTextAreaElement) {
+  const maxHeight = 124;
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
 }
 
 const toolItems = [
@@ -112,6 +133,7 @@ function CourseTopBar({ course }: { course: Course }) {
   const { isDarkMode, toggleTheme } = useCourseNexusTheme();
   const ThemeIcon = isDarkMode ? IconSun : IconMoon;
   const themeLabel = isDarkMode ? "切换为日间模式" : "切换为夜间模式";
+  const termLabel = readableCourseTerm(course.term);
 
   return (
     <Paper className="course-detail-topbar" component="header" radius={0}>
@@ -122,50 +144,21 @@ function CourseTopBar({ course }: { course: Course }) {
           </ActionIcon>
           <Stack className="course-detail-heading" gap={2}>
             <Group gap="sm" wrap="nowrap">
-              <Text className="course-detail-title" fw={760}>
-                课程详情
-              </Text>
-              <Text c="dimmed" fw={650} size="xl">
-                /
-              </Text>
-              <Title className="course-detail-course-name" order={1}>
-                {course.name}
-              </Title>
+              <Text className="course-detail-title" fw={760}>{"课程详情"}</Text>
+              <Text c="dimmed" fw={650} size="xl">/</Text>
+              <Title className="course-detail-course-name" order={1}>{course.name}</Title>
             </Group>
-            <Text className="course-detail-description" c="dimmed" size="sm">
-              {course.description?.trim() || "课程简介待补充"}
-            </Text>
           </Stack>
           <Group className="course-detail-topbar-meta" gap="xs" wrap="nowrap">
-            <Badge color="blue" variant="light">
-              {course.status === "active" ? "课程已创建" : course.status}
-            </Badge>
-            {course.term ? <Badge color="gray" variant="light">{course.term}</Badge> : null}
-            <Text c="dimmed" size="sm">
-              {course.teacher ?? "未填写教师"}
-            </Text>
+            {termLabel ? <Badge color="gray" variant="light">{termLabel}</Badge> : null}
+            <Text c="dimmed" size="sm">{course.teacher ?? "未填写教师"}</Text>
           </Group>
         </Group>
-
         <Group gap="sm" wrap="nowrap">
-          <ActionIcon
-            aria-label={themeLabel}
-            className="course-detail-theme-single-button"
-            onClick={toggleTheme}
-            radius="md"
-            size={44}
-            variant="default"
-          >
+          <ActionIcon aria-label={themeLabel} className="course-detail-theme-single-button" onClick={toggleTheme} radius="md" size={44} variant="default">
             <ThemeIcon size={22} stroke={1.8} />
           </ActionIcon>
-          <ActionIcon
-            aria-label="打开个人中心（待接入）"
-            className="course-detail-user-button"
-            disabled
-            radius="xl"
-            size={48}
-            variant="default"
-          >
+          <ActionIcon aria-label="打开个人中心（待接入）" className="course-detail-user-button" disabled radius="xl" size={48} variant="default">
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
         </Group>
@@ -175,56 +168,34 @@ function CourseTopBar({ course }: { course: Course }) {
 }
 
 function TodayTodoCard({ courseId, plans }: { courseId: string; plans: StudyPlan[] }) {
-  const activePlan = plans[0];
+  const activePlan = [...plans].sort((left, right) => {
+    const leftTime = Date.parse(left.updated_at || left.created_at);
+    const rightTime = Date.parse(right.updated_at || right.created_at);
+    return rightTime - leftTime;
+  })[0];
 
   return (
     <Paper className="course-detail-card course-detail-todo-card" radius="md" withBorder>
       <Group justify="space-between" wrap="nowrap">
-        <Title order={2}>学习计划</Title>
+        <Title order={2}>{"学习计划"}</Title>
       </Group>
-      <Stack gap="xs">
+      <Stack className="course-detail-plan-content" gap="sm">
         {activePlan ? (
-          <>
-            <Text
-              className="course-detail-plan-link"
-              component={Link}
-              fw={700}
-              size="sm"
-              to={`/courses/${courseId}/study-plans/${activePlan.id}`}
-            >
-              {activePlan.title}
-            </Text>
-            <Text c="dimmed" size="sm">
-              {activePlan.start_date} - {activePlan.end_date} · {activePlan.status}
-            </Text>
-            <Button
-              className="course-detail-plan-button"
-              component={Link}
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              to={`/courses/${courseId}/study-plans/new`}
-              variant="light"
-            >
-              新建学习计划
-            </Button>
-          </>
+          <Box aria-label={`查看学习计划 ${activePlan.title}`} className="course-detail-plan-summary" component={Link} to={`/courses/${courseId}/study-plans/${activePlan.id}`}>
+            <Text className="course-detail-plan-title" fw={700} size="sm">{activePlan.title}</Text>
+            <Text c="dimmed" size="sm">{activePlan.start_date} - {activePlan.end_date} · {activePlan.status}</Text>
+          </Box>
         ) : (
-          <>
-            <Text c="dimmed" size="sm">
-              当前课程还没有学习计划
-            </Text>
-            <Button
-              className="course-detail-plan-button"
-              component={Link}
-              leftSection={<IconPlus size={16} />}
-              size="sm"
-              to={`/courses/${courseId}/study-plans/new`}
-              variant="light"
-            >
-              制定学习计划
-            </Button>
-          </>
+          <Text c="dimmed" size="sm">{"当前课程还没有学习计划"}</Text>
         )}
+        <Group className="course-detail-plan-actions" gap="xs" justify="flex-end">
+          <Button className="course-detail-plan-button" component={Link} leftSection={<IconPlus size={16} />} size="sm" to={`/courses/${courseId}/study-plans/new`} variant="light">
+            {activePlan ? "新建学习计划" : "制定学习计划"}
+          </Button>
+          <Button className="course-detail-plan-more-button" component={Link} leftSection={<IconCalendarStats size={16} />} size="sm" to={`/calendar?courseId=${courseId}`} variant="filled">
+            {"查看更多"}
+          </Button>
+        </Group>
       </Stack>
     </Paper>
   );
@@ -235,15 +206,55 @@ function formatCitation(citation: CourseAnswer["source_citations"][number]): str
   return `${citation.material_name} · ${location}`;
 }
 
+interface QaMessage {
+  answerType?: string | null;
+  citations?: SourceCitation[];
+  content: string;
+  id: string;
+  role: "assistant" | "user";
+  status?: "done" | "error";
+}
+
+function qaMessageFromBackend(message: Message): QaMessage {
+  return {
+    answerType: message.answer_type,
+    content: message.content,
+    id: message.id,
+    role: message.role === "assistant" ? "assistant" : "user",
+    status: "done",
+  };
+}
+
+function materialScopeNames(scope: MaterialScope, parsedMaterials: Material[]): string[] {
+  if (scope.include_all_parsed_materials) {
+    return parsedMaterials.map((material) => material.name);
+  }
+
+  const selected = new Set(scope.material_ids);
+  return parsedMaterials.filter((material) => selected.has(material.id)).map((material) => material.name);
+}
+
+function materialScopeForRequest(scope: MaterialScope): MaterialScope {
+  if (scope.include_all_parsed_materials) {
+    return { include_all_parsed_materials: true, material_ids: [] };
+  }
+
+  return scope;
+}
+
 function QaWorkspace({
-  answer,
   isPending,
+  materialScope,
+  materialScopeNames: selectedMaterialNames,
+  messages,
   onQuestionChange,
   onSendQuestion,
   question,
 }: {
-  answer: CourseAnswer | null;
   isPending: boolean;
+  materialScope: MaterialScope;
+  materialScopeNames: string[];
+  messages: QaMessage[];
   onQuestionChange: (value: string) => void;
   onSendQuestion: () => void;
   question: string;
@@ -254,72 +265,29 @@ function QaWorkspace({
     <Paper aria-label="问答区" className="course-detail-card course-detail-qa" component="section" radius="md" withBorder>
       <Group align="flex-start" justify="space-between">
         <Stack gap={4}>
-          <Title order={2}>问答交互</Title>
-          <Text c="dimmed" size="sm">
-            基于左侧已解析资料范围提问
-          </Text>
+          <Title order={2}>{"问答交互"}</Title>
+          <Text c="dimmed" size="sm">{"基于左侧已解析资料范围提问"}</Text>
         </Stack>
-        <Badge color="teal" variant="light">
-          默认资料范围
-        </Badge>
+        <Badge color="teal" variant="light">{"默认资料范围"}</Badge>
       </Group>
-
-      {answer ? (
-        <Box className="course-detail-answer">
-          <Stack gap="sm">
-            <Group gap="xs">
-              <Badge color={answer.answer_type === "grounded" ? "teal" : "gray"} variant="light">
-                {answer.answer_type === "grounded" ? "基于资料" : "无直接来源"}
-              </Badge>
-              <Text c="dimmed" size="sm">AI 助教</Text>
-            </Group>
-            <Text className="course-detail-answer-text">{answer.answer_text}</Text>
-            {answer.source_citations.length > 0 ? (
-              <Stack className="course-detail-citations" gap="xs">
-                <Text fw={700} size="sm">引用来源</Text>
-                {answer.source_citations.map((citation) => (
-                  <Text c="dimmed" key={`${citation.material_id ?? citation.material_name}-${citation.chunk_id ?? citation.hit_text}`} size="sm">
-                    {formatCitation(citation)}
-                  </Text>
-                ))}
-              </Stack>
-            ) : null}
-          </Stack>
-        </Box>
-      ) : (
-        <Box className="course-detail-qa-empty">
-          <IconMessageCircle2 size={42} stroke={1.6} />
-          <Stack gap={4}>
-            <Text fw={700}>选择资料后开始提问</Text>
-            <Text c="dimmed" size="sm">
-              上传并解析资料后，可围绕选定资料提问；回答会展示可追溯引用。
-            </Text>
-          </Stack>
-        </Box>
-      )}
-
-      <Divider />
-
-      <Stack gap="xs">
-        <Text c="dimmed" size="sm">
-          资料范围：当前课程全部已解析资料
-        </Text>
-        <Group align="flex-end" className="course-detail-question-row" wrap="nowrap">
-          <Textarea
-            aria-label="输入你的问题"
-            className="course-detail-question-input"
-            onChange={(event) => onQuestionChange(event.currentTarget.value)}
-            placeholder="输入你的问题..."
-            rows={2}
-            value={question}
-          />
-          <ActionIcon aria-label="发送问题" className="course-detail-send-button" disabled={!canSend} loading={isPending} onClick={onSendQuestion} radius="xl" size={54} variant="filled">
-            <IconSend2 size={24} stroke={1.8} />
-          </ActionIcon>
-        </Group>
-        <Text c="dimmed" size="xs">
-          内容由 AI 生成，仅供学习参考；引用来源用于回到原资料核对。
-        </Text>
+      <Stack className="course-detail-conversation" gap="sm">
+        {messages.length > 0 || isPending ? messages.map((message) => (
+          <Box className={`course-detail-message course-detail-message-${message.role}${message.status === "error" ? " course-detail-message-error" : ""}`} key={message.id}>
+            <Stack gap="xs">
+              <Group gap="xs">
+                {message.role === "assistant" ? <Badge color={message.status === "error" ? "red" : message.answerType === "grounded" ? "teal" : "gray"} variant="light">{message.status === "error" ? "回答失败" : message.answerType === "grounded" ? "基于资料" : "AI 助教"}</Badge> : <Badge color="blue" variant="light">{"你的问题"}</Badge>}
+              </Group>
+              <Box className="course-detail-answer-text">{message.role === "assistant" ? <ReactMarkdown>{message.content}</ReactMarkdown> : <p>{message.content}</p>}</Box>
+              {message.role === "assistant" && message.citations && message.citations.length > 0 ? <Stack className="course-detail-citations" gap="xs"><Text fw={700} size="sm">{"引用来源"}</Text>{message.citations.map((citation) => <Text c="dimmed" key={`${citation.material_id ?? citation.material_name}-${citation.chunk_id ?? citation.hit_text}`} size="sm">{formatCitation(citation)}</Text>)}</Stack> : null}
+            </Stack>
+          </Box>
+        )) : <Box className="course-detail-qa-empty"><IconMessageCircle2 size={42} stroke={1.6} /><Stack gap={4}><Text fw={700}>{"选择资料后开始提问"}</Text><Text c="dimmed" size="sm">{"上传并解析资料后，可围绕选定资料提问。"}</Text></Stack></Box>}
+      </Stack>
+      <Stack className="course-detail-qa-input-area" gap="xs">
+        <Divider />
+        <Text c="dimmed" size="sm">{materialScope.include_all_parsed_materials ? "资料范围：当前课程全部已解析资料" : <span className="course-detail-scope-line"><span className="course-detail-scope-prefix">{"资料范围：已选择"}</span><span className="course-detail-scope-names" title={selectedMaterialNames.join(" / ")}>{selectedMaterialNames.join(" / ")}</span><span className="course-detail-scope-count">{"共 "}{materialScope.material_ids.length}{" 份资料"}</span></span>}</Text>
+        <Group align="flex-end" className="course-detail-question-row" wrap="nowrap"><Textarea aria-label="输入你的问题" className="course-detail-question-input" onChange={(event) => { resizeQuestionTextarea(event.currentTarget); onQuestionChange(event.currentTarget.value); }} placeholder="输入你的问题..." rows={2} value={question} /><ActionIcon aria-label="发送问题" className="course-detail-send-button" disabled={!canSend} loading={isPending} onClick={onSendQuestion} radius="xl" size={54} variant="filled"><IconSend2 size={24} stroke={1.8} /></ActionIcon></Group>
+        <Text c="dimmed" size="xs">{"内容由 AI 生成，仅供学习参考。"}</Text>
       </Stack>
     </Paper>
   );
@@ -337,128 +305,70 @@ function ToolCard({
   const ToolIcon = item.icon;
   const canGenerate = Boolean(item.type);
   return (
-    <Card
-      aria-label={canGenerate ? `生成 ${item.label}` : `${item.label}（待接入）`}
-      className={`course-detail-tool-card course-detail-tool-card-${item.tone}`}
-      component="button"
-      disabled={!canGenerate || isGenerating}
-      onClick={() => item.type && onGenerate(item.type)}
-      padding="md"
-      radius="md"
-      type="button"
-      withBorder
-    >
+    <Card aria-label={canGenerate ? `生成 ${item.label}` : `${item.label} 暂未接入`} className={`course-detail-tool-card course-detail-tool-card-${item.tone}`} component="button" disabled={!canGenerate || isGenerating} onClick={() => item.type && onGenerate(item.type)} padding="md" radius="md" type="button" withBorder>
       <Group className="course-detail-tool-head" justify="space-between" wrap="nowrap">
-        <Box className="course-detail-tool-icon">
-          <ToolIcon size={30} stroke={1.65} />
-        </Box>
-        <Stack gap={3}>
-          <Text fw={750}>{item.label}</Text>
-          <Text c="dimmed" size="sm">{item.description}</Text>
-        </Stack>
+        <Box className="course-detail-tool-icon"><ToolIcon size={30} stroke={1.65} /></Box>
+        <Stack gap={3}><Text fw={750}>{item.label}</Text><Text c="dimmed" size="sm">{item.description}</Text></Stack>
       </Group>
     </Card>
   );
 }
 
-function ToolsPanel({
-  generatingType,
-  onGenerate,
-}: {
-  generatingType: string | null;
-  onGenerate: (contentType: string) => void;
-}) {
+function ToolsPanel({ generatingType, onGenerate }: { generatingType: string | null; onGenerate: (contentType: string) => void }) {
   return (
-    <Paper aria-label="生成内容区" className="course-detail-card course-detail-tools" component="section" radius="md" withBorder>
-      <Title order={2}>功能模块</Title>
-      <Box className="course-detail-tool-grid">
-        {toolItems.map((item) => (
-          <ToolCard isGenerating={generatingType === item.type} item={item} key={item.label} onGenerate={onGenerate} />
-        ))}
-      </Box>
+    <Paper aria-label="学习工具区" className="course-detail-card course-detail-tools" component="section" radius="md" withBorder>
+      <Title order={2}>{"学习工具"}</Title>
+      <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard isGenerating={generatingType === item.type} item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
     </Paper>
   );
 }
 
 function contentTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    flashcard: "Flashcards",
-    knowledge_list: "知识点",
-    mindmap: "Mind Map",
-    note: "学习笔记",
-    outline: "复习提纲",
-    quiz: "Quiz",
-  };
+  const labels: Record<string, string> = { flashcard: "Flashcards", knowledge_list: "知识点清单", mindmap: "Mind Map", note: "学习笔记", outline: "复习提纲", quiz: "Quiz" };
   return labels[type] ?? type;
 }
 
 function GeneratedContentPanel({ contents }: { contents: GeneratedContent[] }) {
   return (
-    <Paper aria-label="AI 生成内容" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
-      <Title order={2}>AI 生成内容</Title>
+    <Paper aria-label="AI 生成内容区" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
+      <Title order={2}>{"AI 生成内容"}</Title>
       {contents.length > 0 ? (
-        <Stack className="course-detail-generated-list" gap="xs">
-          {contents.map((content) => (
-            <Paper
-              aria-label={`查看生成内容 ${content.title}`}
-              className="course-detail-generated-item"
-              component={Link}
-              key={content.id}
-              radius="md"
-              to={`/generated-contents/${content.id}`}
-              withBorder
-            >
-              <Group justify="space-between" wrap="nowrap">
-                <Stack gap={2}>
-                  <Text fw={700} size="sm">
-                    {content.title}
-                  </Text>
-                  <Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text>
-                </Stack>
-                <Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">
-                  {content.generation_status}
-                </Badge>
-              </Group>
-            </Paper>
-          ))}
-        </Stack>
+        <Stack className="course-detail-generated-list" gap="xs">{contents.map((content) => <Paper aria-label={`查看生成内容 ${content.title}`} className="course-detail-generated-item" component={Link} key={content.id} radius="md" to={`/generated-contents/${content.id}`} withBorder><Group justify="space-between" wrap="nowrap"><Stack gap={2}><Text fw={700} size="sm">{content.title}</Text><Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text></Stack><Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">{content.generation_status}</Badge></Group></Paper>)}</Stack>
       ) : (
-        <Stack className="course-detail-generated-empty" gap="xs">
-          <IconSparkles size={34} stroke={1.6} />
-          <Text fw={700}>还没有生成内容</Text>
-          <Text c="dimmed" size="sm">
-            使用右侧工具生成内容，或将问答回答保存为笔记后，会在这里形成记录。
-          </Text>
-        </Stack>
+        <Stack className="course-detail-generated-empty" gap="xs"><IconSparkles size={34} stroke={1.6} /><Text fw={700}>{"还没有生成内容"}</Text><Text c="dimmed" size="sm">{"选择左侧资料范围后，可使用学习工具生成内容。"}</Text></Stack>
       )}
     </Paper>
   );
 }
 
 interface CourseDetailWorkbenchProps {
-  answer?: CourseAnswer | null;
   course: Course;
   generatedContents?: GeneratedContent[];
   generatingType?: string | null;
   isQuestionPending?: boolean;
   materialPanel: ReactNode;
+  materialScope?: MaterialScope;
+  materialScopeNames?: string[];
   onGenerate?: (contentType: string) => void;
   onQuestionChange?: (value: string) => void;
   onSendQuestion?: () => void;
+  qaMessages?: QaMessage[];
   question?: string;
   studyPlans?: StudyPlan[];
 }
 
 export function CourseDetailWorkbench({
-  answer = null,
   course,
   generatedContents = [],
   generatingType = null,
   isQuestionPending = false,
   materialPanel,
+  materialScope = { include_all_parsed_materials: true, material_ids: [] },
+  materialScopeNames = [],
   onGenerate = () => undefined,
   onQuestionChange = () => undefined,
   onSendQuestion = () => undefined,
+  qaMessages = [],
   question = "",
   studyPlans = [],
 }: CourseDetailWorkbenchProps) {
@@ -476,8 +386,10 @@ export function CourseDetailWorkbench({
 
           <Stack className="course-detail-center" gap="sm">
             <QaWorkspace
-              answer={answer}
               isPending={isQuestionPending}
+              materialScope={materialScope}
+              materialScopeNames={materialScopeNames}
+              messages={qaMessages}
               onQuestionChange={onQuestionChange}
               onSendQuestion={onSendQuestion}
               question={question}
@@ -508,13 +420,18 @@ export function CourseDetailPage() {
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<CourseAnswer | null>(null);
+  const [qaMessages, setQaMessages] = useState<QaMessage[]>([]);
   const [isQuestionPending, setIsQuestionPending] = useState(false);
   const [generatingType, setGeneratingType] = useState<string | null>(null);
   const [materialScope, setMaterialScope] = useState<MaterialScope>({
     include_all_parsed_materials: true,
     material_ids: [],
   });
+  const [parsedMaterials, setParsedMaterials] = useState<Material[]>([]);
+  const selectedMaterialNames = useMemo(
+    () => materialScopeNames(materialScope, parsedMaterials),
+    [materialScope, parsedMaterials],
+  );
 
   useEffect(() => {
     if (shouldOpenUploadPrompt) {
@@ -574,7 +491,23 @@ export function CourseDetailPage() {
         if (!ignore) {
           setGeneratedContents(nextGeneratedContents);
           setStudyPlans(nextStudyPlans);
-          setConversationId(conversations[0]?.id ?? null);
+          const nextConversationId = conversations[0]?.id ?? null;
+          setConversationId(nextConversationId);
+          if (nextConversationId) {
+            listConversationMessages(nextConversationId)
+              .then((messages) => {
+                if (!ignore) {
+                  setQaMessages(messages.map(qaMessageFromBackend));
+                }
+              })
+              .catch(() => {
+                if (!ignore) {
+                  setQaMessages([]);
+                }
+              });
+          } else {
+            setQaMessages([]);
+          }
         }
       })
       .catch((nextError: unknown) => {
@@ -595,19 +528,47 @@ export function CourseDetailPage() {
 
     setIsQuestionPending(true);
     setWorkspaceError(null);
+    const trimmedQuestion = question.trim();
+    const pendingUserMessage: QaMessage = {
+      content: trimmedQuestion,
+      id: `pending-${Date.now()}`,
+      role: "user",
+    };
+    setQaMessages((current) => [...current, pendingUserMessage]);
 
     try {
       const nextAnswer = await askCourseQuestion(course.id, {
         conversation_id: conversationId,
-        material_scope: materialScope,
-        question: question.trim(),
+        material_scope: materialScopeForRequest(materialScope),
+        question: trimmedQuestion,
         source_page: "course_detail",
       });
-      setAnswer(nextAnswer);
+      setQaMessages((current) => [
+        ...current.map((message) =>
+          message.id === pendingUserMessage.id ? { ...message, id: nextAnswer.user_message_id } : message,
+        ),
+        {
+          answerType: nextAnswer.answer_type,
+          citations: nextAnswer.source_citations,
+          content: nextAnswer.answer_text,
+          id: nextAnswer.assistant_message_id,
+          role: "assistant",
+          status: "done",
+        },
+      ]);
       setConversationId(nextAnswer.conversation_id);
       setQuestion("");
-    } catch (nextError) {
-      setWorkspaceError(errorMessage(nextError));
+    } catch {
+      setQaMessages((current) => [
+        ...current,
+        {
+          answerType: "error",
+          content: "回答生成失败，请稍后重试。",
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          status: "error",
+        },
+      ]);
     } finally {
       setIsQuestionPending(false);
     }
@@ -624,7 +585,7 @@ export function CourseDetailPage() {
     try {
       const content = await generateCourseContent(course.id, {
         content_type: contentType,
-        material_scope: materialScope,
+        material_scope: materialScopeForRequest(materialScope),
         parameters: {},
       });
       setGeneratedContents((current) => [content, ...current]);
@@ -642,7 +603,7 @@ export function CourseDetailPage() {
           <Skeleton height={34} width={280} />
         </Paper>
         <Box className="course-detail-loading" role="status">
-          <Text c="dimmed">正在加载课程...</Text>
+          <Text c="dimmed">{"正在加载课程工作台..."}</Text>
           <Skeleton height={120} radius="md" />
           <Skeleton height={420} radius="md" />
         </Box>
@@ -654,7 +615,7 @@ export function CourseDetailPage() {
     return (
       <Box className="course-detail-page">
         <Paper className="course-detail-topbar" component="header" radius={0}>
-          <Title className="course-detail-title" order={1}>课程详情</Title>
+          <Title className="course-detail-title" order={1}>{"课程详情加载失败"}</Title>
         </Paper>
         <Alert className="course-detail-error" color="red" role="alert" title="课程加载失败" variant="light">
           {error ?? "课程不存在"}
@@ -666,12 +627,11 @@ export function CourseDetailPage() {
   return (
     <>
       {workspaceError ? (
-        <Alert className="course-detail-workspace-error" color="red" role="alert" title="课程工作区加载失败" variant="light">
+        <Alert className="course-detail-workspace-error" color="red" role="alert" title="课程工作台操作失败" variant="light">
           {workspaceError}
         </Alert>
       ) : null}
       <CourseDetailWorkbench
-        answer={answer}
         course={course}
         generatedContents={generatedContents}
         generatingType={generatingType}
@@ -681,12 +641,16 @@ export function CourseDetailPage() {
             courseId={course.id}
             materialScope={materialScope}
             onMaterialScopeChange={setMaterialScope}
+            onParsedMaterialsChange={setParsedMaterials}
             openUploadPrompt={shouldOpenUploadPromptOnce}
           />
         )}
+        materialScope={materialScope}
+        materialScopeNames={selectedMaterialNames}
         onGenerate={handleGenerateContent}
         onQuestionChange={setQuestion}
         onSendQuestion={handleSendQuestion}
+        qaMessages={qaMessages}
         question={question}
         studyPlans={studyPlans}
       />

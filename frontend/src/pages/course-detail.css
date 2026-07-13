@@ -107,8 +107,44 @@
   min-height: 104px;
 }
 
+.course-detail-plan-content {
+  margin-top: 10px;
+}
+
+.course-detail-plan-summary {
+  border: 1px solid #2f80ed;
+  border-radius: 8px;
+  background: #ffffff;
+  color: inherit;
+  display: block;
+  margin: 0;
+  padding: 12px 14px;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.course-detail-plan-summary:hover {
+  background: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(47, 128, 237, 0.16);
+}
+
+.course-detail-plan-title {
+  color: #1f2937;
+}
+
+.course-detail-plan-summary:hover .course-detail-plan-title {
+  color: #2563eb;
+}
+
+.course-detail-plan-actions {
+  width: 100%;
+}
+
 .course-detail-plan-button {
-  align-self: flex-start;
   background: #e8f2ff;
   color: #2563eb;
 }
@@ -117,13 +153,13 @@
   background: #dbeafe;
 }
 
-.course-detail-plan-link {
-  color: #1f2937;
-  text-decoration: none;
+.course-detail-plan-more-button {
+  background: #2563eb;
+  color: #ffffff;
 }
 
-.course-detail-plan-link:hover {
-  color: #2563eb;
+.course-detail-plan-more-button:hover {
+  background: #1d4ed8;
 }
 
 .course-detail-material-card {
@@ -297,16 +333,16 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
 .course-detail-qa-empty {
   flex: 1;
-  min-height: 300px;
+  min-height: 100%;
   display: grid;
   place-items: center;
-  border: 1px dashed #bfdbfe;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   background:
     linear-gradient(135deg, rgba(232, 242, 255, 0.78), rgba(230, 255, 250, 0.54)),
     #fbfdff;
@@ -329,10 +365,82 @@
   padding: 18px;
 }
 
+.course-detail-conversation {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 16px;
+}
+
+.course-detail-message {
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.course-detail-message-user {
+  margin-left: 48px;
+  background: #eef6ff;
+}
+
+.course-detail-message-assistant {
+  margin-right: 32px;
+  background: #fff;
+}
+
+.course-detail-message-error {
+  border-color: #ffd8d8;
+  background: #fff7f7;
+}
+
 .course-detail-answer-text {
   color: #1f2937;
   line-height: 1.75;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.course-detail-answer-text p {
+  margin: 0;
+}
+
+.course-detail-answer-text h1,
+.course-detail-answer-text h2,
+.course-detail-answer-text h3,
+.course-detail-answer-text h4,
+.course-detail-answer-text h5,
+.course-detail-answer-text h6 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.course-detail-answer-text p + p,
+.course-detail-answer-text ul,
+.course-detail-answer-text pre {
+  margin-top: 8px;
+}
+
+.course-detail-answer-text ul {
+  margin-bottom: 0;
+  padding-left: 20px;
+  white-space: normal;
+}
+
+.course-detail-answer-text pre {
+  margin-bottom: 0;
+  overflow: auto;
+  border: 1px solid #dbe4ee;
+  border-radius: 6px;
+  background: #f6f8fb;
+  padding: 10px 12px;
+}
+
+.course-detail-answer-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
 }
 
 .course-detail-citations {
@@ -346,14 +454,44 @@
   width: 100%;
 }
 
+.course-detail-qa-input-area {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+.course-detail-scope-line {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.course-detail-scope-prefix,
+.course-detail-scope-count {
+  flex: 0 0 auto;
+}
+
+.course-detail-scope-names {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .course-detail-question-input {
   flex: 1;
 }
 
 .course-detail-question-input textarea {
+  max-height: 124px;
+  overflow-y: auto;
   border-color: #cbd5e1;
   border-radius: 8px;
   font-size: 15px;
+  resize: none;
 }
 
 .course-detail-send-button {
@@ -471,6 +609,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding-top: 2px;
   padding-right: 4px;
 }
 
