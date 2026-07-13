@@ -30,8 +30,8 @@ import {
   saveStudyPlan,
 } from "../features/study-plans/api";
 import type {
-  StudyPlanDraftRequest,
   StudyPlanPreview,
+  StudyPlanPreviewRequest,
   StudyPlanPreviewSubtask,
 } from "../features/study-plans/types";
 import type { Course } from "../types/course";
@@ -41,6 +41,8 @@ const defaultScope = {
   include_all_parsed_materials: true,
   material_ids: [],
 };
+const defaultPreference = "balanced" as const;
+const minimumDailyMinutes = 30;
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError || error instanceof Error) {
@@ -53,6 +55,7 @@ function errorMessage(error: unknown, fallback: string): string {
 function subtaskTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     learn: "学习",
+    quiz: "练习",
     review: "复习",
     test: "测试",
   };
@@ -62,6 +65,7 @@ function subtaskTypeLabel(type: string): string {
 function subtaskTone(type: string): string {
   const tones: Record<string, string> = {
     learn: "violet",
+    quiz: "blue",
     review: "grape",
     test: "orange",
   };
@@ -144,7 +148,7 @@ export function StudyPlanCreatePage() {
   const [endDate, setEndDate] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
-  const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanDraftRequest | null>(null);
+  const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
   const [isPreviewStale, setIsPreviewStale] = useState(false);
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -184,7 +188,7 @@ export function StudyPlanCreatePage() {
     };
   }, [courseId]);
 
-  const draft = useMemo<StudyPlanDraftRequest | null>(() => {
+  const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
     if (!goalText.trim() || !startDate || !endDate || Number.isNaN(minutes)) {
       return null;
@@ -195,6 +199,7 @@ export function StudyPlanCreatePage() {
       start_date: startDate,
       end_date: endDate,
       daily_available_minutes: minutes,
+      preference: defaultPreference,
       material_scope: defaultScope,
     };
   }, [dailyMinutes, endDate, goalText, startDate]);
@@ -210,8 +215,8 @@ export function StudyPlanCreatePage() {
       return "结束日期不能早于开始日期。";
     }
     const minutes = Number.parseInt(dailyMinutes, 10);
-    if (Number.isNaN(minutes) || minutes <= 0) {
-      return "每日时长需要是大于 0 的分钟数。";
+    if (Number.isNaN(minutes) || minutes < minimumDailyMinutes) {
+      return `每日时长至少需要 ${minimumDailyMinutes} 分钟。`;
     }
     return null;
   }
@@ -250,7 +255,7 @@ export function StudyPlanCreatePage() {
   }
 
   async function handleSave() {
-    if (!courseId || !previewSnapshot || isPreviewStale) {
+    if (!courseId || !previewSnapshot || !preview || isPreviewStale) {
       return;
     }
 
@@ -258,7 +263,16 @@ export function StudyPlanCreatePage() {
     setError(null);
 
     try {
-      const result = await saveStudyPlan(courseId, previewSnapshot);
+      const result = await saveStudyPlan(
+        courseId,
+        {
+          ...previewSnapshot,
+          title: preview.title,
+          client_flow: "wizard_v1",
+          tasks: preview.tasks,
+        },
+        `study-plan-${courseId}-${Date.now()}`,
+      );
       navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
     } catch (nextError) {
       setError(errorMessage(nextError, "保存计划失败"));
@@ -290,7 +304,7 @@ export function StudyPlanCreatePage() {
           >
             返回课程
           </Button>
-          <Badge color="orange" variant="light">自动解析待接入</Badge>
+          <Badge color="orange" variant="light">自动解析后续接入</Badge>
         </Group>
 
         <Group align="flex-start" className="study-plan-header" justify="space-between">
@@ -298,7 +312,7 @@ export function StudyPlanCreatePage() {
             <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>
             <Title order={1}>创建学习计划</Title>
             <Text c="dimmed">
-              先由用户手动填写基础配置，再调用真实 preview。保存只发送当前契约字段。
+              先由用户手动填写基础配置，再调用真实 preview。保存会提交已确认的预览任务树。
             </Text>
           </Stack>
           <Badge color="teal" size="lg" variant="light">契约稳定版</Badge>
@@ -321,9 +335,9 @@ export function StudyPlanCreatePage() {
             <Group justify="space-between" wrap="nowrap">
               <Stack gap={2}>
                 <Title order={2}>计划配置</Title>
-                <Text c="dimmed" size="sm">字段只来自当前已落地请求体。</Text>
+                <Text c="dimmed" size="sm">当前使用 balanced 策略，保存采用 wizard_v1 契约。</Text>
               </Stack>
-              <Badge color="orange" variant="outline">学情诊断待契约确认</Badge>
+              <Badge color="orange" variant="outline">学情诊断后续接入</Badge>
             </Group>
 
             <Textarea
@@ -333,7 +347,7 @@ export function StudyPlanCreatePage() {
               placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
               value={goalText}
             />
-            <Text c="dimmed" size="sm">保存为 goal_text，不额外发送 preference 或 parsed_config 假字段。</Text>
+            <Text c="dimmed" size="sm">保存为 goal_text，并随请求发送默认 balanced 策略。</Text>
 
             <Group align="flex-start" grow>
               <TextInput
@@ -352,7 +366,7 @@ export function StudyPlanCreatePage() {
 
             <TextInput
               label="每日可用学习时长"
-              min={1}
+              min={minimumDailyMinutes}
               onChange={(event) => updateField(() => setDailyMinutes(event.currentTarget.value))}
               placeholder="60"
               rightSection={<Text c="dimmed" size="xs">分钟</Text>}
@@ -377,7 +391,7 @@ export function StudyPlanCreatePage() {
               <Group justify="space-between" wrap="nowrap">
                 <Stack gap={2}>
                   <Text fw={750}>学情诊断</Text>
-                  <Text c="dimmed" size="sm">后端契约未确认，先保留位置，不发送字段。</Text>
+                  <Text c="dimmed" size="sm">后端诊断接口已具备，本页先不进入诊断向导。</Text>
                 </Stack>
                 <Badge color="gray" variant="light">disabled</Badge>
               </Group>

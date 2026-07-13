@@ -11,7 +11,7 @@ export function CalendarPage() {
       <Box className="calendar-placeholder-shell">
         <Paper className="home-main-panel" radius="md" withBorder>
           <Title order={2}>大日历</Title>
-          <Text c="dimmed">学习计划聚合接口落地后，这里会展示真实任务日历。</Text>
+          <Text c="dimmed">后端学习计划聚合接口已具备，前端日历视图将在后续任务接入真实任务摘要。</Text>
         </Paper>
       </Box>
     </Box>
