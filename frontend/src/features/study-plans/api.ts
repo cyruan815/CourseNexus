@@ -2,6 +2,8 @@ import { apiRequest } from "../../api/client";
 import type {
   CourseStudyCalendarDay,
   CourseStudyCalendarMonth,
+  GlobalCalendarMonth,
+  GlobalDayTodos,
   StudyPlanConfigParseRequest,
   StudyPlanConfigParseResponse,
   StudyPlanDetail,
@@ -127,4 +129,12 @@ export function fetchCourseStudyCalendarDay(
 
 export function fetchTodayTodos(date: string): Promise<TodayTodos> {
   return apiRequest<TodayTodos>(`/api/v1/todos/today?date=${date}`, { method: "GET" });
+}
+
+export function fetchGlobalCalendarMonth(month: string): Promise<GlobalCalendarMonth> {
+  return apiRequest<GlobalCalendarMonth>(`/api/v1/calendar/month?month=${month}`, { method: "GET" });
+}
+
+export function fetchGlobalCalendarDayTodos(date: string): Promise<GlobalDayTodos> {
+  return apiRequest<GlobalDayTodos>(`/api/v1/calendar/days/${date}/todos`, { method: "GET" });
 }

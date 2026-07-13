@@ -79,7 +79,32 @@ function createHomeFetchMock(courses = backendCourses) {
     }
 
     if (url.startsWith("/api/v1/calendar/month")) {
-      return jsonResponse({ month: "2026-07", days: [] }, "req_month_calendar");
+      return jsonResponse({
+        month: "2026-07",
+        days: [
+          {
+            date: "2026-07-15",
+            course_count: 1,
+            task_count: 1,
+            subtask_count: 2,
+            completed_subtask_count: 0,
+            status: "not_started",
+            task_summaries: [
+              {
+                task_id: "task_calendar",
+                plan_id: "plan_calendar",
+                course_id: "crs_discrete_math",
+                course_name: "离散数学",
+                title: "组合数学复习",
+                status: "not_started",
+                derived_status: "not_started",
+                sort_order: 1,
+              },
+            ],
+            hidden_task_count: 0,
+          },
+        ],
+      }, "req_month_calendar");
     }
 
     return jsonResponse(courses, "req_courses");
@@ -314,9 +339,11 @@ describe("HomePage", () => {
     expect(screen.queryByRole("dialog", { name: "选择年月" })).not.toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "选择年月" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭年月选择" }));
+    expect(await screen.findByText("组合数学复习")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
     expect(screen.getByTestId("location-path")).toHaveTextContent("/calendar");
+    expect(screen.getByTestId("location-state")).toHaveTextContent("null");
   });
 
   it("filters courses by the selected term", async () => {

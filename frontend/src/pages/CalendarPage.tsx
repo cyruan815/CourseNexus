@@ -5,8 +5,19 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import "../features/courses/home-workbench.css";
-import { fetchCourseStudyCalendar, fetchCourseStudyCalendarDay } from "../features/study-plans/api";
-import type { CourseStudyCalendarDay, CourseStudyCalendarMonth, StudyCalendarDaySummary, StudyCalendarTaskTodo } from "../features/study-plans/types";
+import {
+  fetchCourseStudyCalendar,
+  fetchCourseStudyCalendarDay,
+  fetchGlobalCalendarDayTodos,
+  fetchGlobalCalendarMonth,
+} from "../features/study-plans/api";
+import type {
+  CourseStudyCalendarDay,
+  CourseStudyCalendarMonth,
+  GlobalDayTodos,
+  StudyCalendarDaySummary,
+  StudyCalendarTaskTodo,
+} from "../features/study-plans/types";
 
 interface CalendarCell {
   dateKey: string | null;
@@ -374,6 +385,250 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
   );
 }
 
+function GlobalCalendarDayPanel({
+  dayTodos,
+  error,
+  isLoading,
+  selectedDate,
+}: {
+  dayTodos: GlobalDayTodos | null;
+  error: string | null;
+  isLoading: boolean;
+  selectedDate: string | null;
+}) {
+  if (!selectedDate) {
+    return (
+      <Paper className="calendar-day-panel" radius="md" withBorder>
+        <Stack gap="xs">
+          <Title order={2}>选择日期</Title>
+          <Text c="dimmed" size="sm">点击月历中的日期查看全局当天待办。</Text>
+        </Stack>
+      </Paper>
+    );
+  }
+
+  return (
+    <Paper className="calendar-day-panel" radius="md" withBorder>
+      <Stack gap="md">
+        <Group justify="space-between" wrap="nowrap">
+          <Title order={2}>{selectedDate} 待办</Title>
+          {dayTodos ? <Badge color="blue" variant="light">{dayTodos.courses.length} 门课程</Badge> : null}
+        </Group>
+        {isLoading ? (
+          <Stack gap="sm" role="status">
+            <Text c="dimmed">正在加载当天待办...</Text>
+            <Skeleton height={80} radius="md" />
+            <Skeleton height={80} radius="md" />
+          </Stack>
+        ) : null}
+        {!isLoading && error ? (
+          <Alert color="red" role="alert" title="当天待办加载失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        {!isLoading && !error && dayTodos && dayTodos.courses.length === 0 ? (
+          <Stack className="calendar-empty-state" gap="xs">
+            <Text fw={700}>当天没有学习任务</Text>
+            <Text c="dimmed" size="sm">所有课程在这一天都没有一级任务。</Text>
+          </Stack>
+        ) : null}
+        {!isLoading && !error && dayTodos && dayTodos.courses.length > 0 ? (
+          <Stack gap="md">
+            {dayTodos.courses.map((course) => (
+              <Stack gap="sm" key={course.course_id}>
+                <Title order={3}>{course.course_name}</Title>
+                {course.tasks.map((task) => (
+                  <CourseCalendarTaskCard courseId={course.course_id} key={task.task_id} task={task} />
+                ))}
+              </Stack>
+            ))}
+          </Stack>
+        ) : null}
+      </Stack>
+    </Paper>
+  );
+}
+
+function GlobalCalendarPage() {
+  const [searchParams] = useSearchParams();
+  const initialDate = searchParams.get("date");
+  const [referenceDate, setReferenceDate] = useState(() => monthFromDateQuery(initialDate));
+  const [monthDays, setMonthDays] = useState<StudyCalendarDaySummary[]>([]);
+  const [monthError, setMonthError] = useState<string | null>(null);
+  const [isMonthLoading, setIsMonthLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() =>
+    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : null,
+  );
+  const [dayTodos, setDayTodos] = useState<GlobalDayTodos | null>(null);
+  const [dayError, setDayError] = useState<string | null>(null);
+  const [isDayLoading, setIsDayLoading] = useState(false);
+  const month = formatMonth(referenceDate);
+  const calendarCells = useMemo(() => buildCalendarCells(referenceDate), [referenceDate]);
+  const summariesByDate = useMemo(() => {
+    const summaries = new Map<string, StudyCalendarDaySummary>();
+    monthDays.forEach((day) => summaries.set(day.date, day));
+    return summaries;
+  }, [monthDays]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    setIsMonthLoading(true);
+    setMonthError(null);
+
+    fetchGlobalCalendarMonth(month)
+      .then((monthData) => {
+        if (!ignore) {
+          setMonthDays(monthData.days);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setMonthError(errorMessage(nextError));
+          setMonthDays([]);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsMonthLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [month]);
+
+  useEffect(() => {
+    if (!selectedDate) {
+      return undefined;
+    }
+
+    let ignore = false;
+    setIsDayLoading(true);
+    setDayError(null);
+    setDayTodos(null);
+
+    fetchGlobalCalendarDayTodos(selectedDate)
+      .then((todos) => {
+        if (!ignore) {
+          setDayTodos(todos);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setDayError(errorMessage(nextError));
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsDayLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedDate]);
+
+  function moveMonth(offset: number) {
+    setReferenceDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+    setSelectedDate(null);
+    setDayTodos(null);
+    setDayError(null);
+  }
+
+  return (
+    <Box className="home-workbench calendar-placeholder-page">
+      <Paper className="home-header" component="header" radius={0}>
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="md" wrap="nowrap">
+            <ActionIcon aria-label="返回首页" component={Link} radius="xl" size={42} to="/" variant="default">
+              <IconHome2 size={20} stroke={1.8} />
+            </ActionIcon>
+            <Title className="home-brand-title" order={1}>全局学习日历</Title>
+          </Group>
+          <Badge color="blue" variant="light">{month}</Badge>
+        </Group>
+      </Paper>
+      <Box className="calendar-course-shell" component="main">
+        <Paper className="calendar-month-panel" radius="md" withBorder>
+          <Stack gap="md">
+            <Group justify="space-between" wrap="nowrap">
+              <ActionIcon aria-label="上个月" onClick={() => moveMonth(-1)} variant="subtle">
+                <IconChevronLeft size={22} />
+              </ActionIcon>
+              <Title order={2}>{referenceDate.getFullYear()} 年 {referenceDate.getMonth() + 1} 月</Title>
+              <ActionIcon aria-label="下个月" onClick={() => moveMonth(1)} variant="subtle">
+                <IconChevronRight size={22} />
+              </ActionIcon>
+            </Group>
+
+            {isMonthLoading ? (
+              <Stack gap="sm" role="status">
+                <Text c="dimmed">正在加载全局日历...</Text>
+                <Skeleton height={320} radius="md" />
+              </Stack>
+            ) : null}
+            {!isMonthLoading && monthError ? (
+              <Alert color="red" role="alert" title="全局日历加载失败" variant="light">
+                {monthError}
+              </Alert>
+            ) : null}
+            {!isMonthLoading && !monthError ? (
+              <>
+                <Box className="home-calendar-weekdays" aria-hidden>
+                  {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
+                    <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
+                      {day}
+                    </Text>
+                  ))}
+                </Box>
+                <Box aria-label="全局月历" className="home-calendar-grid calendar-course-grid" role="grid">
+                  {calendarCells.map((cell, index) => {
+                    const summary = cell.dateKey ? summariesByDate.get(cell.dateKey) : undefined;
+                    return (
+                      <Box
+                        aria-label={cell.dateKey ? `查看 ${cell.dateKey} 的全局待办` : "空白日期"}
+                        className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${summary ? " has-tasks" : ""}`}
+                        component={cell.dateKey ? "button" : "div"}
+                        key={`${cell.dateKey ?? "empty"}-${index}`}
+                        onClick={cell.dateKey ? () => setSelectedDate(cell.dateKey as string) : undefined}
+                        role="gridcell"
+                        type={cell.dateKey ? "button" : undefined}
+                      >
+                        {cell.day ? <span className="home-calendar-day">{cell.day}</span> : null}
+                        {summary ? (
+                          <span className="calendar-cell-summary">
+                            <span>{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
+                            <span>{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
+                          </span>
+                        ) : null}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                {monthDays.length === 0 ? (
+                  <Stack className="calendar-empty-state" gap="xs">
+                    <Text fw={700}>本月没有学习任务</Text>
+                    <Text c="dimmed" size="sm">所有课程当前月份都没有计划任务。</Text>
+                  </Stack>
+                ) : null}
+              </>
+            ) : null}
+          </Stack>
+        </Paper>
+        <GlobalCalendarDayPanel
+          dayTodos={dayTodos}
+          error={dayError}
+          isLoading={isDayLoading}
+          selectedDate={selectedDate}
+        />
+      </Box>
+    </Box>
+  );
+}
+
 export function CalendarPage() {
   const [searchParams] = useSearchParams();
   const courseId = searchParams.get("courseId");
@@ -382,17 +637,5 @@ export function CalendarPage() {
     return <CourseCalendarPage courseId={courseId} />;
   }
 
-  return (
-    <Box className="home-workbench calendar-placeholder-page">
-      <Paper className="home-header" component="header" radius={0}>
-        <Title className="home-brand-title" order={1}>日历</Title>
-      </Paper>
-      <Box className="calendar-placeholder-shell">
-        <Paper className="home-main-panel" radius="md" withBorder>
-          <Title order={2}>大日历</Title>
-          <Text c="dimmed">后端学习计划聚合接口已具备，前端日历视图将在后续任务接入真实任务摘要。</Text>
-        </Paper>
-      </Box>
-    </Box>
-  );
+  return <GlobalCalendarPage />;
 }

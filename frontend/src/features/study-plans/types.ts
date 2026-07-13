@@ -295,3 +295,20 @@ export interface TodayTodos {
   date: string;
   tasks: StudyCalendarTaskTodo[];
 }
+
+export interface GlobalCalendarMonth {
+  month: string;
+  days: StudyCalendarDaySummary[];
+}
+
+export interface GlobalDayTodoCourseGroup {
+  course_id: string;
+  course_name: string;
+  plan_ids: string[];
+  tasks: StudyCalendarTaskTodo[];
+}
+
+export interface GlobalDayTodos {
+  date: string;
+  courses: GlobalDayTodoCourseGroup[];
+}

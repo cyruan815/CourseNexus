@@ -236,6 +236,10 @@
   background: #f8fbff;
 }
 
+.home-calendar-cell.has-tasks {
+  background: #f8fbff;
+}
+
 .home-calendar-day {
   position: absolute;
   top: 8px;
@@ -251,6 +255,26 @@
   bottom: 7px;
   display: flex;
   gap: 3px;
+}
+
+.home-calendar-cell-summary {
+  position: absolute;
+  inset: 28px 7px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.home-calendar-cell-summary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-term-select {
