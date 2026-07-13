@@ -224,10 +224,20 @@ describe("study plan pages", () => {
         saveAttempts += 1;
         if (saveAttempts <= 2) {
           return Promise.resolve(
-            new Response(JSON.stringify({ error: { message: "network timeout" } }), {
-              status: 500,
-              headers: { "Content-Type": "application/json" },
-            }),
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: "INTERNAL_ERROR",
+                  message: "network timeout",
+                  details: {},
+                },
+                meta: { request_id: "req_save_failed" },
+              }),
+              {
+                status: 500,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
           );
         }
         return Promise.resolve(successResponse(savedDetail, "req_save"));
