@@ -23,6 +23,10 @@ describe("generated content renderers", () => {
     expect(screen.getByText(/回答正确/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     fireEvent.click(screen.getByRole("radio", { name: /B\. B/ }));
+    expect(screen.getByText(/回答错误/)).toBeInTheDocument();
+    expect(screen.getByText("Because A")).toBeInTheDocument();
+    expect(screen.queryByText("小测完成")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "完成测验" }));
     expect(screen.getByText("正确率 50%")).toBeInTheDocument();
   });
 
