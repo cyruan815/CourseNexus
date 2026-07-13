@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
+from app.core.business_time import today_shanghai
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.modules.todos_calendar.schemas import CalendarMonthRead, CourseCalendarMonthRead, CourseDayTodosRead, DayTodosRead, TodayTodosRead
@@ -23,10 +23,6 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["todos_calendar"])
 
 
-def _today_shanghai() -> date:
-    return datetime.now(ZoneInfo("Asia/Shanghai")).date()
-
-
 @router.get("/todos/today")
 def get_today_todos_endpoint(
     request: Request,
@@ -34,7 +30,7 @@ def get_today_todos_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
 ) -> dict[str, object]:
-    selected_date = query_date or _today_shanghai()
+    selected_date = query_date or today_shanghai()
     data = get_today_todos(db, user_id=current_user.id, target_date=selected_date)
     return success_response(TodayTodosRead.model_validate(data).model_dump(mode="json"), request_id=get_request_id(request))
 

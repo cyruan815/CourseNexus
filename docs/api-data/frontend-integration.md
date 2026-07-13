@@ -121,10 +121,22 @@
     "status": "active",
     "created_at": "2026-07-09T12:00:00+00:00",
     "updated_at": "2026-07-09T12:00:00+00:00",
-    "deleted_at": null
+    "deleted_at": null,
+    "material_count": 3,
+    "today_task_status": "has_task_today"
   }
 ]
 ```
+
+课程列表单项使用 `CourseListItemRead`。其中 `material_count` 始终是非负整数，统计课程下当前未删除的资料；尚未解析的资料同样计入。`today_task_status` 始终存在，后端按 `Asia/Shanghai` 的自然日计算：
+
+| 值 | 前端展示 | 判定 |
+| --- | --- | --- |
+| `no_study_plan` | 无学习计划 | 课程下没有未删除的学习计划。 |
+| `no_task_today` | 今日无任务 | 存在未删除的学习计划，但今天没有一级任务。 |
+| `has_task_today` | 今日有任务 | 今天至少存在一个属于未删除学习计划的一级任务。 |
+
+该摘要只在课程列表中返回；前端不得通过逐课程调用学习计划详情自行聚合。课程创建、详情、更新和删除仍返回不含摘要字段的 `CourseRead`。
 
 ### 3.6 创建课程
 
@@ -143,7 +155,7 @@
 }
 ```
 
-响应 `data`：`CourseRead`，字段同课程列表单项。
+响应 `data`：`CourseRead`，不包含课程列表专用的 `material_count` 与 `today_task_status`。
 
 `name` 最多 20 个字符，`description` 最多 50 个字符，`teacher` 最多 10 个字符；超出任一上限返回 `422 VALIDATION_ERROR`。`term` 可省略或提交 `null`；前端创建表单默认显示“未选择”并提交 `null`，不得提供自由文本输入。
 

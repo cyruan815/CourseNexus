@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
 from app.modules.courses.models import Course
-from app.modules.courses.repository import get_active_course_for_user, list_active_courses_for_user, save_course
+from app.modules.courses.repository import (
+    CourseListItem,
+    get_active_course_for_user,
+    list_active_courses_for_user,
+    list_course_list_items_for_user,
+    save_course,
+)
 from app.modules.courses.schemas import CourseCreate, CourseUpdate
 
 
@@ -37,6 +43,10 @@ def create_course(db: Session, user_id: str, payload: CourseCreate) -> Course:
 
 def list_courses(db: Session, user_id: str) -> list[Course]:
     return list_active_courses_for_user(db, user_id)
+
+
+def list_course_list_items(db: Session, *, user_id: str, target_date: date) -> list[CourseListItem]:
+    return list_course_list_items_for_user(db, user_id=user_id, target_date=target_date)
 
 
 def get_course_detail(db: Session, user_id: str, course_id: str) -> Course:

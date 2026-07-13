@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,6 +35,14 @@ class CourseRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+
+
+TodayTaskStatus = Literal["no_study_plan", "no_task_today", "has_task_today"]
+
+
+class CourseListItemRead(CourseRead):
+    material_count: int = Field(ge=0)
+    today_task_status: TodayTaskStatus
 
 
 class CourseTermOptionRead(BaseModel):

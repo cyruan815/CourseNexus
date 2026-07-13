@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
+from app.core.business_time import today_shanghai
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.courses.schemas import CourseCreate, CourseRead, CourseTermOptionRead, CourseUpdate
-from app.modules.courses.service import create_course, delete_course, get_course_detail, list_courses, update_course
+from app.modules.courses.schemas import CourseCreate, CourseListItemRead, CourseRead, CourseTermOptionRead, CourseUpdate
+from app.modules.courses.service import create_course, delete_course, get_course_detail, list_course_list_items, update_course
 from app.modules.courses.terms import COURSE_TERM_OPTIONS
 from app.modules.users.models import User
 from app.shared.responses import success_response
@@ -34,8 +35,15 @@ def list_course_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
 ) -> dict[str, object]:
-    courses = list_courses(db, current_user.id)
-    data = [CourseRead.model_validate(course).model_dump(mode="json") for course in courses]
+    course_items = list_course_list_items(db, user_id=current_user.id, target_date=today_shanghai())
+    data = [
+        CourseListItemRead(
+            **CourseRead.model_validate(item.course).model_dump(),
+            material_count=item.material_count,
+            today_task_status=item.today_task_status,
+        ).model_dump(mode="json")
+        for item in course_items
+    ]
     return success_response(data, request_id=get_request_id(request))
 
 

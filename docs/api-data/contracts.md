@@ -7,6 +7,8 @@
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
+- `GET /api/v1/courses` 返回 `CourseListItemRead`：除课程基础字段外，列表项必须包含 `material_count` 与 `today_task_status`（`no_study_plan`、`no_task_today`、`has_task_today`）。这两个字段是首页课程卡片的只读聚合，不出现在课程创建、详情、更新和删除响应中。
+- 课程卡片的今日状态由服务端按 `Asia/Shanghai` 自然日计算；资料数只统计未删除资料，今日任务只统计未删除学习计划下 `task_date` 为当天的一级任务。
 - 成功响应统一包含 `data` 和 `meta`。
 - 错误响应统一包含 `error.code`、`error.message`、`error.details` 和 `meta.request_id`。
 - 前端根据 HTTP status 与 `error.code` 决定交互，不解析中文错误文案。
