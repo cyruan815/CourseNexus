@@ -34,7 +34,9 @@ Generate with `POST /api/v1/courses/{course_id}/generations` and `content_type="
 
 1. Load any entries in `markmap_data.assets.styles` and `scripts` using Markmap-compatible asset loaders.
 2. Create the SVG container.
-3. Pass `markmap_data.root` to `Markmap.create` from `markmap-view`.
+3. Create the `markmap-view` instance, then pass `markmap_data.root` directly to `instance.setData()` and fit after rendering completes.
 4. Use the view API for fit, expand, collapse, and updates.
+
+The frontend declares `markmap-view@0.18.12` as a direct dependency. If initialization fails, it renders the persisted `nodes` and `edges` as a read-only fallback. It must not import `markmap-lib` or call `Transformer.transform()`.
 
 The frontend must not call `Transformer.transform` again and must not infer citations. Generated-content API responses keep `source_citations: []`.

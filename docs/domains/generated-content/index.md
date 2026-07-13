@@ -41,15 +41,15 @@
 
 详细架构、算法、资源预算和失败策略见 [architecture.md](architecture.md)。
 
-## 4. 前端状态与限制
+## 4. 前端结果渲染
 
 - loading：详情加载中展示骨架。
-- success：按 `content_type` 做基础结构化渲染，当前覆盖 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`、`handout`、`task_test` 的可读兜底。
+- success：`GeneratedContentDetailPage.tsx` 只负责加载、失败状态、元数据与 renderer 分派；五类独立 renderer 位于 `frontend/src/features/generated-content/renderers/`。
 - failed：展示失败提示和 `error_code`，不展示伪结果。
 - error：详情接口失败时展示后端错误信息。
 - empty citation：`source_citations = []` 时展示“当前没有可展示的引用来源”。
 
-当前前端详情页不是最终 Quiz 做题页、Flashcard 翻卡页、Mindmap 图形编辑页或 PDF 导出页；这些能力仍需等待对应生成器和计划学习模式后续接口闭环。
+Quiz 提供单题即时判题和本地正确率；Flashcard 提供翻卡、掌握/未掌握与错卡重练；Mindmap 直接使用 `markmap-view` 渲染后端预处理树；Outline 提供章节导航；Knowledge List 提供搜索和重要程度筛选。上述状态仅存在页面内存，不写后端。
 
 ## 5. 本地手动验收 seed
 
