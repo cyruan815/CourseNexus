@@ -766,3 +766,9 @@ else:
 保存 preview exact tasks 时，后端会为 quiz/test 子任务写入 `generation_parameters.task_test`。若任务描述包含“10 道选择题和 3 道计算题”等明确数量，保存前会解析为结构化默认参数，例如 `question_count=13`、`question_types=["single_choice", "short_answer"]`、`difficulty="medium"`。如果模型已经输出 `{ "single_choice": 10, "short_answer": 3 }` 这类题型计数字段，保存前会归一化为同一标准结构。该参数只用于后续任务测试题按需生成的默认值，保存计划阶段不生成测试题正文，也不写 `AIGeneratedContent`。
 
 后续 `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 省略 `parameters` 时使用计划默认值；请求显式传入字段时覆盖默认值。非法 `generation_parameters.task_test` 在保存/替换阶段返回 `VALIDATION_ERROR`，不会落入 500。
+
+## 2026-07-13 前端 C2 诊断向导落地
+
+`/courses/:courseId/study-plans/new` 已接入 Step 3 的最小闭环：创建页内嵌 `DiagnosticWizard`，先请求后端诊断题，再提交答案生成 `diagnostic_profile`，最后把该 profile 合入 preview 请求。当前第一版仍固定 `material_scope = { include_all_parsed_materials: true, material_ids: [] }`，不提供资料范围选择；因此前端在 `goal_text` 变化或重新获取诊断题时主动清空诊断结果，日期和每日时长变化只标记 preview 过期。
+
+前端不会在本地推导 `prior_knowledge_level`、`foundation_needed`、`weak_topics` 或 `explanation_style`，这些字段必须来自 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 的响应。若后端返回 `NO_PARSED_MATERIAL` 或 `DIAGNOSTIC_STALE`，向导停留在诊断区域并提示用户上传/等待解析或重新获取题目。

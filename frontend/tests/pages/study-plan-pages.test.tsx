@@ -101,6 +101,66 @@ const savedDetail = {
   ],
 };
 
+const diagnosticQuestions = {
+  question_version: "study_plan_diagnostic_v1",
+  questions: [
+    {
+      question_id: "topic_mastery_vector_space",
+      question_type: "topic_mastery",
+      question_text: "你对「向量空间」了解多少？",
+      sort_order: 1,
+      required: true,
+      topic_id: "topic_vector_space",
+      topic_title: "向量空间",
+      options: [
+        { value: "none", label: "完全不了解" },
+        { value: "heard", label: "听说过，但不清楚" },
+        { value: "some", label: "了解一些" },
+        { value: "familiar", label: "比较熟悉" },
+      ],
+      placeholder: null,
+    },
+    {
+      question_id: "weak_area",
+      question_type: "weak_area",
+      question_text: "你最担心哪类内容？",
+      sort_order: 2,
+      required: true,
+      topic_id: null,
+      topic_title: null,
+      options: [
+        { value: "concept", label: "概念理解" },
+        { value: "calculation", label: "计算推导" },
+        { value: "application", label: "做题应用" },
+        { value: "memorization", label: "记忆重点" },
+        { value: "other", label: "其他" },
+      ],
+      placeholder: null,
+    },
+    {
+      question_id: "diagnostic_note",
+      question_type: "diagnostic_note",
+      question_text: "还有什么想特别补的地方？",
+      sort_order: 3,
+      required: false,
+      topic_id: null,
+      topic_title: null,
+      options: [],
+      placeholder: "可选填写",
+    },
+  ],
+};
+
+const diagnosticProfile = {
+  question_version: "study_plan_diagnostic_v1",
+  prior_knowledge_level: "little",
+  foundation_needed: true,
+  weak_topics: ["topic_vector_space"],
+  weak_area: "concept",
+  explanation_style: "plain_language",
+  diagnostic_note: "希望先补基础",
+};
+
 function successResponse(data: unknown, requestId = "req_1") {
   return new Response(JSON.stringify({ data, meta: { request_id: requestId } }), {
     status: 200,
@@ -203,6 +263,71 @@ describe("study plan pages", () => {
           }),
           headers: expect.objectContaining({
             "Idempotency-Key": expect.stringMatching(/^study-plan-crs_123-/),
+          }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("creates a diagnostic profile and sends it with the preview request", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-profiles")) {
+        return Promise.resolve(successResponse(diagnosticProfile, "req_diagnostic_profile"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "三天完成线性代数第一章复习" },
+    });
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "开始学情诊断" }));
+    expect(await screen.findByText("你对「向量空间」了解多少？")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
+    fireEvent.click(screen.getByLabelText("概念理解"));
+    fireEvent.change(screen.getByLabelText("还有什么想特别补的地方？"), {
+      target: { value: "希望先补基础" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提交诊断" }));
+
+    expect(await screen.findByText("诊断已完成")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plans/preview",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: "三天完成线性代数第一章复习",
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
+            daily_available_minutes: 60,
+            preference: "balanced",
+            material_scope: {
+              include_all_parsed_materials: true,
+              material_ids: [],
+            },
+            diagnostic_profile: diagnosticProfile,
           }),
           method: "POST",
         }),

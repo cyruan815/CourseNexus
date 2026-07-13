@@ -29,7 +29,9 @@ import {
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
+import { DiagnosticWizard } from "../features/study-plans/components/DiagnosticWizard";
 import type {
+  StudyPlanDiagnosticProfile,
   StudyPlanPreview,
   StudyPlanPreviewRequest,
   StudyPlanPreviewSubtask,
@@ -152,6 +154,7 @@ export function StudyPlanCreatePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
+  const [diagnosticProfile, setDiagnosticProfile] = useState<StudyPlanDiagnosticProfile | null>(null);
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
   const [previewSaveIdempotencyKey, setPreviewSaveIdempotencyKey] = useState<string | null>(null);
@@ -200,7 +203,7 @@ export function StudyPlanCreatePage() {
       return null;
     }
 
-    return {
+    const baseDraft: StudyPlanPreviewRequest = {
       goal_text: goalText.trim(),
       start_date: startDate,
       end_date: endDate,
@@ -208,7 +211,16 @@ export function StudyPlanCreatePage() {
       preference: defaultPreference,
       material_scope: defaultScope,
     };
-  }, [dailyMinutes, endDate, goalText, startDate]);
+
+    if (diagnosticProfile) {
+      return {
+        ...baseDraft,
+        diagnostic_profile: diagnosticProfile,
+      };
+    }
+
+    return baseDraft;
+  }, [dailyMinutes, diagnosticProfile, endDate, goalText, startDate]);
 
   function validationMessage(): string | null {
     if (!goalText.trim()) {
@@ -229,6 +241,27 @@ export function StudyPlanCreatePage() {
 
   function updateField(next: () => void) {
     next();
+    if (preview) {
+      setIsPreviewStale(true);
+    }
+  }
+
+  function updateGoalText(nextGoalText: string) {
+    updateField(() => {
+      setGoalText(nextGoalText);
+      setDiagnosticProfile(null);
+    });
+  }
+
+  function handleDiagnosticProfileReady(nextProfile: StudyPlanDiagnosticProfile) {
+    setDiagnosticProfile(nextProfile);
+    if (preview) {
+      setIsPreviewStale(true);
+    }
+  }
+
+  function handleDiagnosticProfileCleared() {
+    setDiagnosticProfile(null);
     if (preview) {
       setIsPreviewStale(true);
     }
@@ -350,7 +383,7 @@ export function StudyPlanCreatePage() {
             <Textarea
               label="学习目标"
               minRows={5}
-              onChange={(event) => updateField(() => setGoalText(event.currentTarget.value))}
+              onChange={(event) => updateGoalText(event.currentTarget.value)}
               placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
               value={goalText}
             />
@@ -394,15 +427,14 @@ export function StudyPlanCreatePage() {
               </Button>
             </Paper>
 
-            <Paper className="study-plan-diagnosis" radius="md" withBorder>
-              <Group justify="space-between" wrap="nowrap">
-                <Stack gap={2}>
-                  <Text fw={750}>学情诊断</Text>
-                  <Text c="dimmed" size="sm">后端诊断接口已具备，本页先不进入诊断向导。</Text>
-                </Stack>
-                <Badge color="gray" variant="light">待接入</Badge>
-              </Group>
-            </Paper>
+            <DiagnosticWizard
+              courseId={courseId}
+              goalText={goalText}
+              materialScope={defaultScope}
+              onProfileCleared={handleDiagnosticProfileCleared}
+              onProfileReady={handleDiagnosticProfileReady}
+              profile={diagnosticProfile}
+            />
 
             <Divider />
 
