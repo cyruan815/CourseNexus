@@ -43,6 +43,9 @@ describe("generated content renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "已掌握" }));
     fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
     expect(screen.getByText("Front 1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "翻转卡片" }));
+    fireEvent.click(screen.getByRole("button", { name: "已掌握" }));
+    expect(screen.getByRole("button", { name: "练习全部" })).toBeInTheDocument();
   });
 
   it("navigates outline sections and filters knowledge items", () => {
