@@ -174,7 +174,20 @@ const parsedConfig = {
     include_all_parsed_materials: true,
     material_ids: [],
   },
-  unresolved_fields: ["daily_available_minutes"],
+  unresolved_fields: [
+    "start_date",
+    "end_date",
+    "duration_days",
+    "daily_available_minutes",
+    "recommended_daily_minutes",
+    "daily_minutes_source",
+    "preference",
+    "diagnostic_profile",
+    "material_snapshot",
+    "coverage",
+    "capacity",
+    "generation_metadata",
+  ],
 };
 
 function successResponse(data: unknown, requestId = "req_1") {
@@ -486,7 +499,17 @@ describe("study plan pages", () => {
     expect(screen.getByLabelText("结束日期")).toHaveValue("2026-07-14");
     expect(screen.getByLabelText("每日可用学习时长")).toHaveValue(90);
     expect(screen.getByText("学习方式：冲刺强化")).toBeInTheDocument();
-    expect(screen.getByText("每日可用学习时长：需手动补齐")).toBeInTheDocument();
+    expect(screen.queryByText("开始日期：需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("结束日期：需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("学习天数：需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("每日可用学习时长：需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("recommended_daily_minutes: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("daily_minutes_source: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("diagnostic_profile: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("material_snapshot: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("coverage: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("capacity: 需手动补齐")).not.toBeInTheDocument();
+    expect(screen.queryByText("generation_metadata: 需手动补齐")).not.toBeInTheDocument();
     expect(screen.getByText("配置已修改，请重新生成预览后保存。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存计划" })).toBeDisabled();
   });

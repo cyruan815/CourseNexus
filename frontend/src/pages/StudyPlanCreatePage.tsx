@@ -115,10 +115,11 @@ const unresolvedFieldLabels: Record<string, string> = {
   goal_text: "学习目标",
   start_date: "开始日期",
   end_date: "结束日期",
-  duration_days: "学习天数",
   daily_available_minutes: "每日可用学习时长",
   preference: "学习方式",
 };
+
+const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -132,6 +133,43 @@ function resolveEndDate(startDate: string | null | undefined, durationDays: numb
 
   parsedStartDate.setDate(parsedStartDate.getDate() + durationDays - 1);
   return parsedStartDate.toISOString().slice(0, 10);
+}
+
+function hasResolvedEditableValue(fieldName: string, values: {
+  goalText: string;
+  startDate: string;
+  endDate: string;
+  dailyMinutes: string;
+  preference: PlanPreference;
+}) {
+  switch (fieldName) {
+    case "goal_text":
+      return values.goalText.trim().length > 0;
+    case "start_date":
+      return values.startDate.length > 0;
+    case "end_date":
+      return values.endDate.length > 0;
+    case "daily_available_minutes": {
+      const minutes = Number.parseInt(values.dailyMinutes, 10);
+      return !Number.isNaN(minutes) && minutes >= minimumDailyMinutes;
+    }
+    case "preference":
+      return values.preference.length > 0;
+    default:
+      return false;
+  }
+}
+
+function visibleUnresolvedFields(fields: string[], values: {
+  goalText: string;
+  startDate: string;
+  endDate: string;
+  dailyMinutes: string;
+  preference: PlanPreference;
+}) {
+  return fields.filter((fieldName) => (
+    userEditableParseFields.has(fieldName) && !hasResolvedEditableValue(fieldName, values)
+  ));
 }
 
 function subtaskTypeLabel(type: string): string {
@@ -396,6 +434,13 @@ export function StudyPlanCreatePage() {
       });
       const nextEndDate = parsedConfig.end_date ?? resolveEndDate(parsedConfig.start_date, parsedConfig.duration_days);
 
+      const nextGoalText = parsedConfig.goal_text ?? goalText;
+      const nextStartDate = parsedConfig.start_date ?? startDate;
+      const nextDailyMinutes = parsedConfig.daily_available_minutes
+        ? String(parsedConfig.daily_available_minutes)
+        : dailyMinutes;
+      const nextPreference = parsedConfig.preference ?? preference;
+
       if (parsedConfig.goal_text) {
         setGoalText(parsedConfig.goal_text);
         setDiagnosticProfile(null);
@@ -412,7 +457,13 @@ export function StudyPlanCreatePage() {
       if (parsedConfig.preference) {
         setPreference(parsedConfig.preference);
       }
-      setUnresolvedFields(parsedConfig.unresolved_fields);
+      setUnresolvedFields(visibleUnresolvedFields(parsedConfig.unresolved_fields, {
+        goalText: nextGoalText,
+        startDate: nextStartDate,
+        endDate: nextEndDate ?? endDate,
+        dailyMinutes: nextDailyMinutes,
+        preference: nextPreference,
+      }));
       if (preview) {
         setIsPreviewStale(true);
       }

@@ -9,13 +9,13 @@
 - 学习计划 API 独立封装在 `frontend/src/features/study-plans/api.ts`，类型在 `frontend/src/features/study-plans/types.ts`。
 - 课程详情左侧学习计划卡片读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时跳转创建页，有计划时计划标题跳转详情页。
 - 2026-07-13 C1 已将前端学习计划 API/type 适配层扩展到 S02 生命周期接口：配置解析、学前诊断问题、诊断 profile、preview、保存、列表、详情、重生成 preview、替换和删除。该变更只提供 adapter，不在现有页面启用诊断、重生成、替换或删除交互。
-- 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 会显示为“需手动补齐”，不会由前端静默猜测。
+- 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 只展示当前页面真实可编辑且仍无有效值的字段，系统追溯字段不展示为“需手动补齐”。
 
 ## 创建页状态流转
 
 - 用户手动填写 `goal_text`、`start_date`、`end_date`、`daily_available_minutes`。
 - 用户也可以点击“自动解析配置”，用当前 `goal_text` 和固定 `material_scope` 请求配置解析；解析结果只作为表单回填，用户仍需确认后再生成 preview。
-- `material_scope` 当前固定为 `{ include_all_parsed_materials: true, material_ids: [] }`。
+- `material_scope` 当前固定为 `{ include_all_parsed_materials: true, material_ids: [] }`；资料范围选择器应进入 C4 完整创建向导或独立前置小提交，且只能提交具体资料 ID，不能提交文件夹 ID。
 - `preference` 由创建页学习方式控件维护，默认 `balanced`，解析回填可更新为 `fast_track`、`balanced`、`mastery` 或 `sprint`；API 仍只发送英文枚举，界面展示中文标签。
 - 点击“生成预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`。
 - 前端保存产生预览时的请求快照；若表单字段在预览后变化，旧预览标记为过期并禁用保存。

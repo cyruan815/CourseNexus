@@ -783,8 +783,10 @@ else:
 
 - 后端明确返回的 `goal_text`、`start_date`、`end_date`、`daily_available_minutes` 和 `preference` 会回填到可编辑表单。
 - 后端只返回 `start_date + duration_days` 且 schema 未带 `end_date` 时，前端按确定性日期范围推导展示用 `end_date`；无法推导时不猜测。
-- `unresolved_fields` 会在配置区显示为“需手动补齐”；用户手动编辑对应字段后，从未解析提示中移除该字段。
+- `unresolved_fields` 只展示当前创建页真实可编辑且仍无有效值的字段；`recommended_daily_minutes`、`daily_minutes_source`、`diagnostic_profile`、`material_snapshot`、`coverage`、`capacity` 和 `generation_metadata` 等系统追溯字段不得展示为“需手动补齐”。用户手动编辑对应字段后，从未解析提示中移除该字段。
 - 解析回填改变了 preview 请求体，因此已有 preview 会立即标记为过期并禁用保存。
 - 回填 `goal_text` 会清空已有 `diagnostic_profile`；仅回填日期、每日时长或学习方式时保留诊断结果，但仍要求重新生成 preview。
 
 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加配置解析回填用例；当前本地 Vitest 仍可能被 `entities ./decode` exports 问题挡在收集前，验证时需如实记录。
+
+资料范围选择尚未在 C3 完成；当前创建页仍固定使用全部已解析资料。该能力属于 C4 完整创建向导的配置确认范围，或可作为 C4 前置小提交先落地，提交给后端时必须使用 `MaterialScope` 的资料 ID 结构，不能使用文件夹作为 Agent 范围。
