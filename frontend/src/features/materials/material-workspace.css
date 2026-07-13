@@ -64,7 +64,7 @@
   border-bottom: 1px solid #dfe5eb;
   display: flex;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 10px 12px 8px;
 }
 
 .material-workspace__toolbar label {
@@ -83,35 +83,60 @@
 .material-workspace__content {
   background: #ffffff;
   min-height: 300px;
-  padding: 8px;
+  padding: 0;
 }
 
 .material-workspace__folder-section + .material-workspace__folder-section {
-  border-top: 1px solid #edf0f2;
+  border-top: 1px solid #d8e2ec;
 }
 
-.material-workspace__folder-title {
+.material-workspace__folder-section:first-child {
+  margin-top: -14px;
+}
+
+.material-workspace__folder-head {
+  align-items: center;
+  border-bottom: 1px solid #d8e2ec;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto 34px;
+  min-height: 42px;
+  padding: 0 10px 0 8px;
+}
+
+.material-workspace button.material-workspace__folder-title {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 4px;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
   gap: 8px;
-  grid-template-columns: 18px 42px minmax(0, 1fr) auto;
-  min-height: 36px;
-  padding: 6px 8px;
+  grid-template-columns: 28px 42px minmax(0, 1fr);
+  min-height: 38px;
+  padding: 4px 8px;
   text-align: left;
   width: 100%;
 }
 
-.material-workspace__folder-title:hover,
+.material-workspace__folder-head:hover,
 .material-workspace__file-row:hover {
   background: #eef6ff;
 }
 
 .material-workspace__folder-chevron {
-  color: #5c6975;
-  text-align: center;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid #31506c;
+  border-top: 6px solid transparent;
+  height: 0;
+  justify-self: center;
+  width: 0;
+}
+
+.material-workspace__folder-chevron.is-expanded {
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #31506c;
 }
 
 .material-workspace__folder-icon,
@@ -124,22 +149,23 @@
 .material-workspace__folder-count {
   color: #66727e;
   font-size: 13px;
+  justify-self: end;
 }
 
 .material-workspace__file-list {
   list-style: none;
   margin: 0;
-  padding: 0 0 6px 34px;
+  padding: 0 0 0 34px;
 }
 
 .material-workspace__file-row {
   align-items: center;
-  border-radius: 4px;
+  border-radius: 0;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) 80px 34px;
   min-height: 38px;
-  padding: 4px 8px;
+  padding: 4px 10px 4px 8px;
 }
 
 .material-workspace__material-select {
@@ -170,19 +196,22 @@
   color: #a03939;
 }
 
-.material-workspace__file-actions {
+.material-workspace__file-actions,
+.material-workspace__folder-actions {
   align-items: center;
-  border-color: transparent;
+  border-color: #d7e1ec;
+  border-radius: 8px;
   color: #5f6d7a;
   display: inline-flex;
-  height: 30px;
+  height: 34px;
   justify-content: center;
-  min-height: 30px;
+  min-height: 34px;
   padding: 0;
-  width: 30px;
+  width: 34px;
 }
 
-.material-workspace__file-actions:hover {
+.material-workspace__file-actions:hover,
+.material-workspace__folder-actions:hover {
   background: #e6eef7;
   color: #22303c;
 }
@@ -199,7 +228,7 @@
   border-radius: 8px;
   display: flex;
   justify-content: center;
-  margin: 10px 0 0;
+  margin: 14px 8px 8px;
   min-height: 120px;
 }
 
@@ -252,6 +281,16 @@
   font-size: 14px;
   line-height: 1.55;
   margin-top: 6px;
+}
+
+.material-workspace__upload-target {
+  align-items: baseline;
+  display: flex;
+  gap: 2px;
+}
+
+.material-workspace__upload-target strong {
+  color: #22303c;
 }
 
 .material-workspace__upload-close {
