@@ -26,7 +26,11 @@
 
 - 调用 `GET /api/v1/study-plans/{plan_id}` 获取 `plan`、`tasks`、`subtasks` 后只读展示。
 - 任务状态、子任务类型做中文 fallback；未知枚举保留原值展示。
-- 完成打卡、计划重新生成、导出、学习执行入口、学情诊断均保持 disabled / 后续接入；不调用本页尚未形成前端闭环的接口。
+- 学习执行入口已跳转 `/study-subtasks/{subtask_id}`，由执行页读取 execution context 并完成 / 取消完成二级任务。
+- 计划重新生成已接入详情页内生命周期面板：用户调整目标、日期、每日学习时长和学习方式后调用 `POST /api/v1/study-plans/{plan_id}/regeneration-previews`；该 preview 不落库。
+- 用户确认替换时调用 `PUT /api/v1/study-plans/{plan_id}`，提交新 preview 的 `title`、exact `tasks`、`material_scope`、`client_flow = "wizard_v1"` 和当前详情的 `expected_updated_at`。后端若返回 `STATE_CONFLICT`，前端只提示刷新或新建计划，不强行覆盖。
+- 删除计划已接入二次确认；确认后调用 `DELETE /api/v1/study-plans/{plan_id}`，成功回到课程详情页。删除是软删除，不删除课程资料或已有生成内容。
+- 导出计划仍保持 disabled / 后续接入；学习计划自身没有前端伪造导出。
 
 ## 测试入口
 

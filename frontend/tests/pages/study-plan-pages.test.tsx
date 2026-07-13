@@ -143,6 +143,65 @@ const savedDetail = {
   ],
 };
 
+const replacementPreview = {
+  ...preview,
+  title: "高等数学冲刺计划",
+  goal_text: "两天冲刺线性代数第一章",
+  start_date: "2026-07-14",
+  end_date: "2026-07-15",
+  daily_available_minutes: 90,
+  preference: "sprint",
+  tasks: [
+    {
+      title: "第 1 天强化任务",
+      task_date: "2026-07-14",
+      sort_order: 1,
+      subtasks: [
+        {
+          title: "复习: 向量空间核心概念",
+          subtask_type: "review",
+          description: "整理核心定义并完成回顾",
+          related_material_ids: ["mat_1"],
+          estimated_minutes: 60,
+          citation_chunk_ids: ["chunk_1"],
+          generation_parameters: {},
+          sort_order: 1,
+        },
+      ],
+    },
+  ],
+};
+
+const replacedDetail = {
+  ...savedDetail,
+  plan: {
+    ...savedDetail.plan,
+    title: replacementPreview.title,
+    goal_text: replacementPreview.goal_text,
+    start_date: replacementPreview.start_date,
+    end_date: replacementPreview.end_date,
+    daily_available_minutes: replacementPreview.daily_available_minutes,
+    updated_at: "2026-07-13T11:00:00+00:00",
+  },
+  tasks: [
+    {
+      ...savedDetail.tasks[0],
+      title: "第 1 天强化任务",
+      task_date: "2026-07-14",
+      updated_at: "2026-07-13T11:00:00+00:00",
+    },
+  ],
+  subtasks: [
+    {
+      ...savedDetail.subtasks[0],
+      title: "复习: 向量空间核心概念",
+      subtask_type: "review",
+      description: "整理核心定义并完成回顾",
+      updated_at: "2026-07-13T11:00:00+00:00",
+    },
+  ],
+};
+
 const executionContext = {
   course: {
     course_id: "crs_123",
@@ -398,6 +457,7 @@ function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new")
           <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />
           <Route element={<StudyPlanDetailPage />} path="/courses/:courseId/study-plans/:planId" />
           <Route element={<StudyTaskExecutionPage />} path="/study-subtasks/:subtaskId" />
+          <Route element={<div>课程详情已返回</div>} path="/courses/:courseId" />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -906,6 +966,115 @@ describe("study plan pages", () => {
       "href",
       "/study-subtasks/subtask_1",
     );
+  });
+
+  it("regenerates a preview and replaces the saved plan with expected updated time", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123")) {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/plan_1/regeneration-previews") && init?.method === "POST") {
+        return Promise.resolve(successResponse(replacementPreview, "req_regeneration_preview"));
+      }
+      if (url.endsWith("/study-plans/plan_1") && init?.method === "PUT") {
+        return Promise.resolve(successResponse(replacedDetail, "req_replace"));
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/plan_1");
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    expect(screen.getByRole("heading", { name: "调整并重新生成" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("调整目标"), {
+      target: { value: replacementPreview.goal_text },
+    });
+    fireEvent.change(screen.getByLabelText("调整开始日期"), { target: { value: "2026-07-14" } });
+    fireEvent.change(screen.getByLabelText("调整结束日期"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("调整每日学习时长"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("调整学习方式"), { target: { value: "sprint" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成替换预览" }));
+
+    expect(await screen.findByText("第 1 天强化任务")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认替换计划" }));
+
+    expect(await screen.findByRole("heading", { name: "高等数学冲刺计划" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-plans/plan_1/regeneration-previews",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: replacementPreview.goal_text,
+            start_date: "2026-07-14",
+            end_date: "2026-07-15",
+            daily_available_minutes: 90,
+            preference: "sprint",
+          }),
+          method: "POST",
+        }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-plans/plan_1",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: replacementPreview.goal_text,
+            start_date: replacementPreview.start_date,
+            end_date: replacementPreview.end_date,
+            daily_available_minutes: replacementPreview.daily_available_minutes,
+            preference: replacementPreview.preference,
+            material_scope: replacementPreview.material_scope,
+            title: replacementPreview.title,
+            client_flow: "wizard_v1",
+            tasks: replacementPreview.tasks,
+            expected_updated_at: savedDetail.plan.updated_at,
+          }),
+          method: "PUT",
+        }),
+      );
+    });
+  });
+
+  it("deletes a study plan after confirmation and returns to the course detail page", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123")) {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/plan_1") && init?.method === "DELETE") {
+        return Promise.resolve(
+          successResponse({ ...savedDetail.plan, status: "deleted", deleted_at: "2026-07-13T11:00:00+00:00" }),
+        );
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/plan_1");
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "删除计划" }));
+    expect(screen.getByRole("heading", { name: "确认删除计划" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByText("课程详情已返回")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-plans/plan_1",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
   });
 
   it("opens the execution page from a plan subtask and completes then uncompletes it", async () => {
