@@ -66,5 +66,5 @@ python -m app.commands.seed_generated_content_demo
 
 - 只在本地开发数据库中运行，不作为正式产品功能。
 - 重复运行是幂等的，会更新同一组固定 demo 记录，不堆积重复生成内容。
-- 该 seed 直接写入 `User`、`Course`、`CourseMaterial`、`MaterialChunk`、`AIGeneratedContent` 和 `SourceCitation`，用于绕过暂不可用的解析 / 索引链路，验证前端详情页和后端详情接口。
+- 该 seed 直接写入 `User`、`Course`、`CourseMaterial`、`MaterialChunk` 和五类 `AIGeneratedContent`，不写 `SourceCitation`，用于绕过暂不可用的解析 / 索引链路，验证前端详情页和后端详情接口。
 - 如果后端服务不是从 `backend/` 目录启动，应在运行 seed 时使用同一个工作目录或显式配置相同 `DATABASE_URL`，避免写到另一个 SQLite 文件。

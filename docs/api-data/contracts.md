@@ -1,9 +1,5 @@
 # Contracts v0.1
 
-## 2026-07-13 Generation POC Override
-
-For `quiz`, `flashcard`, `mindmap`, `outline`, and `knowledge_list`, this section supersedes older batch/citation text below. Generation calls `resolve_generation_context()` to merge all selected parsed chunks in stable order, checks `MATERIAL_CONTEXT_MAX_TOKENS`, and invokes exactly one structured model call. The five business JSON structures contain no `source_chunk_ids` or `source_citation_ids`; generation does not write `source_citations`, while the top-level API field remains `[]`. Mindmap additionally persists `markmap_data.root/features/assets` produced by backend `markmap-lib`.
-
 ## 前后端契约基线
 
 - 基础设施阶段的前端是最小集成验证工作台；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
@@ -22,7 +18,7 @@ For `quiz`, `flashcard`, `mindmap`, `outline`, and `knowledge_list`, this sectio
 
 - 资料模块只把 `parse_status = parsed` 的资料暴露给检索和 Agent。
 - 问答不得直接读取资料表或 chunk 表，必须通过 `material_context.retrieve_relevant_context()` 获取相关资料上下文。
-- 指定材料生成和学习计划不得直接读取资料表或 chunk 表，必须通过 `material_context.iter_material_context_batches()` 获取全材料批次。
+- Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 必须通过 `material_context.resolve_generation_context()` 获取完整材料上下文；学习计划、handout 和 task_test 等保留批处理策略的消费者使用 `iter_material_context_batches()`。
 - Agent 模块不得跨课程混用上下文。
 - 无资料命中时，Agent 必须返回 `answer_type = no_source`，并禁止伪引用。
 - AI 生成内容统一写入 `AIGeneratedContent`，通过 `content_type` 区分用途。
@@ -82,7 +78,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 ## 跨模块数据引用原则
 
 - 跨模块引用 ID 时，必须同时保证当前用户有权访问被引用资源。
-- `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`。
+- 需要引用的 Course QA、handout 和 task_test 等能力，其 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；五类独立 POC 生成不创建引用。
 - `material_name` 是快照字段，避免资料改名后历史引用展示异常。
 - 历史引用定位失败时，前端仍可展示快照文本和定位失败提示。
 - `StudySubTask.related_material_ids_json` 只能引用当前课程下当前用户可访问的资料。
@@ -106,7 +102,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、已解析且未删除；否则返回 `NOT_FOUND`。
 - 未解析、解析失败和已删除资料不得进入上下文结果。
 
-`retrieve_relevant_context()` 和 `iter_material_context_batches()` 返回的 `ContextChunk` 最小字段：
+`retrieve_relevant_context()`、`resolve_generation_context()` 和 `iter_material_context_batches()` 使用的 `ContextChunk` 最小字段：
 
 ```json
 {
@@ -124,7 +120,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 
 问答检索没有可用 parsed chunk 时返回 `no_parsed_material = true`；有 parsed chunk 但没有相关命中时返回空 `chunks`。两种情况调用方都应进入 `no_source` 兜底流程，不能调用模型生成无依据回答或保存伪引用。
 
-`score` 只表示问答相关性检索的相似度；全材料批次读取可以返回 `null`。
+`score` 只表示问答相关性检索的相似度；完整上下文和全材料批次读取可以返回 `null`。
 
 ## 独立生成公共契约
 

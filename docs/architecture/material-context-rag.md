@@ -17,28 +17,21 @@ FastAPI + LlamaIndex + Docling + Chroma + OpenAI-compatible APIs
 - `materials` 继续拥有上传记录、解析状态和 `MaterialChunk`。
 - `material-context` 从“顺序读取 chunk 的基础接口”升级为资料范围校验、语义检索和全材料读取的统一入口。
 - `course-qa` 只调用问答检索接口。
-- `generation-orchestrator`、学习计划和各 generator 只调用全材料上下文接口。
+- `generation-orchestrator` 调用完整材料上下文接口；学习计划和任务内容调用全材料批次接口。
 - `model-provider` 继续统一封装 OpenAI-compatible 生成调用。
-- `generated-content` 和 `SourceCitation` 继续保存结果和引用。
+- `generated-content` 保存统一生成结果；Course QA、handout 和 task_test 等需要追溯的能力继续保存 `SourceCitation`，五类独立 POC 不保存逐条引用。
 
-### 1.1 当前基础设施交付边界
+### 1.1 当前交付边界
 
-当前阶段以架构和基础设施身份交付共享能力，不实现下游学习业务。必须交付：
+当前共享能力已经被问答、五类独立生成、学习计划和任务内容消费。公共层提供：
 
 - Docling 解析、结构化切片、LlamaIndex embedding 编排和 Chroma 本地索引；
 - 资料上传、重试解析、删除和重建索引的一致性链路；
 - `retrieve_relevant_context()` 问答相关性检索契约；
+- `resolve_generation_context()` 五类独立 POC 完整上下文契约；
 - `iter_material_context_batches()` 指定材料全覆盖契约；
 - 通用结构化模型 provider 协议和材料覆盖执行器；
-- fake index、mock provider、契约测试、参考消费者和后续接入指南。
-
-当前阶段明确不实现：
-
-- Flashcard、Quiz、Mindmap、Outline、Knowledge List、Handout、Task Test 的真实提示词、输出 schema、API 和页面；
-- AI 学习计划算法或现有学习计划业务迁移；
-- 现有生成模块向新接口的生产迁移。
-
-`course-qa` 已作为首个生产消费者接入 `retrieve_relevant_context()`；下文中的指定材料生成链路仍用于定义未来消费者如何接入，不表示这些生成业务功能属于本轮基础设施交付。
+- fake index、mock provider、契约测试和接入指南。
 
 ## 2. 组件拓扑
 
@@ -172,9 +165,9 @@ PDF 采用资源受限的两阶段解析：首轮关闭 OCR、强制使用 PDF b
 
 Docling conversion 使用 `raises_on_error = false` 获取 `status`、`errors`、处理页和输入页数。`partial_success` 的有效 chunk 必须保留，失败页和稳定 warning 由项目内部 `ParseDiagnostics` 返回，不能因部分失败静默标记为无诊断成功。关闭高级表格结构模型是本地 POC 的稳定性取舍；PDF backend 和 layout 仍提取表格文字，但高级单元格结构恢复不属于本次修复。
 
-## 6. 两类上下文接口
+## 6. 三类上下文接口
 
-`material-context` 对业务层暴露两种语义不同的接口，不能继续用一个模糊的 `resolve_context()` 同时承担两类任务。
+`material-context` 对业务层暴露三种语义不同的接口，不能继续用一个模糊的 `resolve_context()` 同时承担全部任务。
 
 ```python
 def retrieve_relevant_context(
@@ -187,6 +180,14 @@ def retrieve_relevant_context(
     top_k: int,
 ) -> MaterialContextResult: ...
 
+def resolve_generation_context(
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope,
+    max_tokens: int,
+) -> MaterialGenerationContext | None: ...
+
 def iter_material_context_batches(
     *,
     user_id: str,
@@ -196,7 +197,7 @@ def iter_material_context_batches(
 ) -> Iterator[MaterialContextBatch]: ...
 ```
 
-二者都返回项目内部 `ContextChunk`，并统一执行权限、解析状态和材料范围校验。`resolve_context()` 在迁移期间可保留为兼容入口，供尚未迁移的旧消费者使用。
+三者都使用项目内部 `ContextChunk`，并统一执行权限、解析状态和材料范围校验。`resolve_generation_context()` 额外合并稳定完整文本并执行总 token 检查；`resolve_context()` 仅作为兼容入口保留。
 
 ## 7. 问答类链路：相关性检索
 
@@ -224,44 +225,39 @@ sequenceDiagram
 
 问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。模型引用必须与本次返回的 chunk id 取交集；模型返回未检索到或伪造的 chunk id 时不保存 fallback 引用。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
 
-## 8. 指定材料生成链路：全材料覆盖
+## 8. 指定材料生成链路：两种全材料策略
 
-本节是后续生成模块的接入契约。当前基础设施只实现有序 batch、覆盖校验、结构化 provider 协议和参考 map/reduce 消费者，不实现任何具体学习内容。
+五类独立 POC 使用完整上下文单次生成；学习计划、handout 和 task_test 等消费者可保留批处理、覆盖核算与引用策略。两种策略都必须覆盖全部选中资料，不能退化为普通 Top-K。
 
 ```mermaid
 sequenceDiagram
-    participant O as orchestrator / study-plans
+    participant O as generation-orchestrator
     participant CTX as material-context
     participant DB as SQLite
     participant G as generator / planner
     participant MP as model-provider
     participant Store as generated-content / plan tables
 
-    O->>CTX: iter_material_context_batches(scope, token_budget)
+    O->>CTX: resolve_generation_context(scope, total_token_limit)
     CTX->>DB: load all eligible chunks ordered by material + chunk_index
-    loop every batch
-        CTX-->>G: batch + included material ids
-        G->>MP: extract typed intermediate facts
-        MP-->>G: validated intermediate result + citation ids
-    end
-    G->>MP: reduce/deduplicate into final schema
+    CTX-->>G: one complete MaterialGenerationContext
+    G->>MP: generate final typed structure once
     MP-->>G: validated final content
-    G->>Store: save result + citations / plan structure
+    G->>Store: save AIGeneratedContent
 ```
 
-这条链路不调用普通 Top-K retriever。实现必须满足：
+五类独立 POC 链路不调用普通 Top-K retriever，并满足：
 
-- 每个选中的已解析资料至少进入一个 batch。
-- batch 按 `material_id`、`chunk_index` 保持稳定顺序，避免跨页内容随机排列。
-- map 阶段生成带 `chunk_id` 的中间结果，reduce 阶段只基于中间结果去重、组织和裁剪。
-- 最终输出采用各功能的 Pydantic schema；校验失败可进行有限次数修复，仍失败则标记生成失败。
-- 最终引用是所有保留内容所使用 chunk 的并集，不是默认取第一个 chunk。
+- 所选 parsed chunk 按 `material_id`、`chunk_index` 保持稳定顺序并合并为一个上下文。
+- 总 token 超限时在模型调用前返回 `MATERIAL_CONTEXT_TOO_LARGE`，不截断、不改用 Top-K。
+- 每个请求只调用一次对应功能模型，最终输出采用各功能的 Pydantic schema。
+- 业务 JSON 不包含 chunk/citation ID，成功时只写 `AIGeneratedContent`。
 
 不同功能的输出归属：
 
 | 功能 | 上下文策略 | 保存位置 |
 | --- | --- | --- |
-| Flashcard / Quiz / Mindmap / Outline / Knowledge List | 全材料分批 map-reduce | `AIGeneratedContent` + `SourceCitation` |
+| Flashcard / Quiz / Mindmap / Outline / Knowledge List | 完整材料上下文、总 token 检查、单次结构化生成 | `AIGeneratedContent` |
 | 学习计划 | 全材料分批提取章节、难度、任务候选后汇总 | `StudyPlan` / `StudyTask` / `StudySubTask` |
 | 今日讲义 / 任务测试题 | 对任务关联材料做全覆盖；任务参数决定生成重点 | `AIGeneratedContent` + `SourceCitation` |
 
@@ -312,7 +308,8 @@ MATERIAL_BATCH_MAX_TOKENS=12000
 | 资料或文件夹物理删除时 RAG 或 SQLite 提交失败 | SQLite 回滚；暂存文件移回原路径，并用删除前的 SQLite chunk 快照重新索引已解析资料。补偿失败返回 `DELETE_COMPENSATION_FAILED`。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
 | 问答无命中 | 返回 `answer_type = no_source`，不调用或不采信无依据回答。 |
-| 指定材料生成中单个 batch 失败 | 整次生成标记失败，保留可重试状态，不输出“已覆盖全部材料”的部分结果。 |
+| 五类独立生成完整上下文超限 | 返回 `MATERIAL_CONTEXT_TOO_LARGE`，不调用模型、不创建历史。 |
+| 批处理消费者中单个 batch 失败 | 整次生成标记失败，保留可重试状态，不输出“已覆盖全部材料”的部分结果。 |
 | 结构化输出校验失败 | 有限修复后写 `GENERATION_SCHEMA_INVALID`。 |
 
 Chroma 是可重建派生存储。系统提供 `--material-id` 和 `--all` 两级维护入口，但当前不引入后台队列；本地 POC 可同步执行并通过进程退出码和输出计数反映结果。
@@ -336,7 +333,7 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 - 超长资料触发多个 batch，覆盖执行器能校验处理材料集合和引用 chunk 集合。
 - 删除和重试解析不会留下可检索的旧 chunk。
 - 无真实模型 API key 的单元测试和基础开发仍可运行。
-- 本轮验收不包含 Flashcard、Quiz、Mindmap 或 AI 学习计划的业务正确性。
+- 公共材料上下文测试不替代 Flashcard、Quiz、Mindmap 或 AI 学习计划各自的业务质量验收。
 - 图片格式已进入 Docling adapter 路由；OCR 质量、复杂版面和跨页结构回归夹具后置。
 
 ## 12. 技术资料

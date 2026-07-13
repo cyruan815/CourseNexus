@@ -2,7 +2,7 @@
 
 ## 目的
 
-本文定义业务功能如何接入材料上下文 RAG 基础设施。基础设施只负责资料解析、索引、权限过滤、检索、批处理和覆盖核算；业务功能继续拥有自己的提示词、输出 schema、接口、持久化和 UI。
+本文定义业务功能如何接入材料上下文 RAG 基础设施。基础设施负责资料解析、索引、权限过滤、检索、完整上下文、批处理和覆盖核算；业务功能继续拥有自己的提示词、输出 schema、接口、持久化和 UI。
 
 ## 两类调用链
 
@@ -12,11 +12,18 @@
 业务权限 -> retrieve_relevant_context -> ModelProvider -> 限定引用 -> 业务保存
 ```
 
-指定材料生成类：
+五类独立 POC 生成：
+
+```text
+业务权限 -> resolve_generation_context -> 总 token 检查
+         -> 单次模型调用 -> 功能自有 schema -> 业务保存
+```
+
+学习计划和任务内容等保留批处理的消费者：
 
 ```text
 业务权限 -> iter_material_context_batches -> run_material_coverage
-         -> 功能自有 schema/prompt -> 业务保存
+         -> 功能自有 map/reduce -> 业务保存
 ```
 
 ## 问答类接入
@@ -54,6 +61,7 @@ Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 调用 `resolve_generati
 
 - `app.modules.material_context.schemas`；
 - `app.modules.material_context.service.retrieve_relevant_context`；
+- `app.modules.material_context.service.resolve_generation_context`；
 - `app.modules.material_context.service.iter_material_context_batches`；
 - `app.modules.material_context.coverage.run_material_coverage`；
 - `app.integrations.rag.base.RagIndex`；

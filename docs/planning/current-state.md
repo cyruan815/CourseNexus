@@ -84,7 +84,7 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
 - 课程问答面板、引用列表、追问交互等完整前端问答体验。
 - Study Mode 执行页任务测试题轻量只读展示；后端 `task_test` 内容生成已实现，前端仍需接入最近成功内容读取、题目/答案/解析/引用展示和畸形内容兜底。
 - 任务测试题作答、判分、attempt 历史和反馈闭环；该能力后续按 P9 / phase-1 S08 单独设计，不属于 P2 只读展示。
-- Flashcard、Mindmap、Quiz 等能力的真实 LLM 结构化生成提示词和质量验收。
+- Flashcard、Mindmap、Quiz 等能力的真实材料人工质量验收和前端交互完善。
 - 图片 OCR 质量验收和复杂版面回归夹具。
 - S07 PDF 导出业务实现。
 - 生产级鉴权、刷新 token、对象存储、异步任务队列、可观测性和部署配置。
@@ -155,7 +155,7 @@ pnpm test
 
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
-3. 为 Flashcard、Mindmap 和 Quiz 分别设计业务 schema、prompt、质量验收和保存流程。
+3. 为 Flashcard、Mindmap 和 Quiz 补充真实课程材料质量验收和前端交互。
 4. 推进 S07：基于已生成讲义和任务测试题导出 PDF。
 5. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
 6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
