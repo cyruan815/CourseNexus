@@ -29,16 +29,13 @@ class ConfigParseProvider:
 
     def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
         self.prompts.append(prompt)
-        if output_schema.__name__ in {"StudyPlanParsedConfig", "StudyPlanConfigParseResponse"}:
+        if output_schema.__name__ == "StudyPlanConfigExtraction":
             return output_schema.model_validate(
                 {
-                    "goal_text": "精通传输层",
                     "start_date": "2026-07-11",
                     "end_date": "2026-07-24",
                     "daily_available_minutes": 60,
                     "preference": "mastery",
-                    "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
-                    "unresolved_fields": [],
                 }
             )
         if output_schema.__name__ == "PlanBatchExtraction":
@@ -191,7 +188,7 @@ def test_config_parse_endpoint_returns_success_envelope(
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["goal_text"] == "精通传输层"
+    assert data["goal_text"] == "从 2026-07-11 到 2026-07-24，每天 60 分钟精通传输层"
     assert data["start_date"] == "2026-07-11"
     assert data["end_date"] == "2026-07-24"
     assert data["duration_days"] == 14

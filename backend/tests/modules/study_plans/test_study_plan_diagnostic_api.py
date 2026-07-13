@@ -19,6 +19,7 @@ from app.integrations.rag.fake import FakeRagIndex
 from app.main import app
 from app.modules.materials.router import get_material_parser, get_material_storage, get_rag_index
 from app.modules.study_plans import router as study_plan_router
+from app.modules.study_plans.schemas import DIAGNOSTIC_QUESTION_VERSION
 
 
 class DiagnosticApiProvider:
@@ -27,6 +28,28 @@ class DiagnosticApiProvider:
         self.reduce_prompts: list[str] = []
 
     def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        if output_schema.__name__ == "StudyPlanDiagnosticTopicExtraction":
+            candidate_titles = [
+                "物理层的基本功能",
+                "Nyquist / Shannon 公式",
+                "传输介质与编码",
+                "可靠传输基础",
+                "物理层接口特性",
+                "信道容量",
+                "编码与调制",
+                "OSI 分层",
+                "差错控制",
+                "流量控制",
+            ]
+            return output_schema.model_validate(
+                {
+                    "topics": [
+                        {"topic_title": title, "diagnostic_value": "用于生成诊断题", "source_chunk_id": None}
+                        for title in candidate_titles
+                        if title in prompt
+                    ][:3]
+                }
+            )
         if output_schema.__name__ == "PlanBatchExtraction":
             self.batch_prompts.append(prompt)
             material_id = _first_material_id_in_prompt(prompt)
@@ -140,6 +163,7 @@ def api_context(tmp_path) -> Generator[tuple[TestClient, DiagnosticApiProvider],
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[study_plan_router.get_plan_parser_provider] = lambda: provider
     app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_diagnostic_provider] = lambda: provider
     app.dependency_overrides[get_material_storage] = lambda: LocalFileStorage(root_path=tmp_path, max_file_size_bytes=4096)
     app.dependency_overrides[get_material_parser] = lambda: PlainTextParser()
     app.dependency_overrides[get_rag_index] = lambda: rag_index
@@ -220,7 +244,7 @@ def test_diagnostic_questions_include_material_topics_weak_area_and_optional_not
                 "# 物理层的基本功能\n物理层负责比特传输和接口特性。",
                 "# Nyquist / Shannon 公式\n公式用于估算信道极限速率。",
                 "# 传输介质与编码\n双绞线、光纤和编码方式影响传输质量。",
-                "# 多余主题\n第四个主题不应进入第一版诊断问题。",
+                "# 多余主题\n第四个主题不应进入本轮诊断问题。",
             ]
         ),
     )
@@ -233,7 +257,7 @@ def test_diagnostic_questions_include_material_topics_weak_area_and_optional_not
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["question_version"] == "study_plan_diagnostic_v1"
+    assert data["question_version"] == DIAGNOSTIC_QUESTION_VERSION
     topic_questions = _topic_questions(data)
     assert [question["topic_title"] for question in topic_questions] == [
         "物理层的基本功能",
@@ -263,7 +287,7 @@ def test_diagnostic_questions_include_material_topics_weak_area_and_optional_not
     assert note_questions[0]["options"] == []
 
 
-def test_diagnostic_questions_do_not_pad_when_only_one_stable_topic(
+def test_diagnostic_questions_pad_single_stable_topic_to_three_topics(
     api_context: tuple[TestClient, DiagnosticApiProvider],
 ) -> None:
     client, _ = api_context
@@ -285,10 +309,10 @@ def test_diagnostic_questions_do_not_pad_when_only_one_stable_topic(
 
     assert response.status_code == 200
     topic_questions = _topic_questions(response.json()["data"])
-    assert len(topic_questions) == 1
+    assert len(topic_questions) == 3
     assert topic_questions[0]["topic_title"] == "可靠传输基础"
-
-
+    assert all(question["topic_title"] for question in topic_questions)
+    assert len({question["topic_id"] for question in topic_questions}) == 3
 def test_diagnostic_profile_summarizes_answers_without_forcing_foundation(
     api_context: tuple[TestClient, DiagnosticApiProvider],
 ) -> None:
@@ -319,7 +343,7 @@ def test_diagnostic_profile_summarizes_answers_without_forcing_foundation(
         f"/api/v1/courses/{course_id}/study-plan-diagnostic-profiles",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "question_version": "study_plan_diagnostic_v1",
+            "question_version": DIAGNOSTIC_QUESTION_VERSION,
             "topic_mastery": [
                 {"topic_id": topics[0]["topic_id"], "topic_title": topics[0]["topic_title"], "mastery_level": "some"},
                 {"topic_id": topics[1]["topic_id"], "topic_title": topics[1]["topic_title"], "mastery_level": "familiar"},
@@ -333,7 +357,7 @@ def test_diagnostic_profile_summarizes_answers_without_forcing_foundation(
 
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["question_version"] == "study_plan_diagnostic_v1"
+    assert data["question_version"] == DIAGNOSTIC_QUESTION_VERSION
     assert data["foundation_needed"] is False
     assert data["weak_topics"] == []
     assert data["prior_knowledge_level"] in {"some", "solid"}
@@ -372,7 +396,7 @@ def test_diagnostic_profile_marks_weak_foundation_when_most_topics_are_weak(
         f"/api/v1/courses/{course_id}/study-plan-diagnostic-profiles",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "question_version": "study_plan_diagnostic_v1",
+            "question_version": DIAGNOSTIC_QUESTION_VERSION,
             "topic_mastery": [
                 {"topic_id": topics[0]["topic_id"], "topic_title": topics[0]["topic_title"], "mastery_level": "none"},
                 {"topic_id": topics[1]["topic_id"], "topic_title": topics[1]["topic_title"], "mastery_level": "heard"},
@@ -409,9 +433,11 @@ def test_diagnostic_profile_rejects_topic_outside_current_material_scope(
         f"/api/v1/courses/{course_id}/study-plan-diagnostic-profiles",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "question_version": "study_plan_diagnostic_v1",
+            "question_version": DIAGNOSTIC_QUESTION_VERSION,
             "topic_mastery": [
                 {"topic_id": "topic_from_old_scope", "topic_title": "旧资料主题", "mastery_level": "heard"},
+                {"topic_id": "topic_from_old_scope_2", "topic_title": "旧资料主题 2", "mastery_level": "some"},
+                {"topic_id": "topic_from_old_scope_3", "topic_title": "旧资料主题 3", "mastery_level": "familiar"},
             ],
             "weak_area": "concept",
             "material_scope": {"include_all_parsed_materials": False, "material_ids": [material_id]},
@@ -420,7 +446,11 @@ def test_diagnostic_profile_rejects_topic_outside_current_material_scope(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "DIAGNOSTIC_STALE"
-    assert response.json()["error"]["details"]["invalid_topic_ids"] == ["topic_from_old_scope"]
+    assert response.json()["error"]["details"]["invalid_topic_ids"] == [
+        "topic_from_old_scope",
+        "topic_from_old_scope_2",
+        "topic_from_old_scope_3",
+    ]
 
 
 def test_diagnostic_profile_can_be_sent_to_preview(
@@ -441,14 +471,16 @@ def test_diagnostic_profile_can_be_sent_to_preview(
         headers={"Authorization": f"Bearer {token}"},
         json=_diagnostic_questions_payload(material_id),
     )
-    topic = _topic_questions(question_response.json()["data"])[0]
+    topics = _topic_questions(question_response.json()["data"])
     profile_response = client.post(
         f"/api/v1/courses/{course_id}/study-plan-diagnostic-profiles",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "question_version": "study_plan_diagnostic_v1",
+            "question_version": DIAGNOSTIC_QUESTION_VERSION,
             "topic_mastery": [
-                {"topic_id": topic["topic_id"], "topic_title": topic["topic_title"], "mastery_level": "heard"},
+                {"topic_id": topics[0]["topic_id"], "topic_title": topics[0]["topic_title"], "mastery_level": "heard"},
+                {"topic_id": topics[1]["topic_id"], "topic_title": topics[1]["topic_title"], "mastery_level": "some"},
+                {"topic_id": topics[2]["topic_id"], "topic_title": topics[2]["topic_title"], "mastery_level": "some"},
             ],
             "weak_area": "calculation",
             "material_scope": {"include_all_parsed_materials": False, "material_ids": [material_id]},
@@ -503,7 +535,7 @@ def test_preview_reduce_prompt_changes_with_different_diagnostic_profiles(
         json=base_payload
         | {
             "diagnostic_profile": {
-                "question_version": "study_plan_diagnostic_v1",
+                "question_version": DIAGNOSTIC_QUESTION_VERSION,
                 "prior_knowledge_level": "little",
                 "foundation_needed": True,
                 "weak_topics": ["nyquist_shannon"],
@@ -518,7 +550,7 @@ def test_preview_reduce_prompt_changes_with_different_diagnostic_profiles(
         json=base_payload
         | {
             "diagnostic_profile": {
-                "question_version": "study_plan_diagnostic_v1",
+                "question_version": DIAGNOSTIC_QUESTION_VERSION,
                 "prior_knowledge_level": "solid",
                 "foundation_needed": False,
                 "weak_topics": [],
@@ -573,7 +605,7 @@ def test_diagnostic_foundation_minutes_recalculate_capacity_and_save_trace(
         json=base_payload
         | {
             "diagnostic_profile": {
-                "question_version": "study_plan_diagnostic_v1",
+                "question_version": DIAGNOSTIC_QUESTION_VERSION,
                 "prior_knowledge_level": "solid",
                 "foundation_needed": False,
                 "weak_topics": [],
@@ -588,7 +620,7 @@ def test_diagnostic_foundation_minutes_recalculate_capacity_and_save_trace(
         json=base_payload
         | {
             "diagnostic_profile": {
-                "question_version": "study_plan_diagnostic_v1",
+                "question_version": DIAGNOSTIC_QUESTION_VERSION,
                 "prior_knowledge_level": "little",
                 "foundation_needed": True,
                 "weak_topics": ["nyquist_shannon"],

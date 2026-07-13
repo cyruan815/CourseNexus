@@ -131,6 +131,9 @@ def _render_handout_pdf_markdown(
     handout: HandoutContent,
     citations_by_id: dict[str, GeneratedContentCitationRead],
 ) -> str:
+    if handout.schema_version == 2:
+        return _render_handout_v2_markdown(title, handout, citations_by_id)
+
     lines: list[str] = [
         f"# {title}",
         "",
@@ -164,6 +167,189 @@ def _render_handout_pdf_markdown(
     return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
 
 
+
+def _render_handout_v2_markdown(
+    title: str,
+    handout: HandoutContent,
+    citations_by_id: dict[str, GeneratedContentCitationRead],
+) -> str:
+    lines: list[str] = [
+        f"# {title}",
+        "",
+        _handout_source_notice(handout, citations_by_id),
+        "",
+        "## Overview",
+        "",
+        handout.overview,
+        "",
+        "## Learning Objectives",
+        "",
+    ]
+    for objective in handout.learning_objectives:
+        lines.append(f"- {objective}")
+
+    if handout.knowledge_map is not None:
+        lines.extend(["", "## Knowledge Map", ""])
+        lines.extend(_render_handout_block_markdown(handout.knowledge_map))
+
+    lines.extend(["", "## Sections"])
+    for index, section in enumerate(sorted(handout.sections, key=lambda item: item.sort_order), start=1):
+        lines.extend(["", f"### {index}. {section.title}"])
+        if section.lead:
+            lines.extend(["", section.lead])
+        for block in section.blocks:
+            lines.extend(["", *_render_handout_block_markdown(block)])
+        if section.key_points:
+            lines.extend(["", "Key points:", ""])
+            for point in section.key_points:
+                lines.append(f"- {point}")
+
+    lines.extend(["", "## Summary", "", handout.summary])
+    return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
+
+
+def _render_handout_block_markdown(block: object) -> list[str]:
+    block_type = getattr(block, "type", "")
+    if block_type == "paragraph":
+        return [str(getattr(block, "text", "")).strip()]
+    if block_type == "formula":
+        return _render_formula_block_markdown(block)
+    if block_type == "table":
+        return _render_table_block_markdown(block)
+    if block_type == "mindmap":
+        return _render_mindmap_block_markdown(block)
+    if block_type == "example":
+        return _render_example_block_markdown(block)
+    if block_type == "steps":
+        return _render_steps_block_markdown(block)
+    if block_type == "callout":
+        title = str(getattr(block, "title", "")).strip()
+        text = str(getattr(block, "text", "")).strip()
+        return [f"> **{title}**: {text}"]
+    if block_type == "mermaid":
+        block_title = str(getattr(block, "title", "")).strip()
+        code = str(getattr(block, "code", "")).strip()
+        explanation = str(getattr(block, "explanation", "")).strip()
+        return [
+            f"#### {block_title}",
+            "",
+            "```mermaid",
+            code,
+            "```",
+            "",
+            explanation,
+        ]
+    if block_type == "chart":
+        return _render_chart_block_markdown(block)
+    return []
+
+
+def _render_formula_block_markdown(block: object) -> list[str]:
+    block_title = str(getattr(block, "title", "")).strip()
+    latex = str(getattr(block, "latex", "")).strip()
+    lines = [f"#### {block_title}", "", "$$", latex, "$$"]
+    purpose = str(getattr(block, "purpose", "")).strip()
+    if purpose:
+        lines.extend(["", f"Purpose: {purpose}"])
+    variables = list(getattr(block, "variables", []))
+    if variables:
+        lines.extend(["", "Variables:"])
+        for variable in variables:
+            symbol = str(getattr(variable, "symbol", "")).strip()
+            meaning = str(getattr(variable, "meaning", "")).strip()
+            unit = getattr(variable, "unit", None)
+            suffix = f" ({unit})" if unit else ""
+            lines.append(f"- `{symbol}`: {meaning}{suffix}")
+    _append_optional_bullets(lines, "Conditions", getattr(block, "conditions", []))
+    _append_optional_bullets(lines, "Limitations", getattr(block, "limitations", []))
+    return lines
+
+
+def _render_table_block_markdown(block: object) -> list[str]:
+    columns = list(getattr(block, "columns", []))
+    rows = list(getattr(block, "rows", []))
+    block_title = str(getattr(block, "title", "")).strip()
+    headers = [str(getattr(column, "label", "")).strip() for column in columns]
+    values = [[_stringify_markdown_value(row.get(getattr(column, "key"), "")) for column in columns] for row in rows]
+    return [f"#### {block_title}", "", *_markdown_table(headers, values)]
+
+
+def _render_mindmap_block_markdown(block: object) -> list[str]:
+    block_title = str(getattr(block, "title", "")).strip()
+    return [f"#### {block_title}", "", *_render_mindmap_node_markdown(getattr(block, "root"), depth=0)]
+
+
+def _render_mindmap_node_markdown(node: object, *, depth: int) -> list[str]:
+    indent = "  " * depth
+    label = str(getattr(node, "label", "")).strip()
+    lines = [f"{indent}- {label}"]
+    for child in getattr(node, "children", []):
+        lines.extend(_render_mindmap_node_markdown(child, depth=depth + 1))
+    return lines
+
+
+def _render_example_block_markdown(block: object) -> list[str]:
+    block_title = str(getattr(block, "title", "")).strip()
+    problem = str(getattr(block, "problem", "")).strip()
+    answer = str(getattr(block, "answer", "")).strip()
+    explanation = str(getattr(block, "explanation", "")).strip()
+    lines = [f"#### Example: {block_title}", "", f"Problem: {problem}"]
+    steps = list(getattr(block, "steps", []))
+    if steps:
+        lines.extend(["", "Steps:"])
+        for index, step in enumerate(steps, start=1):
+            lines.append(f"{index}. {step}")
+    lines.extend(["", f"Answer: {answer}", "", f"Explanation: {explanation}"])
+    return lines
+
+
+def _render_steps_block_markdown(block: object) -> list[str]:
+    block_title = str(getattr(block, "title", "")).strip()
+    lines = [f"#### {block_title}", ""]
+    for index, step in enumerate(getattr(block, "steps", []), start=1):
+        lines.append(f"{index}. {step}")
+    return lines
+
+
+def _render_chart_block_markdown(block: object) -> list[str]:
+    unit = getattr(block, "unit", None) or ""
+    block_title = str(getattr(block, "title", "")).strip()
+    explanation = str(getattr(block, "explanation", "")).strip()
+    rows: list[list[str]] = []
+    for series in getattr(block, "series", []):
+        for point in getattr(series, "points", []):
+            rows.append([str(getattr(series, "name", "")), str(getattr(point, "label", "")), _stringify_markdown_value(getattr(point, "value", "")), str(unit)])
+    return [f"#### {block_title}", "", explanation, "", *_markdown_table(["Series", "Label", "Value", "Unit"], rows)]
+
+
+def _append_optional_bullets(lines: list[str], title: str, values: object) -> None:
+    if not isinstance(values, list):
+        return
+    items = [str(item).strip() for item in values if str(item).strip()]
+    if not items:
+        return
+    lines.extend(["", f"{title}:"])
+    for item in items:
+        lines.append(f"- {item}")
+
+
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+    table = ["| " + " | ".join(_markdown_cell(header) for header in headers) + " |"]
+    table.append("| " + " | ".join("---" for _ in headers) + " |")
+    for row in rows:
+        table.append("| " + " | ".join(_markdown_cell(cell) for cell in row) + " |")
+    return table
+
+
+def _markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\r", " ").replace("\n", "<br>").strip()
+
+
+def _stringify_markdown_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
 def _sanitize_markdown_for_pdf(markdown: str) -> str:
     sanitized_lines: list[str] = []
     for line in markdown.splitlines():
@@ -187,7 +373,7 @@ _PDF_HTML_TEMPLATE = """<!doctype html>
 <head>
   <meta charset=\"utf-8\" />
   <title>{{ title }}</title>
-  <style>{{ css }}</style>
+  <style>{{ css | safe }}</style>
 </head>
 <body>
   <main id=\"pdf-document\">{{ body_html | safe }}</main>

@@ -29,6 +29,7 @@ from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
+    StudyPlanConfigExtraction,
     StudyPlanParsedConfig,
     StudyPlanRegenerationPreviewRequest,
     StudyPlanReplaceRequest,
@@ -57,7 +58,7 @@ def db() -> Generator[Session, None, None]:
 
 
 class ConfigParseProvider:
-    def __init__(self, output: StudyPlanParsedConfig) -> None:
+    def __init__(self, output: StudyPlanConfigExtraction) -> None:
         self.output = output
         self.prompts: list[str] = []
 
@@ -232,13 +233,11 @@ def test_parse_config_returns_model_fields_without_writing_db(db: Session) -> No
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
     provider = ConfigParseProvider(
-        StudyPlanParsedConfig(
-            goal_text="精通传输层",
-            start_date=None,
-            end_date=None,
+        StudyPlanConfigExtraction(
+            start_date=date(2026, 7, 11),
+            end_date=date(2026, 7, 24),
             daily_available_minutes=60,
             preference="mastery",
-            unresolved_fields=["start_date", "end_date"],
         )
     )
     before_counts = _study_plan_counts(db)
@@ -254,11 +253,11 @@ def test_parse_config_returns_model_fields_without_writing_db(db: Session) -> No
         model_provider=provider,
     )
 
-    assert parsed.goal_text == "精通传输层"
+    assert parsed.goal_text == "从 2026-07-11 到 2026-07-24，每天 60 分钟精通传输层"
     assert parsed.daily_available_minutes == 60
     assert parsed.daily_minutes_source == "user_text"
     assert parsed.preference == "mastery"
-    assert parsed.unresolved_fields == ["start_date", "end_date"]
+    assert parsed.unresolved_fields == []
     assert parsed.material_scope.include_all_parsed_materials is True
     assert _study_plan_counts(db) == before_counts
     assert provider.prompts
@@ -1004,6 +1003,98 @@ def test_regeneration_preview_inherits_saved_diagnostic_profile(db: Session, tmp
     assert preview.generation_metadata["planner_strategy"]["foundation_required"] is True
     assert preview.generation_metadata["planner_strategy"]["weak_topics"] == ["transport-reliability"]
     assert preview.generation_metadata["planner_strategy"]["explanation_style"] == "step_by_step"
+
+
+def test_regeneration_preview_inherits_saved_preference_overrides(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_overrides", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-overrides.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request_from_data(
+            _request_data([material_id]) | {"preference_overrides": {"content_depth": "detailed"}}
+        ),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-overrides-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest(goal_text="review transport layer"),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.preference == "fast_track"
+    assert preview.preference_overrides.content_depth == "detailed"
+    assert preview.generation_metadata["planner_strategy"]["content_depth"] == "detailed"
+
+
+def test_regeneration_preview_request_preference_overrides_replace_saved_overrides(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_overrides_replace", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-overrides-replace.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request_from_data(
+            _request_data([material_id]) | {"preference_overrides": {"content_depth": "detailed"}}
+        ),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-overrides-replace-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest.model_validate(
+            {"preference_overrides": {"content_depth": "concise", "assessment_intensity": "high"}}
+        ),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.preference_overrides.content_depth == "concise"
+    assert preview.preference_overrides.assessment_intensity == "high"
+    assert preview.generation_metadata["planner_strategy"]["content_depth"] == "concise"
+    assert preview.generation_metadata["planner_strategy"]["assessment_intensity"] == "high"
+
+
+def test_regeneration_preview_explicit_empty_preference_overrides_clear_saved_overrides(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="frank_overrides_clear", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, "transport-regen-overrides-clear.txt", b"Reliable transport")
+    saved = save_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=_save_request_from_data(
+            _request_data([material_id]) | {"preference_overrides": {"content_depth": "detailed"}}
+        ),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+        idempotency_key="regen-overrides-clear-save-key",
+    )
+
+    preview = preview_study_plan_regeneration(
+        db,
+        user_id=user.id,
+        plan_id=saved.plan.id,
+        payload=StudyPlanRegenerationPreviewRequest.model_validate({"preference_overrides": {}}),
+        model_provider=RecordingPlanProvider([material_id]),
+        max_tokens=12_000,
+    )
+
+    assert preview.preference_overrides.content_depth is None
+    assert preview.generation_metadata["planner_strategy"]["content_depth"] == "concise"
 
 
 def test_regeneration_preview_duration_override_recomputes_end_date_from_saved_start(db: Session, tmp_path: Path) -> None:

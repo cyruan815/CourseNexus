@@ -208,7 +208,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | 方法与路径 | 状态 | 说明 |
 | --- | --- | --- |
 | `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 已实现 | 自然语言配置回填；不写数据库。 |
-| `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` | 已实现 | 基于当前 parsed 资料范围生成 1 到 3 个 topic 掌握问题、1 个薄弱方向问题和 1 个可选补充输入；不写数据库。 |
+| `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` | 已实现 | 基于目标、确认配置和当前 parsed 资料范围生成固定 3 个 topic 掌握问题、1 个薄弱方向问题和 1 个可选补充输入；模型失败或输出不足时 fallback 补足；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` | 已实现 | 校验 topic 仍属于当前资料范围，并归纳 `prior_knowledge_level`、`foundation_needed`、`weak_topics`、`weak_area` 和 `explanation_style`；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy`、当前资料范围的 `generation_metadata.material_quality` 和基于最终任务树统计的 `capacity`。 |
 | `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；请求体 `client_flow` 默认为 `legacy`。新向导必须传 `client_flow = "wizard_v1"` 和 preview 中确认后的非空 `tasks`；旧客户端省略 `tasks` 时仍先生成 preview。 |
@@ -217,7 +217,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `DELETE /api/v1/study-plans/{plan_id}` | 已实现 | 软删除计划，默认列表和详情隐藏。 |
 
 
-学前诊断接口统一使用 `question_version = "study_plan_diagnostic_v1"`。掌握程度枚举为 `none`、`heard`、`some`、`familiar`；薄弱方向枚举为 `concept`、`calculation`、`application`、`memorization`、`other`。诊断问题的 topic 来自当前 `material_scope` 解析后的资料上下文；若只能稳定提取 1 到 2 个 topic，后端不会补足到 3 个。
+学前诊断接口统一使用 `question_version = "study_plan_diagnostic_v2"`。掌握程度枚举为 `none`、`heard`、`some`、`familiar`；薄弱方向枚举为 `concept`、`calculation`、`application`、`memorization`、`other`。诊断问题的 `topic_mastery` 固定为 3 道，topic 必须来自当前 `material_scope` 解析后的资料上下文；正常路径使用 `study_plan_diagnostic` 模型选择 topic 候选，模型失败、输出不足、重复或无法映射到资料时由后端 fallback 补足，并在 `generation_metadata.diagnostic_questions` 记录 `source` 和 `fallback_reason`。
 
 `study-plan-diagnostic-profiles` 会重新基于当前 `material_scope` 计算合法 topic 集。若请求中的 `question_version` 过期，或 `topic_mastery[].topic_id` 不属于当前资料范围，返回 `409 DIAGNOSTIC_STALE`，`details.invalid_topic_ids` 列出失效 topic。无可用 parsed 资料返回 `400 NO_PARSED_MATERIAL`。归纳出的 `diagnostic_profile` 可直接传给 `POST /api/v1/courses/{course_id}/study-plans/preview` 的 `diagnostic_profile` 字段；preview 会把英文 `preference` 派生为 `planner_strategy` 并与该 profile 一起写入 planner reduce prompt，用于影响 `content_depth`、例题强度、测评强度、review 强度、补基础、薄弱主题顺序和颗粒度、薄弱方向强化以及 description 解释风格；保存时继续追溯 `diagnostic_profile` 和 `planner_strategy`，不在本接口层提前生成讲义或任务测试题。
 
@@ -255,7 +255,7 @@ Study Plan preview 额外返回资料解析质量摘要，位置固定为 `gener
 
 已定义 warning code：`MATERIAL_PARSE_PARTIAL`、`MATERIAL_PARSE_QUALITY_UNKNOWN`、`MATERIAL_PARSE_DIAGNOSTIC_WARNING`。其中 parser 原始 warning code 保存在 `details.diagnostic_code`，原始 message 保存在 `details.diagnostic_message`。
 
-重生成 preview 请求体字段均可选，支持覆盖 `goal_text`、`start_date`、`end_date`、`duration_days`、`daily_available_minutes`、`preference`、`diagnostic_profile` 和 `material_scope`。未传字段继承已保存配置；未传 `diagnostic_profile` 时继承保存计划中的诊断 profile，显式传入新 profile（包括空对象）时覆盖。只传 `duration_days` 时，后端必须基于保存的 `start_date` 或请求覆盖后的 `start_date` 重新推导 `end_date`，不得复用旧 `end_date` 造成范围冲突；只传 `end_date` 时重新计算 `duration_days`。接口只返回 `StudyPlanPreview`，不得写入 `StudyPlan`、`StudyTask`、`StudySubTask` 或 `CheckinRecord`。
+重生成 preview 请求体字段均可选，支持覆盖 `goal_text`、`start_date`、`end_date`、`duration_days`、`daily_available_minutes`、`preference`、`preference_overrides`、`diagnostic_profile` 和 `material_scope`。未传字段继承已保存配置；未传 `diagnostic_profile` 时继承保存计划中的诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存的局部覆盖，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖。只传 `duration_days` 时，后端必须基于保存的 `start_date` 或请求覆盖后的 `start_date` 重新推导 `end_date`，不得复用旧 `end_date` 造成范围冲突；只传 `end_date` 时重新计算 `duration_days`。接口只返回 `StudyPlanPreview`，不得写入 `StudyPlan`、`StudyTask`、`StudySubTask` 或 `CheckinRecord`。
 
 ## 计划学习模式 S03 今日待办与日历契约
 

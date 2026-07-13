@@ -41,14 +41,14 @@ def test_cors_preflight_allows_local_frontend() -> None:
         "/api/v1/auth/register",
         headers={
             "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Method": "PUT",
             "Access-Control-Request-Headers": "Authorization, Content-Type",
         },
     )
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
-    assert "POST" in response.headers["access-control-allow-methods"]
+    assert "PUT" in response.headers["access-control-allow-methods"]
     allowed_headers = response.headers["access-control-allow-headers"].lower()
     assert "authorization" in allowed_headers
     assert "content-type" in allowed_headers

@@ -703,34 +703,73 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
 
-要求：Bearer token。后端根据当前 `material_scope` 的 parsed 资料生成学前诊断问题；接口不写数据库，不做前端向导状态保存。
+要求：Bearer token。后端根据 `goal_text`、确认后的学习设置和当前 `material_scope` 的 parsed 资料生成学前诊断问题；接口不写数据库，不做前端向导状态保存。
 
 请求：
 
 ```json
 {
-  "goal_text": "两天复习物理层核心内容",
+  "goal_text": "我想三天深度掌握物理层",
   "material_scope": {
     "include_all_parsed_materials": false,
     "material_ids": ["mat_123"]
+  },
+  "confirmed_config": {
+    "start_date": "2026-07-13",
+    "duration_days": 3,
+    "preference": "mastery",
+    "daily_available_minutes": null,
+    "daily_minutes_source": null
   }
 }
 ```
 
-响应 `data`：
+响应 `data` 固定包含 5 个问题：3 个 required `topic_mastery`、1 个 required `weak_area`、1 个 optional `diagnostic_note`。
 
 ```json
 {
-  "question_version": "study_plan_diagnostic_v1",
+  "question_version": "study_plan_diagnostic_v2",
   "questions": [
     {
       "question_id": "topic_mastery_topic_xxx",
       "question_type": "topic_mastery",
-      "question_text": "你对「物理层的基本功能」了解多少？",
+      "question_text": "你对「Nyquist / Shannon 公式」了解多少？",
       "sort_order": 1,
       "required": true,
       "topic_id": "topic_xxx",
-      "topic_title": "物理层的基本功能",
+      "topic_title": "Nyquist / Shannon 公式",
+      "options": [
+        { "value": "none", "label": "完全不了解" },
+        { "value": "heard", "label": "听说过，但不清楚" },
+        { "value": "some", "label": "了解一些" },
+        { "value": "familiar", "label": "比较熟悉" }
+      ],
+      "placeholder": null
+    },
+    {
+      "question_id": "topic_mastery_topic_yyy",
+      "question_type": "topic_mastery",
+      "question_text": "你对「编码与调制」了解多少？",
+      "sort_order": 2,
+      "required": true,
+      "topic_id": "topic_yyy",
+      "topic_title": "编码与调制",
+      "options": [
+        { "value": "none", "label": "完全不了解" },
+        { "value": "heard", "label": "听说过，但不清楚" },
+        { "value": "some", "label": "了解一些" },
+        { "value": "familiar", "label": "比较熟悉" }
+      ],
+      "placeholder": null
+    },
+    {
+      "question_id": "topic_mastery_topic_zzz",
+      "question_type": "topic_mastery",
+      "question_text": "你对「传输介质」了解多少？",
+      "sort_order": 3,
+      "required": true,
+      "topic_id": "topic_zzz",
+      "topic_title": "传输介质",
       "options": [
         { "value": "none", "label": "完全不了解" },
         { "value": "heard", "label": "听说过，但不清楚" },
@@ -743,7 +782,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
       "question_id": "weak_area",
       "question_type": "weak_area",
       "question_text": "你最担心哪类内容？",
-      "sort_order": 2,
+      "sort_order": 4,
       "required": true,
       "topic_id": null,
       "topic_title": null,
@@ -760,39 +799,57 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
       "question_id": "diagnostic_note",
       "question_type": "diagnostic_note",
       "question_text": "还有什么想特别补的地方？",
-      "sort_order": 3,
+      "sort_order": 5,
       "required": false,
       "topic_id": null,
       "topic_title": null,
       "options": [],
       "placeholder": "可选填写"
     }
-  ]
+  ],
+  "generation_metadata": {
+    "diagnostic_questions": {
+      "source": "model",
+      "fallback_reason": null,
+      "model_topic_count": 3
+    }
+  }
 }
 ```
 
 规则：
 
-- `topic_mastery` 问题数量为 1 到 3 个，来自当前资料范围；少于 3 个稳定 topic 时不会硬凑。
-- 问题只表达当前掌握程度、薄弱方向和可选补充，不包含学习偏好、学习方式或资料范围问题。
+- `topic_mastery` 问题数量固定为 3 个，来自当前资料范围。
+- 模型失败、输出不足、重复或无法映射到资料时，后端使用资料内容 fallback 补足 3 题，并在 `generation_metadata.diagnostic_questions` 记录原因。
+- 问题只表达当前掌握程度、薄弱方向和可选补充，不包含学习偏好、学习方式、讲课风格或资料范围问题。
 - 当前资料范围没有 parsed chunk 时返回 `NO_PARSED_MATERIAL`。
 
 ### 3.25 学前诊断 Profile
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`
 
-要求：Bearer token。前端提交诊断答案，后端归纳成后续 preview 可携带的 `diagnostic_profile`。
+要求：Bearer token。前端提交 exactly 3 个诊断答案，后端归纳成后续 preview 可携带的 `diagnostic_profile`。
 
 请求：
 
 ```json
 {
-  "question_version": "study_plan_diagnostic_v1",
+  "question_version": "study_plan_diagnostic_v2",
   "topic_mastery": [
     {
       "topic_id": "topic_xxx",
-      "topic_title": "物理层的基本功能",
+      "topic_title": "Nyquist / Shannon 公式",
+      "mastery_level": "none"
+    },
+    {
+      "topic_id": "topic_yyy",
+      "topic_title": "编码与调制",
       "mastery_level": "heard"
+    },
+    {
+      "topic_id": "topic_zzz",
+      "topic_title": "传输介质",
+      "mastery_level": "some"
     }
   ],
   "weak_area": "calculation",
@@ -808,10 +865,10 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 ```json
 {
-  "question_version": "study_plan_diagnostic_v1",
+  "question_version": "study_plan_diagnostic_v2",
   "prior_knowledge_level": "little",
   "foundation_needed": true,
-  "weak_topics": ["topic_xxx"],
+  "weak_topics": ["topic_xxx", "topic_yyy"],
   "weak_area": "calculation",
   "explanation_style": "step_by_step",
   "diagnostic_note": "希望多讲公式怎么用"
@@ -820,14 +877,15 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 归纳规则：
 
+- `topic_mastery` 必须 exactly 3 个，且 `topic_id` 不得重复。
 - `mastery_level` 支持 `none`、`heard`、`some`、`familiar`。
 - `weak_area` 支持 `concept`、`calculation`、`application`、`memorization`、`other`。
 - `none` / `heard` 计为弱掌握；弱掌握超过一半时 `foundation_needed = true`。
 - `weak_topics` 包含弱掌握 topic 的 `topic_id`。
-- `calculation` 映射 `step_by_step`，`application` 映射 `example_first`，`memorization` 映射 `exam_focused`，其余映射 `plain_language`。
+- `explanation_style` 是后端从 `weak_area` 派生的内部兼容字段，不是前端讲课风格选择。
 - `DIAGNOSTIC_STALE` 表示 `question_version` 或 topic 不再匹配当前资料范围；前端应回到诊断步骤重新获取问题和作答。
 
-生成出的 profile 可原样放入 `POST /api/v1/courses/{course_id}/study-plans/preview` 请求。Preview 会用它影响 planner：`foundation_needed=true` 时前置补基础，`weak_topics` 会更靠前更细，`weak_area` 和 `explanation_style` 会影响例题、测试、review 和 description 风格。
+生成出的 profile 可原样放入 `POST /api/v1/courses/{course_id}/study-plans/preview` 请求。Preview 会用它影响 planner：`foundation_needed=true` 时前置补基础，`weak_topics` 会更靠前更细，`weak_area` 会强化概念、计算、应用或记忆方向；`explanation_style` 仅作为后端兼容字段进入 prompt。
 
 ```json
 {
@@ -837,7 +895,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
   "daily_available_minutes": 60,
   "preference": "balanced",
   "diagnostic_profile": {
-    "question_version": "study_plan_diagnostic_v1",
+    "question_version": "study_plan_diagnostic_v2",
     "prior_knowledge_level": "little",
     "foundation_needed": true,
     "weak_topics": ["topic_xxx"],
@@ -990,7 +1048,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
   "daily_minutes_source": "system_estimated",
   "preference": "sprint",
   "diagnostic_profile": {
-    "question_version": "study_plan_diagnostic_v1"
+    "question_version": "study_plan_diagnostic_v2"
   },
   "material_scope": {
     "include_all_parsed_materials": true,

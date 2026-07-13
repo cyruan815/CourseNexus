@@ -344,6 +344,10 @@ def test_task_test_generation_defaults_to_saved_subtask_parameters(api: ApiHarne
                             "task_test": {
                                 "question_count": 2,
                                 "question_types": ["single_choice", "short_answer"],
+                                "question_type_counts": [
+                                    {"question_type": "single_choice", "question_count": 1},
+                                    {"question_type": "short_answer", "question_count": 1},
+                                ],
                                 "difficulty": "hard",
                             }
                         },
@@ -393,4 +397,6 @@ def test_task_test_generation_defaults_to_saved_subtask_parameters(api: ApiHarne
 
     assert response.status_code == 200, response.text
     data = response.json()["data"]
-    assert len(data["content_json"]["questions"]) == 2
+    questions = data["content_json"]["questions"]
+    assert len(questions) == 2
+    assert [question["question_type"] for question in questions] == ["single_choice", "short_answer"]

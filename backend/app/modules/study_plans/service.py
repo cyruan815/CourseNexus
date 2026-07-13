@@ -45,6 +45,7 @@ from app.modules.study_plans.schemas import (
     StudyPlanDiagnosticQuestionOption,
     StudyPlanDiagnosticQuestionRequest,
     StudyPlanDiagnosticQuestionsResponse,
+    StudyPlanDiagnosticTopicExtraction,
     StudyPlanBuildRequest,
     StudyPlanConfigExtraction,
     StudyPlanConfigParseRequest,
@@ -72,6 +73,62 @@ _CONFIG_PARSE_SYSTEM_FIELDS = {
     "generation_metadata",
     "material_scope",
 }
+
+_CONFIG_FIELD_LABELS = {
+    "goal_text": "学习目标",
+    "start_date": "开始日期",
+    "end_date": "结束日期",
+    "duration_days": "学习天数",
+    "daily_available_minutes": "每日学习时间",
+    "preference": "学习方式",
+    "material_scope": "资料范围",
+}
+
+_CONFIG_FIELD_PROMPTS = {
+    "goal_text": "请补充这次学习计划的目标。",
+    "start_date": "请选择开始日期。",
+    "end_date": "请确认结束日期。",
+    "duration_days": "请确认学习天数。",
+    "daily_available_minutes": "请确认每天可用于学习的时间。",
+    "preference": "请确认学习方式。",
+    "material_scope": "请选择要用于生成计划的资料范围。",
+}
+
+_CONFIG_FIELD_OPTIONS = {
+    "preference": [
+        {"value": "fast_track", "label": "快速通关"},
+        {"value": "balanced", "label": "均衡学习"},
+        {"value": "mastery", "label": "深入掌握"},
+        {"value": "sprint", "label": "冲刺强化"},
+    ],
+    "material_scope": [
+        {"value": "all_parsed", "label": "全部已解析资料"},
+        {"value": "selected", "label": "手动选择资料"},
+    ],
+}
+
+_DIAGNOSTIC_QUESTION_TYPE_LABELS = {
+    "topic_mastery": "知识点掌握程度",
+    "weak_area": "薄弱方向",
+    "diagnostic_note": "补充说明",
+}
+
+_META_CITATION_CHUNK_KEYWORDS = (
+    "目录",
+    "主要内容",
+    "小结",
+    "总结",
+    "版权",
+    "感谢",
+    "致谢",
+    "谢谢",
+    "contents",
+    "outline",
+    "summary",
+    "copyright",
+    "thanks",
+    "thank you",
+)
 
 
 def _new_plan_id() -> str:
@@ -108,14 +165,20 @@ def build_study_plan_diagnostic_questions(
     user_id: str,
     course_id: str,
     payload: StudyPlanDiagnosticQuestionRequest,
+    model_provider: ModelProvider,
     max_tokens: int,
 ) -> StudyPlanDiagnosticQuestionsResponse:
-    topics = _diagnostic_topics_for_scope(
+    batches = _diagnostic_batches_for_scope(
         db,
         user_id=user_id,
         course_id=course_id,
         material_scope=payload.material_scope,
         max_tokens=max_tokens,
+    )
+    topics, diagnostic_metadata = _diagnostic_topics_for_questions(
+        payload=payload,
+        batches=batches,
+        model_provider=model_provider,
     )
     questions: list[StudyPlanDiagnosticQuestion] = []
     for index, topic in enumerate(topics, start=1):
@@ -123,6 +186,7 @@ def build_study_plan_diagnostic_questions(
             StudyPlanDiagnosticQuestion(
                 question_id=f"topic_mastery_{topic['topic_id']}",
                 question_type="topic_mastery",
+                question_type_label=_diagnostic_question_type_label("topic_mastery"),
                 question_text=f"你对「{topic['topic_title']}」了解多少？",
                 topic_id=topic["topic_id"],
                 topic_title=topic["topic_title"],
@@ -136,6 +200,7 @@ def build_study_plan_diagnostic_questions(
         StudyPlanDiagnosticQuestion(
             question_id="weak_area",
             question_type="weak_area",
+            question_type_label=_diagnostic_question_type_label("weak_area"),
             question_text="你最担心哪类内容？",
             options=_weak_area_question_options(),
             sort_order=weak_area_order,
@@ -145,18 +210,19 @@ def build_study_plan_diagnostic_questions(
         StudyPlanDiagnosticQuestion(
             question_id="diagnostic_note",
             question_type="diagnostic_note",
+            question_type_label=_diagnostic_question_type_label("diagnostic_note"),
             question_text="还有什么想特别补的地方？",
             required=False,
             options=[],
-            placeholder="可选填写",
+            placeholder="可选填写，例如：希望多讲公式适用条件和典型例题。",
             sort_order=weak_area_order + 1,
         )
     )
     return StudyPlanDiagnosticQuestionsResponse(
         question_version=DIAGNOSTIC_QUESTION_VERSION,
         questions=questions,
+        generation_metadata={"diagnostic_questions": diagnostic_metadata},
     )
-
 
 def build_study_plan_diagnostic_profile(
     db: Session,
@@ -174,21 +240,24 @@ def build_study_plan_diagnostic_profile(
             details={"question_version": payload.question_version, "expected_question_version": DIAGNOSTIC_QUESTION_VERSION},
         )
 
-    topics = _diagnostic_topics_for_scope(
+    batches = _diagnostic_batches_for_scope(
         db,
         user_id=user_id,
         course_id=course_id,
         material_scope=payload.material_scope,
         max_tokens=max_tokens,
     )
-    valid_topic_ids = {topic["topic_id"] for topic in topics}
-    invalid_topic_ids = [answer.topic_id for answer in payload.topic_mastery if answer.topic_id not in valid_topic_ids]
+    invalid_topic_ids = _invalid_diagnostic_answer_topic_ids(payload.topic_mastery, batches)
     if invalid_topic_ids:
+        valid_topic_ids = sorted(_diagnostic_topic_ids_for_titles(
+            [answer.topic_title for answer in payload.topic_mastery],
+            batches,
+        ))
         raise CourseNexusError(
             code="DIAGNOSTIC_STALE",
             message="诊断答案和当前资料范围不匹配，请重新诊断",
             status_code=409,
-            details={"invalid_topic_ids": invalid_topic_ids, "valid_topic_ids": sorted(valid_topic_ids)},
+            details={"invalid_topic_ids": invalid_topic_ids, "valid_topic_ids": valid_topic_ids},
         )
 
     weak_topics = [answer.topic_id for answer in payload.topic_mastery if answer.mastery_level in {"none", "heard"}]
@@ -272,6 +341,10 @@ def preview_study_plan(
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
     task_previews = _normalize_task_sort_orders(_normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks))
+    task_previews = _strip_meta_citations_from_learn_subtasks(
+        task_previews,
+        meta_chunk_ids=_meta_citation_chunk_ids_from_batches(batches),
+    )
     estimated_total_minutes = _task_previews_total_minutes(task_previews)
     daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
     recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
@@ -308,6 +381,7 @@ def preview_study_plan(
         recommended_daily_minutes=recommended_daily_minutes,
         daily_minutes_source=daily_minutes_source,
         preference=payload.preference,
+        preference_overrides=payload.preference_overrides,
         diagnostic_profile=payload.diagnostic_profile,
         material_snapshot=material_snapshot,
         material_scope=payload.material_scope,
@@ -398,6 +472,16 @@ def save_study_plan(
             course_id=course_id,
             payload=save_payload,
             task_previews=tasks_preview,
+        )
+        tasks_preview = _strip_meta_citations_from_learn_subtasks(
+            tasks_preview,
+            meta_chunk_ids=_best_effort_meta_citation_chunk_ids_for_scope(
+                db,
+                user_id=user_id,
+                course_id=course_id,
+                payload=save_payload,
+                max_tokens=max_tokens,
+            ),
         )
         save_payload = _resolve_save_payload_daily_minutes(save_payload, tasks_preview=tasks_preview)
 
@@ -520,6 +604,11 @@ def preview_study_plan_regeneration(
         or plan.daily_available_minutes
     )
     preference = payload.preference or confirmed_config.get("preference") or config.get("preference") or "balanced"
+    preference_overrides = _regeneration_preference_overrides(
+        payload=payload,
+        confirmed_config=confirmed_config,
+        config=config,
+    )
     build_payload = StudyPlanBuildRequest(
         goal_text=payload.goal_text or plan.goal_text,
         start_date=start_date,
@@ -527,6 +616,7 @@ def preview_study_plan_regeneration(
         duration_days=duration_days,
         daily_available_minutes=daily_available_minutes,
         preference=preference,
+        preference_overrides=preference_overrides,
         diagnostic_profile=diagnostic_profile,
         material_scope=material_scope,
     )
@@ -707,14 +797,14 @@ def _normalize_preference_value(value: str | None) -> str | None:
 
 
 
-def _diagnostic_topics_for_scope(
+def _diagnostic_batches_for_scope(
     db: Session,
     *,
     user_id: str,
     course_id: str,
     material_scope: object,
     max_tokens: int,
-) -> list[dict[str, str]]:
+) -> list[MaterialContextBatch]:
     batches = list(
         iter_material_context_batches(
             db,
@@ -726,32 +816,203 @@ def _diagnostic_topics_for_scope(
     )
     if not batches:
         raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有已解析资料", status_code=400)
+    return batches
 
-    topics = _extract_diagnostic_topics(batches)
-    if not topics:
-        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有可用于诊断的资料主题", status_code=400)
+
+def _diagnostic_topics_for_questions(
+    *,
+    payload: StudyPlanDiagnosticQuestionRequest,
+    batches: list[MaterialContextBatch],
+    model_provider: ModelProvider,
+) -> tuple[list[dict[str, str]], dict[str, object]]:
+    model_topics, fallback_reason = _model_diagnostic_topics(
+        payload=payload,
+        batches=batches,
+        model_provider=model_provider,
+    )
+    if fallback_reason is None and len(model_topics) >= 3:
+        return model_topics[:3], {
+            "source": "model",
+            "fallback_reason": None,
+            "model_topic_count": len(model_topics),
+        }
+
+    topics = _fallback_diagnostic_topics(batches, seed_topics=model_topics)
+    return topics[:3], {
+        "source": "fallback",
+        "fallback_reason": fallback_reason or "model_output_supplemented",
+        "model_topic_count": len(model_topics),
+    }
+
+
+def _model_diagnostic_topics(
+    *,
+    payload: StudyPlanDiagnosticQuestionRequest,
+    batches: list[MaterialContextBatch],
+    model_provider: ModelProvider,
+) -> tuple[list[dict[str, str]], str | None]:
+    try:
+        extraction = model_provider.generate_structured(
+            prompt=_build_diagnostic_questions_prompt(payload=payload, batches=batches),
+            output_schema=StudyPlanDiagnosticTopicExtraction,
+        )
+    except CourseNexusError as exc:
+        return [], exc.code.lower()
+    except Exception:
+        return [], "model_failed"
+
+    topics = _topics_from_model_extraction(extraction, batches)
+    if len(topics) < 3:
+        return topics, "model_output_incomplete"
+    return topics[:3], None
+
+
+def _topics_from_model_extraction(
+    extraction: StudyPlanDiagnosticTopicExtraction,
+    batches: list[MaterialContextBatch],
+) -> list[dict[str, str]]:
+    chunk_by_id = {chunk.chunk_id: chunk for chunk in _diagnostic_chunks(batches)}
+    topics: list[dict[str, str]] = []
+    seen_topic_ids: set[str] = set()
+    seen_titles: set[str] = set()
+    for candidate in extraction.topics:
+        title = _normalize_topic_title(candidate.topic_title)
+        if not title:
+            continue
+        source_chunk = chunk_by_id.get(candidate.source_chunk_id or "") or _match_diagnostic_topic_chunk(title, batches)
+        if source_chunk is None:
+            continue
+        topic = _diagnostic_topic_from_chunk(chunk=source_chunk, topic_title=title)
+        title_key = _normalize_topic_title(topic["topic_title"]).casefold()
+        if topic["topic_id"] in seen_topic_ids or title_key in seen_titles:
+            continue
+        seen_topic_ids.add(topic["topic_id"])
+        seen_titles.add(title_key)
+        topics.append(topic)
+        if len(topics) >= 3:
+            break
     return topics
 
 
-def _extract_diagnostic_topics(batches: list[MaterialContextBatch]) -> list[dict[str, str]]:
+def _fallback_diagnostic_topics(
+    batches: list[MaterialContextBatch],
+    *,
+    seed_topics: list[dict[str, str]] | None = None,
+) -> list[dict[str, str]]:
     topics: list[dict[str, str]] = []
+    seen_topic_ids: set[str] = set()
     seen_titles: set[str] = set()
-    for batch in batches:
-        for chunk in batch.chunks:
-            topic_title = _diagnostic_topic_title(chunk)
-            normalized_title = _normalize_topic_title(topic_title)
-            if not normalized_title or normalized_title in seen_titles:
-                continue
-            seen_titles.add(normalized_title)
-            topics.append(
-                {
-                    "topic_id": _diagnostic_topic_id(chunk=chunk, topic_title=normalized_title),
-                    "topic_title": normalized_title,
-                }
-            )
+
+    def add_topic(chunk: ContextChunk, title: str) -> None:
+        if len(topics) >= 3:
+            return
+        normalized_title = _normalize_topic_title(title)
+        if not normalized_title:
+            return
+        topic = _diagnostic_topic_from_chunk(chunk=chunk, topic_title=normalized_title)
+        title_key = topic["topic_title"].casefold()
+        if topic["topic_id"] in seen_topic_ids or title_key in seen_titles:
+            return
+        seen_topic_ids.add(topic["topic_id"])
+        seen_titles.add(title_key)
+        topics.append(topic)
+
+    first_chunk = next(iter(_diagnostic_chunks(batches)), None)
+    for topic in seed_topics or []:
+        source_chunk = _chunk_for_topic_id(topic.get("topic_id", ""), topic.get("topic_title", ""), batches)
+        if source_chunk is not None:
+            add_topic(source_chunk, topic["topic_title"])
+
+    for chunk in _diagnostic_chunks(batches):
+        for title in _fallback_topic_titles_for_chunk(chunk):
+            add_topic(chunk, title)
             if len(topics) >= 3:
                 return topics
+
+    if first_chunk is None:
+        raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前范围没有可用于诊断的资料主题", status_code=400)
+
+    base_title = _normalize_topic_title(_diagnostic_topic_title(first_chunk)) or "核心知识点"
+    for suffix in ("基础概念", "关键关系", "典型应用", "易错点"):
+        add_topic(first_chunk, f"{base_title}{suffix}")
+        if len(topics) >= 3:
+            return topics
+
+    while len(topics) < 3:
+        add_topic(first_chunk, f"{base_title}重点 {len(topics) + 1}")
     return topics
+
+
+def _invalid_diagnostic_answer_topic_ids(topic_mastery: list[object], batches: list[MaterialContextBatch]) -> list[str]:
+    invalid_topic_ids: list[str] = []
+    for answer in topic_mastery:
+        topic_title = _normalize_topic_title(getattr(answer, "topic_title", ""))
+        topic_id = getattr(answer, "topic_id", "")
+        valid_topic_ids = _diagnostic_topic_ids_for_titles([topic_title], batches)
+        if topic_id not in valid_topic_ids:
+            invalid_topic_ids.append(topic_id)
+    return invalid_topic_ids
+
+
+def _diagnostic_topic_ids_for_titles(topic_titles: list[str], batches: list[MaterialContextBatch]) -> set[str]:
+    topic_ids: set[str] = set()
+    for topic_title in topic_titles:
+        normalized_title = _normalize_topic_title(topic_title)
+        if not normalized_title:
+            continue
+        for chunk in _diagnostic_chunks(batches):
+            topic_ids.add(_diagnostic_topic_id(chunk=chunk, topic_title=normalized_title))
+    return topic_ids
+
+
+def _chunk_for_topic_id(topic_id: str, topic_title: str, batches: list[MaterialContextBatch]) -> ContextChunk | None:
+    normalized_title = _normalize_topic_title(topic_title)
+    if not topic_id or not normalized_title:
+        return None
+    for chunk in _diagnostic_chunks(batches):
+        if _diagnostic_topic_id(chunk=chunk, topic_title=normalized_title) == topic_id:
+            return chunk
+    return None
+
+
+def _match_diagnostic_topic_chunk(topic_title: str, batches: list[MaterialContextBatch]) -> ContextChunk | None:
+    title_key = _normalize_topic_title(topic_title).casefold()
+    if not title_key:
+        return None
+    for chunk in _diagnostic_chunks(batches):
+        searchable = " ".join(
+            part for part in (chunk.heading or "", chunk.material_name, chunk.content_text[:1200]) if part
+        ).casefold()
+        if title_key in searchable:
+            return chunk
+    return None
+
+
+def _diagnostic_chunks(batches: list[MaterialContextBatch]) -> list[ContextChunk]:
+    return [chunk for batch in batches for chunk in batch.chunks]
+
+
+def _fallback_topic_titles_for_chunk(chunk: ContextChunk) -> list[str]:
+    titles: list[str] = []
+    primary_title = _diagnostic_topic_title(chunk)
+    if primary_title:
+        titles.append(primary_title)
+
+    text = re.sub(r"[`*_>#\-]+", " ", chunk.content_text)
+    fragments = re.split(r"[。；;\n：:！!？?]", text)
+    for fragment in fragments:
+        cleaned = _normalize_topic_title(fragment)
+        if 4 <= len(cleaned) <= 36:
+            titles.append(cleaned)
+        elif len(cleaned) > 36:
+            titles.append(cleaned[:36].strip())
+        if len(titles) >= 6:
+            break
+
+    material_name = re.sub(r"\.[^.]+$", "", chunk.material_name).strip()
+    if material_name:
+        titles.append(f"{material_name}核心内容")
+    return titles
 
 
 def _diagnostic_topic_title(chunk: ContextChunk) -> str:
@@ -768,10 +1029,22 @@ def _normalize_topic_title(topic_title: str) -> str:
     return re.sub(r"\s+", " ", topic_title.strip().lstrip("#").strip())
 
 
+def _diagnostic_topic_from_chunk(*, chunk: ContextChunk, topic_title: str) -> dict[str, str]:
+    normalized_title = _normalize_topic_title(topic_title)
+    return {
+        "topic_id": _diagnostic_topic_id(chunk=chunk, topic_title=normalized_title),
+        "topic_title": normalized_title,
+        "source_chunk_id": chunk.chunk_id,
+    }
+
+
 def _diagnostic_topic_id(*, chunk: ContextChunk, topic_title: str) -> str:
-    basis = f"{chunk.material_id}:{chunk.chunk_id}:{topic_title}"
+    basis = f"{chunk.material_id}:{chunk.chunk_id}:{_normalize_topic_title(topic_title)}"
     digest = hashlib.sha256(basis.encode("utf-8")).hexdigest()[:16]
     return f"topic_{digest}"
+
+def _diagnostic_question_type_label(question_type: str) -> str:
+    return _DIAGNOSTIC_QUESTION_TYPE_LABELS.get(question_type, question_type)
 
 
 def _mastery_question_options() -> list[StudyPlanDiagnosticQuestionOption]:
@@ -874,6 +1147,79 @@ def _normalize_task_sort_orders(tasks: list[StudyTaskPreview]) -> list[StudyTask
             )
         )
     return normalized_tasks
+
+
+def _best_effort_meta_citation_chunk_ids_for_scope(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    payload: StudyPlanBuildRequest,
+    max_tokens: int,
+) -> set[str]:
+    try:
+        batches = list(
+            iter_material_context_batches(
+                db,
+                user_id=user_id,
+                course_id=course_id,
+                material_scope=payload.material_scope,
+                max_tokens=max_tokens,
+            )
+        )
+    except CourseNexusError as exc:
+        if exc.code == "MATERIAL_COVERAGE_INCOMPLETE":
+            return set()
+        raise
+    return _meta_citation_chunk_ids_from_batches(batches)
+
+
+def _strip_meta_citations_from_learn_subtasks(
+    tasks: list[StudyTaskPreview],
+    *,
+    meta_chunk_ids: set[str],
+) -> list[StudyTaskPreview]:
+    if not meta_chunk_ids:
+        return tasks
+
+    cleaned_tasks: list[StudyTaskPreview] = []
+    for task in tasks:
+        cleaned_subtasks: list[StudySubTaskPreview] = []
+        for subtask in task.subtasks:
+            if subtask.subtask_type == "learn":
+                citation_chunk_ids = subtask.citation_chunk_ids
+                has_meta_citation = any(chunk_id in meta_chunk_ids for chunk_id in citation_chunk_ids)
+                has_body_citation = any(chunk_id not in meta_chunk_ids for chunk_id in citation_chunk_ids)
+                if has_meta_citation and has_body_citation:
+                    subtask = subtask.model_copy(
+                        update={
+                            "citation_chunk_ids": [
+                                chunk_id for chunk_id in citation_chunk_ids if chunk_id not in meta_chunk_ids
+                            ]
+                        }
+                    )
+            cleaned_subtasks.append(subtask)
+        cleaned_tasks.append(task.model_copy(update={"subtasks": cleaned_subtasks}))
+    return cleaned_tasks
+
+
+def _meta_citation_chunk_ids_from_batches(batches: list[MaterialContextBatch]) -> set[str]:
+    return {
+        chunk.chunk_id
+        for batch in batches
+        for chunk in batch.chunks
+        if _is_meta_citation_chunk(chunk)
+    }
+
+
+def _is_meta_citation_chunk(chunk: ContextChunk) -> bool:
+    heading = _normalize_meta_citation_text(chunk.heading or "")
+    content_prefix = _normalize_meta_citation_text((chunk.content_text or "")[:200])
+    return any(keyword in heading or keyword in content_prefix for keyword in _META_CITATION_CHUNK_KEYWORDS)
+
+
+def _normalize_meta_citation_text(value: str) -> str:
+    return " ".join(value.strip().split()).casefold()
 
 
 def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
@@ -1061,6 +1407,7 @@ def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int
         "duration_days": duration_days,
         "daily_available_minutes": _require_resolved_daily_minutes(payload.daily_available_minutes),
         "preference": _normalize_preference_value(payload.preference),
+        "preference_overrides": payload.preference_overrides.model_dump(mode="json"),
         "planner_strategy": planner_strategy,
         "material_scope": payload.material_scope.model_dump(mode="json"),
     }
@@ -1146,6 +1493,7 @@ def _saved_config(
         "material_scope": payload.material_scope.model_dump(mode="json"),
         "daily_available_minutes": daily_available_minutes,
         "preference": _normalize_preference_value(payload.preference),
+        "preference_overrides": payload.preference_overrides.model_dump(mode="json"),
         "planner_strategy": planner_strategy,
         "start_date": payload.start_date.isoformat(),
         "end_date": payload.end_date.isoformat(),
@@ -1219,6 +1567,17 @@ def _validate_confirmed_task_tree(
             )
 
         for subtask in task.subtasks:
+            if subtask.subtask_type not in {"quiz", "test"}:
+                if "task_test" in subtask.generation_parameters:
+                    _raise_invalid_confirmed_task_tree(
+                        "学习或复习任务不能携带测试题生成参数",
+                        details={"task_sort_order": task.sort_order, "subtask_sort_order": subtask.sort_order},
+                    )
+                if _has_assessment_quantity_text(subtask.title, subtask.description):
+                    _raise_invalid_confirmed_task_tree(
+                        "学习或复习任务不能包含测试题量要求",
+                        details={"task_sort_order": task.sort_order, "subtask_sort_order": subtask.sort_order},
+                    )
             related_material_ids = set(subtask.related_material_ids)
             if not related_material_ids:
                 _raise_invalid_confirmed_task_tree(
@@ -1239,6 +1598,12 @@ def _validate_confirmed_task_tree(
 
 def _raise_invalid_confirmed_task_tree(message: str, *, details: dict[str, object] | None = None) -> None:
     raise CourseNexusError(code="VALIDATION_ERROR", message=message, status_code=422, details=details)
+
+
+def _has_assessment_quantity_text(title: str, description: str | None) -> bool:
+    text = " ".join(part for part in (title, description or "") if part)
+    return bool(re.search(r"([一二两三四五六七八九十\d]+)\s*道\s*(单选题|多选题|选择题|判断题|简答题|问答题|计算题|证明题)", text))
+
 
 def _rows_from_task_previews(
     *,
@@ -1327,16 +1692,80 @@ def _config_int(config: dict[str, object], key: str) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _regeneration_preference_overrides(
+    *,
+    payload: StudyPlanRegenerationPreviewRequest,
+    confirmed_config: dict[str, object],
+    config: dict[str, object],
+) -> StudyPreferenceOverrides:
+    if "preference_overrides" in payload.model_fields_set:
+        return payload.preference_overrides or StudyPreferenceOverrides()
+    return (
+        _preference_overrides_from_config(confirmed_config)
+        or _preference_overrides_from_config(config)
+        or StudyPreferenceOverrides()
+    )
+
+
 def _preference_overrides_from_config(config: dict[str, object]) -> StudyPreferenceOverrides | None:
     value = config.get("preference_overrides")
     if isinstance(value, dict):
         return StudyPreferenceOverrides.model_validate(value)
     return None
+
+
 def _material_scope_from_config(config: dict[str, object]) -> object:
     material_scope = config.get("material_scope")
     if isinstance(material_scope, dict):
         return material_scope
     return {"include_all_parsed_materials": True, "material_ids": []}
+
+def _build_diagnostic_questions_prompt(
+    *,
+    payload: StudyPlanDiagnosticQuestionRequest,
+    batches: list[MaterialContextBatch],
+) -> str:
+    chunks_payload = []
+    for index, chunk in enumerate(_diagnostic_chunks(batches)[:30], start=1):
+        chunks_payload.append(
+            {
+                "index": index,
+                "chunk_id": chunk.chunk_id,
+                "material_id": chunk.material_id,
+                "material_name": chunk.material_name,
+                "heading": chunk.heading,
+                "page": chunk.page,
+                "page_index": chunk.page_index,
+                "excerpt": chunk.content_text[:700],
+            }
+        )
+
+    return "\n".join(
+        [
+            "你是 CourseNexus 的学前诊断题生成器。",
+            "你的任务是根据用户学习目标、已确认学习设置和选定课程资料，选择 3 个用于了解学生当前基础的资料内主题。",
+            "你不生成学习计划，不问学习偏好，不估算学习时间，不生成考试题。",
+            "只输出 topics 数组；每个 topic 必须来自下方 chunk excerpts，并尽量填写 source_chunk_id。",
+            "规则：",
+            "- 必须生成 3 个 topic 候选。",
+            "- 优先选择对计划生成有诊断价值的核心主题，不要机械选择前 3 个 heading。",
+            "- 不出知识测验题，不问‘公式是什么’。",
+            "- 不问学习方式、每日时间、资料范围。",
+            "- topic_title 必须来自资料内容，不得编造资料外主题。",
+            "- question_text 统一写成：你对「topic_title」了解多少？",
+            "- 如果资料较少，可以从同一 chunk 中拆出 3 个偏泛但仍然资料内的主题。",
+            "输入：",
+            json.dumps(
+                {
+                    "goal_text": payload.goal_text,
+                    "confirmed_config": payload.confirmed_config.model_dump(mode="json"),
+                    "material_scope": payload.material_scope.model_dump(mode="json"),
+                    "chunk_excerpts": chunks_payload,
+                },
+                ensure_ascii=False,
+            ),
+        ]
+    )
 
 def _build_config_parse_prompt(*, course_name: str, payload: StudyPlanConfigParseRequest) -> str:
     reference_date = _config_parse_reference_date().isoformat()
@@ -1541,6 +1970,7 @@ def _assemble_parsed_config(
     )
     preference_overrides, preference_overrides_resolution = _resolve_config_preference_overrides(
         preference_overrides=extraction.preference_overrides,
+        goal_text=payload.goal_text,
     )
     unresolved_fields = _resolve_config_unresolved_fields(
         start_date=start_date,
@@ -1571,6 +2001,10 @@ def _assemble_parsed_config(
         material_scope=payload.material_scope,
         unresolved_fields=unresolved_fields,
         needs_confirmation_fields=needs_confirmation_fields,
+        field_labels=dict(_CONFIG_FIELD_LABELS),
+        unresolved_field_prompts=_config_field_prompts(unresolved_fields),
+        needs_confirmation_field_prompts=_config_field_prompts(needs_confirmation_fields),
+        field_options=_config_field_options(),
     )
 
 def _config_parse_reference_date() -> date:
@@ -1688,10 +2122,78 @@ def _resolve_config_preference(
 def _resolve_config_preference_overrides(
     *,
     preference_overrides: StudyPreferenceOverrides,
+    goal_text: str,
 ) -> tuple[StudyPreferenceOverrides, str]:
-    if _has_preference_overrides(preference_overrides):
-        return preference_overrides, "model"
+    rule_overrides = _guardrail_preference_overrides(goal_text)
+    model_has_overrides = _has_preference_overrides(preference_overrides)
+    rule_has_overrides = _has_preference_overrides(rule_overrides)
+    if model_has_overrides:
+        merged = _merge_preference_overrides(preference_overrides, rule_overrides)
+        resolution = "model_rule_guardrail" if rule_has_overrides and merged != preference_overrides else "model"
+        return merged, resolution
+    if rule_has_overrides:
+        return rule_overrides, "rule_guardrail"
     return preference_overrides, "none"
+
+
+def _merge_preference_overrides(
+    primary: StudyPreferenceOverrides,
+    fallback: StudyPreferenceOverrides,
+) -> StudyPreferenceOverrides:
+    data = primary.model_dump(mode="json")
+    for key, value in fallback.model_dump(mode="json").items():
+        if data.get(key) is None and value is not None:
+            data[key] = value
+    return StudyPreferenceOverrides.model_validate(data)
+
+
+def _guardrail_preference_overrides(goal_text: str) -> StudyPreferenceOverrides:
+    content_depth = None
+    if any(
+        _contains_non_negated_phrase(goal_text, phrase)
+        for phrase in (
+            "讲义详细",
+            "讲详细",
+            "详细讲",
+            "讲细",
+            "详细一点",
+            "多给公式",
+            "公式适用条件",
+            "多讲公式",
+            "公式部分详细",
+        )
+    ):
+        content_depth = "detailed"
+
+    example_intensity = None
+    if any(
+        _contains_non_negated_phrase(goal_text, phrase)
+        for phrase in ("多给例题", "多讲例题", "多举例", "多给例子")
+    ):
+        example_intensity = "high"
+
+    assessment_intensity = None
+    if any(
+        _contains_non_negated_phrase(goal_text, phrase)
+        for phrase in ("多安排测试", "多做测试", "强化测试", "多做题")
+    ):
+        assessment_intensity = "high"
+
+    review_intensity = None
+    if any(
+        _contains_non_negated_phrase(goal_text, phrase)
+        for phrase in ("多复习", "重点回顾", "强化复习")
+    ):
+        review_intensity = "high"
+
+    return StudyPreferenceOverrides(
+        content_depth=content_depth,
+        example_intensity=example_intensity,
+        assessment_intensity=assessment_intensity,
+        review_intensity=review_intensity,
+    )
+
+
 def _guardrail_preference(goal_text: str) -> str | None:
     signals = {
         "mastery": (
@@ -1702,16 +2204,9 @@ def _guardrail_preference(goal_text: str) -> str | None:
             "真正掌握",
             "系统掌握",
             "扎实掌握",
-            "讲义详细",
-            "讲详细",
-            "讲细",
-            "详细一点",
-            "多给例题",
-            "多给公式",
-            "公式适用条件",
-            "多讲公式",
-            "多讲例题",
-            "讲透",
+            "讲透整个章节",
+            "讲透这一章",
+            "讲透第",
         ),
         "fast_track": (
             "速通",
@@ -1778,6 +2273,24 @@ def _resolve_config_confirmation_fields(*, ambiguous_fields: set[str]) -> list[s
     if "daily_available_minutes" in ambiguous_fields:
         fields.append("daily_available_minutes")
     return _without_system_or_duplicate_fields(fields)
+
+
+def _config_field_prompts(fields: list[str]) -> list[dict[str, str]]:
+    prompts: list[dict[str, str]] = []
+    for field in fields:
+        label = _CONFIG_FIELD_LABELS.get(field, field)
+        prompts.append(
+            {
+                "field": field,
+                "label": label,
+                "message": _CONFIG_FIELD_PROMPTS.get(field, f"请确认{label}。"),
+            }
+        )
+    return prompts
+
+
+def _config_field_options() -> dict[str, list[dict[str, str]]]:
+    return {field: [dict(option) for option in options] for field, options in _CONFIG_FIELD_OPTIONS.items()}
 
 
 def _without_system_or_duplicate_fields(fields: list[str]) -> list[str]:

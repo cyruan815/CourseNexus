@@ -1,12 +1,30 @@
 from __future__ import annotations
 
-from subprocess import CompletedProcess, TimeoutExpired
+from pathlib import Path
+from subprocess import CompletedProcess, TimeoutExpired, run
 
 import pytest
 
 from app.core.errors import CourseNexusError
 from app.integrations.markmap.preprocessor import MarkmapLibPreprocessor
 
+
+def _skip_when_markmap_lib_unavailable() -> None:
+    script_dir = Path(__file__).resolve().parents[2] / "scripts"
+    try:
+        completed = run(
+            ["node", "--input-type=module", "-e", "import('markmap-lib')"],
+            cwd=script_dir,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+            encoding="utf-8",
+        )
+    except (OSError, TimeoutExpired):
+        pytest.skip("markmap-lib runtime is unavailable; run pnpm install at repo root")
+    if completed.returncode != 0:
+        pytest.skip("markmap-lib runtime is unavailable; run pnpm install at repo root")
 
 def test_markmap_preprocessor_sends_markdown_to_node_and_parses_result(tmp_path) -> None:
     calls: list[dict[str, object]] = []
@@ -65,6 +83,7 @@ def test_markmap_preprocessor_maps_timeout(tmp_path) -> None:
 
 
 def test_real_markmap_lib_transform_returns_renderable_tree() -> None:
+    _skip_when_markmap_lib_unavailable()
     result = MarkmapLibPreprocessor().transform("- Root\n  - Child")
     assert result["root"]["content"] == "Root"
     assert result["root"]["children"][0]["content"] == "Child"

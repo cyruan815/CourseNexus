@@ -13,11 +13,13 @@ from app.modules.study_plans.schemas import (
     PlanBatchExtraction,
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
+    StudyPlanConfigExtraction,
     StudyPlanCoverage,
     StudyPlanParsedConfig,
     PlanPreference,
     StudyPlanPreview,
     StudyPlanSaveRequest,
+    StudyPreferenceOverrides,
     StudySubTaskPreview,
     StudyTaskPreview,
 )
@@ -85,6 +87,26 @@ def _mapped_batch() -> PlanBatchExtraction:
             ],
             "citation_chunk_ids": ["chk_001", "chk_002"],
         }
+    )
+
+
+class _ConfigParseTestProvider:
+    pass
+
+
+def _assemble_config_from_goal(
+    goal_text: str,
+    *,
+    preference: str | None = None,
+    preference_overrides: StudyPreferenceOverrides | None = None,
+) -> StudyPlanParsedConfig:
+    return study_plan_service._assemble_parsed_config(
+        extraction=StudyPlanConfigExtraction(
+            preference=preference,
+            preference_overrides=preference_overrides or StudyPreferenceOverrides(),
+        ),
+        payload=StudyPlanConfigParseRequest(goal_text=goal_text, material_scope=MaterialScope()),
+        model_provider=_ConfigParseTestProvider(),
     )
 
 
@@ -284,6 +306,29 @@ def test_derive_planner_strategy_keeps_foundation_for_fast_track_diagnostic() ->
     assert strategy["explanation_style"] == "step_by_step"
 
 
+def test_reduce_prompt_uses_effective_preference_overrides_without_default_conflict() -> None:
+    payload = _build_request().model_copy(
+        update={
+            "preference": "fast_track",
+            "preference_overrides": StudyPreferenceOverrides(content_depth="detailed"),
+        }
+    )
+
+    prompt = planner._build_reduce_prompt(
+        mapped_batches=[_mapped_batch()],
+        payload=payload,
+        expected_material_ids={"mat_net"},
+        course_name="计算机网络",
+    )
+
+    assert "content_depth: detailed" in prompt
+    assert "example_intensity: low" in prompt
+    assert "assessment_intensity: low" in prompt
+    assert "review_intensity: low" in prompt
+    assert "content_depth=concise" not in prompt
+    assert "局部覆盖" in prompt
+
+
 def test_derive_planner_strategy_marks_mastery_and_sprint_intensity() -> None:
     mastery_strategy = planner.derive_planner_strategy("mastery")
     sprint_strategy = planner.derive_planner_strategy("sprint")
@@ -362,7 +407,8 @@ def test_reduce_prompt_includes_diagnostic_profile_strategy() -> None:
     assert "foundation_required: true" in prompt
     assert "第一天或最早可行日期" in prompt
     assert "即使 preference=fast_track" in prompt
-    assert "fast_track 不能生成过重计划" in prompt
+    assert "fast_track 以最终有效策略控制计划轻重" in prompt
+    assert "不得再次使用学习方式的默认值覆盖" in prompt
     assert "weak_topics: nyquist_shannon, modulation_coding" in prompt
     assert "更靠前、更细" in prompt
     assert "weak_area: calculation" in prompt
@@ -518,6 +564,40 @@ def test_config_parse_schema_normalizes_nullable_trace_fields() -> None:
     assert parsed.coverage == {}
     assert parsed.capacity == {}
     assert parsed.generation_metadata == {}
+def test_config_parse_guardrail_keeps_detail_examples_as_local_overrides() -> None:
+    parsed = _assemble_config_from_goal("讲义详细一点，多给例题")
+
+    assert parsed.preference is None
+    assert parsed.preference_overrides.content_depth == "detailed"
+    assert parsed.preference_overrides.example_intensity == "high"
+    assert parsed.generation_metadata["config_parse"]["preference_resolution"] == "unresolved"
+    assert parsed.generation_metadata["config_parse"]["preference_overrides_resolution"] == "rule_guardrail"
+
+
+def test_config_parse_guardrail_keeps_overall_mastery_and_local_detail() -> None:
+    parsed = _assemble_config_from_goal("深入掌握整个章节，讲义详细一点")
+
+    assert parsed.preference == "mastery"
+    assert parsed.preference_overrides.content_depth == "detailed"
+
+
+def test_config_parse_guardrail_supports_fast_track_with_local_detail_override() -> None:
+    parsed = _assemble_config_from_goal("快速过一遍，但公式部分详细讲")
+
+    assert parsed.preference == "fast_track"
+    assert parsed.preference_overrides.content_depth == "detailed"
+    assert parsed.preference_overrides.example_intensity is None
+
+
+@pytest.mark.parametrize("goal_text", ["不需要详细讲", "不是考前冲刺"])
+def test_config_parse_guardrail_ignores_negated_preference_signals(goal_text: str) -> None:
+    parsed = _assemble_config_from_goal(goal_text)
+
+    assert parsed.preference is None
+    assert parsed.preference_overrides.content_depth is None
+    assert parsed.preference_overrides.assessment_intensity is None
+
+
 def test_config_parse_prompt_explains_relative_day_rules() -> None:
     prompt = study_plan_service._build_config_parse_prompt(
         course_name="计算机网络",
@@ -527,32 +607,22 @@ def test_config_parse_prompt_explains_relative_day_rules() -> None:
         ),
     )
 
-    assert "今天是 YYYY年M月D日" in prompt
-    assert "两天学完" in prompt
-    assert "start_date 为当天" in prompt
-    assert "end_date 为当天 + 1 天" in prompt
+    assert "reference_date:" in prompt
+    assert "timezone: Asia/Shanghai" in prompt
+    assert "持续 N 天时，开始日算第 1 天" in prompt
+    assert "如果已知 start_date 和 duration_days，请计算 end_date" in prompt
+    assert "不得计算推荐每日学习时间" in prompt
+    assert "preference_overrides 用于提取局部要求" in prompt
 
 
-def test_normalize_relative_config_resolves_two_day_goal_from_explicit_today() -> None:
-    parsed = StudyPlanParsedConfig(
-        goal_text="我要两天学完计网这门课的第七章节",
-        start_date=None,
-        end_date=None,
-        daily_available_minutes=None,
-        preference=None,
-        unresolved_fields=["start_date", "end_date", "daily_available_minutes"],
-    )
+def test_assemble_parsed_config_resolves_two_day_goal_from_explicit_today() -> None:
+    parsed = _assemble_config_from_goal("我要两天学完计网这门课的第七章节，今天是2026年7月12日")
 
-    normalized = study_plan_service._normalize_relative_config(
-        parsed,
-        goal_text="我要两天学完计网这门课的第七章节，今天是2026年7月12日",
-    )
-
-    assert normalized.start_date == date(2026, 7, 12)
-    assert normalized.end_date == date(2026, 7, 13)
-    assert "start_date" not in normalized.unresolved_fields
-    assert "end_date" not in normalized.unresolved_fields
-    assert "daily_available_minutes" in normalized.unresolved_fields
+    assert parsed.start_date == date(2026, 7, 12)
+    assert parsed.end_date == date(2026, 7, 13)
+    assert parsed.duration_days == 2
+    assert "start_date" not in parsed.unresolved_fields
+    assert "duration_days" not in parsed.unresolved_fields
 
 def test_build_request_derives_end_date_from_duration_days_and_normalizes_preference() -> None:
     request = StudyPlanBuildRequest.model_validate(
@@ -737,6 +807,10 @@ def test_enriches_quiz_subtask_generation_parameters_from_task_text() -> None:
     assert params == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
 
@@ -767,6 +841,10 @@ def test_normalizes_model_question_type_count_generation_parameters() -> None:
     assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
 
@@ -800,6 +878,10 @@ def test_normalizes_model_question_type_list_generation_parameters() -> None:
     assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
 
@@ -828,6 +910,10 @@ def test_normalizes_model_question_label_map_generation_parameters() -> None:
     assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
 
@@ -863,6 +949,10 @@ def test_normalizes_model_question_type_objects_generation_parameters() -> None:
     assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
 
@@ -897,8 +987,47 @@ def test_normalizes_model_items_generation_parameters() -> None:
     assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
         "question_count": 13,
         "question_types": ["single_choice", "short_answer"],
+        "question_type_counts": [
+            {"question_type": "single_choice", "question_count": 10},
+            {"question_type": "short_answer", "question_count": 3},
+        ],
         "difficulty": "medium",
     }
+
+
+def test_rejects_conflicting_question_type_count_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="物理层综合测试",
+                subtask_type="test",
+                description="完成测试题。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={
+                    "task_test": {
+                        "question_count": 12,
+                        "question_type_counts": [
+                            {"question_type": "single_choice", "question_count": 10},
+                            {"question_type": "short_answer", "question_count": 3},
+                        ],
+                    }
+                },
+                sort_order=1,
+            )
+        ],
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        study_plan_service._with_subtask_generation_parameters([task])
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    assert exc_info.value.details["field"] == "generation_parameters.task_test"
+
 
 def test_rejects_invalid_quiz_subtask_generation_parameters() -> None:
     task = StudyTaskPreview(

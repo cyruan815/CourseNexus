@@ -25,6 +25,9 @@ def test_every_model_purpose_has_an_independent_endpoint() -> None:
         quiz_api_key="quiz-key",
         quiz_base_url="https://quiz.example/v1",
         quiz_model="quiz-model",
+        study_plan_diagnostic_api_key="diagnostic-key",
+        study_plan_diagnostic_base_url="https://diagnostic.example/v1",
+        study_plan_diagnostic_model="diagnostic-model",
     )
 
     assert set(MODEL_PURPOSES) == {
@@ -36,6 +39,7 @@ def test_every_model_purpose_has_an_independent_endpoint() -> None:
         "outline",
         "knowledge_list",
         "study_plan_parser",
+        "study_plan_diagnostic",
         "study_plan_generator",
         "handout",
         "task_test",
@@ -54,6 +58,11 @@ def test_every_model_purpose_has_an_independent_endpoint() -> None:
         "api_key": "quiz-key",
         "base_url": "https://quiz.example/v1",
         "model": "quiz-model",
+    }
+    assert settings.model_endpoint("study_plan_diagnostic").model_dump() == {
+        "api_key": "diagnostic-key",
+        "base_url": "https://diagnostic.example/v1",
+        "model": "diagnostic-model",
     }
     assert settings.model_endpoint("flashcard").api_key is None
 

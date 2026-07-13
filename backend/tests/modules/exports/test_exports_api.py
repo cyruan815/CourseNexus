@@ -16,7 +16,7 @@ from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
-from app.modules.exports.renderer import _render_handout_pdf_lines, render_markdown_pdf, render_markdown_pdf_html
+from app.modules.exports.renderer import _render_handout_pdf_lines, _render_handout_pdf_markdown, render_markdown_pdf, render_markdown_pdf_html
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentCitationRead
@@ -168,6 +168,59 @@ def _handout_json(*, source_citation_ids: list[str] | None = None) -> dict[str, 
         "summary": "完成主键概念学习。",
     }
 
+
+def _handout_v2_json() -> dict[str, object]:
+    return {
+        "schema_version": 2,
+        "title": "信道容量讲义",
+        "overview": "围绕信道容量建立公式和直觉。",
+        "difficulty": "medium",
+        "estimated_minutes": 40,
+        "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
+        "prerequisites": [],
+        "sections": [
+            {
+                "id": "sec_1",
+                "title": "Shannon 公式",
+                "lead": "先说结论。",
+                "source_citation_ids": ["cit_task_test"],
+                "blocks": [
+                    {
+                        "type": "formula",
+                        "title": "Shannon 公式",
+                        "latex": "C = W \\log_2(1 + S/N)",
+                        "purpose": "计算理论最大数据率。",
+                        "variables": [{"symbol": "C", "meaning": "最大数据率", "unit": "bps"}],
+                        "conditions": ["有噪声信道"],
+                        "limitations": ["理论上限"],
+                    },
+                    {
+                        "type": "table",
+                        "title": "公式对比",
+                        "columns": [
+                            {"key": "formula", "label": "公式"},
+                            {"key": "usage", "label": "用途"},
+                        ],
+                        "rows": [{"formula": "Shannon", "usage": "有噪声信道"}],
+                    },
+                ],
+                "key_points": ["按条件选公式。"],
+                "sort_order": 1,
+            }
+        ],
+        "knowledge_map": {
+            "type": "mindmap",
+            "title": "关系图",
+            "root": {
+                "label": "信道容量",
+                "children": [{"label": "Shannon", "children": []}],
+            },
+        },
+        "formula_cards": [],
+        "exam_focus": [],
+        "self_check": [],
+        "summary": "按条件选公式。",
+    }
 
 def _default_content_json(content_type: str) -> dict[str, object]:
     if content_type == "handout":
@@ -375,6 +428,32 @@ def test_render_handout_pdf_lines_uses_source_notice_without_section_sources() -
     assert "不应展示的详细摘录" not in rendered
 
 
+def test_render_handout_v2_markdown_uses_block_fallbacks_and_safe_notice() -> None:
+    handout = HandoutContent.model_validate(_handout_v2_json())
+    citations = {
+        "cit_task_test": GeneratedContentCitationRead(
+            id="cit_task_test",
+            material_id="mat_1",
+            chunk_id="chunk_1",
+            material_name="Chap7 物理层.pdf",
+            page="9",
+            page_index=8,
+            hit_text="<!-- formula-not-decoded --> ",
+            sort_order=1,
+        )
+    }
+
+    rendered = _render_handout_pdf_markdown("今日讲义", handout, citations)
+
+    assert "来源说明" in rendered
+    assert "$$\nC = W \\log_2(1 + S/N)\n$$" in rendered
+    assert "| 公式 | 用途 |" in rendered
+    assert "| Shannon | 有噪声信道 |" in rendered
+    assert "- 信道容量" in rendered
+    assert "  - Shannon" in rendered
+    assert "formula-not-decoded" not in rendered
+    assert "" not in rendered
+
 def test_render_real_handout_markdown_pdf() -> None:
     markdown_path = Path(__file__).resolve().parents[2] / "fixtures" / "exports" / "physical-layer-handout.md"
     markdown = markdown_path.read_text(encoding="utf-8")
@@ -382,6 +461,8 @@ def test_render_real_handout_markdown_pdf() -> None:
     html = render_markdown_pdf_html(markdown, title="今日讲义")
     assert "<table>" in html
     assert "Chap7 物理层.pdf, p.9" in html
+    assert "&#34;Microsoft YaHei&#34;" not in html
+    assert '"Microsoft YaHei"' in html
     assert "formula-not-decoded" not in html
     assert "" not in html
     assert "" not in html
