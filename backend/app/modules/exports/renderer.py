@@ -20,6 +20,9 @@ PAGE_MARGIN_X = 50
 PAGE_TOP_Y = 790
 PAGE_BOTTOM_Y = 52
 
+_MARKDOWN_CHOICE_OPTION_IDS = ("A", "B", "C", "D")
+_MARKDOWN_CHOICE_QUESTION_TYPES = {"single_choice", "multiple_choice"}
+
 
 def render_task_test_markdown(content: GeneratedContentRead) -> str:
     task_test = _validate_task_test_content(content.content_json)
@@ -75,13 +78,15 @@ def _render_question(
         f"### {index}. {question.question_text}",
         "",
     ]
+    option_labels = _choice_option_labels(question)
     for option in question.options:
-        lines.append(f"- {option.id}. {option.text}")
+        option_label = option_labels.get(option.id, option.id)
+        lines.append(f"- {option_label}. {option.text}")
     if question.options:
         lines.append("")
     lines.extend(
         [
-            f"Answer: {_format_answer(question.correct_answer)}",
+            f"Answer: {_format_question_answer(question, option_labels)}",
             "",
             f"Explanation: {question.explanation}",
             "",
@@ -89,6 +94,22 @@ def _render_question(
     )
     lines.extend(_render_sources(question.source_citation_ids, citations_by_id))
     return lines
+
+
+def _choice_option_labels(question: TaskTestQuestion) -> dict[str, str]:
+    if question.question_type not in _MARKDOWN_CHOICE_QUESTION_TYPES:
+        return {}
+    if len(question.options) != len(_MARKDOWN_CHOICE_OPTION_IDS):
+        return {}
+    return {option.id: label for option, label in zip(question.options, _MARKDOWN_CHOICE_OPTION_IDS, strict=True)}
+
+
+def _format_question_answer(question: TaskTestQuestion, option_labels: dict[str, str]) -> str:
+    if option_labels and question.question_type == "single_choice" and isinstance(question.correct_answer, str):
+        return option_labels.get(question.correct_answer, question.correct_answer)
+    if option_labels and question.question_type == "multiple_choice" and isinstance(question.correct_answer, list):
+        return ", ".join(option_labels.get(answer, answer) for answer in question.correct_answer)
+    return _format_answer(question.correct_answer)
 
 
 def _format_answer(answer: str | bool | list[str]) -> str:

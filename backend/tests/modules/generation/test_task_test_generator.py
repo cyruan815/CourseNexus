@@ -32,6 +32,11 @@ def _batch() -> MaterialContextBatch:
     return MaterialContextBatch(chunks=context.chunks, material_ids=["mat_1"], estimated_tokens=10)
 
 
+def _choice_options(*, ids: tuple[str, str, str, str] = ("A", "B", "C", "D")) -> list[dict[str, str]]:
+    texts = ("唯一标识一行", "存储图片", "表达外键", "删除数据")
+    return [{"id": option_id, "text": text} for option_id, text in zip(ids, texts, strict=True)]
+
+
 def _question_payload(
     question_id: str,
     *,
@@ -45,7 +50,7 @@ def _question_payload(
         "id": question_id,
         "question_type": question_type,
         "question_text": question_text,
-        "options": options if options is not None else [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
+        "options": options if options is not None else _choice_options(),
         "correct_answer": correct_answer,
         "explanation": "主键用于唯一标识表中的一行。",
         "source_citation_ids": ["chunk_1"],
@@ -53,23 +58,30 @@ def _question_payload(
     }
 
 
+class RecordingTaskTestModelProvider:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in generator tests
+        raise AssertionError("answer_question should not be called")
+
+    def generate_structured(self, *, prompt, output_schema):
+        self.prompts.append(prompt)
+        assert output_schema is TaskTestContent
+        return TaskTestContent.model_validate(
+            {
+                "instructions": "完成下列题目。",
+                "questions": [_question_payload("q_1")],
+            }
+        )
+
+
 def test_task_test_generator_returns_questions_and_citations() -> None:
     provider = MockModelProvider(
         structured_outputs={
             TaskTestContent: {
                 "instructions": "完成下列题目。",
-                "questions": [
-                    {
-                        "id": "q_1",
-                        "question_type": "single_choice",
-                        "question_text": "主键的作用是什么？",
-                        "options": [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
-                        "correct_answer": "A",
-                        "explanation": "主键用于唯一标识表中的一行。",
-                        "source_citation_ids": ["chunk_1"],
-                        "sort_order": 1,
-                    }
-                ],
+                "questions": [_question_payload("q_1")],
             }
         }
     )
@@ -82,8 +94,88 @@ def test_task_test_generator_returns_questions_and_citations() -> None:
 
     assert output.title == "任务测试题"
     assert output.content_json is not None
+    assert [option["id"] for option in output.content_json["questions"][0]["options"]] == ["A", "B", "C", "D"]
     assert output.content_json["questions"][0]["correct_answer"] == "A"
     assert output.item_citation_chunk_ids == {"q_1": ["chunk_1"]}
+
+
+def test_task_test_generator_prompt_requires_four_letter_choice_options() -> None:
+    provider = RecordingTaskTestModelProvider()
+
+    TaskTestGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"question_count": 1, "question_types": ["single_choice"], "difficulty": "medium"},
+    )
+
+    assert "单选和多选题必须恰好 4 个选项" in provider.prompts[0]
+    assert "A、B、C、D" in provider.prompts[0]
+
+
+def test_task_test_generator_normalizes_choice_option_ids_per_question_order() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload(
+                        "q_1",
+                        options=_choice_options(ids=("opt_1", "opt_2", "opt_3", "opt_4")),
+                        correct_answer="opt_2",
+                        sort_order=1,
+                    ),
+                    _question_payload(
+                        "q_2",
+                        question_text="外键的作用是什么？",
+                        options=_choice_options(ids=("opt_5", "opt_6", "opt_7", "opt_8")),
+                        correct_answer="opt_6",
+                        sort_order=2,
+                    ),
+                ],
+            }
+        }
+    )
+
+    output = TaskTestGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"question_count": 2, "question_types": ["single_choice"], "difficulty": "medium"},
+    )
+
+    questions = output.content_json["questions"]
+    assert [[option["id"] for option in question["options"]] for question in questions] == [
+        ["A", "B", "C", "D"],
+        ["A", "B", "C", "D"],
+    ]
+    assert [question["correct_answer"] for question in questions] == ["B", "B"]
+
+
+def test_task_test_generator_normalizes_multiple_choice_answers_per_question_order() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload(
+                        "q_1",
+                        question_type="multiple_choice",
+                        options=_choice_options(ids=("opt_5", "opt_6", "opt_7", "opt_8")),
+                        correct_answer=["opt_5", "opt_7"],
+                    )
+                ],
+            }
+        }
+    )
+
+    output = TaskTestGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"question_count": 1, "question_types": ["multiple_choice"], "difficulty": "medium"},
+    )
+
+    question = output.content_json["questions"][0]
+    assert [option["id"] for option in question["options"]] == ["A", "B", "C", "D"]
+    assert question["correct_answer"] == ["A", "C"]
 
 
 def test_task_test_generator_rejects_question_count_mismatch() -> None:
@@ -161,10 +253,18 @@ def test_task_test_generator_rejects_duplicate_or_non_contiguous_question_identi
 @pytest.mark.parametrize(
     "question",
     [
-        _question_payload("q_1", correct_answer="C"),
-        _question_payload("q_1", question_type="multiple_choice", correct_answer=["A", "C"]),
+        _question_payload("q_1", correct_answer="Z"),
+        _question_payload("q_1", question_type="multiple_choice", correct_answer=["A", "Z"]),
         _question_payload("q_1", question_type="multiple_choice", correct_answer=["A", "A"]),
-        _question_payload("q_1", options=[{"id": "A", "text": "唯一标识一行"}, {"id": "A", "text": "重复选项"}]),
+        _question_payload(
+            "q_1",
+            options=[
+                {"id": "A", "text": "唯一标识一行"},
+                {"id": "A", "text": "重复选项"},
+                {"id": "C", "text": "表达外键"},
+                {"id": "D", "text": "删除数据"},
+            ],
+        ),
     ],
 )
 def test_task_test_generator_rejects_invalid_choice_option_contract(question: dict[str, object]) -> None:
@@ -175,6 +275,35 @@ def test_task_test_generator_rejects_invalid_choice_option_contract(question: di
             batches=(_batch(),),
             expected_material_ids=frozenset({"mat_1"}),
             parameters={"question_count": 1, "question_types": ["single_choice", "multiple_choice"]},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+
+def test_task_test_generator_rejects_choice_question_with_non_four_options() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    _question_payload(
+                        "q_1",
+                        options=[
+                            {"id": "A", "text": "唯一标识一行"},
+                            {"id": "B", "text": "存储图片"},
+                            {"id": "C", "text": "表达外键"},
+                        ],
+                    )
+                ],
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        TaskTestGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"question_count": 1},
         )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
@@ -251,7 +380,7 @@ def test_task_test_generator_rejects_blank_string_correct_answer(
         "id": "q_1",
         "question_type": question_type,
         "question_text": "What is a primary key?",
-        "options": [{"id": "A", "text": "Uniquely identifies a row"}] if question_type == "single_choice" else [],
+        "options": _choice_options() if question_type == "single_choice" else [],
         "correct_answer": correct_answer,
         "explanation": "A primary key uniquely identifies one row.",
         "source_citation_ids": ["chunk_1"],
@@ -297,7 +426,7 @@ def test_task_test_generator_rejects_invalid_multiple_choice_correct_answer_list
                         "id": "q_1",
                         "question_type": "multiple_choice",
                         "question_text": "What is a primary key?",
-                        "options": [{"id": "A", "text": "Uniquely identifies a row"}, {"id": "B", "text": "Stores images"}],
+                        "options": _choice_options(),
                         "correct_answer": correct_answer,
                         "explanation": "A primary key uniquely identifies one row.",
                         "source_citation_ids": ["chunk_1"],

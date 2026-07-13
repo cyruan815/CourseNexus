@@ -132,8 +132,13 @@ def _task_test_json(*, source_citation_ids: list[str] | None = None) -> dict[str
                 "id": "q_1",
                 "question_type": "single_choice",
                 "question_text": "主键的作用是什么？",
-                "options": [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "存储图片"}],
-                "correct_answer": "A",
+                "options": [
+                    {"id": "opt_5", "text": "唯一标识一行"},
+                    {"id": "opt_6", "text": "存储图片"},
+                    {"id": "opt_7", "text": "表达外键"},
+                    {"id": "opt_8", "text": "删除数据"},
+                ],
+                "correct_answer": "opt_6",
                 "explanation": "主键用于唯一标识表中的一行。",
                 "source_citation_ids": ["cit_task_test"] if source_citation_ids is None else source_citation_ids,
                 "sort_order": 1,
@@ -226,7 +231,9 @@ def test_export_task_test_markdown_success(api: ApiHarness) -> None:
     assert "完成下列题目。" in body
     assert "### 1. 主键的作用是什么？" in body
     assert "- A. 唯一标识一行" in body
-    assert "Answer: A" in body
+    assert "- B. 存储图片" in body
+    assert "Answer: B" in body
+    assert "opt_" not in body
     assert "Explanation: 主键用于唯一标识表中的一行。" in body
     assert "- 数据库讲义.pdf, p.1: 主键用于唯一标识表中的一行。" in body
 

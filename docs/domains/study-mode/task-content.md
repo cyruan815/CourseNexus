@@ -100,7 +100,7 @@ sequenceDiagram
 - `questions.length == request.parameters.question_count`。
 - `question_type` 必须属于请求的 `question_types` 白名单。
 - 题目 `id` 必须为 `q_1..q_N`，`sort_order` 必须为 `1..N`，二者都按最终题目顺序连续且唯一。
-- `single_choice` / `multiple_choice` 必须有 options；option id 非空、无首尾空白且唯一。
+- `single_choice` / `multiple_choice` 必须恰好有 4 个 options；生成器按每道题自己的 options 顺序将 option id 归一化为 `A`、`B`、`C`、`D`，并同步映射 `correct_answer`。
 - 单选答案必须是命中 option id 的字符串；多选答案必须是无重复字符串数组，且所有值命中 option id。
 - `true_false` 答案必须是 boolean；`short_answer` 不要求 options，答案为非空字符串。
 - 题干经空白折叠和小写归一后不得重复；长度不少于 8 的归一化题干使用相似度阈值拒绝高度相似题。
@@ -163,6 +163,10 @@ Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必
 ### task-test 默认参数
 
 计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 合并参数时以计划默认值为底、本次请求为覆盖；因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题。模型若输出 `{ "single_choice": 10, "short_answer": 3 }` 这类题型计数别名，会归一化为 `question_count=13` 和对应 `question_types`；真正非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
+
+### task-test 选择题选项字母契约
+
+Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个选项。模型可以临时输出 `opt_1`、`opt_5` 等局部或全局选项 id，但 generator 会在校验前按每道题自己的 options 顺序归一化为 `A`、`B`、`C`、`D`，并同步映射单选字符串答案和多选字符串数组答案。归一化后新生成的 `content_json.questions[].options[].id` 和 choice `correct_answer` 不应再出现 `opt_*`。若选择题不是 4 个选项，或答案无法命中该题原始 options id，生成返回 `GENERATION_SCHEMA_INVALID`。`short_answer` 和 `true_false` 不参与 A-D 归一化；Markdown 导出会对历史 `opt_*` 四选项内容按同样顺序做展示层兜底，避免用户继续看到 `opt_*`。
 
 ### 术语质量校验
 
