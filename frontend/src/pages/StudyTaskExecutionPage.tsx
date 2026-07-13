@@ -17,6 +17,7 @@ import {
   IconBook2,
   IconCheck,
   IconCircle,
+  IconDownload,
   IconExternalLink,
   IconFileText,
   IconPlayerPlay,
@@ -27,6 +28,8 @@ import { Link, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import {
+  exportGeneratedContentMarkdown,
+  exportGeneratedContentPdf,
   fetchSubtaskExecutionContext,
   generateSubtaskHandout,
   generateSubtaskTaskTest,
@@ -81,6 +84,22 @@ function generationErrorMessage(error: unknown): string {
   }
 
   return errorMessage(error, "内容生成失败");
+}
+
+function exportErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const messages: Record<string, string> = {
+      EXPORT_CONTENT_INVALID: "导出内容结构异常，暂时不能生成文件。",
+      EXPORT_CONTENT_NOT_READY: "内容还没有成功生成，暂时不能导出。",
+      EXPORT_FAILED: "文件导出失败，请稍后重试。",
+      EXPORT_UNSUPPORTED_CONTENT_TYPE: "当前内容类型不支持这个导出格式。",
+      NOT_FOUND: "生成内容不存在，或你没有访问权限。",
+      UNAUTHORIZED: "登录已过期，请重新登录。",
+    };
+    return messages[error.code] ?? error.message;
+  }
+
+  return errorMessage(error, "文件导出失败");
 }
 
 function statusLabel(status: string): string {
@@ -191,6 +210,17 @@ function applyCompletionResult(
   };
 }
 
+function saveDownloadedFile(blob: Blob, filename: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export function StudyTaskExecutionPage() {
   const { subtaskId } = useParams();
   const [context, setContext] = useState<ExecutionContextRead | null>(null);
@@ -198,10 +228,12 @@ export function StudyTaskExecutionPage() {
   const [error, setError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContentRead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -216,6 +248,7 @@ export function StudyTaskExecutionPage() {
     setError(null);
     setCompletionError(null);
     setGenerationError(null);
+    setExportError(null);
     setCompletionResult(null);
     setGeneratedContent(null);
 
@@ -287,10 +320,31 @@ export function StudyTaskExecutionPage() {
         ? await generateSubtaskHandout(subtaskId, { force_regenerate: forceRegenerate })
         : await generateSubtaskTaskTest(subtaskId, { force_regenerate: forceRegenerate });
       setGeneratedContent(content);
+      setExportError(null);
     } catch (nextError) {
       setGenerationError(generationErrorMessage(nextError));
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleExportContent = async () => {
+    if (!activeContentId || !contentType) {
+      return;
+    }
+
+    setIsExporting(true);
+    setExportError(null);
+
+    try {
+      const file = contentType === "handout"
+        ? await exportGeneratedContentPdf(activeContentId)
+        : await exportGeneratedContentMarkdown(activeContentId);
+      saveDownloadedFile(file.blob, file.filename);
+    } catch (nextError) {
+      setExportError(exportErrorMessage(nextError));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -431,6 +485,11 @@ export function StudyTaskExecutionPage() {
                           {generationError}
                         </Alert>
                       ) : null}
+                      {exportError ? (
+                        <Alert color="red" role="alert" title="文件导出失败" variant="light">
+                          {exportError}
+                        </Alert>
+                      ) : null}
                       {activeContentId ? (
                         <Paper className="study-plan-generated-content" radius="md" withBorder>
                           <Group align="center" justify="space-between" wrap="nowrap">
@@ -447,6 +506,15 @@ export function StudyTaskExecutionPage() {
                                 variant="light"
                               >
                                 查看{contentLabel}
+                              </Button>
+                              <Button
+                                leftSection={<IconDownload size={15} />}
+                                loading={isExporting}
+                                onClick={() => void handleExportContent()}
+                                size="xs"
+                                variant="light"
+                              >
+                                {contentType === "handout" ? "导出PDF" : "导出Markdown"}
                               </Button>
                               <Button
                                 leftSection={<IconRefresh size={15} />}
