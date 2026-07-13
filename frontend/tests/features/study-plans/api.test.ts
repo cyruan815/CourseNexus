@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDiagnosticProfile,
   deleteStudyPlan,
+  fetchCourseStudyCalendar,
+  fetchCourseStudyCalendarDay,
   fetchStudyPlan,
   fetchDiagnosticQuestions,
   listStudyPlans,
@@ -117,6 +119,8 @@ describe("study plans api", () => {
     await previewStudyPlanRegeneration("plan_1", { duration_days: 5 });
     await replaceStudyPlan("plan_1", replacePayload);
     await deleteStudyPlan("plan_1");
+    await fetchCourseStudyCalendar("crs_1", "2026-07");
+    await fetchCourseStudyCalendarDay("crs_1", "2026-07-14");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -191,6 +195,16 @@ describe("study plans api", () => {
       10,
       "/api/v1/study-plans/plan_1",
       expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      11,
+      "/api/v1/courses/crs_1/study-calendar?month=2026-07",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      12,
+      "/api/v1/courses/crs_1/study-calendar/days/2026-07-14",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });

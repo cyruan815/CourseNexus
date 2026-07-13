@@ -4,6 +4,7 @@ export type DailyMinutesSource = "user_text" | "system_estimated" | "user_modifi
 export type PlanPreference = "balanced" | "fast_track" | "mastery" | "sprint";
 export type StudyPlanClientFlow = "legacy" | "wizard_v1";
 export type StudySubtaskType = "learn" | "review" | "quiz" | "test";
+export type StudyTaskStatus = "not_started" | "in_progress" | "completed";
 export type DiagnosticQuestionType = "topic_mastery" | "weak_area" | "diagnostic_note";
 export type MasteryLevel = "none" | "heard" | "some" | "familiar";
 export type WeakArea = "concept" | "calculation" | "application" | "memorization" | "other";
@@ -227,4 +228,65 @@ export interface StudyPlanDetail {
   plan: StudyPlanRead;
   tasks: StudyTaskRead[];
   subtasks: StudySubtaskRead[];
+}
+
+export interface StudyCalendarTaskSummary {
+  task_id: string;
+  plan_id: string;
+  course_id: string;
+  course_name: string;
+  title: string;
+  status: StudyTaskStatus;
+  derived_status: StudyTaskStatus;
+  sort_order: number;
+}
+
+export interface StudyCalendarDaySummary {
+  date: string;
+  course_count: number;
+  task_count: number;
+  subtask_count: number;
+  completed_subtask_count: number;
+  status: StudyTaskStatus;
+  task_summaries: StudyCalendarTaskSummary[];
+  hidden_task_count: number;
+}
+
+export interface CourseStudyCalendarMonth {
+  course_id: string;
+  course_name: string;
+  month: string;
+  days: StudyCalendarDaySummary[];
+}
+
+export interface StudyCalendarSubtaskTodo {
+  subtask_id: string;
+  title: string;
+  subtask_type: string;
+  description: string | null;
+  status: StudyTaskStatus;
+  sort_order: number;
+  execution_url: string | null;
+}
+
+export interface StudyCalendarTaskTodo {
+  task_id: string;
+  plan_id: string;
+  course_id: string;
+  course_name: string;
+  title: string;
+  task_date: string;
+  status: StudyTaskStatus;
+  derived_status: StudyTaskStatus;
+  completed_subtask_count: number;
+  total_subtask_count: number;
+  first_incomplete_subtask_id: string | null;
+  subtasks: StudyCalendarSubtaskTodo[];
+}
+
+export interface CourseStudyCalendarDay {
+  course_id: string;
+  course_name: string;
+  date: string;
+  tasks: StudyCalendarTaskTodo[];
 }

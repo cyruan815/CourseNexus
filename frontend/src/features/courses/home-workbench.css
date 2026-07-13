@@ -428,6 +428,76 @@
   padding: 10px;
 }
 
+.calendar-course-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 10px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.calendar-month-panel,
+.calendar-day-panel {
+  min-height: 0;
+  border-color: #d6e0eb;
+  background: #ffffff;
+  overflow: auto;
+  padding: 22px;
+}
+
+.calendar-course-grid {
+  min-height: 520px;
+}
+
+.calendar-course-cell {
+  min-height: 92px;
+}
+
+.calendar-course-cell.has-tasks {
+  background: #f8fbff;
+}
+
+.calendar-cell-summary {
+  position: absolute;
+  inset: 32px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.calendar-cell-summary span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-task-card {
+  border-color: #dbeafe;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.calendar-subtask-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.calendar-empty-state {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 18px;
+}
+
 .home-course-alert {
   border: 1px solid #fecaca;
 }
@@ -441,6 +511,11 @@
 
   .home-side-panel {
     grid-template-rows: auto auto;
+  }
+
+  .calendar-course-shell {
+    grid-template-columns: 1fr;
+    overflow: auto;
   }
 }
 
