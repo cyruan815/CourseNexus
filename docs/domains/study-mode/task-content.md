@@ -158,6 +158,8 @@ Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必
 
 Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引用绑定：section id 重写为 `sec_N` 后，`GeneratorOutput.item_citation_chunk_ids` 要把旧 section id 对应的 chunk id 迁移到新 id；若 generator 未提供该映射，则回退使用该 section 自身的 `source_citation_ids` 并去重。Handout reducer 不再把所有 section 的引用合成总集合后绑定给每个 section，避免 PDF 每节显示整章引用。
 
+短期不新增二级任务 chunk 范围字段；handout 生成会从 `StudyPlan.parsed_config_json.task_snapshot` 中按当前 task/subtask 的 `sort_order` 回读 `citation_chunk_ids`。若该字段是合法字符串数组，则仅保留这些 chunk 所在的 material-context batch 内容，并用过滤后实际 chunks 的 `material_id` 集合作为 handout 覆盖校验范围；若字段缺失、结构异常或为空，则保持旧的资料级范围行为。若字段存在但过滤后没有任何 chunk，生成返回 `NO_PARSED_MATERIAL` 或等价覆盖错误并保存 failed 记录，不回退到整份资料。task-test 暂不使用该过滤，继续按二级任务关联资料生成综合测试题。
+
 ### PDF renderer 契约
 
 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`。中文和其他 CJK 字符使用 `STSong-Light`；ASCII、数字、英文术语和公式片段使用 `Helvetica`，内容流按字符 run 切换字体，避免 `Overview`、`Nyquist/Shannon`、`C = B log2(1 + S/N)` 等英文/公式被中文 CID 字体逐字拉开。回归测试需至少确认内容流包含 Helvetica 英文 run 和 STSong 中文 run。
