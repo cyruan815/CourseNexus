@@ -136,7 +136,7 @@
 | `no_task_today` | 今日无任务 | 存在未删除的学习计划，但今天没有一级任务。 |
 | `has_task_today` | 今日有任务 | 今天至少存在一个属于未删除学习计划的一级任务。 |
 
-该摘要只在课程列表中返回；前端不得通过逐课程调用学习计划详情自行聚合。课程创建、详情、更新和删除仍返回不含摘要字段的 `CourseRead`。
+首页课程卡片显示 `material_count` 为 `资料 N 份`。该摘要只在课程列表中返回；前端不得通过逐课程调用学习计划详情、按本地日期或按任务列表自行聚合。课程创建、详情、更新和删除仍返回不含摘要字段的 `CourseRead`。接口上线前可保留同步占位或在测试中使用本地 mock 字段。
 
 ### 3.6 创建课程
 
@@ -188,7 +188,7 @@
 
 要求：Bearer token。只能访问当前用户自己的课程。
 
-响应 `data`：`CourseRead`。
+响应 `data`：基础 `CourseRead` 字段，不包含课程列表接口专用的 `material_count` 和 `today_task_status` 摘要字段。
 
 ### 3.8 更新课程
 
@@ -207,7 +207,7 @@
 }
 ```
 
-响应 `data`：`CourseRead`。
+响应 `data`：基础 `CourseRead` 字段，不包含课程列表接口专用的 `material_count` 和 `today_task_status` 摘要字段。
 
 `name` 最多 20 个字符，`description` 最多 50 个字符，`teacher` 最多 10 个字符；超出任一上限返回 `422 VALIDATION_ERROR`。`term` 可提交 `null` 以清除已选学期；提交非选项值返回 `422 VALIDATION_ERROR`。
 
@@ -217,7 +217,7 @@
 
 要求：Bearer token。当前实现为软删除。
 
-响应 `data`：`CourseRead`，其中 `status = "deleted"` 且 `deleted_at` 非空。
+响应 `data`：基础 `CourseRead` 字段，其中 `status = "deleted"` 且 `deleted_at` 非空；不包含课程列表接口专用的 `material_count` 和 `today_task_status` 摘要字段。
 
 ### 3.10 资料对象字段
 

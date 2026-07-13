@@ -1,5 +1,15 @@
 # Course Workspace 课程详情工作台
 
+## Frontend Interaction Notes
+
+- 2026-07-13: In the course detail workspace, the default material scope follows the PRD and backend contract: no explicit partial selection means the current course's full parsed material set and sends `{ include_all_parsed_materials: true, material_ids: [] }`. If a partial selection is cleared to empty, the frontend returns to the full parsed-material scope instead of sending `{ include_all_parsed_materials: false, material_ids: [] }`.
+- 2026-07-13: The left material list can represent the default full parsed-material scope with all visible checkboxes empty. If the user explicitly checks every parsed material, the top "全部已解析资料" checkbox also becomes checked; clearing the final individual checkbox returns to the default full-scope state with visible checkboxes empty.
+- 2026-07-13: The Q&A material scope label updates immediately when the left material selection changes. Partial selections render a single-line label that keeps the fixed prefix `资料范围：已选择` and suffix `共 N 份资料` visible while allowing the middle material-name list to ellipsize.
+- 2026-07-13: The Q&A panel keeps a continuous local message list: user questions are appended immediately, assistant answers append after the API returns, the send button shows loading while the request is pending, and failed answers keep the user message plus an assistant error bubble. Assistant answers render Markdown through `react-markdown` without dangerous HTML, covering paragraphs, lists, bold text, headings and code blocks.
+- 2026-07-13: Course detail headers render readable academic terms by mapping `AUTUMN` / `autumn` to `秋季` and `SPRING` / `spring` to `春季`, while keeping the year prefix. The course description is intentionally omitted from this page header.
+- 2026-07-13: The Q&A card is a fixed work surface: the conversation area owns scrolling, and the material-scope line plus question input stay anchored at the card bottom. The question textarea starts at about two rows, grows up to about five rows, then scrolls internally.
+- 2026-07-13: The study-plan area shows at most one plan, selected by latest `updated_at` / `created_at`. Existing plans render as a rounded bordered summary card that links to `/courses/{course_id}/study-plans/{plan_id}`; the action row stays right-aligned and includes a blue "查看更多" entry to `/calendar?courseId={course_id}`. The calendar route is an integration point for later course-filtered calendar behavior, not a fully closed study-mode calendar in this task.
+
 ## 概述
 
 课程详情工作台承载单门课程内的资料管理、资料范围、课程问答、AI 学习工具入口、AI 生成内容记录和学习计划入口。当前前端已经从静态预览进入后端接入阶段：正式课程详情页读取后端课程、资料、生成内容、学习计划，并可以基于当前资料范围发送课程问答和触发基础生成接口。
@@ -9,7 +19,7 @@
 - 让学生在单门课程内管理资料，并明确哪些资料会进入问答和生成上下文。
 - 让学生基于课程资料向 Agent 提问，并展示后端返回的回答、answer_type 和引用来源。
 - 让学生从右侧学习工具触发后端已注册的生成类型，并在生成内容列表中看到记录。
-- 在学习计划未创建时提供制定计划入口；已有计划时展示计划摘要。
+- 在学习计划未创建时提供制定计划入口；已有计划时展示最近更新的计划摘要，并提供跳转到课程计划日历的入口。
 
 ## 当前范围
 
@@ -18,16 +28,18 @@
 - 正式路由 `/courses/:courseId` 读取 `GET /api/v1/courses/{course_id}`。
 - 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。首页创建课程成功后跳转到课程详情页时，会通过路由 state 触发一次可关闭的上传资料提示。
 - 中间问答区调用 `POST /api/v1/courses/{course_id}/qa/questions`，传入当前 `material_scope`，展示回答、`grounded` / `no_source` 状态和真实引用来源。
+- 问答区以连续消息形式展示当前会话内的用户消息和 AI 消息；发送中只使用发送按钮 loading 表示，失败时保留用户问题并追加短错误气泡。
+- 课程详情页顶部不展示课程简介；学期字段在前端统一转换为用户可读季节标签。
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；支持生成的工具以整张卡片作为操作入口，不再额外显示内嵌“生成”按钮。
 - AI 生成内容列表读取 `GET /api/v1/courses/{course_id}/generated-contents`，列表记录整张卡片可进入生成内容详情页 `/generated-contents/:generatedContentId`。
-- 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时只展示“制定学习计划”入口，有计划时展示计划摘要。
+- 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时展示“制定学习计划”入口，有计划时按 `updated_at` / `created_at` 优先展示最近更新的一条计划摘要，摘要以圆角边框卡片形式链接到计划详情，不在卡片内展开多计划列表。“查看更多”入口跳转 `/calendar?courseId={course_id}`，等待大日历本课程筛选闭环。
 - 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心和制定学习计划入口仍以待接入禁用态展示。今日待办查看和 AI 生成内容“查看全部”在没有真实页面或接口闭环前不渲染占位按钮。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
 
 未实现：
 
 - 资料预览视图和引用点击定位。
-- 对话历史选择、连续追问消息列表展示和会话管理完整 UI。
+- 对话历史选择、会话管理完整 UI 和跨会话切换。
 - Quiz、Flashcard、Mindmap、复习提纲、知识点清单的最终专属学习交互页；当前仅有生成内容基础详情页。
 - 学习计划创建页、计划预览 / 保存表单、本课程计划学习模式日历。
 - 计划今日待办的真实当日任务聚合和任务执行入口。
@@ -56,19 +68,20 @@
 - 课程 loading：展示课程详情骨架。
 - 课程 error：展示课程加载失败 alert。
 - 资料区：沿用 `materials` 领域状态，包括 loading、empty、error、ready 和 mutating。若从首页创建课程成功后进入详情页，资料区初次挂载时展示“上传课程资料”提示，用户可以上传文件，也可以直接关闭；普通进入课程详情页不自动弹出。
-- 问答区：无回答时展示空态；输入为空或发送中禁用发送；发送成功展示回答和引用；失败时展示工作区错误提示。
+- 问答区：无回答时展示空态；输入为空或发送中禁用发送；发送后立即追加用户消息，按钮进入 loading；成功后追加 AI 回答和引用；失败时保留用户消息并追加 assistant error 气泡，不用全局工作区错误替代聊天记录。
 - 生成内容：页面加载时读取列表；点击支持的工具后进入 pending；成功后把返回的 `GeneratedContentRead` 插入列表；失败时展示工作区错误提示。
-- 学习计划：无计划时只展示待接入的制定计划入口；有计划时展示第一条计划摘要，不伪造今日任务。
+- 学习计划：无计划时展示制定计划入口；有计划时展示最近更新的一条可点击摘要卡片，并提供新建计划和查看更多入口；不伪造今日任务。
 
 ## 关键决策
 
 - PRD 的三栏结构是信息架构依据，但视觉不照搬线框图；采用亮色课程工作台风格。
-- 学习计划入口与今日待办合并：无计划时是小型行动入口，有计划后才展示课程内计划摘要。
+- 学习计划入口与今日待办合并：无计划时是小型行动入口，有计划后展示课程内最近更新计划摘要卡片；“查看更多”先跳转 `/calendar?courseId={course_id}`，大日历的本课程筛选闭环待后续接入。
 - 资料范围使用后端 `MaterialScope` 结构，一级文件夹只作为浏览归类，不作为 Agent 上下文范围。
 - 创建课程与上传资料解耦：创建课程只写入课程基础信息；创建成功后由课程详情页弹出可关闭的上传资料提示，引导用户继续补资料，但不阻塞课程创建结果。
 - 右侧工具只接后端当前注册生成类型；“学习笔记”当前只作为保存回答后的未来入口，不调用不存在的一键生成 note 能力。
 - 功能模块保持六张卡片的 2 列布局；支持生成的卡片整卡触发生成，不展示额外“生成入口”徽标，学习笔记卡片保持同尺寸待接入状态，不跨整行占用空间。
 - 课程详情页桌面工作台高度贴合当前视口，资料列表和 AI 生成内容列表作为局部滚动区，避免页面级滚动条挤压三栏工作台。
+- 问答区同样采用局部滚动：对话历史在卡片中部滚动，底部资料范围和输入区不随长对话或长输入被顶出卡片。
 - 没有 PRD / 后端闭环的“查看全部”和今日待办查看动作不保留假入口；需要对应列表页、聚合接口或交互闭环后再接入。
 - 生成接口当前后端仍可能由 deterministic placeholder 提供具体类型 fallback，前端详情页只做基础结构化展示和引用展示，不把结果渲染成最终学习产品页面。
 
@@ -78,7 +91,7 @@
 
 - 对话列表和消息列表 API 已有，但前端尚未提供会话列表、历史消息切换和完整连续追问 UI。
 - 生成内容详情 API 已接入基础详情页，但尚未提供各内容类型的最终专属学习交互。
-- 学习计划预览、保存、列表和详情 API 已有，但前端只接入列表摘要，尚未实现计划创建页和保存流程。
+- 学习计划预览、保存、列表和详情 API 已有；课程详情页已接入计划列表摘要、创建入口和详情入口，大日历本课程筛选仍待后续接入。
 
 PRD 要求但当前后端能力不足或未形成完整接口：
 
