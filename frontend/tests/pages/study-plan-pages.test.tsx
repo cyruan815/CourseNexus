@@ -197,6 +197,18 @@ const executionContext = {
   ],
 };
 
+const executionContextWithHandout = {
+  ...executionContext,
+  handout_content_id: "gen_handout_1",
+};
+
+const quizExecutionContext = {
+  ...executionContext,
+  current_subtask_id: "subtask_2",
+  handout_content_id: null,
+  task_test_content_id: null,
+};
+
 const completedResult = {
   changed: true,
   subtask: {
@@ -250,6 +262,36 @@ const uncompletedResult = {
     completed_subtask_count: 1,
     completed: true,
   },
+};
+
+const generatedHandout = {
+  id: "gen_handout_1",
+  user_id: "usr_123",
+  course_id: "crs_123",
+  study_subtask_id: "subtask_1",
+  source_message_id: null,
+  content_type: "handout",
+  title: "向量空间今日讲义",
+  content: "",
+  content_json: {},
+  generation_status: "success",
+  material_scope_json: {
+    include_all_parsed_materials: false,
+    material_ids: ["mat_1"],
+  },
+  error_code: null,
+  source_citations: [],
+  created_at: "2026-07-13T03:00:00+00:00",
+  updated_at: "2026-07-13T03:00:00+00:00",
+  deleted_at: null,
+};
+
+const generatedTaskTest = {
+  ...generatedHandout,
+  id: "gen_task_test_1",
+  study_subtask_id: "subtask_2",
+  content_type: "task_test",
+  title: "基础题任务测试题",
 };
 
 const diagnosticQuestions = {
@@ -916,6 +958,99 @@ describe("study plan pages", () => {
         expect.objectContaining({
           body: JSON.stringify({ completed: false }),
           method: "PUT",
+        }),
+      );
+    });
+  });
+
+  it("shows an existing handout link without generating new content", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看今日讲义" })).toHaveAttribute(
+      "href",
+      "/generated-contents/gen_handout_1",
+    );
+    expect(screen.queryByRole("button", { name: "生成今日讲义" })).not.toBeInTheDocument();
+  });
+
+  it("generates a handout for learn and review subtasks", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContext, "req_execution"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return Promise.resolve(successResponse(generatedHandout, "req_handout"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "生成今日讲义" }));
+
+    expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看今日讲义" })).toHaveAttribute(
+      "href",
+      "/generated-contents/gen_handout_1",
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/handouts",
+        expect.objectContaining({
+          body: JSON.stringify({ force_regenerate: false }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("generates a task test for quiz and test subtasks", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_2/execution-context")) {
+        return Promise.resolve(successResponse(quizExecutionContext, "req_execution"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_2/task-tests") && init?.method === "POST") {
+        return Promise.resolve(successResponse(generatedTaskTest, "req_task_test"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_2");
+
+    expect(await screen.findByRole("heading", { name: "练习: 基础题" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "生成任务测试题" }));
+
+    expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看任务测试题" })).toHaveAttribute(
+      "href",
+      "/generated-contents/gen_task_test_1",
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_2/task-tests",
+        expect.objectContaining({
+          body: JSON.stringify({ force_regenerate: false }),
+          method: "POST",
         }),
       );
     });

@@ -17,19 +17,29 @@ import {
   IconBook2,
   IconCheck,
   IconCircle,
+  IconExternalLink,
+  IconFileText,
   IconPlayerPlay,
+  IconRefresh,
   IconX,
 } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
-import { fetchSubtaskExecutionContext, updateSubtaskCompletion } from "../features/study-plans/api";
+import {
+  fetchSubtaskExecutionContext,
+  generateSubtaskHandout,
+  generateSubtaskTaskTest,
+  updateSubtaskCompletion,
+} from "../features/study-plans/api";
 import type {
   ExecutionContextRead,
   ExecutionMaterialRead,
   ExecutionSubtaskRead,
   ExecutionTaskRead,
+  GeneratedContentRead,
   SubtaskCompletionResult,
+  TaskContentType,
 } from "../features/study-plans/types";
 import "./study-plan.css";
 
@@ -53,6 +63,24 @@ function completionErrorMessage(error: unknown): string {
   }
 
   return errorMessage(error, "任务状态更新失败");
+}
+
+function generationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const messages: Record<string, string> = {
+      GENERATION_FAILED: "内容生成失败，可以稍后重试。",
+      GENERATION_SCHEMA_INVALID: "生成结果结构不符合要求，已记录失败，可重新生成。",
+      MATERIAL_COVERAGE_INCOMPLETE: "资料覆盖不完整，暂时无法生成完整内容。",
+      NO_PARSED_MATERIAL: "当前任务没有可用的已解析资料。",
+      NOT_FOUND: "任务不存在，或你没有访问权限。",
+      STATE_CONFLICT: "当前任务类型不支持这个生成入口。",
+      UNAUTHORIZED: "登录已过期，请重新登录。",
+      VALIDATION_ERROR: "生成参数不合法。",
+    };
+    return messages[error.code] ?? error.message;
+  }
+
+  return errorMessage(error, "内容生成失败");
 }
 
 function statusLabel(status: string): string {
@@ -83,6 +111,20 @@ function subtaskTypeLabel(type: string): string {
     test: "测试",
   };
   return labels[type] ?? type;
+}
+
+function taskContentType(type: string): TaskContentType | null {
+  if (type === "learn" || type === "review") {
+    return "handout";
+  }
+  if (type === "quiz" || type === "test") {
+    return "task_test";
+  }
+  return null;
+}
+
+function taskContentLabel(contentType: TaskContentType): string {
+  return contentType === "handout" ? "今日讲义" : "任务测试题";
 }
 
 function materialAvailabilityLabel(material: ExecutionMaterialRead): string {
@@ -155,8 +197,11 @@ export function StudyTaskExecutionPage() {
   const [completionResult, setCompletionResult] = useState<SubtaskCompletionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedContent, setGeneratedContent] = useState<GeneratedContentRead | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -170,7 +215,9 @@ export function StudyTaskExecutionPage() {
     setIsLoading(true);
     setError(null);
     setCompletionError(null);
+    setGenerationError(null);
     setCompletionResult(null);
+    setGeneratedContent(null);
 
     fetchSubtaskExecutionContext(subtaskId)
       .then((nextContext) => {
@@ -196,6 +243,11 @@ export function StudyTaskExecutionPage() {
 
   const sortedTasks = useMemo(() => sortTasks(context?.tasks ?? []), [context?.tasks]);
   const currentSubtask = useMemo(() => findCurrentSubtask(context), [context]);
+  const contentType = currentSubtask ? taskContentType(currentSubtask.subtask_type) : null;
+  const contentLabel = contentType ? taskContentLabel(contentType) : null;
+  const existingContentId = contentType === "handout" ? context?.handout_content_id : context?.task_test_content_id;
+  const activeContentId = generatedContent?.id ?? existingContentId ?? null;
+  const activeContentTitle = generatedContent?.title ?? null;
   const completedCount = sortedTasks.reduce(
     (total, task) => total + task.subtasks.filter((subtask) => subtask.status === "completed").length,
     0,
@@ -219,6 +271,26 @@ export function StudyTaskExecutionPage() {
       setCompletionError(completionErrorMessage(nextError));
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleGenerateContent = async (forceRegenerate: boolean) => {
+    if (!subtaskId || !contentType) {
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerationError(null);
+
+    try {
+      const content = contentType === "handout"
+        ? await generateSubtaskHandout(subtaskId, { force_regenerate: forceRegenerate })
+        : await generateSubtaskTaskTest(subtaskId, { force_regenerate: forceRegenerate });
+      setGeneratedContent(content);
+    } catch (nextError) {
+      setGenerationError(generationErrorMessage(nextError));
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -344,24 +416,69 @@ export function StudyTaskExecutionPage() {
               <Paper className="study-plan-execution-content" radius="md" withBorder>
                 <Stack gap="sm">
                   <Group gap="xs">
-                    <IconBook2 size={18} />
-                    <Text fw={750}>执行说明</Text>
+                    <IconFileText size={18} />
+                    <Text fw={750}>{contentLabel ?? "任务内容"}</Text>
                   </Group>
-                  <Text c="dimmed" size="sm">
-                    当前版本先接入任务上下文与完成状态。今日讲义、任务测试题和执行页问答会在后续上下文按真实接口继续接入。
-                  </Text>
-                  <Group gap="xs">
-                    {context.handout_content_id ? (
-                      <Badge color="teal" variant="light">已有今日讲义</Badge>
-                    ) : (
-                      <Badge color="gray" variant="light">今日讲义待生成</Badge>
-                    )}
-                    {context.task_test_content_id ? (
-                      <Badge color="teal" variant="light">已有任务测试题</Badge>
-                    ) : (
-                      <Badge color="gray" variant="light">任务测试题待生成</Badge>
-                    )}
-                  </Group>
+                  {contentType ? (
+                    <>
+                      <Text c="dimmed" size="sm">
+                        {contentType === "handout"
+                          ? "为当前学习 / 复习任务按需生成讲义。默认复用最近一次成功内容。"
+                          : "为当前练习 / 测试任务按需生成测试题。默认复用最近一次成功内容。"}
+                      </Text>
+                      {generationError ? (
+                        <Alert color="red" role="alert" title="内容生成失败" variant="light">
+                          {generationError}
+                        </Alert>
+                      ) : null}
+                      {activeContentId ? (
+                        <Paper className="study-plan-generated-content" radius="md" withBorder>
+                          <Group align="center" justify="space-between" wrap="nowrap">
+                            <Stack gap={2}>
+                              <Badge color="teal" variant="light">已生成</Badge>
+                              <Text fw={750}>{activeContentTitle ?? `${contentLabel}已可查看`}</Text>
+                            </Stack>
+                            <Group gap="xs" wrap="nowrap">
+                              <Button
+                                component={Link}
+                                leftSection={<IconExternalLink size={15} />}
+                                size="xs"
+                                to={`/generated-contents/${activeContentId}`}
+                                variant="light"
+                              >
+                                查看{contentLabel}
+                              </Button>
+                              <Button
+                                leftSection={<IconRefresh size={15} />}
+                                loading={isGenerating}
+                                onClick={() => void handleGenerateContent(true)}
+                                size="xs"
+                                variant="subtle"
+                              >
+                                重新生成
+                              </Button>
+                            </Group>
+                          </Group>
+                        </Paper>
+                      ) : (
+                        <Group justify="space-between" wrap="nowrap">
+                          <Badge color="gray" variant="light">{contentLabel}待生成</Badge>
+                          <Button
+                            leftSection={<IconBook2 size={16} />}
+                            loading={isGenerating}
+                            onClick={() => void handleGenerateContent(false)}
+                            variant="light"
+                          >
+                            生成{contentLabel}
+                          </Button>
+                        </Group>
+                      )}
+                    </>
+                  ) : (
+                    <Alert color="yellow" variant="light">
+                      该任务类型暂不支持生成内容。
+                    </Alert>
+                  )}
                 </Stack>
               </Paper>
 

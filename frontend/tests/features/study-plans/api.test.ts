@@ -11,6 +11,8 @@ import {
   fetchTodayTodos,
   fetchStudyPlan,
   fetchDiagnosticQuestions,
+  generateSubtaskHandout,
+  generateSubtaskTaskTest,
   listStudyPlans,
   parseStudyPlanConfig,
   previewStudyPlan,
@@ -131,6 +133,8 @@ describe("study plans api", () => {
     await fetchGlobalCalendarDayTodos("2026-07-14");
     await fetchSubtaskExecutionContext("subtask_1");
     await updateSubtaskCompletion("subtask_1", true);
+    await generateSubtaskHandout("subtask_1", { force_regenerate: false });
+    await generateSubtaskTaskTest("subtask_2", { force_regenerate: true, parameters: {} });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -242,6 +246,22 @@ describe("study plans api", () => {
       expect.objectContaining({
         body: JSON.stringify({ completed: true }),
         method: "PUT",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      18,
+      "/api/v1/study-subtasks/subtask_1/handouts",
+      expect.objectContaining({
+        body: JSON.stringify({ force_regenerate: false }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      19,
+      "/api/v1/study-subtasks/subtask_2/task-tests",
+      expect.objectContaining({
+        body: JSON.stringify({ force_regenerate: true, parameters: {} }),
+        method: "POST",
       }),
     );
   });

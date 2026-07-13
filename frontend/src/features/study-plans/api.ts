@@ -3,8 +3,10 @@ import type {
   CourseStudyCalendarDay,
   CourseStudyCalendarMonth,
   ExecutionContextRead,
+  GeneratedContentRead,
   GlobalCalendarMonth,
   GlobalDayTodos,
+  HandoutGenerationRequest,
   SubtaskCompletionResult,
   StudyPlanConfigParseRequest,
   StudyPlanConfigParseResponse,
@@ -19,6 +21,7 @@ import type {
   StudyPlanRegenerationPreviewRequest,
   StudyPlanReplaceRequest,
   StudyPlanSaveRequest,
+  TaskTestGenerationRequest,
   TodayTodos,
 } from "./types";
 
@@ -154,5 +157,25 @@ export function updateSubtaskCompletion(
   return apiRequest<SubtaskCompletionResult>(`/api/v1/study-subtasks/${subtaskId}/completion`, {
     method: "PUT",
     body: { completed },
+  });
+}
+
+export function generateSubtaskHandout(
+  subtaskId: string,
+  payload: HandoutGenerationRequest = { force_regenerate: false },
+): Promise<GeneratedContentRead> {
+  return apiRequest<GeneratedContentRead>(`/api/v1/study-subtasks/${subtaskId}/handouts`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function generateSubtaskTaskTest(
+  subtaskId: string,
+  payload: TaskTestGenerationRequest = { force_regenerate: false },
+): Promise<GeneratedContentRead> {
+  return apiRequest<GeneratedContentRead>(`/api/v1/study-subtasks/${subtaskId}/task-tests`, {
+    method: "POST",
+    body: payload,
   });
 }
