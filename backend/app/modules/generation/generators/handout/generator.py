@@ -61,9 +61,23 @@ def _assert_no_known_terminology_errors(content: HandoutContent) -> None:
 
 
 def _handout_text_fragments(content: HandoutContent) -> list[str]:
-    fragments = [content.overview, *content.learning_objectives, content.summary]
-    for section in content.sections:
-        fragments.extend([section.title, section.body, *section.key_points])
+    fragments: list[str] = []
+
+    def collect(value: object) -> None:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                fragments.append(stripped)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+            return
+        if isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    collect(content.model_dump(mode="python"))
     return fragments
 
 
@@ -96,27 +110,80 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
         for chunk in context.chunks
     )
     task_context = "\n".join(_task_context_lines(params))
-    requirements = "\n".join(
+    role_and_task = "\n".join(
         [
-            "生成要求：",
+            "你是一名擅长大学数学、物理、计算机和工程类课程的教学设计专家，也是 CourseNexus 的计划学习讲义生成器。",
+            "你的任务不是简单总结资料，而是根据课程资料、学习目标、二级任务类型、学习时间和学生诊断，生成可在网页中稳定渲染的结构化个性化讲义。",
+            "不要输出完整 Markdown 文档。",
+            "不要输出 HTML。",
+            "只输出符合 HandoutContent schema 的 JSON 对象。",
+        ]
+    )
+    mode_rules = "\n".join(
+        [
+            "模式规则：",
+            "- subtask_type=learn：优先讲清新知识，顺序为先说结论 -> 精确定义 -> 直觉理解 -> 为什么需要 -> 公式/步骤 -> 例子 -> 易错点。",
+            "- subtask_type=review：优先帮助回顾和查漏，增加对比表、公式卡片、易错点、知识关系图和自测。",
+            "- content_depth=concise：减少背景扩展，每个核心知识点保留定义、核心原理和至多 1 个基础例子。",
+            "- content_depth=standard：完整解释定义、原理、例子、易错点，对核心公式给出必要推导。",
+            "- content_depth=detailed：增加边界条件、反例、综合应用和容易被教材省略的中间步骤。",
+            "- weak_area=calculation：公式必须说明用途、变量、单位、适用条件、限制条件，并给出代入步骤。",
+            "- weak_area=concept：加强概念边界、直觉解释和相似概念对比。",
+            "- weak_area=application：加强场景、输入输出、系统作用和迁移例题。",
+            "- weak_area=memorization：加强核心结论卡片、易错判断和快速自测。",
+        ]
+    )
+    planning_rules = "\n".join(
+        [
+            "生成前的内部处理：",
+            "- 先在内部提取核心知识点、依赖关系、前置知识缺口、易混点、需要公式/图示/表格的位置；不要展示分析过程。",
+            "- 区分必须掌握、理解即可和拓展内容，根据预计学习时间控制讲义长度。",
+            "- 如果课程材料不足以支持某个结论，明确说明课程材料未提供足够信息，不要自行编造。",
             "- 只服务当前 subtask 的学习目标，不生成整章摘要或泛泛课程总结。",
+        ]
+    )
+    schema_rules = "\n".join(
+        [
+            "输出 schema 要求：",
+            "- schema_version 必须为 2。",
+            "- sections[].blocks 是正文主体；不要把整节正文塞进一个 Markdown 字符串。",
             "- 每个 section 都围绕当前 subtask 展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。",
-            "- 对物理层公式类内容，必须写清适用条件和变量含义，再给出简短例子或步骤。",
+            "- learning_objectives 使用可观察动词，例如解释、区分、计算、推导、判断、比较、应用。",
+            "- prerequisites 只补足理解当前任务所需的最小前置知识，不扩展成另一整章。",
+        ]
+    )
+    block_rules = "\n".join(
+        [
+            "排版与块规则：",
+            "- 数学公式必须放入 type=formula block，latex 必须是 KaTeX 兼容字符串，并写清适用条件和变量含义。",
+            "- 对比内容必须放入 type=table block，最多 6 列、12 行。",
+            "- 知识关系优先使用 knowledge_map 的 mindmap tree，不要把思维导图写成普通段落。",
+            "- Mermaid 只用于流程、顺序或关系图；必须提供 title、code、explanation。",
+            "- Chart 只在资料提供真实数值时生成，不得编造数据。",
+            "- 不生成 SVG，除非输入资料明确要求且系统 schema 支持。",
+            "- 每个 block 需要 source_citation_ids，必须来自输入 chunk_id。",
+        ]
+    )
+    citation_rules = "\n".join(
+        [
+            "引用规则：",
             "- 每个 section 的 source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个，且必须直接相关。",
             "- source_citation_ids 仅用于后端追溯和质量校验；学生导出讲义不会逐节展示 citation。",
             "- 正文不要写“来源如下”“引用如下”，也不要堆叠资料摘录。",
         ]
     )
-    return (
-        "你是 CourseNexus 的计划学习讲义生成器。只能使用给定资料，不得编造来源。"
-        "输出必须符合 HandoutContent schema。\n"
-        f"语言：{params.language}；内容深度：{params.content_depth}；"
-        f"例题强度：{params.example_intensity}；测试强度：{params.assessment_intensity}；"
-        f"复习强度：{params.review_intensity}。\n\n"
-        f"{task_context}\n\n"
-        f"{requirements}\n\n"
-        "资料片段：\n"
-        f"{chunks}"
+    return "\n\n".join(
+        [
+            role_and_task,
+            f"语言与强度：{params.language}；内容深度：{params.content_depth}；例题强度：{params.example_intensity}；测试强度：{params.assessment_intensity}；复习强度：{params.review_intensity}。",
+            task_context,
+            mode_rules,
+            planning_rules,
+            schema_rules,
+            block_rules,
+            citation_rules,
+            f"资料片段：\n{chunks}",
+        ]
     )
 
 

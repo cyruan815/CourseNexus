@@ -199,6 +199,20 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
     assert "source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个" in prompt
     assert "学生导出讲义不会逐节展示 citation" in prompt
     assert "正文不要写“来源如下”“引用如下”" in prompt
+    assert "你的任务不是简单总结资料" in prompt
+    assert "不要输出完整 Markdown 文档" in prompt
+    assert "不要输出 HTML" in prompt
+    assert "只输出符合 HandoutContent schema 的 JSON 对象" in prompt
+    assert "schema_version 必须为 2" in prompt
+    assert "subtask_type=learn：优先讲清新知识" in prompt
+    assert "subtask_type=review：优先帮助回顾和查漏" in prompt
+    assert "weak_area=calculation：公式必须说明用途、变量、单位、适用条件、限制条件，并给出代入步骤" in prompt
+    assert "数学公式必须放入 type=formula block" in prompt
+    assert "对比内容必须放入 type=table block" in prompt
+    assert "知识关系优先使用 knowledge_map 的 mindmap tree" in prompt
+    assert "Chart 只在资料提供真实数值时生成，不得编造数据" in prompt
+    assert "不生成 SVG" in prompt
+    assert "每个 block 需要 source_citation_ids，必须来自输入 chunk_id" in prompt
 
 
 def test_handout_generator_rejects_schema_without_citation() -> None:
