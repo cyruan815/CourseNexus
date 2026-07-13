@@ -145,7 +145,7 @@ describe("CourseDetailPage", () => {
 
     expect(await screen.findByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("location-state")).toHaveTextContent("null"));
-    fireEvent.click(screen.getByRole("button", { name: "暂不上传" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭上传资料弹窗" }));
 
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
   });

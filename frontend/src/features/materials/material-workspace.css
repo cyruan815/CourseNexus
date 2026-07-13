@@ -218,9 +218,80 @@
   width: min(100%, 440px);
 }
 
+.material-workspace__upload-dialog-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
 .material-workspace__upload-dialog-panel h3,
 .material-workspace__upload-dialog-panel p {
   margin: 0;
+}
+
+.material-workspace__upload-dialog-panel p {
+  color: #5d6875;
+  font-size: 14px;
+  line-height: 1.55;
+  margin-top: 6px;
+}
+
+.material-workspace__upload-close {
+  align-items: center;
+  border-color: transparent;
+  border-radius: 999px;
+  color: #5f6d7a;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0;
+  width: 32px;
+}
+
+.material-workspace__upload-close:hover {
+  background: #eef3f8;
+  color: #233241;
+}
+
+.material-workspace__dropzone {
+  align-items: center;
+  background: #fbfcfe;
+  border: 1px dashed #b7c4d2;
+  border-radius: 8px;
+  color: #415264;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-height: 150px;
+  padding: 24px;
+  text-align: center;
+}
+
+.material-workspace__dropzone:hover {
+  background: #f4f8fc;
+  border-color: #7ca3ca;
+}
+
+.material-workspace__dropzone input {
+  display: none;
+}
+
+.material-workspace__dropzone-title {
+  color: #243447;
+  font-weight: 700;
+}
+
+.material-workspace__dropzone-hint {
+  color: #6c7885;
+  font-size: 13px;
+}
+
+.material-workspace__upload-submit {
+  justify-self: stretch;
 }
 
 .material-workspace__context-menu {

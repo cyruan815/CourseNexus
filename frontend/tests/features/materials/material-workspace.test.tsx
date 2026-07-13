@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -126,7 +126,7 @@ describe("MaterialWorkspace", () => {
     });
   });
 
-  it("opens and closes the upload prompt when requested by the course creation flow", async () => {
+  it("opens a drag-and-drop upload prompt with a close button when requested by the course creation flow", async () => {
     renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
@@ -137,9 +137,44 @@ describe("MaterialWorkspace", () => {
     );
 
     expect(await screen.findByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "暂不上传" }));
+    expect(screen.getByText("拖拽文件到这里，或点击选择文件")).toBeInTheDocument();
+    expect(screen.getByText(/上传后会自动进入解析流程/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "暂不上传" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭上传资料弹窗" }));
 
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
+  });
+
+  it("uploads a file selected by dropping it into the upload prompt", async () => {
+    const droppedFile = new File(["chapter"], "chapter.pdf", { type: "application/pdf" });
+    vi.mocked(materialsApi.uploadMaterial).mockResolvedValue({
+      ...materials[1],
+      id: "mat_drop",
+      name: "chapter.pdf",
+      material_type: "pdf",
+      mime_type: "application/pdf",
+      parse_status: "parsing",
+    });
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+        openUploadPrompt
+      />,
+    );
+
+    fireEvent.drop(await screen.findByLabelText("拖拽上传课程资料"), {
+      dataTransfer: { files: [droppedFile] },
+    });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "上传课程资料" })).getByRole("button", { name: "上传资料" }));
+
+    await waitFor(() => {
+      expect(materialsApi.uploadMaterial).toHaveBeenCalledWith("crs_1", droppedFile, null);
+    });
+    expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
+    expect(screen.getByText("chapter.pdf")).toBeInTheDocument();
   });
 
   it("removes a deleted folder and its materials after confirmation", async () => {
