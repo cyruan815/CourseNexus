@@ -124,7 +124,10 @@ def test_handout_generator_returns_structured_output_and_citations() -> None:
     assert output.content_json is not None
     assert output.content_json["schema_version"] == 2
     assert output.content_json["overview"] == payload["overview"]
-    assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
+    assert output.item_citation_chunk_ids == {
+        "sec_1": ["chunk_1"],
+        "__handout__": ["chunk_1"],
+    }
 
 
 def test_handout_generator_rejects_output_without_explicit_v2_schema_version() -> None:
@@ -174,6 +177,108 @@ def test_handout_generator_uses_section_citations_only_for_v2_blocks() -> None:
     )
 
     assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
+
+
+def test_handout_generator_collects_and_validates_top_level_citations() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["knowledge_map"] = None
+    payload["prerequisites"] = [
+        {
+            "id": "pre_1",
+            "title": "对数基础",
+            "explanation": "理解二进制对数。",
+            "sort_order": 1,
+            "source_citation_ids": ["chunk_extra"],
+        }
+    ]
+    payload["formula_cards"] = [payload["sections"][0]["blocks"][0] | {"source_citation_ids": ["chunk_extra"]}]
+    payload["exam_focus"] = [
+        {
+            "id": "exam_1",
+            "title": "单位换算",
+            "description": "不要把 dB 直接代入。",
+            "sort_order": 1,
+            "source_citation_ids": ["chunk_extra"],
+        }
+    ]
+    payload["self_check"] = [
+        {
+            "id": "check_1",
+            "question": "带宽增加会怎样？",
+            "answer": "容量上限提高。",
+            "sort_order": 1,
+            "source_citation_ids": ["chunk_extra"],
+        }
+    ]
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(
+            _batch(),
+            MaterialContextBatch(
+                chunks=[
+                    ContextChunk(
+                        material_id="mat_1",
+                        chunk_id="chunk_extra",
+                        chunk_index=1,
+                        material_name="数据库讲义.pdf",
+                        page="2",
+                        page_index=1,
+                        heading="补充公式",
+                        content_text="额外公式说明。",
+                    )
+                ],
+                material_ids=["mat_1"],
+                estimated_tokens=10,
+            ),
+        ),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"language": "zh-CN"},
+    )
+
+    assert output.item_citation_chunk_ids == {
+        "sec_1": ["chunk_1"],
+        "__handout__": ["chunk_extra"],
+    }
+
+
+def test_handout_generator_rejects_top_level_formula_without_citations() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["formula_cards"] = [payload["sections"][0]["blocks"][0] | {"source_citation_ids": []}]
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        HandoutGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"language": "zh-CN"},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details == {"formula_cards_without_citations": ["Shannon 公式"]}
+
+
+def test_handout_generator_rejects_top_level_citation_outside_context() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["prerequisites"] = [
+        {
+            "id": "pre_1",
+            "title": "对数基础",
+            "explanation": "理解二进制对数。",
+            "sort_order": 1,
+            "source_citation_ids": ["chunk_outside"],
+        }
+    ]
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        HandoutGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"language": "zh-CN"},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
 def test_handout_generator_prompt_includes_task_context_and_quality_requirements() -> None:
     payload = _valid_handout_v2_payload()
@@ -226,6 +331,7 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
     assert "不生成整章摘要" in prompt
     assert "适用条件和变量含义" in prompt
     assert "每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个" in prompt
+    assert "每个顶层条目必须独立填写 source_citation_ids" in prompt
     assert "学生导出讲义不会逐节展示 citation" in prompt
     assert "正文不要写“来源如下”“引用如下”" in prompt
     assert "你的任务不是简单总结资料" in prompt
