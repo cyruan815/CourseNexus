@@ -428,21 +428,23 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
     contents = [HandoutContent.model_validate(output.content_json) for output in outputs]
     objectives: list[str] = []
     sections: list[dict[str, object]] = []
-    citation_chunk_ids: list[str] = []
+    item_citation_chunk_ids: dict[str, list[str]] = {}
     sort_order = 1
-    for content in contents:
+    for output, content in zip(outputs, contents, strict=True):
         for objective in content.learning_objectives:
             if objective not in objectives:
                 objectives.append(objective)
         for section in sorted(content.sections, key=lambda item: item.sort_order):
+            old_id = section.id
+            new_id = f"sec_{sort_order}"
             data = section.model_dump(mode="json")
-            data["id"] = f"sec_{sort_order}"
+            data["id"] = new_id
             data["sort_order"] = sort_order
             sections.append(data)
+            item_citation_chunk_ids[new_id] = list(
+                dict.fromkeys(output.item_citation_chunk_ids.get(old_id, section.source_citation_ids))
+            )
             sort_order += 1
-            for chunk_id in section.source_citation_ids:
-                if chunk_id not in citation_chunk_ids:
-                    citation_chunk_ids.append(chunk_id)
 
     content_json = {
         "overview": contents[0].overview,
@@ -453,7 +455,7 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
     return GeneratorOutput(
         title="今日讲义",
         content_json=content_json,
-        item_citation_chunk_ids=_item_citation_chunk_ids(content_json=content_json, citation_chunk_ids=citation_chunk_ids),
+        item_citation_chunk_ids=item_citation_chunk_ids,
     )
 
 
