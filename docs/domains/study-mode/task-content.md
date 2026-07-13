@@ -132,8 +132,7 @@ sequenceDiagram
         {
           "type": "paragraph",
           "role": "definition",
-          "text": "带宽是信道可通过的频率范围，单位是 Hz。",
-          "source_citation_ids": ["chunk_2"]
+          "text": "带宽是信道可通过的频率范围，单位是 Hz。"
         },
         {
           "type": "formula",
@@ -146,8 +145,7 @@ sequenceDiagram
             {"symbol": "S/N", "meaning": "信噪比倍数，不是 dB", "unit": null}
           ],
           "conditions": ["有噪声信道"],
-          "limitations": ["这是理论上限，不等于实际吞吐率"],
-          "source_citation_ids": ["chunk_3"]
+          "limitations": ["这是理论上限，不等于实际吞吐率"]
         }
       ],
       "key_points": ["Shannon 公式关注噪声，Nyquist 公式关注电平级数。"],
@@ -163,8 +161,7 @@ sequenceDiagram
         {"label": "信号与码元", "children": [{"label": "波特率", "children": []}]},
         {"label": "信道容量", "children": [{"label": "Nyquist", "children": []}, {"label": "Shannon", "children": []}]}
       ]
-    },
-    "source_citation_ids": ["chunk_2", "chunk_3"]
+    }
   },
   "formula_cards": [],
   "exam_focus": [],
@@ -180,8 +177,8 @@ v2 讲义的字段语义：
 - `estimated_minutes` 来自当前二级任务或生成参数，不由模型随意扩展学习时长。
 - `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课。
 - `sections[].blocks[]` 是正文主体；旧版 `sections[].body` 在 v2 中被 typed blocks 替代。
-- `source_citation_ids` 在模型输出阶段必须引用本次 material-context 中的 chunk id；保存成功后由 learning-execution 回绑为 `SourceCitation.id`。
-- `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空。
+- `sections[].source_citation_ids` 为第一版强制引用字段；模型输出阶段必须引用本次 material-context 中的 chunk id，保存成功后由 learning-execution 回绑为 `SourceCitation.id`。`blocks[]` 默认继承所在 section 的来源，prompt 明确要求第一版不要在 block 内单独填写 `source_citation_ids`；如果未来兼容字段出现，后端暂不依赖它。
+- `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空；第一版默认继承所有 section 来源，展示时不单独显示引用。
 - `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
 - `exam_focus[]` 用于保存考试或测验常见考法、易错点和解题提醒。
 - `self_check[]` 用于保存讲义后的短自测，服务学习闭环，不替代 `task_test`。
@@ -259,7 +256,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 ### 引用链契约
 
-Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 `content_json.sections[].source_citation_ids` / `content_json.questions[].source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
+Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 `content_json.sections[].source_citation_ids` / `content_json.questions[].source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。v2 handout 第一版只强制 section-level citation；block 默认继承 section 来源，不做逐 block 引用校验或独立回绑。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
 
 Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引用绑定：section id 重写为 `sec_N` 后，`GeneratorOutput.item_citation_chunk_ids` 要把旧 section id 对应的 chunk id 迁移到新 id；若 generator 未提供该映射，则回退使用该 section 自身的 `source_citation_ids` 并去重。Handout reducer 不再把所有 section 的引用合成总集合后绑定给每个 section，避免 PDF 每节显示整章引用。
 
@@ -267,7 +264,7 @@ Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引
 
 ### Handout prompt 契约
 
-Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯，但正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
+Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯；block 默认继承 section 来源，第一版不要在 block 内单独填写 `source_citation_ids`。正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
 
 ### PDF renderer 契约
 

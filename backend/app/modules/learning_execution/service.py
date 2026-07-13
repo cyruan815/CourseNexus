@@ -667,7 +667,7 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
             data["id"] = new_id
             data["sort_order"] = sort_order
             sections.append(data)
-            chunk_ids = output.item_citation_chunk_ids.get(old_id) or _collect_source_citation_ids(data)
+            chunk_ids = output.item_citation_chunk_ids.get(old_id) or list(section.source_citation_ids)
             item_citation_chunk_ids[new_id] = list(dict.fromkeys(chunk_ids))
             sort_order += 1
 
@@ -846,14 +846,16 @@ def _bind_source_citation_ids(
 ) -> object:
     if isinstance(value, dict):
         item_id = value.get("id")
+        block_type = value.get("type")
+        is_block = isinstance(block_type, str)
         item_citation_ids = bindings.get(item_id, []) if isinstance(item_id, str) else []
-        source_citation_ids = _citation_ids_for_raw_sources(value.get("source_citation_ids"), bindings)
+        source_citation_ids = [] if is_block else _citation_ids_for_raw_sources(value.get("source_citation_ids"), bindings)
         current_citation_ids = source_citation_ids or item_citation_ids or list(inherited_citation_ids or [])
         bound = {
             key: _bind_source_citation_ids(child, bindings, current_citation_ids)
             for key, child in value.items()
         }
-        if "source_citation_ids" in value:
+        if "source_citation_ids" in value or (is_block and current_citation_ids):
             bound["source_citation_ids"] = list(dict.fromkeys(current_citation_ids))
         return bound
     if isinstance(value, list):

@@ -1190,13 +1190,13 @@ typed block 展示规则：
 | `steps` | 用于推导、流程或解题步骤，必须保持稳定编号和缩进。 |
 | `mindmap` | 使用树形 `root.children[]` 渲染为 Markmap 或自定义树组件；节点文本不得当作 HTML。 |
 | `mermaid` | 只允许流程图或关系图，必须同时展示标题和解释；渲染失败时回退为文本代码块。 |
-| `chart` | 只展示资料中可追溯的数值数据；缺少数值、单位或引用时前端应回退为表格或隐藏图表。 |
+| `chart` | 只展示资料中可追溯的数值数据；缺少数值或单位时前端应回退为表格或隐藏图表。第一版不要求 chart block 自带引用字段。 |
 
 排版和安全约束：
 
 - 数学公式只从 `latex` 字段读取，模型不得在正文里混入需要前端猜测的公式图片或 HTML。
 - 表格列宽、公式溢出、图表高度、思维导图节点间距和移动端滚动都由前端组件控制，不能依赖模型输出空格、换行或 HTML 标签来排版。
 - `mermaid` 只接受受控图类型；首版不接受模型输出的 `svg` 字符串。
-- `chart` 必须有明确数值、单位和 `source_citation_ids`，不得根据模型推测的趋势画图。
-- 任一 block 的 `source_citation_ids` 都只用于绑定 `source_citations[].id` 或保存前的 chunk id；学生正文默认不展示 raw snippet。
+- `chart` 必须有明确数值和单位，不得根据模型推测的趋势画图；其资料来源第一版继承所在 section。
+- `sections[].source_citation_ids` 是第一版强制引用字段，保存后为 `source_citations[].id`；`blocks[]` 默认继承所在 section 来源，前端不要要求或展示逐 block 引用。`knowledge_map` 默认继承所有 section 来源，第一版不单独显示引用。
 - 历史 `schema_version` 缺失或为 1 的 handout 继续按旧版 `overview`、`learning_objectives`、`sections[].body`、`summary` 渲染。
