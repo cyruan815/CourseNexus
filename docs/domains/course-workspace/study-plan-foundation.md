@@ -8,6 +8,7 @@
 - 详情页路由：`/courses/:courseId/study-plans/:planId`，页面入口为 `frontend/src/pages/StudyPlanDetailPage.tsx`。
 - 学习计划 API 独立封装在 `frontend/src/features/study-plans/api.ts`，类型在 `frontend/src/features/study-plans/types.ts`。
 - 课程详情左侧学习计划卡片读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时跳转创建页，有计划时计划标题跳转详情页。
+- 2026-07-13 C1 已将前端学习计划 API/type 适配层扩展到 S02 生命周期接口：配置解析、学前诊断问题、诊断 profile、preview、保存、列表、详情、重生成 preview、替换和删除。该变更只提供 adapter，不在现有页面启用诊断、重生成、替换或删除交互。
 
 ## 创建页状态流转
 
@@ -30,3 +31,20 @@
 - 页面测试：`frontend/tests/pages/study-plan-pages.test.tsx`
 - 路由测试：`frontend/tests/pages/app-router.test.tsx`
 - 课程详情入口测试：`frontend/tests/pages/course-detail.test.tsx`
+
+## API 适配层覆盖范围
+
+`frontend/src/features/study-plans/api.ts` 当前封装的真实后端接口：
+
+- `POST /api/v1/courses/{course_id}/study-plan-config-parses`
+- `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
+- `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`
+- `POST /api/v1/courses/{course_id}/study-plans/preview`
+- `POST /api/v1/courses/{course_id}/study-plans`，保存时由调用方传入并复用 `Idempotency-Key`
+- `GET /api/v1/courses/{course_id}/study-plans`
+- `GET /api/v1/study-plans/{plan_id}`
+- `POST /api/v1/study-plans/{plan_id}/regeneration-previews`
+- `PUT /api/v1/study-plans/{plan_id}`
+- `DELETE /api/v1/study-plans/{plan_id}`
+
+`types.ts` 对齐后端 S02 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview 和替换请求均有独立类型。跨域的 todos/calendar、learning execution、handout/task-test 和 export 接口暂不放入 `features/study-plans`，后续按对应上下文建立边界。
