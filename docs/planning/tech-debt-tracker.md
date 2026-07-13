@@ -22,6 +22,30 @@
 | TD-012 | `material-context` 已区分问答相关性检索和指定材料全覆盖读取，并提供覆盖执行器和参考消费者；`course-qa` 已迁移到问答检索接口。 | 具体生成模块仍需逐步迁移到全材料批次接口。 | 高 | 已关闭（2026-07-10） |
 | TD-013 | 指定材料生成的具体 schema、提示词和业务质量尚未实现。 | Flashcard、Quiz、Mindmap 仍需后续业务团队基于基础设施分别开发。 | 中 | 后续业务阶段 |
 | TD-014 | AI 学习计划仍为确定性占位。 | S02 已接入全材料 map/reduce、保存幂等、替换、重生成和软删除。 | 高 | 已关闭（2026-07-11） |
+| TD-015 | 公共 `OpenAIModelProvider.answer_question()` 固定调用 Responses API，尚未兼容仅提供 Chat Completions API 的 OpenAI-compatible 服务。 | DeepSeek 等不支持 `/responses` 的服务会让课程问答和 Study Mode 任务级问答稳定返回 `GENERATION_FAILED`；支持 Responses API 的模型不受影响。 | 高 | 待合并后统一修复 |
+
+## TD-015：问答模型接口兼容
+
+### 当前行为
+
+- 问题位于 `backend/app/integrations/model_provider/openai.py::OpenAIModelProvider.answer_question()`，属于 `main` 公共模型 provider，不是 Study Mode 的局部实现问题。
+- 当前问答固定调用 `client.responses.create()`；课程详情 Agent 问答和 Study Mode 执行页任务级问答都复用该入口。
+- 结构化生成路径已经能在 Responses API 不可用时回退到 Chat Completions，但普通问答路径没有同等兼容逻辑。
+- 真实 Study Mode E2E 已观察到 `deepseek-chat` 调用 `/responses` 返回 404，因此任务级问答步骤被跳过；这不影响支持 Responses API 的 OpenAI 模型。
+
+### 处理决定
+
+- 允许当前业务 PR 先合并，合并后在公共模型 provider 中统一修复，业务模块不得各自复制或绕过模型调用逻辑。
+- POC 阶段可在确认 Responses endpoint 不受支持时回退 `chat.completions.create()`；不得把鉴权失败、限流或普通服务端错误一律视为可回退条件。
+- 后续若供应商差异继续扩大，应评估增加显式接口模式配置，例如 `responses`、`chat_completions` 和 `auto`，避免依赖失败探测决定调用协议。
+
+### 完成标准
+
+- 支持 Responses API 的 provider 继续通过原路径完成问答。
+- `/responses` 明确不受支持时，能通过 Chat Completions 完成课程问答和任务级问答。
+- 401、403、429 和非兼容性 5xx 不被错误回退，并继续返回稳定错误码。
+- 补充 provider 单元测试，以及课程问答和 Study Mode 任务级问答的真实 provider E2E；验证报告不得再以跳过任务级问答作为通过条件。
+- 修复后同步更新模型配置说明、相关领域文档和本技术债状态。
 
 ## 更新规则
 
