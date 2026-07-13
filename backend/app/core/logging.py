@@ -4,8 +4,10 @@ from contextvars import ContextVar, Token
 from copy import copy
 from datetime import datetime
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.core.config import Settings
@@ -15,6 +17,15 @@ _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 _FORMAT = "%(asctime)s | %(levelname)s | %(event_name)s | %(message)s | req=%(request_id)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _LOG_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_ANSI_RESET = "\x1b[0m"
+_LEVEL_COLORS = {
+    logging.DEBUG: "\x1b[36m",
+    logging.INFO: "\x1b[32m",
+    logging.WARNING: "\x1b[33m",
+    logging.ERROR: "\x1b[31m",
+    logging.CRITICAL: "\x1b[1;31m",
+}
+_MAX_EXCEPTION_SUMMARY_LENGTH = 500
 
 
 class RequestContextFilter(logging.Filter):
@@ -29,8 +40,32 @@ class RequestContextFilter(logging.Filter):
 def exception_summary(exc: BaseException | None) -> str | None:
     if exc is None:
         return None
-    message = str(exc).replace("\n", " ").strip()
-    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
+    root_cause = _root_cause(exc)
+    message = " ".join(str(root_cause).split())
+    summary = f"{type(root_cause).__name__}: {message}" if message else type(root_cause).__name__
+    if len(summary) > _MAX_EXCEPTION_SUMMARY_LENGTH:
+        return f"{summary[: _MAX_EXCEPTION_SUMMARY_LENGTH - 1]}…"
+    return summary
+
+
+def _root_cause(exc: BaseException) -> BaseException:
+    current = exc
+    seen: set[int] = set()
+    while id(current) not in seen:
+        seen.add(id(current))
+        original = getattr(current, "orig", None)
+        next_error = original if isinstance(original, BaseException) else current.__cause__ or current.__context__
+        if not isinstance(next_error, BaseException):
+            break
+        current = next_error
+    return current
+
+
+def _stream_supports_color(stream: object) -> bool:
+    if "NO_COLOR" in os.environ or os.environ.get("TERM", "").lower() == "dumb":
+        return False
+    isatty = getattr(stream, "isatty", None)
+    return bool(isatty and isatty())
 
 
 class TimezoneFormatter(logging.Formatter):
@@ -55,14 +90,31 @@ class ExceptionSummaryFormatter(TimezoneFormatter):
 
 
 class CompactConsoleFormatter(ExceptionSummaryFormatter):
+    def __init__(self, *args: Any, use_colors: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.use_colors = use_colors
+
     def format(self, record: logging.LogRecord) -> str:
         compact = copy(record)
         summary = exception_summary(record.exc_info[1]) if record.exc_info else None
         compact.exc_info = None
         compact.exc_text = None
         compact.stack_info = None
+        if self.use_colors:
+            color = _LEVEL_COLORS.get(record.levelno)
+            if color:
+                compact.levelname = f"{color}{record.levelname}{_ANSI_RESET}"
+                compact.event_name = f"{color}{record.event_name}{_ANSI_RESET}"
         headline = logging.Formatter.format(self, compact)
         return f"{headline} | error={summary}" if summary else headline
+
+
+class UvicornRequestExceptionFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            record.exc_info is not None
+            and record.getMessage().strip().startswith("Exception in ASGI application")
+        )
 
 
 def configure_logging(settings: Settings) -> None:
@@ -79,7 +131,13 @@ def configure_logging(settings: Settings) -> None:
     context_filter = RequestContextFilter()
     console = logging.StreamHandler()
     console.addFilter(context_filter)
-    console.setFormatter(CompactConsoleFormatter(_FORMAT, _DATE_FORMAT))
+    console.setFormatter(
+        CompactConsoleFormatter(
+            _FORMAT,
+            _DATE_FORMAT,
+            use_colors=_stream_supports_color(console.stream),
+        )
+    )
 
     file_handler = RotatingFileHandler(
         log_dir / "course-nexus.log",
@@ -93,6 +151,11 @@ def configure_logging(settings: Settings) -> None:
     logger.addHandler(console)
     logger.addHandler(file_handler)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    for log_filter in uvicorn_error_logger.filters[:]:
+        if isinstance(log_filter, UvicornRequestExceptionFilter):
+            uvicorn_error_logger.removeFilter(log_filter)
+    uvicorn_error_logger.addFilter(UvicornRequestExceptionFilter())
 
 
 def get_logger(name: str) -> logging.Logger:

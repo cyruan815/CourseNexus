@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from pathlib import Path
+
+from sqlalchemy.exc import OperationalError as SqlAlchemyOperationalError
 
 from app.core.config import Settings
 from app.core.logging import (
+    CompactConsoleFormatter,
+    RequestContextFilter,
+    UvicornRequestExceptionFilter,
     bind_request_id,
     configure_logging,
     exception_summary,
@@ -15,6 +21,63 @@ from app.core.logging import (
 
 def test_exception_summary_preserves_original_type_and_message() -> None:
     assert exception_summary(TimeoutError("request timed out")) == "TimeoutError: request timed out"
+
+
+def test_exception_summary_uses_database_driver_root_cause() -> None:
+    error = SqlAlchemyOperationalError(
+        "select missing_column from study_plans",
+        {},
+        sqlite3.OperationalError("no such column: study_plans.missing_column"),
+    )
+
+    assert exception_summary(error) == "OperationalError: no such column: study_plans.missing_column"
+
+
+def test_compact_console_formatter_colors_level_and_event() -> None:
+    record = logging.LogRecord(
+        name="course_nexus.api.error",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="请求失败",
+        args=(),
+        exc_info=None,
+    )
+    RequestContextFilter().filter(record)
+    formatter = CompactConsoleFormatter(
+        "%(levelname)s | %(event_name)s | %(message)s",
+        use_colors=True,
+    )
+
+    output = formatter.format(record)
+
+    assert "\x1b[31mERROR\x1b[0m" in output
+    assert "\x1b[31mapi.error\x1b[0m" in output
+
+
+def test_uvicorn_request_exception_filter_only_drops_duplicate_asgi_traceback() -> None:
+    duplicate = logging.LogRecord(
+        name="uvicorn.error",
+        level=logging.ERROR,
+        pathname=__file__,
+        lineno=1,
+        msg="Exception in ASGI application\n",
+        args=(),
+        exc_info=(RuntimeError, RuntimeError("boom"), None),
+    )
+    startup = logging.LogRecord(
+        name="uvicorn.error",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="Application startup complete.",
+        args=(),
+        exc_info=None,
+    )
+    log_filter = UvicornRequestExceptionFilter()
+
+    assert log_filter.filter(duplicate) is False
+    assert log_filter.filter(startup) is True
 
 
 def test_configure_logging_writes_compact_console_and_detailed_file(
@@ -58,3 +121,7 @@ def test_configure_logging_is_idempotent(tmp_path: Path) -> None:
     configure_logging(settings)
 
     assert len(logging.getLogger("course_nexus").handlers) == 2
+    assert sum(
+        isinstance(log_filter, UvicornRequestExceptionFilter)
+        for log_filter in logging.getLogger("uvicorn.error").filters
+    ) == 1

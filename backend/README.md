@@ -86,7 +86,7 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 
 ## 日志
 
-应用统一使用 Python 标准库 `logging`。日志时间明确使用带 `+08:00` 偏移的北京时间；`StreamHandler` 在终端输出单行摘要，`RotatingFileHandler` 将完整日志和异常 traceback 写入 `logs/course-nexus.log`。
+应用统一使用 Python 标准库 `logging`。日志时间明确使用带 `+08:00` 偏移的北京时间；`StreamHandler` 在交互式终端按级别为日志级别和事件名着色，只输出单行根因摘要，重定向输出或设置 `NO_COLOR` 时自动关闭颜色。Uvicorn 不重复打印已由应用记录的请求异常 traceback；`RotatingFileHandler` 仍将完整日志和异常追溯写入 `logs/course-nexus.log`。
 
 ```dotenv
 LOG_LEVEL=INFO
@@ -103,7 +103,7 @@ Select-String -Path logs/course-nexus.log -Pattern 'ERROR'
 Select-String -Path logs/course-nexus.log -Pattern 'req_具体请求ID'
 ```
 
-终端日志不显示 traceback；文件日志会保留。禁止记录密码、Authorization、Token、Cookie、API Key、完整资料内容、完整用户问题、prompt、模型响应或向量。
+终端日志不显示 traceback；SQLAlchemy 等包装异常只显示最底层根因，文件日志保留完整上下文。禁止记录密码、Authorization、Token、Cookie、API Key、完整资料内容、完整用户问题、prompt、模型响应或向量。
 
 ## 配置
 
