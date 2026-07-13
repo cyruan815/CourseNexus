@@ -10,6 +10,11 @@ class HandoutGenerationParameters(BaseModel):
 
     language: str = "zh-CN"
     detail_level: Literal["brief", "standard", "deep"] = "standard"
+    subtask_title: str | None = None
+    subtask_description: str | None = None
+    plan_goal: str | None = None
+    diagnostic_weak_area: str | None = None
+    diagnostic_explanation_style: str | None = None
 
 
 class HandoutSection(BaseModel):
