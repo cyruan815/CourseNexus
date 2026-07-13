@@ -44,7 +44,7 @@ handout.content_json / Markdown
 
 ## Consequences
 
-- 本地和 CI 环境若运行 handout PDF 导出测试，需要安装 Playwright Chromium：`uv run playwright install chromium`。
+- 本地和 CI 环境若运行 handout PDF 导出或相关测试，需要在后端 Python 环境安装依赖后额外执行 `python -m playwright install chromium`；Conda / pip 安装 `playwright` 包本身不会下载浏览器二进制。
 - 后端依赖声明必须包含 `markdown-it-py`、`jinja2` 和 `playwright`。
 - 导出层应继续清洗用户可见引用残留，不展示 `formula-not-decoded`、``、``、`` 等 parser/OCR 噪声。
 - PDF 视觉质量以后应通过渲染 PNG 或人工抽检验证；文本抽取只能作为辅助检查。
