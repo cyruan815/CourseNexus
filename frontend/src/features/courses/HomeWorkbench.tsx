@@ -219,14 +219,20 @@ function buildTermSelectData(courses: HomeCourse[], termOptions: CourseTermOptio
 }
 
 function mapCourseToHomeCourse(course: Course): HomeCourse {
+  const taskStatusLabel: Record<NonNullable<Course["today_task_status"]>, string> = {
+    has_task_today: "今日有任务",
+    no_study_plan: "无学习计划",
+    no_task_today: "今日无任务",
+  };
+
   return {
     id: course.id,
     name: course.name,
     description: course.description,
     teacher: course.teacher,
     term: course.term,
-    materialLabel: "资料待接入",
-    taskLabel: "今日任务待接入",
+    materialLabel: typeof course.material_count === "number" ? `资料 ${course.material_count} 份` : "资料状态待同步",
+    taskLabel: course.today_task_status ? taskStatusLabel[course.today_task_status] : "今日任务待同步",
     recentActivity: course.description?.trim() || "课程资料待上传",
     progress: course.status === "active" ? "课程已创建" : course.status,
     status: course.status,
@@ -441,7 +447,7 @@ function CourseCard({
         <Group align="flex-start" justify="space-between" wrap="nowrap">
           <Stack gap="xs">
             <Title order={3}>
-              <Link className="home-course-link" to={`/courses/${course.id}`}>
+              <Link className="home-course-link" title={course.name} to={`/courses/${course.id}`}>
                 {course.name}
               </Link>
             </Title>
@@ -484,7 +490,7 @@ function CourseCard({
           </Menu>
         </Group>
 
-        <Text className="home-course-activity">{course.recentActivity}</Text>
+        <Text className="home-course-activity" title={course.recentActivity}>{course.recentActivity}</Text>
 
         <Group gap="sm">
           <Badge className="home-material-badge" variant="light">
@@ -493,9 +499,6 @@ function CourseCard({
           <Badge className="home-task-badge" variant="light">
             {course.taskLabel}
           </Badge>
-          <Text c="dimmed" ml="auto" size="sm">
-            {course.progress}
-          </Text>
         </Group>
       </Stack>
     </Card>

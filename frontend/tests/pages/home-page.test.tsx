@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TOKEN_STORAGE_KEY } from "../../src/features/auth/session";
 import { THEME_STORAGE_KEY } from "../../src/app/theme";
+import type { Course } from "../../src/types/course";
 import { HomePage } from "../../src/pages/HomePage";
 
-const backendCourses = [
+const backendCourses: Course[] = [
   {
     id: "crs_discrete_math",
     user_id: "usr_123",
@@ -147,6 +148,78 @@ describe("HomePage", () => {
     expect(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" })).toBeInTheDocument();
     expect(screen.queryByText("暂无计划")).not.toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
+  });
+
+  it("shows material and task status on course cards without the created status text", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal("fetch", createHomeFetchMock([{
+      ...backendCourses[0],
+      material_count: 3,
+      name: "Course Card",
+      today_task_status: "has_task_today",
+    }]));
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "Course Card" })).toBeInTheDocument();
+    expect(screen.getByText("资料 3 份")).toBeInTheDocument();
+    expect(screen.getByText("今日有任务")).toBeInTheDocument();
+    expect(screen.queryByText("资料状态待同步")).not.toBeInTheDocument();
+    expect(screen.queryByText("今日任务待同步")).not.toBeInTheDocument();
+    expect(screen.queryByText("课程已创建")).not.toBeInTheDocument();
+  });
+
+  it("maps course list aggregate statuses without per-course study-plan requests", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const fetchMock = createHomeFetchMock([
+      { ...backendCourses[0], id: "crs_no_plan", material_count: 0, name: "No Plan", today_task_status: "no_study_plan" },
+      { ...backendCourses[1], id: "crs_no_task", material_count: 1, name: "No Task", today_task_status: "no_task_today" },
+      { ...backendCourses[2], id: "crs_has_task", material_count: 2, name: "Has Task", today_task_status: "has_task_today" },
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "No Plan" })).toBeInTheDocument();
+    expect(screen.getByText("资料 0 份")).toBeInTheDocument();
+    expect(screen.getByText("资料 1 份")).toBeInTheDocument();
+    expect(screen.getByText("资料 2 份")).toBeInTheDocument();
+    expect(screen.getByText("无学习计划")).toBeInTheDocument();
+    expect(screen.getByText("今日无任务")).toBeInTheDocument();
+    expect(screen.getByText("今日有任务")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/study-plans"))).toBe(false);
+  });
+
+  it("keeps pending badges before the course list aggregate fields are available", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    vi.stubGlobal("fetch", createHomeFetchMock([{
+      ...backendCourses[0],
+      name: "Course Card",
+    }]));
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "Course Card" })).toBeInTheDocument();
+    expect(screen.getByText("资料状态待同步")).toBeInTheDocument();
+    expect(screen.getByText("今日任务待同步")).toBeInTheDocument();
+    expect(screen.queryByText("资料待接入")).not.toBeInTheDocument();
+    expect(screen.queryByText("今日任务待接入")).not.toBeInTheDocument();
+    expect(screen.queryByText("课程已创建")).not.toBeInTheDocument();
+  });
+
+  it("keeps long course card text inspectable without relying on the visible layout", async () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
+    const longDescription = "12345678901234567890123456789012345678901234567890";
+    vi.stubGlobal("fetch", createHomeFetchMock([{
+      ...backendCourses[0],
+      description: longDescription,
+      name: "Very Very Long Course",
+    }]));
+
+    renderHomePage();
+
+    expect(await screen.findByRole("link", { name: "Very Very Long Course" })).toHaveAttribute("title", "Very Very Long Course");
+    expect(screen.getByText(longDescription)).toHaveAttribute("title", longDescription);
   });
 
   it("lets the month calendar navigate without fake empty-state overlays", async () => {
