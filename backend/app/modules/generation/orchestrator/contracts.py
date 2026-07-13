@@ -23,6 +23,7 @@ class GeneratorOutput(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content: str | None = None
     content_json: dict[str, Any]
+    item_citation_chunk_ids: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Generator(Protocol):
