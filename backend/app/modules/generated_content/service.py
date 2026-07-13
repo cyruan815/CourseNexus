@@ -14,6 +14,9 @@ from app.modules.generated_content.repository import (
 from app.modules.generated_content.schemas import GeneratedContentCitationRead, GeneratedContentRead
 
 
+POC_GENERATION_TYPES = {"quiz", "flashcard", "mindmap", "outline", "knowledge_list"}
+
+
 def _assemble_generated_content_reads(
     contents: list[AIGeneratedContent],
     citations: list[SourceCitation],
@@ -36,14 +39,21 @@ def _assemble_generated_content_reads(
 
 
 def build_generated_content_read(db: Session, content: AIGeneratedContent) -> GeneratedContentRead:
-    citations = list_generated_content_citations(db, [content.id])
+    citations = (
+        []
+        if content.content_type in POC_GENERATION_TYPES
+        else list_generated_content_citations(db, [content.id])
+    )
     return _assemble_generated_content_reads([content], citations)[0]
 
 
 def list_generated_contents(db: Session, *, user_id: str, course_id: str) -> list[GeneratedContentRead]:
     assert_course_owner(db, user_id, course_id)
     contents = list_active_generated_contents_for_course(db, user_id=user_id, course_id=course_id)
-    citations = list_generated_content_citations(db, [content.id for content in contents])
+    citation_content_ids = [
+        content.id for content in contents if content.content_type not in POC_GENERATION_TYPES
+    ]
+    citations = list_generated_content_citations(db, citation_content_ids)
     return _assemble_generated_content_reads(contents, citations)
 
 

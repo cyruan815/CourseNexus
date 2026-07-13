@@ -111,7 +111,7 @@ flowchart LR
 | 上传资料 | 前端 multipart 上传到后端；后端保存文件和 `CourseMaterial`；解析过程写 `parse_status`。 |
 | 资料解析与索引 | Docling adapter 读取文件并输出有序结构化 chunk；后端写 `MaterialChunk`，LlamaIndex 生成 embedding 并写入本地 Chroma；两者成功后资料才进入 `parsed`。 |
 | 课程问答 | `course-qa` 通过 `material-context` 在材料范围内执行 Chroma Top-K 检索，调用模型 provider，写 `Message` 和 `SourceCitation`。 |
-| 指定材料生成 | generation-orchestrator 或 study-plans 通过 `material-context` 按顺序分批读取全部选定 chunk，执行 map-reduce 生成并保存结果与引用。 |
+| 指定材料生成 | 五类独立生成由 generation-orchestrator 通过 `material-context` 合并全部选定 chunk，检查总 token 后单次调用模型并保存 `AIGeneratedContent`；study-plans 可保留自身批处理策略。 |
 | 学习计划 | study-plans 调用模型或规则生成计划结构，写 `StudyPlan`、`StudyTask`、`StudySubTask`。 |
 | 日历聚合 | todos-calendar 只读查询 `StudyTask`、`StudySubTask`，按日期和课程聚合。 |
 | 任务完成 | learning-execution 更新 `StudySubTask`，汇总 `StudyTask`，触发 checkins 更新。 |

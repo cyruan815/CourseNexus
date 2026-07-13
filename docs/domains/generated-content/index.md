@@ -22,8 +22,8 @@
 
 ## 3. 当前状态
 
-- G01：全材料批次、用途模型注入、生成器工厂、引用过滤与回填、原子持久化、历史/详情引用响应已经实现。
-- G02-G06：Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 均已实现真实结构化生成、全材料 map/reduce、逐条目引用和稳定 schema；placeholder 仅在内建模块文件缺失时作为注册降级机制。
+- G01：完整选定材料上下文、总 token 检查、用途模型注入、生成器工厂、单次模型调用和 `AIGeneratedContent` 持久化已经实现。
+- G02-G06：Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 均已实现最终结构化 schema、稳定 ID/顺序和失败记录；五类业务 JSON 不包含 chunk/citation ID，顶层 `source_citations` 固定返回空数组。
 
 具体实现文档：
 
@@ -33,11 +33,11 @@
 - [outline.md](outline.md)
 - [knowledge-list.md](knowledge-list.md)
 - 当前没有队列、取消、进度查询或持久化幂等键；重复请求生成独立记录。
-- 前端已接入生成内容详情基础闭环：课程详情页生成内容列表中的记录可跳转到 `/generated-contents/:generatedContentId`，详情页调用 `GET /api/v1/generated-contents/{generated_content_id}`，展示标题、类型、状态、结构化结果基础视图和后端返回的真实引用来源。
-- 前端详情页只渲染后端返回内容，不补造引用、统计或最终学习产品交互；`page = null` 且 `page_index = 0` 的引用位置展示为“页码未知”，不得解释为真实第 0 页。
+- 前端已接入生成内容详情基础闭环：课程详情页生成内容列表中的记录可跳转到 `/generated-contents/:generatedContentId`，详情页调用 `GET /api/v1/generated-contents/{generated_content_id}`，展示标题、类型、状态和结构化结果基础视图。
+- 前端详情页只渲染后端返回内容，不补造引用、统计或最终学习产品交互；五类 POC 生成内容不提供逐条引用。
 - 生成失败记录展示 `error_code` 和失败态，不伪装成成功内容；引用为空时展示真实空态。
-- 来源资料被用户永久删除后，生成内容及其 `SourceCitation` 快照继续保留；`material_id`、`chunk_id` 返回 null，详情页仍使用资料名、页码和命中文本展示历史来源。
-- 为了在资料解析 / 索引未配置时手动查看前端详情页，后端提供仅限本地开发使用的 seed 命令。该命令创建或更新固定 demo 用户、课程、已解析占位资料、MaterialChunk、`outline` 生成内容和真实 `SourceCitation`，不新增正式 API，也不代表生产数据生成路径。
+- 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json` 是生成时选择范围快照，不是引用契约。
+- 为了在资料解析 / 索引未配置时手动查看前端详情页，后端提供仅限本地开发使用的 seed 命令。该命令创建或更新固定 demo 用户、课程、已解析占位资料、MaterialChunk 和五类示例生成内容，不新增正式 API，也不代表生产数据生成路径。
 
 详细架构、算法、资源预算和失败策略见 [architecture.md](architecture.md)。
 

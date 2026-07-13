@@ -1,5 +1,9 @@
 # Table Schema v0.1
 
+## 2026-07-13 Generation POC Persistence Rule
+
+The five independent generators write `ai_generated_contents` only. The existing `source_citations` table remains for Course QA and compatibility, but these generation requests do not insert rows. No migration or new business table is introduced.
+
 ## 目的
 
 本文把 PRD 第 13 章字段字典转换为 CourseNexus v0.1 后端可落地的数据表字段契约。它服务于 SQLAlchemy model、Alembic migration、API schema 和前后端联调。
@@ -59,7 +63,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
-| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 问答与 G01 生成链路已实现真实引用、快照保存和未知位置降级；S06 任务内容生成通过 `generated_content_id` 绑定引用来源。 |
+| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 课程问答和 S06 任务内容继续保存真实引用；五类独立 POC 生成不创建逐条引用。 |
 | `AIGeneratedContent` | `ai_generated_contents` | 已建表并已接入 S06 | `generated-content` | 已支持任务讲义和任务测试题按需生成落库；历史列表、详情查询和 PDF 导出入口仍需后续完善。 |
 | `StudyPlan` | `study_plans` | 已建表并已接入 API | `study-plans` | 已实现自然语言配置回填、计划预览、保存、替换、删除和计划状态汇总。 |
 | `StudyTask` | `study_tasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现保存计划时生成一级任务，并由二级任务完成状态汇总一级任务状态。 |
@@ -476,7 +480,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       ],
       "correct_answer": "A",
       "explanation": "答案解析",
-      "source_citation_ids": ["cit_..."],
+      "difficulty": "medium",
       "sort_order": 1
     }
   ]
@@ -485,9 +489,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 规则：
 
-- `question_type` 支持 `single_choice`、`multiple_choice`、`true_false`、`short_answer`。
+- 当前独立 Quiz 只支持 `single_choice`，每题固定包含 A-D 四个选项。
 - 课程自测使用 `content_type = quiz`；任务测试题使用独立 `task_test` 结构。
-- 每道题应尽量关联引用来源；不能生成伪引用。
+- 五类独立 POC 业务 JSON 不包含引用字段；任务讲义和任务测试题仍可保存真实引用。
 
 ### handout
 
@@ -556,7 +560,6 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       "back": "卡片背面",
       "tags": ["概念"],
       "mastery_status": "unknown",
-      "source_citation_ids": ["cit_..."],
       "sort_order": 1
     }
   ]
@@ -572,23 +575,30 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 ```json
 {
-  "root_node_id": "node_1",
+  "schema_version": "1.0",
+  "renderer": "markmap",
+  "root_node_id": "node_001",
   "nodes": [
     {
-      "id": "node_1",
+      "id": "node_001",
       "label": "节点名称",
       "summary": "节点说明",
-      "level": 1,
-      "source_citation_ids": ["cit_..."]
+      "level": 1
     }
   ],
   "edges": [
     {
-      "from": "node_1",
-      "to": "node_2",
+      "from": "node_001",
+      "to": "node_002",
       "relation": "child"
     }
-  ]
+  ],
+  "markmap_markdown": "- 节点名称\n  - 子节点",
+  "markmap_data": {
+    "root": {},
+    "features": {},
+    "assets": {"styles": [], "scripts": []}
+  }
 }
 ```
 
@@ -596,6 +606,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - 节点必须有稳定 ID，便于前端展开收起。
 - 边表示节点之间的父子或关联关系。
+- 前端使用 `markmap-view` 渲染后端 `markmap-lib` 生成的 `markmap_data.root`，并按 `assets` 加载实际使用资源。
 
 ### outline
 
@@ -607,7 +618,6 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       "title": "章节标题",
       "summary": "重点说明",
       "review_suggestion": "复习建议",
-      "source_citation_ids": ["cit_..."],
       "sort_order": 1
     }
   ]
@@ -625,7 +635,6 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       "definition": "定义说明",
       "importance": "high",
       "related_section": "关联章节",
-      "source_citation_ids": ["cit_..."],
       "sort_order": 1
     }
   ]

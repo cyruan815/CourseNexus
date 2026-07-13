@@ -36,16 +36,16 @@
 
 ## 指定材料生成类接入
 
-闪卡、测验、提纲、总结等需要覆盖指定材料全集的功能应调用 `iter_material_context_batches()`，再用 `run_material_coverage()` 执行 map/reduce。
+Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 调用 `resolve_generation_context()`，一次取得稳定顺序的完整选定材料上下文。
 
-业务功能必须显式比较 `expected_material_ids` 和 `CoverageRunResult.processed_material_ids`。如果两者不一致，应中止生成或向上抛出 `MATERIAL_COVERAGE_INCOMPLETE`，不能用一次 Top-K 检索替代全材料覆盖。
+业务功能在调用模型前检查 `MaterialGenerationContext.estimated_tokens`；超过 `MATERIAL_CONTEXT_MAX_TOKENS` 时返回 `MATERIAL_CONTEXT_TOO_LARGE`，不能静默截断，也不能用一次 Top-K 检索替代全材料覆盖。学习计划等其他消费者仍可使用批处理与覆盖执行器。
 
 每个功能自行定义：
 
 - prompt；
 - Pydantic 输出 schema；
-- map batch 的模型调用；
-- reduce 规则；
+- 最终结构化模型输出；
+- 业务 schema 校验和稳定 ID/顺序；
 - API、数据库持久化和前端展示。
 
 ## 基础设施边界
@@ -75,8 +75,9 @@
 
 - `NOT_FOUND`：材料不属于当前用户/课程，或不是已解析可用资料。
 - `RETRIEVAL_FAILED`：向量检索失败。
-- `MATERIAL_COVERAGE_INCOMPLETE`：完整材料生成没有覆盖所有预期材料。
-- `GENERATION_FAILED`：模型调用或 map/reduce 执行失败。
+- `MATERIAL_CONTEXT_TOO_LARGE`：五类独立生成的完整上下文超过总 token 上限。
+- `MATERIAL_COVERAGE_INCOMPLETE`：仍使用批处理策略的消费者没有覆盖所有预期材料。
+- `GENERATION_FAILED`：模型调用执行失败。
 - `GENERATION_SCHEMA_INVALID`：模型结构化输出不符合调用方 schema。
 
 测试必须避免 live network：

@@ -1,5 +1,9 @@
 # Module Topology and Boundaries v0.1
 
+## 2026-07-13 Generation Boundary Override
+
+`generation-orchestrator` consumes `material-context.resolve_generation_context`, not Top-K retrieval or batch coverage. A concrete generator sees one `MaterialGenerationContext`, calls only its own model once, and returns final business JSON. Citation persistence is outside the five-module POC. Mindmap may call the `integrations.markmap` adapter after graph validation.
+
 > 本文合并记录功能模块拓扑和模块边界。它回答“系统拆成哪些模块、模块之间怎么依赖、每个模块拥有哪类数据、哪些耦合被禁止”。关键流程见 [runtime-flows.md](runtime-flows.md)，数据字段以 [../api-data/data-model.md](../api-data/data-model.md) 为准。
 
 ## 1. 拆分原则
@@ -27,7 +31,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `material-context`：作为问答、生成、学习计划共用的资料范围与上下文入口；已提供“相关性检索”和“全材料分批读取”两个接口。调用方不得绕过它直接查询 Chroma 或拼装 chunk。
 - `course-qa`：拥有会话、消息和课程问答引用保存；已通过 `retrieve_relevant_context()` 接入课程资料相关性检索，不负责 Flashcard、Mindmap、Quiz 或学习计划。
 - `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI-compatible 调用统一集中在 OpenAI SDK provider 实现中，并读取当前业务用途的独立 endpoint 配置。
-- `generation-orchestrator`：负责课程归属与注册类型校验、用途模型注入、全材料批次交付、生成器工厂调用、真实引用过滤与ID回填，以及`AIGeneratedContent`和`SourceCitation`原子保存；不包含具体题型、卡片、导图、提纲或知识点规则。
+- `generation-orchestrator`：负责课程归属与注册类型校验、用途模型注入、完整材料上下文交付、总 token 检查、生成器工厂调用和 `AIGeneratedContent` 保存；五类 POC 不创建 `SourceCitation`，具体题型、卡片、导图、提纲或知识点规则仍由各生成器拥有。
 - `study-plans`：当前只负责单课程计划预览、保存和任务结构写入，不负责执行页、日历聚合、打卡或讲义 / 任务测试题生成。
 - `todos-calendar`：已实现 S03 五个只读聚合接口，读取学习计划任务树生成首页今日待办、全局月历、全局当日待办、课程月历和课程当日任务；不拥有写模型。
 - `study-mode S01`：已固定计划学习模式第一阶段契约和无 migration 结论；S02-S07 只允许复用 13 张核心表，不得创建待办、日历、讲义、任务测试题或导出历史独立表。

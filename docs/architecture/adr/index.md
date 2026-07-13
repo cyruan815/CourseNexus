@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+- [0005 Simplified Generation POC](0005-simplified-generation-poc.md)
+
 ## 概述
 
 本目录记录 CourseNexus 的长期架构决策。ADR 用于解释为什么选择某个技术方案，而不是记录临时任务计划。

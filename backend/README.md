@@ -40,6 +40,8 @@ tests/             # API、模块、契约和集成测试
 
 后端固定使用 Python 3.12 和项目专属 Conda 环境：
 
+Mindmap 生成还依赖仓库根目录的 `markmap-lib`，首次运行前需在根目录执行 `pnpm install`，并确保 `MARKMAP_NODE_COMMAND` 指向可用的 Node.js 20+ 可执行文件。
+
 ```powershell
 cd backend
 conda env create -f environment.yml

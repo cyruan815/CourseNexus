@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.integrations.model_provider.base import ModelProvider
-from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope
+from app.modules.material_context.schemas import MaterialGenerationContext, MaterialScope
 
 
 class GenerateContentRequest(BaseModel):
@@ -23,7 +23,6 @@ class GeneratorOutput(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content: str | None = None
     content_json: dict[str, Any]
-    item_citation_chunk_ids: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class Generator(Protocol):
@@ -32,8 +31,7 @@ class Generator(Protocol):
     def generate(
         self,
         *,
-        batches: tuple[MaterialContextBatch, ...],
-        expected_material_ids: frozenset[str],
+        context: MaterialGenerationContext,
         parameters: dict[str, Any],
     ) -> GeneratorOutput: ...
 

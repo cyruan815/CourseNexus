@@ -46,3 +46,10 @@ class MaterialQualityWarning(BaseModel):
 
 class MaterialQualitySummary(BaseModel):
     warnings: list[MaterialQualityWarning] = Field(default_factory=list)
+
+
+class MaterialGenerationContext(BaseModel):
+    chunks: list[ContextChunk]
+    material_ids: list[str]
+    text: str
+    estimated_tokens: int

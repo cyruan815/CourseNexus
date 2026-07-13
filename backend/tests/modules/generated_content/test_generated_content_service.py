@@ -45,6 +45,7 @@ def create_content(
     course_id: str,
     content_id: str,
     *,
+    content_type: str = "outline",
     generation_status: str = "success",
     deleted_at: datetime | None = None,
 ) -> AIGeneratedContent:
@@ -54,7 +55,7 @@ def create_content(
             id=content_id,
             user_id=user_id,
             course_id=course_id,
-            content_type="outline",
+            content_type=content_type,
             title="Outline",
             content="Alpha",
             content_json={"items": ["Alpha"]},
@@ -115,12 +116,13 @@ def test_list_generated_contents_groups_ordered_citations_and_uses_one_bulk_quer
 ) -> None:
     user = register_user(db, UserCreate(username="citation-list", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
-    cited = create_content(db, user.id, course.id, "gen_cited")
+    cited = create_content(db, user.id, course.id, "gen_cited", content_type="handout")
     failed = create_content(
         db,
         user.id,
         course.id,
         "gen_failed",
+        content_type="handout",
         generation_status="failed",
     )
     create_citation(
@@ -201,7 +203,7 @@ def test_list_generated_contents_groups_ordered_citations_and_uses_one_bulk_quer
 def test_generated_content_detail_returns_ordered_citations(db: Session) -> None:
     user = register_user(db, UserCreate(username="citation-detail", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
-    content = create_content(db, user.id, course.id, "gen_detail")
+    content = create_content(db, user.id, course.id, "gen_detail", content_type="handout")
     create_citation(
         db,
         citation_id="cit_2",
@@ -224,6 +226,24 @@ def test_generated_content_detail_returns_ordered_citations(db: Session) -> None
     assert [citation.id for citation in detail.source_citations] == ["cit_1", "cit_2"]
     assert detail.source_citations[1].sort_order == 2
     assert detail.source_citations[1].chunk_id is None
+
+
+def test_poc_generation_types_ignore_legacy_citation_rows(db: Session) -> None:
+    user = register_user(db, UserCreate(username="poc-no-citations", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    content = create_content(db, user.id, course.id, "gen_poc", content_type="mindmap")
+    create_citation(
+        db,
+        citation_id="cit_legacy",
+        generated_content_id=content.id,
+        material_id="mat_legacy",
+        chunk_id="chunk_legacy",
+        sort_order=1,
+    )
+
+    detail = get_generated_content_detail(db, user_id=user.id, generated_content_id=content.id)
+
+    assert detail.source_citations == []
 
 
 def test_cross_user_detail_does_not_load_or_expose_citations(

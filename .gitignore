@@ -30,8 +30,11 @@ coverage/
 /uploads/
 /exports/
 /data/chroma/
+/backend/uploads/
+/backend/data/
 /logs/
 /backend/logs/
+.runtime-*.log
 
 # Local agent/plugin process notes
 /docs/superpowers/
