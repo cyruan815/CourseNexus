@@ -434,7 +434,7 @@ PDF 内容包含标题、overview、learning objectives、sections、key points�
 - `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 的请求 `parameters` 省略或为空时，后端优先读取计划快照中的 `task_test` 默认值；非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
 - 合并计划默认参数和本次请求时，本次请求显式传 `question_type_counts` 或其兼容别名会整体覆盖计划中的题型分布；本次请求只传 `difficulty` 时保留计划分布；本次请求显式传 `question_count` 或字符串数组形式的 `question_types`、但不传按题型计数时，会清掉计划里的 `question_type_counts`，退回“总题数 + 题型白名单”旧契约。
 - 保存计划时会把模型输出的任务测试题参数别名归一化后写入快照；支持按题型计数对象、题型计数列表、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象、`task_test` 字符串 shorthand 搭配同级 `question_count`，以及题量文案到题型的映射，最终保存为规范 `question_count`、`question_types`、`question_type_counts` 和 `difficulty`。
-- `handout` / `task_test` 生成器内部仍使用 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation` 行，并将 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`。Markdown/PDF 导出只按 `SourceCitation.id` 匹配来源；存在有效引用时不得输出 `Sources: unavailable`。
+- `handout` / `task_test` 生成器内部仍使用 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation` 行，并将 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`。handout 的 section block 继承 section 引用，顶层 prerequisites / formula_cards / exam_focus / self_check 保留并回绑独立引用；回绑后的 v2 handout 必须再次通过 schema 校验。Markdown/PDF 导出只按 `SourceCitation.id` 匹配来源；存在有效引用时不得输出 `Sources: unavailable`。
 - 执行页 QA 的 `OpenAIModelProvider.answer_question()` 在兼容服务对 `/responses` 返回 404 时回退 Chat Completions；非 404 的鉴权、网络、限流或服务端错误语义不变。
 - 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`：中文/CJK run 使用 `STSong-Light`，ASCII、数字、英文术语和公式 run 使用 `Helvetica`，避免 `Overview`、`Nyquist/Shannon` 等英文被中文 CID 字体逐字排版。
 - 物理层讲义生成后会扫描已知术语误拼，例如 `Nyquest`、`Shanon`、`bandwith`；命中时按 `GENERATION_SCHEMA_INVALID` 拒绝，不静默落库。

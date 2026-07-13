@@ -269,7 +269,21 @@ def _generate_task_content(
             batches=batches,
             item_citation_chunk_ids=output.item_citation_chunk_ids,
         )
-        content.content_json = _bind_source_citation_ids(output.content_json, citation_ids_by_item)
+        content.content_json = _bind_source_citation_ids(
+            output.content_json,
+            citation_ids_by_item,
+            is_handout_root=content_type == "handout",
+        )
+        if content_type == "handout":
+            try:
+                HandoutContent.model_validate(content.content_json)
+            except ValidationError as exc:
+                raise CourseNexusError(
+                    code="GENERATION_SCHEMA_INVALID",
+                    message="引用回绑后的讲义内容不符合 HandoutContent 契约",
+                    status_code=500,
+                    details={"errors": exc.errors()},
+                ) from exc
         db.add(content)
         db.flush()
         db.commit()
@@ -852,23 +866,43 @@ def _bind_source_citation_ids(
     value: object,
     bindings: dict[str, list[str]],
     inherited_citation_ids: list[str] | None = None,
+    *,
+    allow_raw_block_citations: bool = False,
+    is_handout_root: bool = False,
 ) -> object:
     if isinstance(value, dict):
         item_id = value.get("id")
         block_type = value.get("type")
         is_block = isinstance(block_type, str)
         item_citation_ids = bindings.get(item_id, []) if isinstance(item_id, str) else []
-        source_citation_ids = [] if is_block else _citation_ids_for_raw_sources(value.get("source_citation_ids"), bindings)
+        source_citation_ids = (
+            _citation_ids_for_raw_sources(value.get("source_citation_ids"), bindings)
+            if not is_block or allow_raw_block_citations
+            else []
+        )
         current_citation_ids = source_citation_ids or item_citation_ids or list(inherited_citation_ids or [])
         bound = {
-            key: _bind_source_citation_ids(child, bindings, current_citation_ids)
+            key: _bind_source_citation_ids(
+                child,
+                bindings,
+                current_citation_ids,
+                allow_raw_block_citations=is_handout_root and key in {"knowledge_map", "formula_cards"},
+            )
             for key, child in value.items()
         }
         if "source_citation_ids" in value or (is_block and current_citation_ids):
             bound["source_citation_ids"] = list(dict.fromkeys(current_citation_ids))
         return bound
     if isinstance(value, list):
-        return [_bind_source_citation_ids(child, bindings, inherited_citation_ids) for child in value]
+        return [
+            _bind_source_citation_ids(
+                child,
+                bindings,
+                inherited_citation_ids,
+                allow_raw_block_citations=allow_raw_block_citations,
+            )
+            for child in value
+        ]
     return value
 
 

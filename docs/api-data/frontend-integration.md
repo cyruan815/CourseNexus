@@ -1256,5 +1256,5 @@ typed block 展示规则：
 - 表格列宽、公式溢出、图表高度、思维导图节点间距和移动端滚动都由前端组件控制，不能依赖模型输出空格、换行或 HTML 标签来排版。
 - `mermaid` 只接受受控图类型；首版不接受模型输出的 `svg` 字符串。
 - `chart` 必须有明确数值和单位，不得根据模型推测的趋势画图；其资料来源第一版继承所在 section。
-- `sections[].source_citation_ids` 是第一版强制引用字段，保存后为 `source_citations[].id`；`blocks[]` 默认继承所在 section 来源，前端不要要求或展示逐 block 引用。`knowledge_map` 默认继承所有 section 来源，第一版不单独显示引用。
+- `sections[].source_citation_ids` 是强制引用字段，保存后为 `source_citations[].id`；`blocks[]` 默认继承所在 section 来源，前端不要要求或展示逐 block 引用。顶层 `prerequisites[]`、`formula_cards[]`、`exam_focus[]`、`self_check[]` 可保存各自独立的 `source_citation_ids`，同样只包含 `source_citations[].id`。`knowledge_map` 默认继承所有 section 来源，第一版不单独显示引用。
 - 历史 `schema_version` 缺失或为 1 的 handout 继续按旧版 `overview`、`learning_objectives`、`sections[].body`、`summary` 渲染。

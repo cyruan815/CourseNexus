@@ -43,6 +43,7 @@ class HandoutGenerator:
                 status_code=500,
                 details={"schema_version": content.schema_version, "expected_schema_version": 2},
             )
+        _assert_top_level_citations(content)
         _assert_no_known_terminology_errors(content)
         item_citation_chunk_ids = _collect_item_citation_chunk_ids(content)
         citation_chunk_ids = {chunk_id for chunk_ids in item_citation_chunk_ids.values() for chunk_id in chunk_ids}
@@ -169,6 +170,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- Chart 只在资料提供真实数值时生成，不得编造数据。",
             "- 不生成 SVG，除非输入资料明确要求且系统 schema 支持。",
             "- 每个 section 必须填写 source_citation_ids；block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids。",
+            "- prerequisites、formula_cards、exam_focus、self_check 中的每个顶层条目必须独立填写 source_citation_ids，并使用下方 chunk_id。",
         ]
     )
     citation_rules = "\n".join(
@@ -230,11 +232,40 @@ def _context_value(value: str | None) -> str:
 
 
 def _collect_item_citation_chunk_ids(content: HandoutContent) -> dict[str, list[str]]:
-    return {
+    bindings = {
         section.id: list(dict.fromkeys(section.source_citation_ids))
         for section in sorted(content.sections, key=lambda item: item.sort_order)
         if section.source_citation_ids
     }
+    top_level_items = [
+        *content.prerequisites,
+        *content.formula_cards,
+        *content.exam_focus,
+        *content.self_check,
+    ]
+    if content.knowledge_map is not None:
+        top_level_items.append(content.knowledge_map)
+    top_level_chunk_ids = list(
+        dict.fromkeys(
+            chunk_id
+            for item in top_level_items
+            for chunk_id in item.source_citation_ids
+        )
+    )
+    if top_level_chunk_ids:
+        bindings["__handout__"] = top_level_chunk_ids
+    return bindings
+
+
+def _assert_top_level_citations(content: HandoutContent) -> None:
+    missing_formula_titles = [formula.title for formula in content.formula_cards if not formula.source_citation_ids]
+    if missing_formula_titles:
+        raise CourseNexusError(
+            code="GENERATION_SCHEMA_INVALID",
+            message="顶层公式卡片必须包含独立来源引用",
+            status_code=500,
+            details={"formula_cards_without_citations": missing_formula_titles},
+        )
 
 
 def _page_label(chunk: object) -> str | int | None:

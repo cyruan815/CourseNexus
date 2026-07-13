@@ -535,7 +535,15 @@ def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: Api
                     "difficulty": "medium",
                     "estimated_minutes": 40,
                     "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
-                    "prerequisites": [],
+                    "prerequisites": [
+                        {
+                            "id": "pre_1",
+                            "title": "对数基础",
+                            "explanation": "理解二进制对数。",
+                            "sort_order": 1,
+                            "source_citation_ids": ["chunk_api_content_second"],
+                        }
+                    ],
                     "sections": [
                         {
                             "id": "sec_1",
@@ -559,9 +567,36 @@ def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: Api
                         }
                     ],
                     "knowledge_map": None,
-                    "formula_cards": [],
-                    "exam_focus": [],
-                    "self_check": [],
+                    "formula_cards": [
+                        {
+                            "type": "formula",
+                            "title": "Nyquist 公式",
+                            "latex": "C = 2W \\log_2 M",
+                            "purpose": "计算无噪声信道上限。",
+                            "variables": [{"symbol": "W", "meaning": "带宽", "unit": "Hz"}],
+                            "conditions": ["理想无噪声信道"],
+                            "limitations": ["不考虑噪声"],
+                            "source_citation_ids": ["chunk_api_content_second"],
+                        }
+                    ],
+                    "exam_focus": [
+                        {
+                            "id": "exam_1",
+                            "title": "公式选择",
+                            "description": "先判断是否考虑噪声。",
+                            "sort_order": 1,
+                            "source_citation_ids": ["chunk_api_content_second"],
+                        }
+                    ],
+                    "self_check": [
+                        {
+                            "id": "check_1",
+                            "question": "有噪声信道使用哪个公式？",
+                            "answer": "Shannon 公式。",
+                            "sort_order": 1,
+                            "source_citation_ids": ["chunk_api_content_second"],
+                        }
+                    ],
                     "summary": "按条件选公式。",
                 }
             )
@@ -587,10 +622,19 @@ def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: Api
     assert block["source_citation_ids"] == section["source_citation_ids"]
     assert all(citation_id.startswith("cit_") for citation_id in section["source_citation_ids"])
     assert all(citation_id.startswith("cit_") for citation_id in block["source_citation_ids"])
+    top_level_source_ids = {
+        result.content_json["prerequisites"][0]["source_citation_ids"][0],
+        result.content_json["formula_cards"][0]["source_citation_ids"][0],
+        result.content_json["exam_focus"][0]["source_citation_ids"][0],
+        result.content_json["self_check"][0]["source_citation_ids"][0],
+    }
+    assert len(top_level_source_ids) == 1
+    assert next(iter(top_level_source_ids)).startswith("cit_")
+    assert top_level_source_ids.isdisjoint(section["source_citation_ids"])
     assert "chunk_api_content" not in str(result.content_json)
     assert "chunk_api_content_second" not in str(result.content_json)
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
-    assert {citation.chunk_id for citation in citations} == {"chunk_api_content"}
+    assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
 
 
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
