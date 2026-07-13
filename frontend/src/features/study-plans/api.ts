@@ -15,6 +15,7 @@ import type {
   StudyPlanRegenerationPreviewRequest,
   StudyPlanReplaceRequest,
   StudyPlanSaveRequest,
+  TodayTodos,
 } from "./types";
 
 export function parseStudyPlanConfig(
@@ -122,4 +123,8 @@ export function fetchCourseStudyCalendarDay(
   return apiRequest<CourseStudyCalendarDay>(`/api/v1/courses/${courseId}/study-calendar/days/${date}`, {
     method: "GET",
   });
+}
+
+export function fetchTodayTodos(date: string): Promise<TodayTodos> {
+  return apiRequest<TodayTodos>(`/api/v1/todos/today?date=${date}`, { method: "GET" });
 }

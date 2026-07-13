@@ -38,6 +38,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../api/errors";
 import { useCourseNexusTheme } from "../../app/theme";
+import { fetchTodayTodos } from "../study-plans/api";
+import type { StudyCalendarTaskTodo } from "../study-plans/types";
 import type { Course } from "../../types/course";
 import { createCourse, deleteCourse, listCourses, listCourseTermOptions, updateCourse } from "./api";
 import type { CourseTermOption } from "./api";
@@ -120,6 +122,28 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "课程列表加载失败";
+}
+
+function statusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    completed: "已完成",
+    in_progress: "进行中",
+    not_started: "未开始",
+  };
+
+  return labels[status] ?? status;
+}
+
+function statusColor(status: string): string {
+  if (status === "completed") {
+    return "teal";
+  }
+
+  if (status === "in_progress") {
+    return "blue";
+  }
+
+  return "gray";
 }
 
 function createEmptyCourseForm(): CourseFormValues {
@@ -281,24 +305,110 @@ function Header() {
 }
 
 function TodayTodoPanel() {
+  const today = new Date();
+  const todayKey = getDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+  const [tasks, setTasks] = useState<StudyCalendarTaskTodo[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let ignore = false;
+
+    setIsLoading(true);
+    setError(null);
+
+    fetchTodayTodos(todayKey)
+      .then((todos) => {
+        if (!ignore) {
+          setTasks(todos.tasks);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setError(getErrorMessage(nextError));
+          setTasks([]);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [todayKey]);
+
   return (
     <Paper className="home-focus-panel" radius="md" withBorder>
       <Stack gap="lg" h="100%" justify="space-between">
         <Group justify="space-between">
           <Stack gap={2}>
             <Title order={2}>今日待办</Title>
+            <Text c="dimmed" size="sm">{todayKey}</Text>
           </Stack>
+          {!isLoading && !error && tasks.length > 0 ? (
+            <Badge className="home-urgent-badge" variant="light">
+              {tasks.length} 个任务
+            </Badge>
+          ) : null}
         </Group>
 
-        <Stack align="center" className="home-plan-empty" gap="md">
-          <IconClipboardList aria-hidden className="home-empty-icon" size={48} stroke={1.6} />
-          <Stack gap={4}>
-            <Title order={3}>今天还没有学习计划</Title>
-            <Text c="dimmed" ta="center">
-              进入课程详情制定学习计划后，这里会展示当天任务
-            </Text>
+        {isLoading ? (
+          <Stack className="home-todo-list" gap="sm" role="status">
+            <Text c="dimmed" size="sm">正在加载今日待办...</Text>
+            <Skeleton height={72} radius="md" />
+            <Skeleton height={72} radius="md" />
           </Stack>
-        </Stack>
+        ) : null}
+
+        {!isLoading && error ? (
+          <Alert color="red" role="alert" title="今日待办加载失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+
+        {!isLoading && !error && tasks.length === 0 ? (
+          <Stack align="center" className="home-plan-empty" gap="md">
+            <IconClipboardList aria-hidden className="home-empty-icon" size={48} stroke={1.6} />
+            <Stack gap={4}>
+              <Title order={3}>今天还没有学习计划</Title>
+              <Text c="dimmed" ta="center">
+                进入课程详情制定学习计划后，这里会展示当天任务
+              </Text>
+            </Stack>
+          </Stack>
+        ) : null}
+
+        {!isLoading && !error && tasks.length > 0 ? (
+          <Stack className="home-todo-list" gap="sm">
+            {tasks.map((task) => (
+              <Paper
+                aria-label={`查看今日任务 ${task.title}`}
+                className="home-todo-item"
+                component={Link}
+                key={task.task_id}
+                radius="md"
+                to={`/courses/${task.course_id}/study-plans/${task.plan_id}`}
+                withBorder
+              >
+                <Group justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Text fw={750} size="sm">{task.title}</Text>
+                    <Text c="dimmed" size="xs">{task.course_name}</Text>
+                    <Text c="dimmed" size="xs">
+                      {task.completed_subtask_count}/{task.total_subtask_count} 个二级任务完成
+                    </Text>
+                  </Stack>
+                  <Badge color={statusColor(task.derived_status)} size="xs" variant="light">
+                    {statusLabel(task.derived_status)}
+                  </Badge>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        ) : null}
       </Stack>
     </Paper>
   );

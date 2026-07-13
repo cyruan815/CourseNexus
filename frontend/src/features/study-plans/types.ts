@@ -290,3 +290,8 @@ export interface CourseStudyCalendarDay {
   date: string;
   tasks: StudyCalendarTaskTodo[];
 }
+
+export interface TodayTodos {
+  date: string;
+  tasks: StudyCalendarTaskTodo[];
+}
