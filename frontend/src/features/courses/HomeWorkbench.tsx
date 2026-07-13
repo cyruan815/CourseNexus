@@ -38,8 +38,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../api/errors";
 import { useCourseNexusTheme } from "../../app/theme";
-import { fetchTodayTodos } from "../study-plans/api";
-import type { StudyCalendarTaskTodo } from "../study-plans/types";
+import { fetchGlobalCalendarMonth, fetchTodayTodos } from "../study-plans/api";
+import type { StudyCalendarDaySummary, StudyCalendarTaskTodo } from "../study-plans/types";
 import type { Course } from "../../types/course";
 import { createCourse, deleteCourse, listCourses, listCourseTermOptions, updateCourse } from "./api";
 import type { CourseTermOption } from "./api";
@@ -421,14 +421,52 @@ function CalendarPanel() {
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
   const [draftYear, setDraftYear] = useState(String(referenceDate.getFullYear()));
   const [draftMonth, setDraftMonth] = useState(String(referenceDate.getMonth()));
+  const [monthSummaries, setMonthSummaries] = useState<StudyCalendarDaySummary[]>([]);
+  const [monthError, setMonthError] = useState<string | null>(null);
+  const [isMonthLoading, setIsMonthLoading] = useState(true);
   const monthLabel = `${referenceDate.getMonth() + 1} 月`;
   const calendarTitle = `${referenceDate.getFullYear()} 年 ${monthLabel}`;
   const calendarDays = getCalendarDays(referenceDate, today);
+  const monthKey = `${referenceDate.getFullYear()}-${padDatePart(referenceDate.getMonth() + 1)}`;
+  const summariesByDate = useMemo(() => {
+    const summaries = new Map<string, StudyCalendarDaySummary>();
+    monthSummaries.forEach((summary) => summaries.set(summary.date, summary));
+    return summaries;
+  }, [monthSummaries]);
   const yearOptions = Array.from({ length: 5 }, (_, index) => {
     const year = today.getFullYear() - 2 + index;
     return { value: String(year), label: `${year} 年` };
   });
   const monthOptions = Array.from({ length: 12 }, (_, index) => ({ value: String(index), label: `${index + 1} 月` }));
+
+  useEffect(() => {
+    let ignore = false;
+
+    setIsMonthLoading(true);
+    setMonthError(null);
+
+    fetchGlobalCalendarMonth(monthKey)
+      .then((monthData) => {
+        if (!ignore) {
+          setMonthSummaries(monthData.days);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setMonthError(getErrorMessage(nextError));
+          setMonthSummaries([]);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsMonthLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [monthKey]);
 
   function moveMonth(offset: number) {
     setReferenceDate((currentDate) => new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
@@ -484,6 +522,15 @@ function CalendarPanel() {
 
             <Divider />
 
+            {isMonthLoading ? (
+              <Text c="dimmed" role="status" size="sm">正在加载月历任务...</Text>
+            ) : null}
+            {!isMonthLoading && monthError ? (
+              <Alert color="red" role="alert" title="月历加载失败" variant="light">
+                {monthError}
+              </Alert>
+            ) : null}
+
             <Box className="home-calendar-weekdays" aria-hidden>
               {["日", "一", "二", "三", "四", "五", "六"].map((day) => (
                 <Text c="dimmed" fw={500} key={day} size="sm" ta="center">
@@ -494,18 +541,29 @@ function CalendarPanel() {
 
             <Box aria-label="月历" className="home-calendar-grid" role="grid">
               {calendarDays.map((calendarDay, index) => (
-                <Box
-                  aria-label={calendarDay.dateKey ? `打开 ${calendarDay.dateKey} 的日历` : "空白日期"}
-                  className={`home-calendar-cell${calendarDay.isToday ? " is-today" : ""}`}
-                  component={calendarDay.dateKey ? "button" : "div"}
-                  key={`${calendarDay.day ?? "empty"}-${index}`}
-                  onClick={calendarDay.dateKey ? () => navigate(`/calendar?date=${calendarDay.dateKey}`) : undefined}
-                  role="gridcell"
-                  type={calendarDay.dateKey ? "button" : undefined}
-                >
-                  {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
-                  {calendarDay.day ? <span aria-hidden className="home-calendar-task-dots" /> : null}
-                </Box>
+                (() => {
+                  const summary = calendarDay.dateKey ? summariesByDate.get(calendarDay.dateKey) : undefined;
+
+                  return (
+                    <Box
+                      aria-label={calendarDay.dateKey ? `打开 ${calendarDay.dateKey} 的日历` : "空白日期"}
+                      className={`home-calendar-cell${calendarDay.isToday ? " is-today" : ""}${summary ? " has-tasks" : ""}`}
+                      component={calendarDay.dateKey ? "button" : "div"}
+                      key={`${calendarDay.day ?? "empty"}-${index}`}
+                      onClick={calendarDay.dateKey ? () => navigate(`/calendar?date=${calendarDay.dateKey}`) : undefined}
+                      role="gridcell"
+                      type={calendarDay.dateKey ? "button" : undefined}
+                    >
+                      {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
+                      {summary ? (
+                        <span className="home-calendar-cell-summary">
+                          <span>{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
+                          <span>{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
+                        </span>
+                      ) : calendarDay.day ? <span aria-hidden className="home-calendar-task-dots" /> : null}
+                    </Box>
+                  );
+                })()
               ))}
             </Box>
           </Paper>

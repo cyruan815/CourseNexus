@@ -50,7 +50,7 @@
 - `PUT /api/v1/study-plans/{plan_id}`
 - `DELETE /api/v1/study-plans/{plan_id}`
 
-`types.ts` 对齐后端 S02/S03 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview、替换请求和单课程 study calendar 均有独立类型。全局 todos/calendar、learning execution、handout/task-test 和 export 接口暂不放入 `features/study-plans`，后续按对应上下文建立边界。
+`types.ts` 对齐后端 S02/S03 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview、替换请求、today todos、全局 calendar 和单课程 study calendar 均有独立类型。learning execution、handout/task-test 和 export 接口暂不放入 `features/study-plans`，后续按对应上下文建立边界。
 
 ## 2026-07-14 C5 本课程计划日历前端接入
 

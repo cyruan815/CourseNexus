@@ -140,14 +140,72 @@ describe("CalendarPage", () => {
     });
   });
 
-  it("keeps the global calendar placeholder when no course id is present", () => {
-    const fetchMock = vi.fn();
+  it("loads the global month calendar and selected day todos without a course id", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/calendar/month?month=2026-07")) {
+        return Promise.resolve(successResponse({
+          month: "2026-07",
+          days: [
+            {
+              date: "2026-07-14",
+              course_count: 1,
+              task_count: 1,
+              subtask_count: 2,
+              completed_subtask_count: 1,
+              status: "in_progress",
+              task_summaries: [
+                {
+                  task_id: "task_1",
+                  plan_id: "plan_1",
+                  course_id: "crs_123",
+                  course_name: "计算机网络",
+                  title: "物理层复习",
+                  status: "in_progress",
+                  derived_status: "in_progress",
+                  sort_order: 1,
+                },
+              ],
+              hidden_task_count: 0,
+            },
+          ],
+        }, "req_global_month"));
+      }
+      if (url.endsWith("/calendar/days/2026-07-14/todos")) {
+        return Promise.resolve(successResponse({
+          date: "2026-07-14",
+          courses: [
+            {
+              course_id: "crs_123",
+              course_name: "计算机网络",
+              plan_ids: ["plan_1"],
+              tasks: dayResponse.tasks,
+            },
+          ],
+        }, "req_global_day"));
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderCalendarPage("/calendar");
+    renderCalendarPage("/calendar?date=2026-07-14");
 
-    expect(screen.getByRole("heading", { name: "大日历" })).toBeInTheDocument();
-    expect(screen.getByText("后端学习计划聚合接口已具备，前端日历视图将在后续任务接入真实任务摘要。")).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "全局学习日历" })).toBeInTheDocument();
+    expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "2026-07-14 待办" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "计算机网络" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看计划 物理层复习" })).toHaveAttribute(
+      "href",
+      "/courses/crs_123/study-plans/plan_1",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/calendar/month?month=2026-07",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/calendar/days/2026-07-14/todos",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });
