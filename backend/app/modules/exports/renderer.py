@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 import re
 import textwrap
+from tempfile import TemporaryDirectory
 from typing import Any
 
+from jinja2 import Environment, select_autoescape
+from markdown_it import MarkdownIt
 from pydantic import ValidationError
 
 from app.core.errors import CourseNexusError
@@ -23,6 +27,7 @@ PAGE_BOTTOM_Y = 52
 
 _MARKDOWN_CHOICE_OPTION_IDS = ("A", "B", "C", "D")
 _MARKDOWN_CHOICE_QUESTION_TYPES = {"single_choice", "multiple_choice"}
+_UNSAFE_CITATION_SNIPPET_MARKERS = ("formula-not-decoded", "", "", "")
 
 
 def render_task_test_markdown(content: GeneratedContentRead) -> str:
@@ -47,9 +52,252 @@ def render_task_test_markdown(content: GeneratedContentRead) -> str:
 def render_handout_pdf(content: GeneratedContentRead) -> bytes:
     handout = _validate_handout_content(content.content_json)
     citations_by_id = {citation.id: citation for citation in content.source_citations}
-    lines = _render_handout_pdf_lines(content.title, handout, citations_by_id)
-    return _build_pdf(lines)
+    markdown = _render_handout_pdf_markdown(content.title, handout, citations_by_id)
+    return render_markdown_pdf(markdown, title=content.title)
 
+
+def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
+    html = render_markdown_pdf_html(markdown, title=title)
+
+    with TemporaryDirectory(prefix="coursenexus-pdf-") as temp_dir:
+        html_path = Path(temp_dir) / "document.html"
+        pdf_path = Path(temp_dir) / "document.pdf"
+        html_path.write_text(html, encoding="utf-8")
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise RuntimeError("Playwright is required for handout PDF export. Run `uv add playwright` and `uv run playwright install chromium`.") from exc
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page_errors: list[str] = []
+                page.on("pageerror", lambda error: page_errors.append(str(error)))
+                page.goto(html_path.as_uri(), wait_until="load")
+                page.emulate_media(media="print")
+                page.wait_for_function("() => !document.fonts || document.fonts.status === 'loaded'", timeout=30_000)
+
+                render_state = page.evaluate(
+                    """
+                    () => ({
+                      mathErrors: document.querySelectorAll('.katex-error').length
+                    })
+                    """
+                )
+                if page_errors:
+                    raise RuntimeError("PDF HTML rendering failed: " + "; ".join(page_errors))
+                if render_state.get("mathErrors"):
+                    raise RuntimeError("PDF HTML rendering produced KaTeX errors")
+
+                page.pdf(
+                    path=str(pdf_path),
+                    format="A4",
+                    print_background=True,
+                    prefer_css_page_size=True,
+                    margin={"top": "16mm", "right": "16mm", "bottom": "18mm", "left": "16mm"},
+                )
+            finally:
+                browser.close()
+
+        return pdf_path.read_bytes()
+
+
+def render_markdown_pdf_html(markdown: str, *, title: str = "CourseNexus") -> str:
+    safe_markdown = _sanitize_markdown_for_pdf(markdown)
+    body_html = _build_markdown_renderer().render(safe_markdown)
+    template = _html_environment().from_string(_PDF_HTML_TEMPLATE)
+    return template.render(title=title, body_html=body_html, css=_PDF_CSS)
+
+
+def _build_markdown_renderer() -> MarkdownIt:
+    return MarkdownIt(
+        "commonmark",
+        {
+            "html": False,
+            "breaks": False,
+            "linkify": False,
+        },
+    ).enable("table")
+
+
+def _html_environment() -> Environment:
+    return Environment(autoescape=select_autoescape(("html", "xml")))
+
+
+def _render_handout_pdf_markdown(
+    title: str,
+    handout: HandoutContent,
+    citations_by_id: dict[str, GeneratedContentCitationRead],
+) -> str:
+    lines: list[str] = [
+        f"# {title}",
+        "",
+        _handout_source_notice(handout, citations_by_id),
+        "",
+        "## Overview",
+        "",
+        handout.overview,
+        "",
+        "## Learning Objectives",
+        "",
+    ]
+    for objective in handout.learning_objectives:
+        lines.append(f"- {objective}")
+    lines.extend(["", "## Sections"])
+    for index, section in enumerate(sorted(handout.sections, key=lambda item: item.sort_order), start=1):
+        lines.extend(
+            [
+                "",
+                f"### {index}. {section.title}",
+                "",
+                section.body,
+                "",
+                "Key points:",
+                "",
+            ]
+        )
+        for point in section.key_points:
+            lines.append(f"- {point}")
+    lines.extend(["", "## Summary", "", handout.summary])
+    return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
+
+
+def _sanitize_markdown_for_pdf(markdown: str) -> str:
+    sanitized_lines: list[str] = []
+    for line in markdown.splitlines():
+        cleaned = _sanitize_markdown_line(line)
+        if cleaned is not None:
+            sanitized_lines.append(cleaned)
+    return "\n".join(sanitized_lines).rstrip() + "\n"
+
+
+def _sanitize_markdown_line(line: str) -> str | None:
+    if not any(marker in line for marker in _UNSAFE_CITATION_SNIPPET_MARKERS):
+        return line
+    citation_match = re.match(r"^(\s*-\s*.+?,\s*p\.[^:]+):", line)
+    if citation_match:
+        return citation_match.group(1).rstrip()
+    return None
+
+
+_PDF_HTML_TEMPLATE = """<!doctype html>
+<html lang=\"zh-CN\">
+<head>
+  <meta charset=\"utf-8\" />
+  <title>{{ title }}</title>
+  <style>{{ css }}</style>
+</head>
+<body>
+  <main id=\"pdf-document\">{{ body_html | safe }}</main>
+</body>
+</html>
+"""
+
+_PDF_CSS = """
+@page {
+  size: A4;
+  margin: 16mm 16mm 18mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.65;
+  color: #222;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+#pdf-document {
+  width: 100%;
+  max-width: 100%;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: 24pt;
+  line-height: 1.25;
+}
+
+h2 {
+  margin: 24px 0 10px;
+  font-size: 16pt;
+  line-height: 1.35;
+  break-after: avoid-page;
+}
+
+h3 {
+  margin: 18px 0 8px;
+  font-size: 13pt;
+  break-after: avoid-page;
+}
+
+p {
+  margin: 7px 0;
+  orphans: 3;
+  widows: 3;
+}
+
+ul,
+ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+li {
+  margin: 4px 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 12px 0;
+}
+
+th,
+td {
+  padding: 7px 8px;
+  border: 1px solid #bbb;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  max-width: 100%;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+code {
+  font-family: Consolas, "JetBrains Mono", monospace;
+}
+
+blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 4px solid #888;
+  color: #444;
+}
+"""
 
 def _validate_task_test_content(content_json: ContentJSON) -> TaskTestContent:
     if not isinstance(content_json, dict):
@@ -212,7 +460,20 @@ def _lookup_citations(
 
 
 def _format_citation(citation: GeneratedContentCitationRead) -> str:
-    return f"{citation.material_name}, {_format_location(citation)}: {citation.hit_text}"
+    base = f"{citation.material_name}, {_format_location(citation)}"
+    snippet = _safe_citation_snippet(citation.hit_text)
+    if snippet:
+        return f"{base}: {snippet}"
+    return base
+
+
+def _safe_citation_snippet(hit_text: str | None) -> str:
+    cleaned = _clean_text(hit_text or "")
+    if not cleaned:
+        return ""
+    if any(marker in cleaned for marker in _UNSAFE_CITATION_SNIPPET_MARKERS):
+        return ""
+    return cleaned
 
 
 def _format_location(citation: GeneratedContentCitationRead) -> str:

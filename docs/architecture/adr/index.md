@@ -13,6 +13,7 @@
 | [0003-local-rag-stack.md](0003-local-rag-stack.md) | Accepted；本地资料上下文与 RAG 采用 LlamaIndex、Docling、Chroma 和用途级独立 OpenAI-compatible API，RAGFlow 作为 future 方案。 | 2026-07-10 |
 | [0004-frontend-ui-foundation.md](0004-frontend-ui-foundation.md) | Accepted；前端 UI 基础设施采用 Mantine、Tabler Icons、TanStack Query 和 dayjs。 | 2026-07-10 |
 | [0005-simplified-generation-poc.md](0005-simplified-generation-poc.md) | Accepted；五类独立 POC 使用完整材料上下文单次生成，不保存逐条引用。 | 2026-07-13 |
+| [0006-handout-pdf-rendering.md](0006-handout-pdf-rendering.md) | Accepted；今日讲义 PDF 导出采用 Markdown/HTML/Playwright Chromium 打印链路。 | 2026-07-13 |
 
 ## 相关链接
 
