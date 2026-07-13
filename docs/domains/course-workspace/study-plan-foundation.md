@@ -71,3 +71,13 @@
 验证入口：
 
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖诊断题加载、答题、profile 生成以及 preview payload 携带 `diagnostic_profile`。
+## 2026-07-14 C4 创建向导资料范围选择落地
+
+创建页已将 C2/C3 阶段“固定全部已解析资料”的临时约束替换为真实资料范围选择器。入口为 `frontend/src/features/study-plans/components/StudyPlanMaterialScopeSelector.tsx`，由 `frontend/src/pages/StudyPlanCreatePage.tsx` 挂载并维护 `materialScope` 状态。
+
+- 创建页通过 `frontend/src/features/materials/api.ts::listMaterials(courseId)` 读取当前课程资料，只允许 `parse_status = "parsed"` 的资料进入 Agent 生成范围；解析中、待解析或解析失败的资料只展示状态，不可勾选。
+- 支持两种 `MaterialScope`：全部已解析资料 `{ include_all_parsed_materials: true, material_ids: [] }`，以及指定资料 `{ include_all_parsed_materials: false, material_ids: [...] }`。前端不提交文件夹 ID，文件夹仍只用于资料管理归类。
+- 配置解析、学前诊断问题、诊断 profile、preview 和 save 都读取同一份 `materialScope`。因此用户切换资料范围后，后续所有请求都会使用最新选择。
+- 资料范围变化会清空当前配置解析未补齐提示、清空已有 `diagnostic_profile`，并把已生成 preview 标记为过期，从而禁用保存，要求用户重新生成 preview。
+- 创建页草稿会随 courseId 持久化 `materialScope`，刷新后恢复用户选择；保存计划成功后仍清理草稿。
+- 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加“指定已解析资料进入 parse 和 preview 请求”的用例。当前本地 Vitest 仍受 `entities ./decode` exports 问题阻塞在测试收集前，需以 build 和后续依赖修复后的 Vitest 共同验证。

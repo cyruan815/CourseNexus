@@ -56,7 +56,6 @@
   line-height: 1.25;
 }
 
-.study-plan-scope,
 .study-plan-diagnosis {
   display: grid;
   gap: 12px;
@@ -66,8 +65,26 @@
 }
 
 .study-plan-scope {
+  display: grid;
+  gap: 12px;
   border-color: #bde7df;
   background: #f8fffd;
+  border: 1px solid #bde7df;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.study-plan-scope-list {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.study-plan-scope-row {
+  min-height: 38px;
+  border: 1px solid #e5edf5;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
 }
 
 .study-plan-preview-empty {

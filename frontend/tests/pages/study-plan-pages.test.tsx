@@ -19,6 +19,47 @@ const course = {
   deleted_at: null,
 };
 
+const materials = [
+  {
+    id: "mat_1",
+    course_id: "crs_123",
+    user_id: "usr_123",
+    folder_id: null,
+    name: "线代第一章.pdf",
+    material_type: "pdf",
+    source_type: "upload",
+    file_url: "/files/mat_1.pdf",
+    source_url: null,
+    file_size: 1024,
+    mime_type: "application/pdf",
+    parse_status: "parsed",
+    parse_error: null,
+    page_count: 12,
+    created_at: "2026-07-09T12:00:00+00:00",
+    updated_at: "2026-07-09T12:00:00+00:00",
+    deleted_at: null,
+  },
+  {
+    id: "mat_2",
+    course_id: "crs_123",
+    user_id: "usr_123",
+    folder_id: null,
+    name: "未解析习题.pdf",
+    material_type: "pdf",
+    source_type: "upload",
+    file_url: "/files/mat_2.pdf",
+    source_url: null,
+    file_size: 2048,
+    mime_type: "application/pdf",
+    parse_status: "parsing",
+    parse_error: null,
+    page_count: null,
+    created_at: "2026-07-09T12:00:00+00:00",
+    updated_at: "2026-07-09T12:00:00+00:00",
+    deleted_at: null,
+  },
+];
+
 const preview = {
   course_id: "crs_123",
   title: "高等数学学习计划",
@@ -443,6 +484,95 @@ describe("study plan pages", () => {
         }),
       );
     });
+  });
+
+  it("uses the selected parsed material scope for parse and preview requests", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse(parsedConfig, "req_config_parse"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = renderStudyPlanRoutes();
+
+    await screen.findByRole("heading", { level: 1 });
+    await screen.findByText("线代第一章.pdf");
+
+    fireEvent.click(screen.getByTestId("scope-mode-specific"));
+    expect(screen.getByLabelText("线代第一章.pdf")).toBeChecked();
+    expect(screen.getByLabelText("未解析习题.pdf")).toBeDisabled();
+
+    const goalInput = container.querySelector("textarea");
+    const dateInputs = container.querySelectorAll('input[type="date"]');
+    const minutesInput = container.querySelector('input[type="number"]');
+    expect(goalInput).not.toBeNull();
+    expect(dateInputs).toHaveLength(2);
+    expect(minutesInput).not.toBeNull();
+
+    fireEvent.change(goalInput!, { target: { value: preview.goal_text } });
+    fireEvent.change(dateInputs[0], { target: { value: "2026-07-13" } });
+    fireEvent.change(dateInputs[1], { target: { value: "2026-07-15" } });
+    fireEvent.change(minutesInput!, { target: { value: "60" } });
+
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plans/preview",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: preview.goal_text,
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
+            daily_available_minutes: 60,
+            preference: "balanced",
+            material_scope: {
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
+            },
+          }),
+          method: "POST",
+        }),
+      );
+    });
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());
+
+    fireEvent.click(screen.getByTestId("scope-mode-all"));
+    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("scope-mode-specific"));
+
+    fireEvent.click(screen.getByTestId("study-plan-parse-config"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plan-config-parses",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: preview.goal_text,
+            material_scope: {
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
+            },
+          }),
+          method: "POST",
+        }),
+      );
+    });
+
+    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
   });
 
   it("parses natural language config into editable fields and expires the existing preview", async () => {
