@@ -60,10 +60,11 @@ pnpm install
 ```powershell
 Set-Location backend
 conda env create -f environment.yml
+conda run -n course-nexus python -m playwright install chromium
 Set-Location ..
 ```
 
-该命令会创建名为 `course-nexus` 的 Python 3.12 环境，并安装后端运行与测试依赖。环境已经存在时不要重复创建，按后文“环境准备”中的更新命令同步依赖。
+前两条命令会创建名为 `course-nexus` 的 Python 3.12 环境、安装后端依赖，并额外下载 PDF 导出所需的 Playwright Chromium。Python 包安装不会自动下载浏览器，因此首次创建环境或 Playwright 升级后都应执行 Chromium 安装命令。环境已经存在时不要重复创建，按后文“环境准备”中的更新命令同步依赖。
 
 ### 3. 创建本地配置
 
@@ -180,6 +181,7 @@ pnpm preview
 cd backend
 conda env create -f environment.yml
 conda activate course-nexus
+python -m playwright install chromium
 ```
 
 如果环境已经存在，更新后端依赖：
@@ -187,6 +189,8 @@ conda activate course-nexus
 ```powershell
 cd backend
 conda env update -f environment.yml --prune
+conda activate course-nexus
+python -m playwright install chromium
 ```
 
 安装前端依赖：
@@ -200,7 +204,10 @@ pnpm install
 ```powershell
 cd backend
 python -m pip install -e ".[dev]"
+python -m playwright install chromium
 ```
+
+`playwright` Python 包和 Chromium 浏览器二进制是两部分依赖；只执行 Conda / pip 安装仍会导致讲义 PDF 导出失败。Chromium 下载通常只需在首次安装或 Playwright 版本升级后执行一次。
 
 环境变量：
 

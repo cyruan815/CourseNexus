@@ -46,6 +46,7 @@ Mindmap 生成还依赖仓库根目录的 `markmap-lib`，首次运行前需在�
 cd backend
 conda env create -f environment.yml
 conda activate course-nexus
+python -m playwright install chromium
 ```
 
 环境已存在时：
@@ -53,7 +54,11 @@ conda activate course-nexus
 ```powershell
 cd backend
 conda env update -f environment.yml --prune
+conda activate course-nexus
+python -m playwright install chromium
 ```
+
+Playwright 的 Python 包不会自动下载浏览器。首次创建环境或 Playwright 升级后必须执行 `python -m playwright install chromium`，否则讲义 PDF 导出和相关测试会因找不到 Chromium 而失败。
 
 ## 开发命令
 
