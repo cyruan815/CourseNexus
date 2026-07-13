@@ -146,9 +146,95 @@
   padding: 10px 12px;
 }
 
+.study-plan-execution-shell {
+  display: grid;
+  gap: 14px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 18px 20px 28px;
+}
+
+.study-plan-execution-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.72fr) minmax(440px, 1.45fr) minmax(280px, 0.85fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.study-plan-execution-sidebar,
+.study-plan-execution-main,
+.study-plan-execution-aside {
+  border-color: #d6e0eb;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.study-plan-execution-sidebar {
+  position: sticky;
+  top: 14px;
+}
+
+.study-plan-execution-main h1 {
+  font-size: 28px;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.study-plan-execution-taskrail {
+  border-left: 1px solid #d6e0eb;
+  padding-left: 10px;
+}
+
+.study-plan-execution-step {
+  border-color: #e5edf5;
+  background: #fbfdff;
+  padding: 10px;
+}
+
+.study-plan-execution-step.is-current {
+  border-color: #9dd6ce;
+  background: #f3fffc;
+}
+
+.study-plan-step-icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #94a3b8;
+}
+
+.study-plan-step-icon.is-current {
+  color: #0f766e;
+}
+
+.study-plan-step-icon.is-complete {
+  color: #059669;
+}
+
+.study-plan-execution-content {
+  border-color: #dbeafe;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.88), rgba(245, 253, 250, 0.78)),
+    #ffffff;
+  padding: 14px;
+}
+
+.study-plan-checkin-card {
+  border-color: #bde7df;
+  background: #f8fffd;
+  padding: 12px;
+}
+
+.study-plan-material-row {
+  border-color: #e5edf5;
+  background: #fbfdff;
+  padding: 12px;
+}
+
 @media (max-width: 900px) {
   .study-plan-grid,
-  .study-plan-detail-layout {
+  .study-plan-detail-layout,
+  .study-plan-execution-grid {
     grid-template-columns: 1fr;
   }
 
@@ -157,8 +243,13 @@
   }
 
   .study-plan-header h1,
-  .study-plan-detail-hero h1 {
+  .study-plan-detail-hero h1,
+  .study-plan-execution-main h1 {
     font-size: 24px;
+  }
+
+  .study-plan-execution-sidebar {
+    position: static;
   }
 }
 

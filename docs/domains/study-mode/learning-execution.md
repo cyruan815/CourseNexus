@@ -6,7 +6,13 @@
 - `backend/app/modules/learning_execution/repository.py`：二级任务、父任务、计划、课程、同日任务和关联资料查询。
 - `backend/app/modules/learning_execution/service.py`：执行上下文组装、任务级问答资料范围派生、父任务/计划状态汇总和 completion 事务。
 - `backend/app/modules/learning_execution/router.py`：执行上下文、任务级问答和二级任务完成 API。
+- `frontend/src/features/study-plans/api.ts`：执行上下文和二级任务完成 API adapter。
+- `frontend/src/features/study-plans/types.ts`：执行上下文、执行任务树、关联资料和 completion 返回类型。
+- `frontend/src/pages/StudyPlanDetailPage.tsx`：从学习计划详情页进入具体二级任务执行页。
+- `frontend/src/pages/StudyTaskExecutionPage.tsx`：计划执行页基础，读取当天执行上下文并完成 / 取消完成当前二级任务。
+- `frontend/src/router/AppRouter.tsx`：受保护路由 `/study-subtasks/:subtaskId`。
 - 测试入口：`backend/tests/modules/learning_execution/test_task_qa_api.py`、`backend/tests/modules/learning_execution/`、`backend/tests/integration/test_subtask_completion_transaction.py`。
+- 前端测试入口：`frontend/tests/features/study-plans/api.test.ts`、`frontend/tests/pages/study-plan-pages.test.tsx`。
 
 ## 执行上下文
 
@@ -15,6 +21,14 @@
 响应只返回当前二级任务父任务的 `task_date` 当天、同一计划内的一级任务和二级任务，不返回完整计划树。`execution_date` 使用父任务业务日期，允许用户从日历进入历史或未来任务。
 
 关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；拿到 `handout_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 下载今日讲义 PDF。导出不改变二级任务完成状态，也不写打卡记录。
+
+前端执行页只以 execution context 为事实来源：
+
+- 左侧展示当天同一计划内的一级任务和二级任务，按 `sort_order` 排序，高亮 `current_subtask_id`。
+- 中间展示当前二级任务标题、类型、描述、状态和完成 / 取消完成按钮。
+- 右侧展示当前二级任务关联资料、最近成功生成内容 ID 的只读状态和打卡进度。
+- 页面不接受用户修改资料范围，不在前端拼接完整计划树，不在 C8 中生成讲义或任务测试题正文。
+- `/study-subtasks/:subtaskId` 是轻量执行页入口；计划详情页只通过二级任务 ID 跳转到该路由。
 
 ## 执行页任务级问答
 
@@ -38,6 +52,8 @@
 ```
 
 完成时二级任务写为 `completed` 并设置 UTC `completed_at`。取消完成时二级任务写回 `not_started` 并清空 `completed_at`。重复提交同一状态返回 `changed=false`，不会重复累计，也不会刷新已完成任务的 `completed_at`。
+
+前端 completion 调用固定提交 `{ "completed": boolean }`，不把按钮当作无状态 toggle。成功后用返回的 `subtask`、`task`、`plan` 和 `checkin` 快照更新执行页局部状态；失败时按 `error.code` 展示可恢复提示。`STATE_CONFLICT` 提示用户刷新后再试，`NOT_FOUND` 表示任务不存在或无权限，`UNAUTHORIZED` 由统一 API client 清理登录态。
 
 事务顺序：
 
