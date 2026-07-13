@@ -34,3 +34,5 @@ def test_quiz_uses_one_final_model_result_and_assigns_ids() -> None:
     assert "ALL MATERIALS" in provider.calls[0][0]
     assert [item["id"] for item in output.content_json["questions"]] == ["q_001", "q_002"]
     assert "source_citation_ids" not in output.content_json["questions"][0]
+    assert "plausible distractors" in provider.calls[0][0]
+    assert "conceptual understanding" in provider.calls[0][0]

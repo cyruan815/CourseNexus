@@ -42,7 +42,7 @@ class FlashcardGenerator:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Flashcard structure is invalid") from exc
         return GeneratorOutput(
             title=f"Flashcards ({len(cards)} cards)",
-            content_json=content.model_dump(mode="json"),
+            content_json=content.model_dump(mode="json", exclude_none=True),
         )
 
 

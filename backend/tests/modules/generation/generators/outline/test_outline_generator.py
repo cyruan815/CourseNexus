@@ -15,3 +15,5 @@ def test_outline_preserves_model_order_and_assigns_ids() -> None:
     assert provider.calls[0][1] is OutlineGenerationResult
     assert [item["title"] for item in output.content_json["sections"]] == ["1. First", "2. Second"]
     assert "source_citation_ids" not in output.content_json["sections"][0]
+    assert "Do not create calendar events" in provider.calls[0][0]
+    assert "distinct learning purpose" in provider.calls[0][0]

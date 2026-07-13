@@ -32,3 +32,10 @@ def test_quiz_requires_exactly_four_ordered_options() -> None:
     assert QuizDraft.model_validate(_question()).correct_answer == "A"
     with pytest.raises(ValidationError):
         QuizDraft.model_validate(_question(options=[{"id": "A", "text": "A"}]))
+
+
+def test_quiz_accepts_optional_trimmed_hint_and_rejects_duplicate_option_text() -> None:
+    assert QuizDraft.model_validate(_question(hint="  Recall the degree rule. ")).hint == "Recall the degree rule."
+    assert QuizDraft.model_validate(_question()).hint is None
+    with pytest.raises(ValidationError):
+        QuizDraft.model_validate(_question(options=[{"id": key, "text": "same"} for key in "ABCD"]))

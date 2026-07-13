@@ -18,6 +18,7 @@ class FlashcardDraft(BaseModel):
     front: str = Field(min_length=1, max_length=300)
     back: str = Field(min_length=1, max_length=1200)
     tags: list[str] = Field(default_factory=list, max_length=5)
+    explanation: str | None = Field(default=None, min_length=1, max_length=800)
 
     @field_validator("front", "back")
     @classmethod
@@ -41,6 +42,11 @@ class FlashcardDraft(BaseModel):
                 seen.add(key)
                 result.append(tag)
         return result
+
+    @field_validator("explanation")
+    @classmethod
+    def trim_explanation(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
 
 class FlashcardGenerationResult(BaseModel):

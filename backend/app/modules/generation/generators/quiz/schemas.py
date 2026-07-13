@@ -46,6 +46,7 @@ class QuizDraft(BaseModel):
     options: list[QuizOption]
     correct_answer: Literal["A", "B", "C", "D"]
     explanation: str = Field(min_length=1, max_length=2000)
+    hint: str | None = Field(default=None, min_length=1, max_length=500)
     difficulty: Difficulty
 
     @field_validator("question_text", "explanation")
@@ -56,10 +57,18 @@ class QuizDraft(BaseModel):
             raise ValueError("Quiz text cannot be blank")
         return result
 
+    @field_validator("hint")
+    @classmethod
+    def trim_hint(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
     @model_validator(mode="after")
     def validate_options(self) -> "QuizDraft":
         if [option.id for option in self.options] != ["A", "B", "C", "D"]:
             raise ValueError("Choice questions require options A-D")
+        normalized = [" ".join(option.text.split()).casefold() for option in self.options]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Choice option text must be unique")
         return self
 
 

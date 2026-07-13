@@ -14,3 +14,4 @@ def test_flashcard_uses_one_final_model_result() -> None:
         "id": "card_001", "front": "Process", "back": "Running program", "tags": ["OS"],
         "mastery_status": "unknown", "sort_order": 1,
     }]
+    assert "one atomic concept" in provider.calls[0][0]
