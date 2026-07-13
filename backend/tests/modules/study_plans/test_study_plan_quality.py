@@ -64,6 +64,55 @@ def _context_batch() -> MaterialContextBatch:
     )
 
 
+def _context_chunk(*, heading: str | None, content_text: str) -> ContextChunk:
+    return ContextChunk(
+        material_id="mat_net",
+        chunk_id="chk_meta_case",
+        chunk_index=1,
+        material_name="Chap7 物理层.pdf",
+        page="1",
+        page_index=0,
+        heading=heading,
+        content_text=content_text,
+    )
+
+
+@pytest.mark.parametrize(
+    ("heading", "content_text"),
+    [
+        ("第 7 章 小结", "复习本章要点。"),
+        ("目录", "第 1 章 基础"),
+        (None, "# Summary\nThis chapter reviews the main ideas."),
+        ("Acknowledgements", "Thank you to the contributors."),
+    ],
+)
+def test_meta_citation_detection_accepts_structural_labels(
+    heading: str | None,
+    content_text: str,
+) -> None:
+    assert study_plan_service._is_meta_citation_chunk(
+        _context_chunk(heading=heading, content_text=content_text)
+    )
+
+
+@pytest.mark.parametrize(
+    ("heading", "content_text"),
+    [
+        ("Summary Statistics", "Summary Statistics describes numerical data."),
+        ("数据总结方法", "总结变量之间的关系是统计分析的一部分。"),
+        (None, "总结变量之间的关系，并计算均值与方差。"),
+        ("Outline Algorithms", "Outline Algorithms are used in rendering."),
+    ],
+)
+def test_meta_citation_detection_keeps_normal_body_content(
+    heading: str | None,
+    content_text: str,
+) -> None:
+    assert not study_plan_service._is_meta_citation_chunk(
+        _context_chunk(heading=heading, content_text=content_text)
+    )
+
+
 def _mapped_batch() -> PlanBatchExtraction:
     return PlanBatchExtraction.model_validate(
         {

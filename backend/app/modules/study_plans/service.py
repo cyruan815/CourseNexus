@@ -113,21 +113,36 @@ _DIAGNOSTIC_QUESTION_TYPE_LABELS = {
     "diagnostic_note": "补充说明",
 }
 
-_META_CITATION_CHUNK_KEYWORDS = (
-    "目录",
-    "主要内容",
-    "小结",
-    "总结",
-    "版权",
-    "感谢",
-    "致谢",
-    "谢谢",
-    "contents",
-    "outline",
-    "summary",
-    "copyright",
-    "thanks",
-    "thank you",
+_META_CITATION_LABELS = frozenset(
+    {
+        "目录",
+        "主要内容",
+        "小结",
+        "总结",
+        "本章小结",
+        "本章总结",
+        "章节小结",
+        "章节总结",
+        "版权",
+        "感谢",
+        "致谢",
+        "鸣谢",
+        "谢谢",
+        "contents",
+        "table of contents",
+        "outline",
+        "summary",
+        "chapter summary",
+        "copyright",
+        "acknowledgments",
+        "acknowledgements",
+        "thanks",
+        "thank you",
+    }
+)
+_META_CITATION_CHAPTER_SUMMARY_PATTERN = re.compile(
+    r"^(?:第\s*[一二三四五六七八九十百零〇0-9]+\s*[章节篇部]|(?:chapter|section|part)\s+[a-z0-9.]+)\s*(?:小结|总结|summary)$",
+    flags=re.IGNORECASE,
 )
 
 
@@ -1213,9 +1228,25 @@ def _meta_citation_chunk_ids_from_batches(batches: list[MaterialContextBatch]) -
 
 
 def _is_meta_citation_chunk(chunk: ContextChunk) -> bool:
-    heading = _normalize_meta_citation_text(chunk.heading or "")
-    content_prefix = _normalize_meta_citation_text((chunk.content_text or "")[:200])
-    return any(keyword in heading or keyword in content_prefix for keyword in _META_CITATION_CHUNK_KEYWORDS)
+    heading = _normalize_meta_citation_label(chunk.heading or "")
+    first_content_line = next(
+        (line for line in (chunk.content_text or "").splitlines() if line.strip()),
+        "",
+    )
+    content_label = _normalize_meta_citation_label(first_content_line)
+    return _is_meta_citation_label(heading) or _is_meta_citation_label(content_label)
+
+
+def _is_meta_citation_label(value: str) -> bool:
+    return value in _META_CITATION_LABELS or _META_CITATION_CHAPTER_SUMMARY_PATTERN.fullmatch(value) is not None
+
+
+def _normalize_meta_citation_label(value: str) -> str:
+    normalized = _normalize_meta_citation_text(value)
+    normalized = re.sub(r"^[#>*\-\s]+", "", normalized)
+    normalized = re.sub(r"^\d+(?:\.\d+)*\s*[、.)：:\-]?\s*", "", normalized)
+    normalized = re.sub(r"[：:。.!！?？\-—–]+$", "", normalized)
+    return normalized.strip()
 
 
 def _normalize_meta_citation_text(value: str) -> str:
