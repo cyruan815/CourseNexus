@@ -1,5 +1,6 @@
-import { type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { IconUpload, IconX } from "@tabler/icons-react";
 
 import { ApiError } from "../../api/errors";
 import {
@@ -202,6 +203,14 @@ export function MaterialWorkspace({
     setIsUploadPromptOpen(true);
   }
 
+  function closeUploadDialog() {
+    if (isMutating) {
+      return;
+    }
+    setIsUploadPromptOpen(false);
+    setUploadFile(null);
+  }
+
   function openCreateFolderModal() {
     setContextMenu(null);
     setActionTarget({ kind: "createFolder" });
@@ -366,6 +375,14 @@ export function MaterialWorkspace({
         input.value = "";
       }
     });
+  }
+
+  function handleUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      setUploadFile(file);
+    }
   }
 
   function handleMove(material: Material, folderId: string | null) {
@@ -535,19 +552,48 @@ export function MaterialWorkspace({
       {isUploadPromptOpen ? (
         <div aria-labelledby="material-upload-dialog-title" className="material-workspace__upload-dialog" role="dialog">
           <div className="material-workspace__upload-dialog-panel">
-            <h3 id="material-upload-dialog-title">上传课程资料</h3>
-            <p>资料将上传到：{uploadTargetName}。也可以先关闭，之后在课程详情页继续上传。</p>
+            <div className="material-workspace__upload-dialog-head">
+              <div>
+                <h3 id="material-upload-dialog-title">上传课程资料</h3>
+                <p>
+                  上传到：{uploadTargetName}。上传后会自动进入解析流程，解析完成后可用于问答、生成内容和学习计划。
+                </p>
+              </div>
+              <button
+                aria-label="关闭上传资料弹窗"
+                className="material-workspace__upload-close"
+                disabled={isMutating}
+                onClick={closeUploadDialog}
+                type="button"
+              >
+                <IconX size={18} stroke={1.8} />
+              </button>
+            </div>
             <form className="material-workspace__upload" onSubmit={handleUpload}>
-              <input
-                id="material-upload-input"
-                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                type="file"
-              />
-              <button disabled={isMutating || !uploadFile} type="submit">上传资料</button>
+              <label
+                aria-label="拖拽上传课程资料"
+                className="material-workspace__dropzone"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleUploadDrop}
+              >
+                <IconUpload size={28} stroke={1.6} />
+                <span className="material-workspace__dropzone-title">拖拽文件到这里，或点击选择文件</span>
+                <span className="material-workspace__dropzone-hint">支持 PDF、Markdown、文本和常见课程资料文件</span>
+                <input
+                  id="material-upload-input"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+              </label>
+              {uploadFile ? (
+                <Text c="dimmed" size="sm">
+                  已选择：{uploadFile.name}
+                </Text>
+              ) : null}
+              <button className="material-workspace__upload-submit" disabled={isMutating || !uploadFile} type="submit">
+                上传资料
+              </button>
             </form>
-            <button disabled={isMutating} onClick={() => setIsUploadPromptOpen(false)} type="button">
-              暂不上传
-            </button>
           </div>
         </div>
       ) : null}
