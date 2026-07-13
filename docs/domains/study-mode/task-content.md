@@ -23,7 +23,11 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - Repository：`backend/app/modules/learning_execution/repository.py`
 - Export API：`backend/app/modules/exports/router.py`
 - Export service / renderer：`backend/app/modules/exports/service.py`、`backend/app/modules/exports/renderer.py`
+- 前端 API：`frontend/src/features/study-plans/api.ts`
+- 前端类型：`frontend/src/features/study-plans/types.ts`
+- 前端页面：`frontend/src/pages/StudyTaskExecutionPage.tsx`
 - 测试入口：`backend/tests/modules/generation/test_handout_generator.py`、`backend/tests/modules/generation/test_task_test_generator.py`、`backend/tests/modules/learning_execution/test_task_content_api.py`、`backend/tests/modules/exports/test_exports_api.py`、`backend/tests/integration/test_task_content_generation_flow.py`
+- 前端测试入口：`frontend/tests/features/study-plans/api.test.ts`、`frontend/tests/pages/study-plan-pages.test.tsx`
 
 ## API
 
@@ -34,6 +38,16 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`
 
 两个 POST 接口都返回统一成功 envelope，`data` 为 `GeneratedContentRead`。默认重复请求是幂等的：同一个 `study_subtask_id + content_type` 已存在未删除且 `generation_status=success` 的内容时，接口直接返回最近一次成功内容，不调用模型、不新增 `AIGeneratedContent`。请求体可传 `force_regenerate=true` 显式重新生成新内容；failed 记录不会作为幂等命中结果。执行上下文会返回最近一次成功生成的 `handout_content_id` 或 `task_test_content_id`；失败记录不会作为执行页内容 ID 返回。
+
+前端 C9 只接入执行页中的按需生成入口：
+
+- `learn` / `review` 二级任务显示“今日讲义”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/handouts`，请求 `{ "force_regenerate": false }`。
+- `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
+- 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
+- “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到同学 B 的现有生成内容详情页；前端不修改 generated-content 目录。
+- 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
+- C9 不接入导出、测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 

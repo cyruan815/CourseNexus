@@ -219,6 +219,12 @@
   padding: 14px;
 }
 
+.study-plan-generated-content {
+  border-color: #bde7df;
+  background: #ffffff;
+  padding: 12px;
+}
+
 .study-plan-checkin-card {
   border-color: #bde7df;
   background: #f8fffd;

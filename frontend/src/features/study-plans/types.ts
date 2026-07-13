@@ -398,3 +398,41 @@ export interface SubtaskCompletionResult {
   plan: CompletionPlanRead;
   checkin: CompletionCheckinRead;
 }
+
+export type TaskContentType = "handout" | "task_test";
+
+export interface GeneratedContentRead {
+  id: string;
+  user_id: string;
+  course_id: string;
+  study_subtask_id: string | null;
+  source_message_id: string | null;
+  content_type: TaskContentType | string;
+  title: string;
+  content?: string | null;
+  content_json: unknown;
+  generation_status: string;
+  material_scope_json: unknown;
+  error_code: string | null;
+  source_citations: unknown[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface HandoutGenerationRequest {
+  force_regenerate?: boolean;
+  parameters?: {
+    language?: string;
+    detail_level?: "brief" | "standard" | "deep";
+  };
+}
+
+export interface TaskTestGenerationRequest {
+  force_regenerate?: boolean;
+  parameters?: {
+    question_count?: number;
+    question_types?: Array<"single_choice" | "multiple_choice" | "true_false" | "short_answer">;
+    difficulty?: "easy" | "medium" | "hard";
+  } | Record<string, unknown>;
+}
