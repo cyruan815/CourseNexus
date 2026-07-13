@@ -69,6 +69,24 @@
 - `uv run python -m pytest tests/modules/study_plans tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/integration -q`：`125 passed in 28.53s`，覆盖计划、执行、打卡、日历和集成链路。
 - `uv run python -m pytest -q`：`316 passed in 41.41s`。
 - 历史真实模型验收报告保留在 `docs/planning/phase-1-validation/`，但不属于本次幂等修复提交范围。
+
+## 2026-07-14 前端 C10 计划重生成 / 替换 / 删除接入
+
+`frontend/src/pages/StudyPlanDetailPage.tsx` 已接入 S02 生命周期接口，入口集中在学习计划详情页，不新增独立路由。
+
+- 点击“重新生成”会展开详情页内生命周期面板。用户可调整 `goal_text`、`start_date`、`end_date`、`daily_available_minutes` 和 `preference`；前端只提交这些本次覆盖字段到 `POST /api/v1/study-plans/{plan_id}/regeneration-previews`。
+- 重生成 preview 只展示新任务树摘要，不写入数据库；用户确认前不会替换当前计划，也不会生成讲义、任务测试题或导出文件。
+- 点击“确认替换计划”调用 `PUT /api/v1/study-plans/{plan_id}`。请求体使用后端返回 preview 的 `title`、`tasks`、`material_scope` 和生成追溯字段，并强制 `client_flow = "wizard_v1"`；`expected_updated_at` 来自当前详情页 `plan.updated_at`，用于后端原子并发校验。
+- 替换成功后，前端用返回的 `StudyPlanDetail` 更新当前页面；替换失败不会清空旧计划。`STATE_CONFLICT` 统一解释为计划已有学习进度、已有绑定生成内容或已被其他请求更新，前端提示刷新或新建计划，不提供强制覆盖按钮。
+- 点击“删除计划”先进入二次确认。确认后调用 `DELETE /api/v1/study-plans/{plan_id}`，成功回到 `/courses/{course_id}`。删除仍是后端软删除，不删除课程资料、问答历史或已存在的生成内容。
+- C10 不修改 `frontend/src/pages/GeneratedContentDetailPage.tsx`、`frontend/src/features/generated-content/` 或对应测试；若替换被已绑定生成内容阻止，前端只展示冲突提示。
+
+前端测试入口：
+
+- `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖重生成 preview、确认替换 payload、删除二次确认和返回课程。
+- `frontend/tests/features/study-plans/api.test.ts` 覆盖生命周期 adapter 的 path / method / body。
+
+当前本地 Vitest 仍可能在收集阶段被 `entities ./decode` exports 问题阻断；C10 提交以 `frontend:build`、`git diff --check` 和后续依赖修复后的 Vitest 共同验证。
 ## 2026-07-13 计划保存参数快照补充
 
 - 保存和替换计划时，`parsed_config_json.task_snapshot` 会保存每个二级任务的排序、类型、关联资料和必要生成参数；quiz/test 子任务额外保存 `generation_parameters.task_test`。

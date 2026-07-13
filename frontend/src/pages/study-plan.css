@@ -146,6 +146,48 @@
   padding: 10px 12px;
 }
 
+.study-plan-lifecycle-panel {
+  border-color: #bfdbfe;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.86), rgba(248, 255, 253, 0.9)),
+    #ffffff;
+}
+
+.study-plan-lifecycle-form {
+  display: grid;
+  gap: 12px;
+}
+
+.study-plan-lifecycle-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.study-plan-native-input {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 4px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2937;
+  font: inherit;
+  padding: 6px 10px;
+}
+
+.study-plan-regeneration-preview {
+  border-color: #bde7df;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.study-plan-delete-panel {
+  border-color: #fecaca;
+  background: #fffafa;
+}
+
 .study-plan-execution-shell {
   display: grid;
   gap: 14px;
@@ -240,7 +282,8 @@
 @media (max-width: 900px) {
   .study-plan-grid,
   .study-plan-detail-layout,
-  .study-plan-execution-grid {
+  .study-plan-execution-grid,
+  .study-plan-lifecycle-fields {
     grid-template-columns: 1fr;
   }
 
