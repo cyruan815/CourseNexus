@@ -24,6 +24,7 @@
 | TD-014 | AI 学习计划仍为确定性占位。 | S02 已接入全材料 map/reduce、保存幂等、替换、重生成和软删除。 | 高 | 已关闭（2026-07-11） |
 | TD-015 | 公共 `OpenAIModelProvider.answer_question()` 固定调用 Responses API，尚未兼容仅提供 Chat Completions API 的 OpenAI-compatible 服务。 | DeepSeek 等不支持 `/responses` 的服务会让课程问答和 Study Mode 任务级问答稳定返回 `GENERATION_FAILED`；支持 Responses API 的模型不受影响。 | 高 | 待合并后统一修复 |
 | TD-016 | 讲义 PDF 的 Markdown/HTML/Playwright 渲染链路尚未限制外部网络请求。 | 当前本地 POC 不阻塞使用；未来部署到共享服务或处理不可信生成内容时，Markdown 图片可能让后端 Chromium 请求内网或外部地址。 | 中 | 待处理（本地 POC 后置） |
+| TD-017 | [资料理解流水线完整性与检索质量改造](material-understanding-pipeline-tech-debt.md)：当前把解析成功近似为内容完整，且问答检索缺少目录治理、去重、任务路由和全文覆盖保证。 | 可能静默漏页/漏元素、误标 `complete`、重解析破坏旧可用结果，并让 Top-K 被重复目录占满；涉及多格式解析、数据/索引兼容和前端透明度。 | 高 | 待规划（独立大型改造） |
 
 ## TD-015：问答模型接口兼容
 
