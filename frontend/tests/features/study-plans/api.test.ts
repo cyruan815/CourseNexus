@@ -7,6 +7,7 @@ import {
   fetchCourseStudyCalendarDay,
   fetchGlobalCalendarDayTodos,
   fetchGlobalCalendarMonth,
+  fetchSubtaskExecutionContext,
   fetchTodayTodos,
   fetchStudyPlan,
   fetchDiagnosticQuestions,
@@ -16,6 +17,7 @@ import {
   previewStudyPlanRegeneration,
   replaceStudyPlan,
   saveStudyPlan,
+  updateSubtaskCompletion,
 } from "../../../src/features/study-plans/api";
 import type {
   StudyPlanConfigParseRequest,
@@ -127,6 +129,8 @@ describe("study plans api", () => {
     await fetchTodayTodos("2026-07-14");
     await fetchGlobalCalendarMonth("2026-07");
     await fetchGlobalCalendarDayTodos("2026-07-14");
+    await fetchSubtaskExecutionContext("subtask_1");
+    await updateSubtaskCompletion("subtask_1", true);
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -226,6 +230,19 @@ describe("study plans api", () => {
       15,
       "/api/v1/calendar/days/2026-07-14/todos",
       expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      16,
+      "/api/v1/study-subtasks/subtask_1/execution-context",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      17,
+      "/api/v1/study-subtasks/subtask_1/completion",
+      expect.objectContaining({
+        body: JSON.stringify({ completed: true }),
+        method: "PUT",
+      }),
     );
   });
 });

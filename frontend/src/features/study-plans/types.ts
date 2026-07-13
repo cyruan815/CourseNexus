@@ -312,3 +312,89 @@ export interface GlobalDayTodos {
   date: string;
   courses: GlobalDayTodoCourseGroup[];
 }
+
+export interface ExecutionCourseRead {
+  course_id: string;
+  name: string;
+}
+
+export interface ExecutionPlanRead {
+  plan_id: string;
+  title: string;
+  status: string;
+}
+
+export interface ExecutionMaterialRead {
+  material_id: string;
+  name: string | null;
+  material_type: string | null;
+  parse_status: string | null;
+  availability: string;
+}
+
+export interface ExecutionSubtaskRead {
+  subtask_id: string;
+  title: string;
+  subtask_type: string;
+  description: string | null;
+  status: StudyTaskStatus;
+  completed_at: string | null;
+  sort_order: number;
+}
+
+export interface ExecutionTaskRead {
+  task_id: string;
+  title: string;
+  task_date: string;
+  status: StudyTaskStatus;
+  sort_order: number;
+  subtasks: ExecutionSubtaskRead[];
+}
+
+export interface ExecutionContextRead {
+  course: ExecutionCourseRead;
+  plan: ExecutionPlanRead;
+  execution_date: string;
+  tasks: ExecutionTaskRead[];
+  current_subtask_id: string;
+  related_materials: ExecutionMaterialRead[];
+  handout_content_id: string | null;
+  task_test_content_id: string | null;
+}
+
+export interface CompletionSubtaskRead {
+  subtask_id: string;
+  status: StudyTaskStatus;
+  completed_at: string | null;
+}
+
+export interface CompletionTaskRead {
+  task_id: string;
+  status: StudyTaskStatus;
+  completed_subtask_count: number;
+  total_subtask_count: number;
+}
+
+export interface CompletionPlanRead {
+  plan_id: string;
+  status: string;
+}
+
+export interface CompletionCheckinRead {
+  date: string;
+  planned_task_count: number;
+  completed_task_count: number;
+  planned_subtask_count: number;
+  completed_subtask_count: number;
+  completed: boolean;
+  first_completed_at: string | null;
+  last_completed_at: string | null;
+}
+
+export interface SubtaskCompletionResult {
+  changed: boolean;
+  subtask: CompletionSubtaskRead;
+  task: CompletionTaskRead;
+  plan: CompletionPlanRead;
+  checkin: CompletionCheckinRead;
+}

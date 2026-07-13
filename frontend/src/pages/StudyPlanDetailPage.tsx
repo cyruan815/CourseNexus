@@ -159,6 +159,10 @@ export function StudyPlanDetailPage() {
   }
 
   const sortedTasks = [...detail.tasks].sort((left, right) => left.sort_order - right.sort_order);
+  const firstRunnableSubtask = sortedTasks
+    .flatMap((task) => subtasksByTaskId.get(task.id) ?? [])
+    .find((subtask) => subtask.status !== "completed")
+    ?? sortedTasks.flatMap((task) => subtasksByTaskId.get(task.id) ?? [])[0];
 
   return (
     <Box className="study-plan-page">
@@ -200,9 +204,19 @@ export function StudyPlanDetailPage() {
                 </Badge>
               </Group>
             </Stack>
-            <Button disabled leftSection={<IconPlayerPlay size={16} />}>
-              开始学习（待接入）
-            </Button>
+            {firstRunnableSubtask ? (
+              <Button
+                component={Link}
+                leftSection={<IconPlayerPlay size={16} />}
+                to={`/study-subtasks/${firstRunnableSubtask.id}`}
+              >
+                开始学习
+              </Button>
+            ) : (
+              <Button disabled leftSection={<IconPlayerPlay size={16} />}>
+                暂无任务
+              </Button>
+            )}
           </Group>
         </Paper>
 
@@ -243,9 +257,21 @@ export function StudyPlanDetailPage() {
                               </Text>
                             ) : null}
                           </Stack>
-                          <Badge color={subtaskTypeColor(subtask.subtask_type)} variant="light">
-                            {subtaskTypeLabel(subtask.subtask_type)}
-                          </Badge>
+                          <Stack align="flex-end" gap="xs">
+                            <Badge color={subtaskTypeColor(subtask.subtask_type)} variant="light">
+                              {subtaskTypeLabel(subtask.subtask_type)}
+                            </Badge>
+                            <Button
+                              aria-label={`进入学习：${subtask.title}`}
+                              component={Link}
+                              leftSection={<IconPlayerPlay size={14} />}
+                              size="xs"
+                              to={`/study-subtasks/${subtask.id}`}
+                              variant="light"
+                            >
+                              进入学习
+                            </Button>
+                          </Stack>
                         </Group>
                       </Paper>
                     ))}
@@ -264,7 +290,7 @@ export function StudyPlanDetailPage() {
               </Paper>
               <Paper className="study-plan-disabled-row" radius="md" withBorder>
                 <Text fw={700}>完成打卡</Text>
-                <Badge color="gray" variant="light">待接入</Badge>
+                <Badge color="teal" variant="light">执行页已接入</Badge>
               </Paper>
               <Paper className="study-plan-disabled-row" radius="md" withBorder>
                 <Text fw={700}>资料讲义 / 小测闭环</Text>

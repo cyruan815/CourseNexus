@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StudyPlanCreatePage } from "../../src/pages/StudyPlanCreatePage";
 import { StudyPlanDetailPage } from "../../src/pages/StudyPlanDetailPage";
+import { StudyTaskExecutionPage } from "../../src/pages/StudyTaskExecutionPage";
 
 const course = {
   id: "crs_123",
@@ -142,6 +143,115 @@ const savedDetail = {
   ],
 };
 
+const executionContext = {
+  course: {
+    course_id: "crs_123",
+    name: "高等数学",
+  },
+  plan: {
+    plan_id: "plan_1",
+    title: "高等数学学习计划",
+    status: "active",
+  },
+  execution_date: "2026-07-13",
+  current_subtask_id: "subtask_1",
+  related_materials: [
+    {
+      material_id: "mat_1",
+      name: "线代第一章.pdf",
+      material_type: "pdf",
+      parse_status: "parsed",
+      availability: "available",
+    },
+  ],
+  handout_content_id: null,
+  task_test_content_id: null,
+  tasks: [
+    {
+      task_id: "task_1",
+      title: "第 1 天学习任务",
+      task_date: "2026-07-13",
+      status: "not_started",
+      sort_order: 1,
+      subtasks: [
+        {
+          subtask_id: "subtask_1",
+          title: "学习: 向量空间",
+          subtask_type: "learn",
+          description: "阅读并整理概念",
+          status: "not_started",
+          completed_at: null,
+          sort_order: 1,
+        },
+        {
+          subtask_id: "subtask_2",
+          title: "练习: 基础题",
+          subtask_type: "quiz",
+          description: null,
+          status: "completed",
+          completed_at: "2026-07-13T02:00:00+00:00",
+          sort_order: 2,
+        },
+      ],
+    },
+  ],
+};
+
+const completedResult = {
+  changed: true,
+  subtask: {
+    subtask_id: "subtask_1",
+    status: "completed",
+    completed_at: "2026-07-13T03:00:00+00:00",
+  },
+  task: {
+    task_id: "task_1",
+    status: "completed",
+    completed_subtask_count: 2,
+    total_subtask_count: 2,
+  },
+  plan: {
+    plan_id: "plan_1",
+    status: "completed",
+  },
+  checkin: {
+    date: "2026-07-13",
+    planned_task_count: 1,
+    completed_task_count: 1,
+    planned_subtask_count: 2,
+    completed_subtask_count: 2,
+    completed: true,
+    first_completed_at: "2026-07-13T03:00:00+00:00",
+    last_completed_at: "2026-07-13T03:00:00+00:00",
+  },
+};
+
+const uncompletedResult = {
+  ...completedResult,
+  changed: true,
+  subtask: {
+    subtask_id: "subtask_1",
+    status: "not_started",
+    completed_at: null,
+  },
+  task: {
+    task_id: "task_1",
+    status: "in_progress",
+    completed_subtask_count: 1,
+    total_subtask_count: 2,
+  },
+  plan: {
+    plan_id: "plan_1",
+    status: "active",
+  },
+  checkin: {
+    ...completedResult.checkin,
+    completed_task_count: 0,
+    completed_subtask_count: 1,
+    completed: true,
+  },
+};
+
 const diagnosticQuestions = {
   question_version: "study_plan_diagnostic_v1",
   questions: [
@@ -245,6 +355,7 @@ function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new")
         <Routes>
           <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />
           <Route element={<StudyPlanDetailPage />} path="/courses/:courseId/study-plans/:planId" />
+          <Route element={<StudyTaskExecutionPage />} path="/study-subtasks/:subtaskId" />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -312,7 +423,7 @@ describe("study plan pages", () => {
 
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
     expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "开始学习（待接入）" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "开始学习" })).toHaveAttribute("href", "/study-subtasks/subtask_1");
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -749,5 +860,64 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
     expect(screen.getByText("未开始")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "进入学习：学习: 向量空间" })).toHaveAttribute(
+      "href",
+      "/study-subtasks/subtask_1",
+    );
+  });
+
+  it("opens the execution page from a plan subtask and completes then uncompletes it", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123")) {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContext, "req_execution"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/completion") && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as { completed: boolean };
+        return Promise.resolve(successResponse(body.completed ? completedResult : uncompletedResult, "req_completion"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/plan_1");
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "进入学习：学习: 向量空间" }));
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    expect(screen.getByText("线代第一章.pdf")).toBeInTheDocument();
+    expect(screen.getByText("第 1 天学习任务")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "取消完成" })).toBeInTheDocument());
+    expect(screen.getByText("打卡进度：2/2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "取消完成" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "完成任务" })).toBeInTheDocument());
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/completion",
+        expect.objectContaining({
+          body: JSON.stringify({ completed: true }),
+          method: "PUT",
+        }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/completion",
+        expect.objectContaining({
+          body: JSON.stringify({ completed: false }),
+          method: "PUT",
+        }),
+      );
+    });
   });
 });

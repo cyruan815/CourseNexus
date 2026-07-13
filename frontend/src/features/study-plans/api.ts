@@ -2,8 +2,10 @@ import { apiRequest } from "../../api/client";
 import type {
   CourseStudyCalendarDay,
   CourseStudyCalendarMonth,
+  ExecutionContextRead,
   GlobalCalendarMonth,
   GlobalDayTodos,
+  SubtaskCompletionResult,
   StudyPlanConfigParseRequest,
   StudyPlanConfigParseResponse,
   StudyPlanDetail,
@@ -137,4 +139,20 @@ export function fetchGlobalCalendarMonth(month: string): Promise<GlobalCalendarM
 
 export function fetchGlobalCalendarDayTodos(date: string): Promise<GlobalDayTodos> {
   return apiRequest<GlobalDayTodos>(`/api/v1/calendar/days/${date}/todos`, { method: "GET" });
+}
+
+export function fetchSubtaskExecutionContext(subtaskId: string): Promise<ExecutionContextRead> {
+  return apiRequest<ExecutionContextRead>(`/api/v1/study-subtasks/${subtaskId}/execution-context`, {
+    method: "GET",
+  });
+}
+
+export function updateSubtaskCompletion(
+  subtaskId: string,
+  completed: boolean,
+): Promise<SubtaskCompletionResult> {
+  return apiRequest<SubtaskCompletionResult>(`/api/v1/study-subtasks/${subtaskId}/completion`, {
+    method: "PUT",
+    body: { completed },
+  });
 }
