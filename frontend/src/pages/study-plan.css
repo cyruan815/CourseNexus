@@ -1,0 +1,154 @@
+.study-plan-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, #f4f8fc 0, #f7fafc 260px),
+    #f7fafc;
+  color: #1f2937;
+}
+
+.study-plan-shell {
+  display: grid;
+  gap: 14px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 20px 28px;
+}
+
+.study-plan-nav {
+  min-height: 42px;
+}
+
+.study-plan-header {
+  border-bottom: 1px solid #d9e2ec;
+  padding-bottom: 14px;
+}
+
+.study-plan-header h1,
+.study-plan-detail-hero h1 {
+  font-size: 28px;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.study-plan-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.study-plan-panel,
+.study-plan-detail-hero {
+  border-color: #d6e0eb;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.study-plan-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.study-plan-panel h2 {
+  font-size: 21px;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.study-plan-scope,
+.study-plan-diagnosis {
+  display: grid;
+  gap: 12px;
+  border-color: #d6e0eb;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.study-plan-scope {
+  border-color: #bde7df;
+  background: #f8fffd;
+}
+
+.study-plan-preview-empty {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  border-color: #bfdbfe;
+  background:
+    linear-gradient(135deg, rgba(232, 242, 255, 0.82), rgba(230, 255, 250, 0.54)),
+    #fbfdff;
+  color: #2563eb;
+  padding: 30px;
+  text-align: center;
+}
+
+.study-plan-preview-empty p {
+  max-width: 430px;
+}
+
+.study-plan-task {
+  border-color: #d6e0eb;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.study-plan-subtask {
+  border-color: #e5edf5;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.study-plan-detail-hero {
+  background:
+    linear-gradient(135deg, rgba(232, 242, 255, 0.72), rgba(255, 247, 237, 0.5)),
+    #ffffff;
+}
+
+.study-plan-goal {
+  max-width: 760px;
+  color: #334155;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.study-plan-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  align-items: start;
+}
+
+.study-plan-disabled-row {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-color: #e5edf5;
+  background: #fbfdff;
+  padding: 10px 12px;
+}
+
+@media (max-width: 900px) {
+  .study-plan-grid,
+  .study-plan-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .study-plan-shell {
+    padding: 14px 12px 24px;
+  }
+
+  .study-plan-header h1,
+  .study-plan-detail-hero h1 {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .study-plan-nav,
+  .study-plan-detail-hero > .mantine-Group-root {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

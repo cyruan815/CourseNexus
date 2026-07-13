@@ -1,0 +1,210 @@
+import { MantineProvider } from "@mantine/core";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { StudyPlanCreatePage } from "../../src/pages/StudyPlanCreatePage";
+import { StudyPlanDetailPage } from "../../src/pages/StudyPlanDetailPage";
+
+const course = {
+  id: "crs_123",
+  user_id: "usr_123",
+  name: "高等数学",
+  description: "期末复习",
+  teacher: "王老师",
+  term: "2026 Spring",
+  status: "active",
+  created_at: "2026-07-09T12:00:00+00:00",
+  updated_at: "2026-07-09T12:00:00+00:00",
+  deleted_at: null,
+};
+
+const preview = {
+  course_id: "crs_123",
+  title: "高等数学学习计划",
+  goal_text: "三天完成线性代数第一章复习",
+  start_date: "2026-07-13",
+  end_date: "2026-07-15",
+  daily_available_minutes: 60,
+  material_scope: {
+    include_all_parsed_materials: true,
+    material_ids: [],
+  },
+  tasks: [
+    {
+      title: "第 1 天学习任务",
+      task_date: "2026-07-13",
+      sort_order: 1,
+      subtasks: [
+        {
+          title: "学习: 向量空间",
+          subtask_type: "learn",
+          description: "阅读并整理概念",
+          related_material_ids: ["mat_1"],
+          sort_order: 1,
+        },
+      ],
+    },
+  ],
+};
+
+const savedDetail = {
+  plan: {
+    id: "plan_1",
+    user_id: "usr_123",
+    course_id: "crs_123",
+    title: "高等数学学习计划",
+    goal_text: "三天完成线性代数第一章复习",
+    parsed_config_json: null,
+    start_date: "2026-07-13",
+    end_date: "2026-07-15",
+    daily_available_minutes: 60,
+    status: "active",
+    created_at: "2026-07-09T12:00:00+00:00",
+    updated_at: "2026-07-09T12:00:00+00:00",
+    deleted_at: null,
+  },
+  tasks: [
+    {
+      id: "task_1",
+      plan_id: "plan_1",
+      course_id: "crs_123",
+      title: "第 1 天学习任务",
+      task_date: "2026-07-13",
+      status: "not_started",
+      sort_order: 1,
+      start_time: null,
+      end_time: null,
+      created_at: "2026-07-09T12:00:00+00:00",
+      updated_at: "2026-07-09T12:00:00+00:00",
+    },
+  ],
+  subtasks: [
+    {
+      id: "subtask_1",
+      task_id: "task_1",
+      plan_id: "plan_1",
+      course_id: "crs_123",
+      title: "学习: 向量空间",
+      subtask_type: "learn",
+      description: "阅读并整理概念",
+      related_material_ids_json: ["mat_1"],
+      status: "not_started",
+      completed_at: null,
+      sort_order: 1,
+      created_at: "2026-07-09T12:00:00+00:00",
+      updated_at: "2026-07-09T12:00:00+00:00",
+    },
+  ],
+};
+
+function successResponse(data: unknown, requestId = "req_1") {
+  return new Response(JSON.stringify({ data, meta: { request_id: requestId } }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new") {
+  render(
+    <MantineProvider>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />
+          <Route element={<StudyPlanDetailPage />} path="/courses/:courseId/study-plans/:planId" />
+        </Routes>
+      </MemoryRouter>
+    </MantineProvider>,
+  );
+}
+
+describe("study plan pages", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
+        return Promise.resolve(successResponse(savedDetail, "req_save"));
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "三天完成线性代数第一章复习" },
+    });
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
+    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存计划" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "75" } });
+    expect(screen.getByText("配置已修改，请重新生成预览后保存。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存计划" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    expect(await screen.findByText("预览已生成")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始学习（待接入）" })).toBeDisabled();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plans",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: "三天完成线性代数第一章复习",
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
+            daily_available_minutes: 75,
+            material_scope: {
+              include_all_parsed_materials: true,
+              material_ids: [],
+            },
+          }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("renders readonly detail from the detail endpoint", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/courses/crs_123")) {
+          return Promise.resolve(successResponse(course, "req_course"));
+        }
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }),
+    );
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/plan_1");
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    expect(screen.getByText("未开始")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
+  });
+});

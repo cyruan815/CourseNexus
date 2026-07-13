@@ -6,8 +6,8 @@ import type {
   GeneratedContent,
   GenerateContentRequest,
   Message,
-  StudyPlan,
 } from "./types";
+export { listStudyPlans } from "../study-plans/api";
 
 export function listCourseConversations(courseId: string): Promise<Conversation[]> {
   return apiRequest<Conversation[]>(`/api/v1/courses/${courseId}/conversations`, { method: "GET" });
@@ -39,6 +39,3 @@ export function generateCourseContent(courseId: string, payload: GenerateContent
   });
 }
 
-export function listStudyPlans(courseId: string): Promise<StudyPlan[]> {
-  return apiRequest<StudyPlan[]>(`/api/v1/courses/${courseId}/study-plans`, { method: "GET" });
-}

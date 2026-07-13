@@ -40,12 +40,12 @@ import {
   generateCourseContent,
   listCourseConversations,
   listGeneratedContents,
-  listStudyPlans,
 } from "../features/course-workspace/api";
 import type { CourseAnswer, GeneratedContent, StudyPlan } from "../features/course-workspace/types";
 import { fetchCourse } from "../features/courses/api";
 import { MaterialWorkspace } from "../features/materials/MaterialWorkspace";
 import type { MaterialScope } from "../features/materials/types";
+import { listStudyPlans } from "../features/study-plans/api";
 import type { Course } from "../types/course";
 import "./course-detail.css";
 
@@ -174,21 +174,39 @@ function CourseTopBar({ course }: { course: Course }) {
   );
 }
 
-function TodayTodoCard({ plans }: { plans: StudyPlan[] }) {
+function TodayTodoCard({ courseId, plans }: { courseId: string; plans: StudyPlan[] }) {
   const activePlan = plans[0];
 
   return (
     <Paper className="course-detail-card course-detail-todo-card" radius="md" withBorder>
       <Group justify="space-between" wrap="nowrap">
-        <Title order={2}>今日待办</Title>
+        <Title order={2}>学习计划</Title>
       </Group>
       <Stack gap="xs">
         {activePlan ? (
           <>
-            <Text fw={700} size="sm">{activePlan.title}</Text>
+            <Text
+              className="course-detail-plan-link"
+              component={Link}
+              fw={700}
+              size="sm"
+              to={`/courses/${courseId}/study-plans/${activePlan.id}`}
+            >
+              {activePlan.title}
+            </Text>
             <Text c="dimmed" size="sm">
               {activePlan.start_date} - {activePlan.end_date} · {activePlan.status}
             </Text>
+            <Button
+              className="course-detail-plan-button"
+              component={Link}
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              to={`/courses/${courseId}/study-plans/new`}
+              variant="light"
+            >
+              新建学习计划
+            </Button>
           </>
         ) : (
           <>
@@ -196,11 +214,11 @@ function TodayTodoCard({ plans }: { plans: StudyPlan[] }) {
               当前课程还没有学习计划
             </Text>
             <Button
-              aria-label="制定学习计划（待接入）"
               className="course-detail-plan-button"
-              disabled
+              component={Link}
               leftSection={<IconPlus size={16} />}
               size="sm"
+              to={`/courses/${courseId}/study-plans/new`}
               variant="light"
             >
               制定学习计划
@@ -450,7 +468,7 @@ export function CourseDetailWorkbench({
       <Box className="course-detail-shell" component="main">
         <Box className="course-detail-layout">
           <Stack className="course-detail-left" gap="sm">
-            <TodayTodoCard plans={studyPlans} />
+            <TodayTodoCard courseId={course.id} plans={studyPlans} />
             <Paper className="course-detail-card course-detail-material-card" radius="md" withBorder>
               {materialPanel}
             </Paper>

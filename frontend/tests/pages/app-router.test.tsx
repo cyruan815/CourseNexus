@@ -151,6 +151,103 @@ describe("AppRouter", () => {
     expect(await screen.findByRole("heading", { name: "知识点清单" })).toBeInTheDocument();
   });
 
+  it("renders protected study plan create route for authenticated users", async () => {
+    setSessionToken("token-123");
+    window.history.pushState({}, "", "/courses/crs_123/study-plans/new");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              id: "crs_123",
+              user_id: "usr_123",
+              name: "高等数学",
+              description: "期末复习",
+              teacher: "王老师",
+              term: "2026 Spring",
+              status: "active",
+              created_at: "2026-07-09T12:00:00+00:00",
+              updated_at: "2026-07-09T12:00:00+00:00",
+              deleted_at: null,
+            },
+            meta: { request_id: "req_1" },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    renderRouter();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+  });
+
+  it("renders protected study plan detail route for authenticated users", async () => {
+    setSessionToken("token-123");
+    window.history.pushState({}, "", "/courses/crs_123/study-plans/plan_1");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/courses/crs_123")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: {
+                  id: "crs_123",
+                  user_id: "usr_123",
+                  name: "高等数学",
+                  description: "期末复习",
+                  teacher: "王老师",
+                  term: "2026 Spring",
+                  status: "active",
+                  created_at: "2026-07-09T12:00:00+00:00",
+                  updated_at: "2026-07-09T12:00:00+00:00",
+                  deleted_at: null,
+                },
+                meta: { request_id: "req_course" },
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                plan: {
+                  id: "plan_1",
+                  user_id: "usr_123",
+                  course_id: "crs_123",
+                  title: "高等数学学习计划",
+                  goal_text: "期末复习",
+                  parsed_config_json: null,
+                  start_date: "2026-07-13",
+                  end_date: "2026-07-15",
+                  daily_available_minutes: 60,
+                  status: "active",
+                  created_at: "2026-07-09T12:00:00+00:00",
+                  updated_at: "2026-07-09T12:00:00+00:00",
+                  deleted_at: null,
+                },
+                tasks: [],
+                subtasks: [],
+              },
+              meta: { request_id: "req_plan" },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }),
+    );
+
+    renderRouter();
+
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+  });
+
   it("returns to the public entry when an authenticated request is unauthorized", async () => {
     setSessionToken("expired-token");
     window.history.pushState({}, "", "/");
