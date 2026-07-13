@@ -161,14 +161,15 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- Mermaid 只用于流程、顺序或关系图；必须提供 title、code、explanation。",
             "- Chart 只在资料提供真实数值时生成，不得编造数据。",
             "- 不生成 SVG，除非输入资料明确要求且系统 schema 支持。",
-            "- 每个 block 需要 source_citation_ids，必须来自输入 chunk_id。",
+            "- 每个 section 必须填写 source_citation_ids；block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids。",
         ]
     )
     citation_rules = "\n".join(
         [
             "引用规则：",
-            "- 每个 section 的 source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个，且必须直接相关。",
+            "- 每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个，且必须直接相关。",
             "- source_citation_ids 仅用于后端追溯和质量校验；学生导出讲义不会逐节展示 citation。",
+            "- top-level knowledge_map 默认继承所有 section 来源；第一版展示时不单独显示引用。",
             "- 正文不要写“来源如下”“引用如下”，也不要堆叠资料摘录。",
         ]
     )
@@ -222,43 +223,11 @@ def _context_value(value: str | None) -> str:
 
 
 def _collect_item_citation_chunk_ids(content: HandoutContent) -> dict[str, list[str]]:
-    content_data = content.model_dump(mode="json")
-    bindings: dict[str, list[str]] = {}
-    section_chunk_ids: list[str] = []
-    for section in sorted(content.sections, key=lambda item: item.sort_order):
-        section_data = section.model_dump(mode="json")
-        chunk_ids = _collect_source_citation_ids(section_data)
-        bindings[section.id] = chunk_ids
-        for chunk_id in chunk_ids:
-            if chunk_id not in section_chunk_ids:
-                section_chunk_ids.append(chunk_id)
-
-    extra_chunk_ids = [
-        chunk_id for chunk_id in _collect_source_citation_ids(content_data) if chunk_id not in section_chunk_ids
-    ]
-    if extra_chunk_ids:
-        bindings["__handout__"] = extra_chunk_ids
-    return {item_id: chunk_ids for item_id, chunk_ids in bindings.items() if chunk_ids}
-
-
-def _collect_source_citation_ids(value: object) -> list[str]:
-    chunk_ids: list[str] = []
-    if isinstance(value, dict):
-        source_ids = value.get("source_citation_ids")
-        if isinstance(source_ids, list):
-            for source_id in source_ids:
-                if isinstance(source_id, str) and source_id.strip() and source_id not in chunk_ids:
-                    chunk_ids.append(source_id)
-        for child in value.values():
-            for chunk_id in _collect_source_citation_ids(child):
-                if chunk_id not in chunk_ids:
-                    chunk_ids.append(chunk_id)
-    elif isinstance(value, list):
-        for child in value:
-            for chunk_id in _collect_source_citation_ids(child):
-                if chunk_id not in chunk_ids:
-                    chunk_ids.append(chunk_id)
-    return chunk_ids
+    return {
+        section.id: list(dict.fromkeys(section.source_citation_ids))
+        for section in sorted(content.sections, key=lambda item: item.sort_order)
+        if section.source_citation_ids
+    }
 
 
 def _page_label(chunk: object) -> str | int | None:

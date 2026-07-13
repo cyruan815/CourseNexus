@@ -64,6 +64,20 @@ class CitationBoundModel(BaseModel):
         return list(dict.fromkeys(stripped))
 
 
+class OptionalCitationBoundModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_citation_ids: list[str] = Field(default_factory=list, max_length=4)
+
+    @field_validator("source_citation_ids")
+    @classmethod
+    def _citation_ids_non_empty(cls, value: list[str]) -> list[str]:
+        stripped = [item.strip() for item in value]
+        if any(not item for item in stripped):
+            raise ValueError("source_citation_ids must contain non-empty strings")
+        return list(dict.fromkeys(stripped))
+
+
 class FormulaVariable(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -72,7 +86,7 @@ class FormulaVariable(BaseModel):
     unit: str | None = None
 
 
-class FormulaBlock(CitationBoundModel):
+class FormulaBlock(OptionalCitationBoundModel):
     type: Literal["formula"] = "formula"
     title: str = Field(min_length=1)
     latex: str = Field(min_length=1)
@@ -89,13 +103,13 @@ class FormulaBlock(CitationBoundModel):
         return value
 
 
-class ParagraphBlock(CitationBoundModel):
+class ParagraphBlock(OptionalCitationBoundModel):
     type: Literal["paragraph"] = "paragraph"
     role: Literal["lead", "definition", "intuition", "why", "process", "summary"] = "definition"
     text: str = Field(min_length=1)
 
 
-class ExampleBlock(CitationBoundModel):
+class ExampleBlock(OptionalCitationBoundModel):
     type: Literal["example"] = "example"
     title: str = Field(min_length=1)
     problem: str = Field(min_length=1)
@@ -118,7 +132,7 @@ class TableColumn(BaseModel):
     label: str = Field(min_length=1)
 
 
-class TableBlock(CitationBoundModel):
+class TableBlock(OptionalCitationBoundModel):
     type: Literal["table"] = "table"
     title: str = Field(min_length=1)
     columns: list[TableColumn] = Field(min_length=2, max_length=6)
@@ -135,7 +149,7 @@ class TableBlock(CitationBoundModel):
         return self
 
 
-class StepsBlock(CitationBoundModel):
+class StepsBlock(OptionalCitationBoundModel):
     type: Literal["steps"] = "steps"
     title: str = Field(min_length=1)
     steps: list[str] = Field(min_length=1, max_length=12)
@@ -148,7 +162,7 @@ class StepsBlock(CitationBoundModel):
         return value
 
 
-class CalloutBlock(CitationBoundModel):
+class CalloutBlock(OptionalCitationBoundModel):
     type: Literal["callout"] = "callout"
     tone: Literal["key", "tip", "warning", "mistake"] = "key"
     title: str = Field(min_length=1)
@@ -162,13 +176,13 @@ class MindmapNode(BaseModel):
     children: list[MindmapNode] = Field(default_factory=list, max_length=12)
 
 
-class MindmapBlock(CitationBoundModel):
+class MindmapBlock(OptionalCitationBoundModel):
     type: Literal["mindmap"] = "mindmap"
     title: str = Field(min_length=1)
     root: MindmapNode
 
 
-class MermaidBlock(CitationBoundModel):
+class MermaidBlock(OptionalCitationBoundModel):
     type: Literal["mermaid"] = "mermaid"
     title: str = Field(min_length=1)
     diagram_type: Literal["flowchart", "sequence", "class", "state", "er"] = "flowchart"
@@ -190,7 +204,7 @@ class ChartSeries(BaseModel):
     points: list[ChartPoint] = Field(min_length=1, max_length=24)
 
 
-class ChartBlock(CitationBoundModel):
+class ChartBlock(OptionalCitationBoundModel):
     type: Literal["chart"] = "chart"
     title: str = Field(min_length=1)
     chart_type: Literal["bar", "line", "pie"] = "bar"

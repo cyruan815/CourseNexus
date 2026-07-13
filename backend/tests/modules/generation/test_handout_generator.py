@@ -88,6 +88,18 @@ def test_handout_content_v2_accepts_structured_formula_and_mindmap_blocks() -> N
     assert content.knowledge_map.type == "mindmap"
 
 
+def test_handout_content_v2_allows_blocks_to_omit_citations() -> None:
+    payload = _valid_handout_v2_payload()
+    del payload["sections"][0]["blocks"][0]["source_citation_ids"]
+    del payload["knowledge_map"]["source_citation_ids"]
+
+    content = HandoutContent.model_validate(payload)
+
+    assert content.sections[0].source_citation_ids == ["chunk_1"]
+    assert content.sections[0].blocks[0].source_citation_ids == []
+    assert content.knowledge_map.source_citation_ids == []
+
+
 class PromptCapturingModelProvider(MockModelProvider):
     def __init__(self, structured_outputs: dict[type[HandoutContent], dict]) -> None:
         super().__init__(structured_outputs=structured_outputs)
@@ -130,6 +142,38 @@ def test_handout_generator_returns_structured_output_and_citations() -> None:
     assert output.content_json["overview"] == "学习关系模型的基本组成。"
     assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
 
+
+def test_handout_generator_uses_section_citations_only_for_v2_blocks() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["sections"][0]["blocks"][0]["source_citation_ids"] = ["chunk_extra"]
+    payload["knowledge_map"] = None
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(
+            _batch(),
+            MaterialContextBatch(
+                chunks=[
+                    ContextChunk(
+                        material_id="mat_1",
+                        chunk_id="chunk_extra",
+                        chunk_index=1,
+                        material_name="数据库讲义.pdf",
+                        page="2",
+                        page_index=1,
+                        heading="补充公式",
+                        content_text="额外公式说明。",
+                    )
+                ],
+                material_ids=["mat_1"],
+                estimated_tokens=10,
+            ),
+        ),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"language": "zh-CN"},
+    )
+
+    assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
 
 def test_handout_generator_prompt_includes_task_context_and_quality_requirements() -> None:
     provider = PromptCapturingModelProvider(
@@ -196,7 +240,7 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
     assert "diagnostic_explanation_style" not in prompt
     assert "不生成整章摘要" in prompt
     assert "适用条件和变量含义" in prompt
-    assert "source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个" in prompt
+    assert "每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个" in prompt
     assert "学生导出讲义不会逐节展示 citation" in prompt
     assert "正文不要写“来源如下”“引用如下”" in prompt
     assert "你的任务不是简单总结资料" in prompt
@@ -212,7 +256,9 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
     assert "知识关系优先使用 knowledge_map 的 mindmap tree" in prompt
     assert "Chart 只在资料提供真实数值时生成，不得编造数据" in prompt
     assert "不生成 SVG" in prompt
-    assert "每个 block 需要 source_citation_ids，必须来自输入 chunk_id" in prompt
+    assert "每个 section 必须填写 source_citation_ids" in prompt
+    assert "block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids" in prompt
+    assert "每个 block 需要 source_citation_ids" not in prompt
 
 
 def test_handout_generator_rejects_schema_without_citation() -> None:

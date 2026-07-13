@@ -481,7 +481,7 @@ def test_reduce_handout_outputs_preserves_v2_blocks_and_schema() -> None:
     assert reduced.item_citation_chunk_ids == {"sec_1": ["chunk_primary"], "sec_2": ["chunk_secondary"]}
 
 
-def test_generate_handout_binds_v2_section_and_block_citations(api: ApiHarness) -> None:
+def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: ApiHarness) -> None:
     class StructuredHandoutModelProvider:
         def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
             raise AssertionError("answer_question should not be called")
@@ -545,13 +545,13 @@ def test_generate_handout_binds_v2_section_and_block_citations(api: ApiHarness) 
     block = section["blocks"][0]
     assert len(section["source_citation_ids"]) == 1
     assert len(block["source_citation_ids"]) == 1
-    assert section["source_citation_ids"] != block["source_citation_ids"]
+    assert block["source_citation_ids"] == section["source_citation_ids"]
     assert all(citation_id.startswith("cit_") for citation_id in section["source_citation_ids"])
     assert all(citation_id.startswith("cit_") for citation_id in block["source_citation_ids"])
     assert "chunk_api_content" not in str(result.content_json)
     assert "chunk_api_content_second" not in str(result.content_json)
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
-    assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
+    assert {citation.chunk_id for citation in citations} == {"chunk_api_content"}
 
 
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
