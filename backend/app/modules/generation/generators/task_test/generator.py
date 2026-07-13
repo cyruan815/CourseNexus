@@ -10,6 +10,10 @@ from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialContextBatch, MaterialContextResult
 
 
+_CHOICE_OPTION_IDS = ("A", "B", "C", "D")
+_CHOICE_QUESTION_TYPES = {"single_choice", "multiple_choice"}
+
+
 class TaskTestGenerator:
     content_type = "task_test"
 
@@ -29,6 +33,7 @@ class TaskTestGenerator:
         allowed_chunk_ids = {chunk.chunk_id for chunk in context.chunks}
         prompt = _build_prompt(context=context, params=params)
         content = self.model_provider.generate_structured(prompt=prompt, output_schema=TaskTestContent)
+        _normalize_choice_question_options(content)
         _validate_task_test_content(content=content, params=params)
         item_citation_chunk_ids = _collect_item_citation_chunk_ids(content)
         citation_chunk_ids = {chunk_id for chunk_ids in item_citation_chunk_ids.values() for chunk_id in chunk_ids}
@@ -79,6 +84,7 @@ def _build_prompt(*, context: MaterialContextResult, params: TaskTestGenerationP
         "question_type 只能来自上面的题型白名单。"
         "题目 id 必须连续使用 q_1、q_2 ... q_N，sort_order 必须连续使用 1..N。"
         "单选和多选题的 options[].id 必须唯一，正确答案必须精确命中 options[].id；"
+        "单选和多选题必须恰好 4 个选项，最终选项必须按顺序使用 A、B、C、D；"
         "多选题 correct_answer 必须是无重复字符串数组；判断题 correct_answer 必须是 boolean。"
         "不得输出重复或高度相似的题干。"
         "每道题必须有答案、解析和 source_citation_ids；source_citation_ids 必须使用下方 chunk_id。\n\n"
@@ -119,6 +125,45 @@ def _validate_task_test_content(*, content: TaskTestContent, params: TaskTestGen
         if any(_is_duplicate_or_highly_similar(normalized_text, existing) for existing in normalized_texts):
             _raise_schema_invalid("测试题题干重复或高度相似", details={"question_id": question.id})
         normalized_texts.append(normalized_text)
+
+
+def _normalize_choice_question_options(content: TaskTestContent) -> None:
+    for question in sorted(content.questions, key=lambda item: item.sort_order):
+        if question.question_type not in _CHOICE_QUESTION_TYPES:
+            continue
+        if len(question.options) != len(_CHOICE_OPTION_IDS):
+            _raise_schema_invalid(
+                "选择题必须恰好包含 4 个选项",
+                details={"question_id": question.id, "actual": len(question.options)},
+            )
+
+        original_to_normalized: dict[str, str] = {}
+        for normalized_id, option in zip(_CHOICE_OPTION_IDS, question.options, strict=True):
+            original_id = option.id
+            if not original_id.strip() or original_id != original_id.strip():
+                _raise_schema_invalid("选项 id 必须为无首尾空白的非空字符串", details={"question_id": question.id})
+            if original_id in original_to_normalized:
+                _raise_schema_invalid("选择题选项 id 必须唯一", details={"question_id": question.id})
+            original_to_normalized[original_id] = normalized_id
+            option.id = normalized_id
+
+        if question.question_type == "single_choice":
+            answer = question.correct_answer
+            if not isinstance(answer, str) or answer != answer.strip() or answer not in original_to_normalized:
+                _raise_schema_invalid("单选题答案必须精确命中选项 id", details={"question_id": question.id})
+            question.correct_answer = original_to_normalized[answer]
+        elif question.question_type == "multiple_choice":
+            answers = question.correct_answer
+            if not isinstance(answers, list):
+                _raise_schema_invalid("多选题答案必须是字符串数组", details={"question_id": question.id})
+            normalized_answers: list[str] = []
+            for answer in answers:
+                if not isinstance(answer, str) or answer != answer.strip() or answer not in original_to_normalized:
+                    _raise_schema_invalid("多选题答案必须精确命中选项 id", details={"question_id": question.id})
+                normalized_answers.append(original_to_normalized[answer])
+            if len(normalized_answers) != len(set(normalized_answers)):
+                _raise_schema_invalid("多选题答案不得重复", details={"question_id": question.id})
+            question.correct_answer = normalized_answers
 
 
 def _validate_question_contract(question: object) -> None:
