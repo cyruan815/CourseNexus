@@ -160,9 +160,15 @@ Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引
 
 短期不新增二级任务 chunk 范围字段；handout 生成会从 `StudyPlan.parsed_config_json.task_snapshot` 中按当前 task/subtask 的 `sort_order` 回读 `citation_chunk_ids`。若该字段是合法字符串数组，则仅保留这些 chunk 所在的 material-context batch 内容，并用过滤后实际 chunks 的 `material_id` 集合作为 handout 覆盖校验范围；若字段缺失、结构异常或为空，则保持旧的资料级范围行为。若字段存在但过滤后没有任何 chunk，生成返回 `NO_PARSED_MATERIAL` 或等价覆盖错误并保存 failed 记录，不回退到整份资料。task-test 暂不使用该过滤，继续按二级任务关联资料生成综合测试题。
 
+### Handout prompt 契约
+
+Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯，但正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
+
 ### PDF renderer 契约
 
 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`。中文和其他 CJK 字符使用 `STSong-Light`；ASCII、数字、英文术语和公式片段使用 `Helvetica`，内容流按字符 run 切换字体，避免 `Overview`、`Nyquist/Shannon`、`C = B log2(1 + S/N)` 等英文/公式被中文 CID 字体逐字拉开。回归测试需至少确认内容流包含 Helvetica 英文 run 和 STSong 中文 run。
+
+今日讲义 PDF 只在开头 title 后展示一行来源说明，格式为 `来源说明：本讲义根据《资料名.pdf》《补充资料.pdf》中“知识点”相关内容生成。`。资料名来自 `GeneratedContentRead.source_citations[].material_name` 去重；知识点短期从 handout section 标题合并推导，后续若导出层可取得 subtask title 应优先使用 subtask title。PDF 不再在每个 section 下展示 `Sources`，不生成文末 `Source Details`，也不展示 `hit_text`，避免 `<!-- formula-not-decoded -->`、``、`` 等解析残留进入学生讲义正文。`source_citations` 仍保留在 API 返回和数据库中供内部追溯。
 
 ### task-test 默认参数
 

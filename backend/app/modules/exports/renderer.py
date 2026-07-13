@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import re
 import textwrap
 from typing import Any
@@ -142,6 +143,8 @@ def _render_handout_pdf_lines(
     lines: list[PDFLine] = []
     _append_wrapped(lines, title, font_size=16, max_chars=36)
     _append_blank(lines)
+    _append_wrapped(lines, _handout_source_notice(handout, citations_by_id), font_size=10, max_chars=72)
+    _append_blank(lines)
     _append_wrapped(lines, "Overview", font_size=13, max_chars=48)
     _append_wrapped(lines, handout.overview)
     _append_blank(lines)
@@ -151,32 +154,54 @@ def _render_handout_pdf_lines(
     _append_blank(lines)
     _append_wrapped(lines, "Sections", font_size=13, max_chars=48)
     for index, section in enumerate(sorted(handout.sections, key=lambda item: item.sort_order), start=1):
-        _append_section(lines, index, section, citations_by_id)
+        _append_section(lines, index, section)
     _append_blank(lines)
     _append_wrapped(lines, "Summary", font_size=13, max_chars=48)
     _append_wrapped(lines, handout.summary)
     return lines
 
 
-def _append_section(
-    lines: list[PDFLine],
-    index: int,
-    section: HandoutSection,
-    citations_by_id: dict[str, GeneratedContentCitationRead],
-) -> None:
+def _append_section(lines: list[PDFLine], index: int, section: HandoutSection) -> None:
     _append_blank(lines)
     _append_wrapped(lines, f"{index}. {section.title}", font_size=12, max_chars=56)
     _append_wrapped(lines, section.body)
     _append_wrapped(lines, "Key Points", font_size=11, max_chars=60)
     for point in section.key_points:
         _append_wrapped(lines, point, prefix="- ")
-    citations = _lookup_citations(section.source_citation_ids, citations_by_id)
-    if not citations:
-        _append_wrapped(lines, "Sources: unavailable", font_size=9, max_chars=78)
-        return
-    _append_wrapped(lines, "Sources:", font_size=9, max_chars=78)
-    for citation in citations:
-        _append_wrapped(lines, _format_citation(citation), font_size=9, max_chars=78, prefix="- ")
+
+
+def _handout_source_notice(
+    handout: HandoutContent,
+    citations_by_id: dict[str, GeneratedContentCitationRead],
+) -> str:
+    material_names = _unique_material_names(citations_by_id.values())
+    topic_label = _handout_topic_label(handout)
+    if material_names:
+        materials = "".join(f"《{material_name}》" for material_name in material_names)
+        return f"来源说明：本讲义根据{materials}中“{topic_label}”相关内容生成。"
+    return f"来源说明：本讲义根据当前任务相关资料中“{topic_label}”相关内容生成。"
+
+
+def _unique_material_names(citations: Iterable[GeneratedContentCitationRead]) -> list[str]:
+    names: list[str] = []
+    ordered_citations = sorted(
+        citations,
+        key=lambda citation: (citation.sort_order is None, citation.sort_order or 0, citation.material_name),
+    )
+    for citation in ordered_citations:
+        material_name = citation.material_name.strip()
+        if material_name and material_name not in names:
+            names.append(material_name)
+    return names
+
+
+def _handout_topic_label(handout: HandoutContent) -> str:
+    titles: list[str] = []
+    for section in sorted(handout.sections, key=lambda item: item.sort_order):
+        title = section.title.strip()
+        if title and title not in titles:
+            titles.append(title)
+    return "、".join(titles[:3]) if titles else "当前任务"
 
 
 def _lookup_citations(

@@ -48,8 +48,6 @@ class HandoutGenerator:
         )
 
 
-
-
 def _assert_no_known_terminology_errors(content: HandoutContent) -> None:
     for text in _handout_text_fragments(content):
         for term, expected in _KNOWN_TERM_CORRECTIONS.items():
@@ -67,6 +65,8 @@ def _handout_text_fragments(content: HandoutContent) -> list[str]:
     for section in content.sections:
         fragments.extend([section.title, section.body, *section.key_points])
     return fragments
+
+
 def build_generator(model_provider: ModelProvider) -> HandoutGenerator:
     return HandoutGenerator(model_provider=model_provider)
 
@@ -95,14 +95,46 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
         f"[chunk_id={chunk.chunk_id}; material={chunk.material_name}; page={_page_label(chunk)}]\n{chunk.content_text}"
         for chunk in context.chunks
     )
+    task_context = "\n".join(_task_context_lines(params))
+    requirements = "\n".join(
+        [
+            "生成要求：",
+            "- 只服务当前 subtask 的学习目标，不生成整章摘要或泛泛课程总结。",
+            "- 每个 section 都围绕当前 subtask 展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。",
+            "- 对物理层公式类内容，必须写清适用条件和变量含义，再给出简短例子或步骤。",
+            "- 每个 section 的 source_citation_ids 必须使用下方 chunk_id，数量为 1-4 个，且必须直接相关。",
+            "- source_citation_ids 仅用于后端追溯和质量校验；学生导出讲义不会逐节展示 citation。",
+            "- 正文不要写“来源如下”“引用如下”，也不要堆叠资料摘录。",
+        ]
+    )
     return (
-        "你是 CourseNexus 的计划学习讲义生成器。"
-        "只能使用给定资料，不得编造来源。"
-        "输出必须符合 HandoutContent schema。"
+        "你是 CourseNexus 的计划学习讲义生成器。只能使用给定资料，不得编造来源。"
+        "输出必须符合 HandoutContent schema。\n"
         f"语言：{params.language}；详细程度：{params.detail_level}。\n\n"
-        "每个 section 的 source_citation_ids 必须使用下方 chunk_id。\n\n"
+        f"{task_context}\n\n"
+        f"{requirements}\n\n"
+        "资料片段：\n"
         f"{chunks}"
     )
+
+
+def _task_context_lines(params: HandoutGenerationParameters) -> list[str]:
+    lines = [
+        "任务上下文：",
+        f"- 学习计划目标：{_context_value(params.plan_goal)}",
+        f"- 当前二级任务标题：{_context_value(params.subtask_title)}",
+        f"- 当前二级任务描述：{_context_value(params.subtask_description)}",
+    ]
+    if params.diagnostic_weak_area:
+        lines.append(f"- 诊断薄弱方向：{params.diagnostic_weak_area}")
+    if params.diagnostic_explanation_style:
+        lines.append(f"- 建议讲解风格：{params.diagnostic_explanation_style}")
+    return lines
+
+
+def _context_value(value: str | None) -> str:
+    stripped = value.strip() if isinstance(value, str) else ""
+    return stripped or "未提供"
 
 
 def _collect_item_citation_chunk_ids(content: HandoutContent) -> dict[str, list[str]]:

@@ -15,8 +15,11 @@ from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
+from app.modules.exports.renderer import _render_handout_pdf_lines
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
+from app.modules.generated_content.schemas import GeneratedContentCitationRead
+from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.materials.models import CourseMaterial
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -333,6 +336,46 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
     assert b"/F1 10 Tf" in response.content
     assert "Overview".encode().hex().upper().encode() in response.content
     assert "Nyquist/Shannon".encode().hex().upper().encode() in response.content
+
+
+def test_render_handout_pdf_lines_uses_source_notice_without_section_sources() -> None:
+    handout = HandoutContent.model_validate(_handout_json())
+    citations = {
+        "cit_task_test": GeneratedContentCitationRead(
+            id="cit_task_test",
+            material_id="mat_1",
+            chunk_id="chunk_1",
+            material_name="Chap7 物理层.pdf",
+            page="1",
+            page_index=0,
+            hit_text="<!-- formula-not-decoded -->  ",
+            sort_order=2,
+        ),
+        "cit_extra": GeneratedContentCitationRead(
+            id="cit_extra",
+            material_id="mat_2",
+            chunk_id="chunk_2",
+            material_name="补充资料.pdf",
+            page="2",
+            page_index=1,
+            hit_text="不应展示的详细摘录。",
+            sort_order=1,
+        ),
+    }
+
+    rendered = "\n".join(text for text, _ in _render_handout_pdf_lines("今日讲义", handout, citations))
+
+    assert "来源说明" in rendered
+    assert "《Chap7 物理层.pdf》" in rendered
+    assert "《补充资料.pdf》" in rendered
+    assert "Overview 与 Nyquist/Shannon" in rendered
+    assert "Sources:" not in rendered
+    assert "Sources: unavailable" not in rendered
+    assert "Source Details" not in rendered
+    assert "<!-- formula-not-decoded -->" not in rendered
+    assert "" not in rendered
+    assert "" not in rendered
+    assert "不应展示的详细摘录" not in rendered
 
 
 def test_export_handout_pdf_returns_not_found_for_cross_user_content(api: ApiHarness) -> None:

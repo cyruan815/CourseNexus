@@ -331,6 +331,8 @@ def _merge_task_content_parameters(
     target: repository.ExecutionTarget,
     parameters: dict[str, object],
 ) -> dict[str, object]:
+    if content_type == "handout":
+        return {**dict(parameters), **_handout_task_context_parameters(target)}
     if content_type != "task_test":
         return dict(parameters)
     stored_parameters = _stored_task_generation_parameters(target=target, content_type=content_type)
@@ -344,6 +346,44 @@ def _merge_task_content_parameters(
             status_code=500,
             details={"field": "generation_parameters.task_test", "errors": exc.errors()},
         ) from exc
+
+
+def _handout_task_context_parameters(target: repository.ExecutionTarget) -> dict[str, object]:
+    diagnostic_profile = _stored_diagnostic_profile(target)
+    context: dict[str, object] = {
+        "subtask_title": target.subtask.title,
+        "subtask_description": target.subtask.description or "",
+        "plan_goal": target.plan.goal_text or "",
+    }
+    weak_area = _optional_string(diagnostic_profile.get("weak_area"))
+    explanation_style = _optional_string(diagnostic_profile.get("explanation_style"))
+    if weak_area:
+        context["diagnostic_weak_area"] = weak_area
+    if explanation_style:
+        context["diagnostic_explanation_style"] = explanation_style
+    return context
+
+
+def _stored_diagnostic_profile(target: repository.ExecutionTarget) -> dict[str, object]:
+    config = target.plan.parsed_config_json
+    if not isinstance(config, dict):
+        return {}
+    profile = config.get("diagnostic_profile")
+    if isinstance(profile, dict):
+        return profile
+    confirmed_config = config.get("confirmed_config")
+    if isinstance(confirmed_config, dict):
+        confirmed_profile = confirmed_config.get("diagnostic_profile")
+        if isinstance(confirmed_profile, dict):
+            return confirmed_profile
+    return {}
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 def _stored_task_generation_parameters(
