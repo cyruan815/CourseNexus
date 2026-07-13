@@ -22,6 +22,7 @@ const draft: StudyPlanPreviewRequest = {
 
 const savePayload: StudyPlanSaveRequest = {
   ...draft,
+  title: "楂樼瓑鏁板瀛︿範璁″垝",
   client_flow: "wizard_v1",
   tasks: [
     {
