@@ -117,6 +117,15 @@
   background: #dbeafe;
 }
 
+.course-detail-plan-link {
+  color: #1f2937;
+  text-decoration: none;
+}
+
+.course-detail-plan-link:hover {
+  color: #2563eb;
+}
+
 .course-detail-material-card {
   flex: 1;
   min-height: 0;

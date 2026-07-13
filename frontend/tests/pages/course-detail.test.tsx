@@ -101,7 +101,7 @@ describe("CourseDetailPage", () => {
     expect(screen.getByRole("region", { name: "资料区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "生成内容区" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "制定学习计划（待接入）" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "制定学习计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/new");
     expect(screen.queryByRole("button", { name: "查看今日待办（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByText("生成入口")).not.toBeInTheDocument();
@@ -179,7 +179,7 @@ describe("CourseDetailPage", () => {
 
     expect(await screen.findByText("期末复习提纲")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看生成内容 期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
-    expect(screen.getByText("高等数学期末计划")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "高等数学期末计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_1");
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {
       target: { value: "什么是模型？" },

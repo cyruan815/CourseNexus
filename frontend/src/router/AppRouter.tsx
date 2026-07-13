@@ -9,6 +9,8 @@ import { GeneratedContentDetailPage } from "../pages/GeneratedContentDetailPage"
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { RegisterPage } from "../pages/RegisterPage";
+import { StudyPlanCreatePage } from "../pages/StudyPlanCreatePage";
+import { StudyPlanDetailPage } from "../pages/StudyPlanDetailPage";
 import { WelcomePage } from "../pages/WelcomePage";
 
 function RequireAuth() {
@@ -37,6 +39,8 @@ export function AppRouter() {
           <Route element={<HomePage />} path="/" />
           <Route element={<CalendarPage />} path="/calendar" />
           <Route element={<CourseDetailPage />} path="/courses/:courseId" />
+          <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />
+          <Route element={<StudyPlanDetailPage />} path="/courses/:courseId/study-plans/:planId" />
           <Route element={<GeneratedContentDetailPage />} path="/generated-contents/:generatedContentId" />
         </Route>
         <Route element={<Navigate replace to="/" />} path="*" />
