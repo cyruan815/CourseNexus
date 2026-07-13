@@ -21,8 +21,9 @@ from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
+from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.learning_execution import router as learning_router
-from app.modules.learning_execution.service import generate_task_test_for_subtask
+from app.modules.learning_execution.service import _reduce_task_content_outputs, generate_task_test_for_subtask
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -293,6 +294,78 @@ def _successful_contents(db: Session, *, subtask_id: str, content_type: str) -> 
             .order_by(AIGeneratedContent.created_at, AIGeneratedContent.id)
         ).scalars()
     )
+
+
+def _handout_output(
+    *,
+    overview: str,
+    summary: str,
+    sections: list[dict[str, object]],
+    item_citation_chunk_ids: dict[str, list[str]],
+) -> GeneratorOutput:
+    return GeneratorOutput(
+        title="今日讲义",
+        content_json={
+            "overview": overview,
+            "learning_objectives": ["解释主键和外键"],
+            "sections": sections,
+            "summary": summary,
+        },
+        item_citation_chunk_ids=item_citation_chunk_ids,
+    )
+
+
+def test_reduce_handout_outputs_preserves_section_citation_bindings_after_reindex() -> None:
+    first_output = _handout_output(
+        overview="学习数据库约束。",
+        summary="完成主键和外键学习。",
+        sections=[
+            {
+                "id": "sec_primary_key",
+                "title": "主键",
+                "body": "主键用于唯一标识表中的一行。",
+                "key_points": ["唯一标识"],
+                "source_citation_ids": ["chunk_primary"],
+                "sort_order": 1,
+            },
+            {
+                "id": "sec_foreign_key",
+                "title": "外键",
+                "body": "外键用于表达两个表之间的关系。",
+                "key_points": ["表间关系"],
+                "source_citation_ids": ["chunk_foreign"],
+                "sort_order": 2,
+            },
+        ],
+        item_citation_chunk_ids={
+            "sec_primary_key": ["chunk_primary"],
+            "sec_foreign_key": ["chunk_foreign"],
+        },
+    )
+    second_output = _handout_output(
+        overview="学习索引。",
+        summary="完成索引学习。",
+        sections=[
+            {
+                "id": "sec_index",
+                "title": "索引",
+                "body": "索引用于提高查询效率。",
+                "key_points": ["提高查询效率"],
+                "source_citation_ids": ["chunk_index", "chunk_index"],
+                "sort_order": 1,
+            }
+        ],
+        item_citation_chunk_ids={},
+    )
+
+    reduced = _reduce_task_content_outputs(content_type="handout", outputs=[first_output, second_output])
+
+    assert [section["id"] for section in reduced.content_json["sections"]] == ["sec_1", "sec_2", "sec_3"]
+    assert reduced.item_citation_chunk_ids == {
+        "sec_1": ["chunk_primary"],
+        "sec_2": ["chunk_foreign"],
+        "sec_3": ["chunk_index"],
+    }
 
 
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:

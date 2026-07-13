@@ -156,6 +156,8 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 `content_json.sections[].source_citation_ids` / `content_json.questions[].source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
 
+Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引用绑定：section id 重写为 `sec_N` 后，`GeneratorOutput.item_citation_chunk_ids` 要把旧 section id 对应的 chunk id 迁移到新 id；若 generator 未提供该映射，则回退使用该 section 自身的 `source_citation_ids` 并去重。Handout reducer 不再把所有 section 的引用合成总集合后绑定给每个 section，避免 PDF 每节显示整章引用。
+
 ### PDF renderer 契约
 
 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`。中文和其他 CJK 字符使用 `STSong-Light`；ASCII、数字、英文术语和公式片段使用 `Helvetica`，内容流按字符 run 切换字体，避免 `Overview`、`Nyquist/Shannon`、`C = B log2(1 + S/N)` 等英文/公式被中文 CID 字体逐字拉开。回归测试需至少确认内容流包含 Helvetica 英文 run 和 STSong 中文 run。
