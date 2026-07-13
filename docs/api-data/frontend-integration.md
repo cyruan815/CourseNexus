@@ -685,6 +685,20 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 前端调用前应先通过 execution-context 获取 `handout_content_id`，或通过 `GET /api/v1/generated-contents/{generated_content_id}` 确认内容为当前用户可访问的成功 `handout`。轻量阶段测试题不走 PDF；`task_test` 调用该接口会返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`。`EXPORT_CONTENT_NOT_READY` 表示生成未成功；`EXPORT_CONTENT_INVALID` 表示历史讲义结构畸形；`EXPORT_FAILED` 表示 PDF 渲染失败。
 
+### 3.23.3 学习计划自然语言配置回填
+
+`POST /api/v1/courses/{course_id}/study-plan-config-parses`
+
+要求：Bearer token。接口不写数据库，只把 `goal_text` 和 `material_scope` 回填为配置确认页可用字段。
+
+响应契约要点：
+
+- 后端保留请求原始 `goal_text` 和 `material_scope`，模型只负责抽取日期、每日时间、学习方式和隐藏策略偏好。
+- `preference` 为 `fast_track`、`balanced`、`mastery`、`sprint` 或 `null`；新向导进入 preview 前必须提交用户确认后的非空学习方式。
+- `preference_overrides` 可包含 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity`，用于后续策略追踪，不作为当前主控件。
+- `recommended_daily_minutes` 固定由 preview 估算，配置回填阶段不猜测；没有每日时间时 `daily_available_minutes=null`、`daily_minutes_source=null`。
+- `unresolved_fields` 只包含阻塞补充的用户配置字段，不包含 `recommended_daily_minutes`、`coverage`、`capacity` 等系统字段。
+- `needs_confirmation_fields` 用于提示确认但不一定阻塞；当前至少包含 `preference`。
 ### 3.24 学前诊断问题
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
@@ -1094,3 +1108,57 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 - `GeneratedContentRead.source_citations` 始终是导出引用的事实来源。`handout.content_json.sections[].source_citation_ids` 和 `task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id；前端展示引用时按 `source_citations[].id` 建映射。
 - 任务测试题 Markdown 导出在有效引用存在时不应出现 `Sources: unavailable`；若出现该文本，应视为引用链断裂或历史坏数据。
 - 今日讲义 PDF 混排由后端 renderer 处理：中文使用 `STSong-Light`，英文、数字、公式和 `Overview`、`Nyquist/Shannon` 等术语使用 `Helvetica`。前端只按文件流下载或预览，不需要自行修复字体。
+
+### 3.23.4 任务讲义详情前端展示契约
+
+`handout` 是二级任务级讲义。前端应通过执行上下文和生成内容详情接口读取，不应自行从资料或引用拼装讲义正文。
+
+推荐调用链：
+
+1. `POST /api/v1/study-subtasks/{subtask_id}/handouts`：按需生成当前二级任务讲义。默认复用最近一次成功内容；`force_regenerate=true` 才重新生成。
+2. `GET /api/v1/study-subtasks/{subtask_id}/execution-context`：读取当前二级任务上下文，其中 `handout_content_id` 指向最近一次成功生成的当前二级任务讲义。
+3. `GET /api/v1/generated-contents/{generated_content_id}`：读取完整 `GeneratedContentRead` 供详情页展示。
+
+`GeneratedContentRead` 中 handout 的前端字段口径：
+
+```json
+{
+  "content_type": "handout",
+  "title": "Nyquist与Shannon公式（补基础）讲义",
+  "study_subtask_id": "sub_123",
+  "content_json": {
+    "overview": "本讲义聚焦...",
+    "learning_objectives": ["掌握 Nyquist 公式"],
+    "sections": [
+      {
+        "id": "sec_1",
+        "title": "Nyquist 公式",
+        "body": "...",
+        "key_points": ["C = 2B log2 L"],
+        "source_citation_ids": ["cit_123"],
+        "sort_order": 1
+      }
+    ],
+    "summary": "..."
+  },
+  "source_citations": [
+    {
+      "id": "cit_123",
+      "material_name": "Chap7 物理层.pdf",
+      "page": "15",
+      "page_index": 14,
+      "hit_text": "原始 chunk 命中文本"
+    }
+  ]
+}
+```
+
+前端展示规则：
+
+- 讲义正文使用 `content_json` 结构化渲染，不使用 Markdown renderer，不使用 `dangerouslySetInnerHTML`。
+- 标题直接使用 `GeneratedContentRead.title`；新生成内容应为 `{二级任务标题}讲义`。
+- `source_citations[].hit_text` 是内部追溯文本，不是无条件展示给学生的引用摘录。
+- 引用面板默认展示 `material_name + page/page_index`；当 `hit_text` 包含 `formula-not-decoded`、``、`` 等解析残留时，必须隐藏摘录，只保留资料名和页码。
+- 若 `sections[].source_citation_ids` 找不到对应 `source_citations[].id`，前端不得补造来源；应展示引用缺失兜底或仅隐藏该条绑定。
+
+任务测试题 Markdown 导出也遵循同一引用展示规则：有效 citation 存在但 `hit_text` 不适合展示时，只输出资料名和页码，不输出 `Sources: unavailable`。

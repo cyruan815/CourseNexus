@@ -74,14 +74,16 @@ def _build_prompt(*, context: MaterialContextResult, params: TaskTestGenerationP
         f"[chunk_id={chunk.chunk_id}; material={chunk.material_name}; page={_page_label(chunk)}]\n{chunk.content_text}"
         for chunk in context.chunks
     )
+    question_type_counts_requirement = _question_type_counts_requirement(params)
     return (
         "你是 CourseNexus 的计划学习任务测试题生成器。"
         "只能使用给定资料，不得编造来源。"
         "输出必须符合 TaskTestContent schema。"
-        f"题数：{params.question_count}；题型：{', '.join(params.question_types)}；难度：{params.difficulty}。\n\n"
+        f"题数：{params.question_count}；题型：{', '.join(params.question_types)}；{question_type_counts_requirement}难度：{params.difficulty}。\n\n"
         "请先在内部汇总下方所有 chunk 的候选考点，再只输出最终题目。"
         "题数是最终硬约束，questions 长度必须严格等于题数，不能多也不能少。"
         "question_type 只能来自上面的题型白名单。"
+        "如果给出了每种题型数量，必须严格按每种题型数量输出，不得自行平均或调整。"
         "题目 id 必须连续使用 q_1、q_2 ... q_N，sort_order 必须连续使用 1..N。"
         "单选和多选题的 options[].id 必须唯一，正确答案必须精确命中 options[].id；"
         "单选和多选题必须恰好 4 个选项，最终选项必须按顺序使用 A、B、C、D；"
@@ -90,6 +92,15 @@ def _build_prompt(*, context: MaterialContextResult, params: TaskTestGenerationP
         "每道题必须有答案、解析和 source_citation_ids；source_citation_ids 必须使用下方 chunk_id。\n\n"
         f"{chunks}"
     )
+
+
+def _question_type_counts_requirement(params: TaskTestGenerationParameters) -> str:
+    if not params.question_type_counts:
+        return ""
+    counts = "，".join(
+        f"{item.question_type} {item.question_count} 道" for item in params.question_type_counts
+    )
+    return f"每种题型数量：{counts}；"
 
 
 def _validate_task_test_content(*, content: TaskTestContent, params: TaskTestGenerationParameters) -> None:
@@ -118,6 +129,8 @@ def _validate_task_test_content(*, content: TaskTestContent, params: TaskTestGen
     if invalid_types:
         _raise_schema_invalid("测试题题型不在请求白名单内", details={"invalid_question_types": invalid_types})
 
+    _validate_question_type_counts(questions=questions, params=params)
+
     normalized_texts: list[str] = []
     for question in questions:
         _validate_question_contract(question)
@@ -125,6 +138,22 @@ def _validate_task_test_content(*, content: TaskTestContent, params: TaskTestGen
         if any(_is_duplicate_or_highly_similar(normalized_text, existing) for existing in normalized_texts):
             _raise_schema_invalid("测试题题干重复或高度相似", details={"question_id": question.id})
         normalized_texts.append(normalized_text)
+
+
+def _validate_question_type_counts(*, questions: list[object], params: TaskTestGenerationParameters) -> None:
+    if not params.question_type_counts:
+        return
+    expected_counts = {item.question_type: item.question_count for item in params.question_type_counts}
+    actual_counts = {question_type: 0 for question_type in expected_counts}
+    for question in questions:
+        question_type = getattr(question, "question_type")
+        if question_type in actual_counts:
+            actual_counts[question_type] += 1
+    if actual_counts != expected_counts:
+        _raise_schema_invalid(
+            "测试题每种题型数量不符合请求",
+            details={"expected_question_type_counts": expected_counts, "actual_question_type_counts": actual_counts},
+        )
 
 
 def _normalize_choice_question_options(content: TaskTestContent) -> None:

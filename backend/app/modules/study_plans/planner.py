@@ -60,9 +60,11 @@ _PREFERENCE_PLANNER_STRATEGIES = {
 def derive_planner_strategy(
     preference: object,
     diagnostic_profile: dict[str, object] | None = None,
+    preference_overrides: object | None = None,
 ) -> dict[str, object]:
     normalized_preference = _normalize_strategy_preference(preference)
-    base_strategy = _PREFERENCE_PLANNER_STRATEGIES[normalized_preference]
+    base_strategy = dict(_PREFERENCE_PLANNER_STRATEGIES[normalized_preference])
+    base_strategy.update(_planner_preference_overrides(preference_overrides))
     profile = diagnostic_profile if isinstance(diagnostic_profile, dict) else {}
     return {
         "preference": normalized_preference,
@@ -77,6 +79,24 @@ def derive_planner_strategy(
     }
 
 
+
+def _planner_preference_overrides(preference_overrides: object | None) -> dict[str, object]:
+    if preference_overrides is None:
+        return {}
+    if isinstance(preference_overrides, dict):
+        raw = preference_overrides
+    elif hasattr(preference_overrides, "model_dump"):
+        raw = preference_overrides.model_dump(mode="json")
+    else:
+        raw = {
+            key: getattr(preference_overrides, key, None)
+            for key in ("content_depth", "example_intensity", "assessment_intensity", "review_intensity")
+        }
+    return {
+        key: raw[key]
+        for key in ("content_depth", "example_intensity", "assessment_intensity", "review_intensity")
+        if isinstance(raw, dict) and raw.get(key) is not None
+    }
 def _normalize_strategy_preference(preference: object) -> str:
     if preference is None:
         return "balanced"
@@ -301,7 +321,7 @@ def _build_reduce_prompt(
 ) -> str:
     mapped_json = [batch.model_dump(mode="json") for batch in mapped_batches]
     course_line = f"课程名称：{course_name}" if course_name else "课程名称：未提供，标题必须忠实使用 goal_text 中的课程名"
-    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, getattr(payload, "preference_overrides", None))
     strategy_prompt_lines = _planner_strategy_prompt_lines(planner_strategy)
     diagnostic_prompt_lines = _diagnostic_profile_prompt_lines(payload.diagnostic_profile)
     return "\n".join(
