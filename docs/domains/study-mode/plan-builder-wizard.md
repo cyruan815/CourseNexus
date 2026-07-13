@@ -774,3 +774,17 @@ else:
 前端不会在本地推导 `prior_knowledge_level`、`foundation_needed`、`weak_topics` 或 `explanation_style`，这些字段必须来自 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 的响应。若后端返回 `NO_PARSED_MATERIAL` 或 `DIAGNOSTIC_STALE`，向导停留在诊断区域并提示用户上传/等待解析或重新获取题目。
 
 创建页会将当前表单草稿按 courseId 写入浏览器 `localStorage`，刷新后恢复目标、日期、每日时长和已生成的诊断 profile；保存成功后清理草稿。preview 结果仍只保存在页面内存中，后续如需刷新后继续等待同一次生成，应把 preview 改造成后端异步任务或持久化 draft/preview 资源。
+
+## 2026-07-13 前端 C3 配置解析回填落地
+
+`/courses/:courseId/study-plans/new` 已接入 Step 1/2 的自然语言配置解析辅助。用户在学习目标文本框输入一句目标后，可以点击“自动解析配置”；前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，请求体只包含当前 `goal_text` 和固定 `material_scope`，不写数据库、不保存计划。
+
+回填规则：
+
+- 后端明确返回的 `goal_text`、`start_date`、`end_date`、`daily_available_minutes` 和 `preference` 会回填到可编辑表单。
+- 后端只返回 `start_date + duration_days` 且 schema 未带 `end_date` 时，前端按确定性日期范围推导展示用 `end_date`；无法推导时不猜测。
+- `unresolved_fields` 会在配置区显示为“需手动补齐”；用户手动编辑对应字段后，从未解析提示中移除该字段。
+- 解析回填改变了 preview 请求体，因此已有 preview 会立即标记为过期并禁用保存。
+- 回填 `goal_text` 会清空已有 `diagnostic_profile`；仅回填日期、每日时长或学习方式时保留诊断结果，但仍要求重新生成 preview。
+
+测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加配置解析回填用例；当前本地 Vitest 仍可能被 `entities ./decode` exports 问题挡在收集前，验证时需如实记录。

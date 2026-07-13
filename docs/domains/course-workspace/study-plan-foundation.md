@@ -9,14 +9,17 @@
 - 学习计划 API 独立封装在 `frontend/src/features/study-plans/api.ts`，类型在 `frontend/src/features/study-plans/types.ts`。
 - 课程详情左侧学习计划卡片读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时跳转创建页，有计划时计划标题跳转详情页。
 - 2026-07-13 C1 已将前端学习计划 API/type 适配层扩展到 S02 生命周期接口：配置解析、学前诊断问题、诊断 profile、preview、保存、列表、详情、重生成 preview、替换和删除。该变更只提供 adapter，不在现有页面启用诊断、重生成、替换或删除交互。
+- 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 会显示为“需手动补齐”，不会由前端静默猜测。
 
 ## 创建页状态流转
 
 - 用户手动填写 `goal_text`、`start_date`、`end_date`、`daily_available_minutes`。
+- 用户也可以点击“自动解析配置”，用当前 `goal_text` 和固定 `material_scope` 请求配置解析；解析结果只作为表单回填，用户仍需确认后再生成 preview。
 - `material_scope` 当前固定为 `{ include_all_parsed_materials: true, material_ids: [] }`。
-- `preference` 当前固定发送英文枚举 `balanced`；学情诊断后端契约已存在，但本基础页暂不接入诊断向导。
+- `preference` 由创建页学习方式控件维护，默认 `balanced`，解析回填可更新为 `fast_track`、`balanced`、`mastery` 或 `sprint`；API 仍只发送英文枚举，界面展示中文标签。
 - 点击“生成预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`。
 - 前端保存产生预览时的请求快照；若表单字段在预览后变化，旧预览标记为过期并禁用保存。
+- 配置解析回填属于会改变 preview 请求体的操作；如果已有 preview，回填后必须标记为过期并禁用保存。
 - 点击“保存计划”调用 `POST /api/v1/courses/{course_id}/study-plans`，请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview 中展示过的 `tasks`；保存成功后跳转计划详情页。同一份未变化 preview 的保存重试复用同一个幂等键，只有重新生成 preview 后才创建新的保存幂等键。
 
 ## 详情页状态流转
@@ -59,6 +62,7 @@
 - 后端返回的 `StudyPlanDiagnosticProfile` 保存在创建页状态中；后续点击“生成预览”时作为 `diagnostic_profile` 放入 `StudyPlanPreviewRequest`。
 - 学情诊断是可选增强项；未完成诊断时，创建页仍允许直接生成 preview，且请求体不携带 `diagnostic_profile`。
 - 修改 `goal_text` 或重新获取诊断题会清空已有诊断 profile；修改日期或每日时长只会让 preview 过期，默认保留诊断结果。
+- 配置解析回填 `goal_text` 时同样清空已有诊断 profile；仅回填日期、每日时长或学习方式时保留已生成 profile，但旧 preview 仍过期。
 - 创建页会按 courseId 将 `goal_text`、日期、每日时长和已生成的诊断 profile 写入浏览器 `localStorage` 草稿；刷新页面后恢复这些输入，保存计划成功后清理草稿。preview 结果本身不持久化，刷新期间仍在运行的后端 preview 请求不会自动回填到新页面。
 - `NO_PARSED_MATERIAL` 在向导内提示先上传并等待资料解析完成；`DIAGNOSTIC_STALE` 提示重新获取问题并作答；其他错误透传 API message 或显示通用失败提示。
 

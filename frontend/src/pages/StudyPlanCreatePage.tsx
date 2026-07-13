@@ -7,6 +7,7 @@ import {
   Divider,
   Group,
   Paper,
+  Select,
   Skeleton,
   Stack,
   Text,
@@ -20,17 +21,20 @@ import {
   IconClipboardCheck,
   IconLock,
   IconRefresh,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { fetchCourse } from "../features/courses/api";
 import {
+  parseStudyPlanConfig,
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
 import { DiagnosticWizard } from "../features/study-plans/components/DiagnosticWizard";
 import type {
+  PlanPreference,
   StudyPlanDiagnosticProfile,
   StudyPlanPreview,
   StudyPlanPreviewRequest,
@@ -51,6 +55,7 @@ interface StudyPlanCreateDraftStorage {
   startDate?: string;
   endDate?: string;
   dailyMinutes?: string;
+  preference?: PlanPreference;
   diagnosticProfile?: StudyPlanDiagnosticProfile | null;
 }
 
@@ -90,6 +95,43 @@ function errorMessage(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+const preferenceOptions: Array<{ value: PlanPreference; label: string }> = [
+  { value: "fast_track", label: "快速通关" },
+  { value: "balanced", label: "均衡学习" },
+  { value: "mastery", label: "深入掌握" },
+  { value: "sprint", label: "冲刺强化" },
+];
+
+const preferenceLabels: Record<PlanPreference, string> = {
+  fast_track: "快速通关",
+  balanced: "均衡学习",
+  mastery: "深入掌握",
+  sprint: "冲刺强化",
+};
+
+const unresolvedFieldLabels: Record<string, string> = {
+  goal_text: "学习目标",
+  start_date: "开始日期",
+  end_date: "结束日期",
+  duration_days: "学习天数",
+  daily_available_minutes: "每日可用学习时长",
+  preference: "学习方式",
+};
+
+function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
+  if (!startDate || !durationDays) {
+    return null;
+  }
+
+  const parsedStartDate = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(parsedStartDate.getTime())) {
+    return null;
+  }
+
+  parsedStartDate.setDate(parsedStartDate.getDate() + durationDays - 1);
+  return parsedStartDate.toISOString().slice(0, 10);
 }
 
 function subtaskTypeLabel(type: string): string {
@@ -187,10 +229,13 @@ export function StudyPlanCreatePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
+  const [preference, setPreference] = useState<PlanPreference>(defaultPreference);
   const [diagnosticProfile, setDiagnosticProfile] = useState<StudyPlanDiagnosticProfile | null>(null);
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
   const [previewSaveIdempotencyKey, setPreviewSaveIdempotencyKey] = useState<string | null>(null);
+  const [unresolvedFields, setUnresolvedFields] = useState<string[]>([]);
+  const [isParsingConfig, setIsParsingConfig] = useState(false);
   const [isPreviewStale, setIsPreviewStale] = useState(false);
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -209,10 +254,12 @@ export function StudyPlanCreatePage() {
     setStartDate(storedDraft?.startDate ?? "");
     setEndDate(storedDraft?.endDate ?? "");
     setDailyMinutes(storedDraft?.dailyMinutes ?? "");
+    setPreference(storedDraft?.preference ?? defaultPreference);
     setDiagnosticProfile(storedDraft?.diagnosticProfile ?? null);
     setPreview(null);
     setPreviewSnapshot(null);
     setPreviewSaveIdempotencyKey(null);
+    setUnresolvedFields([]);
     setIsPreviewStale(false);
     setIsDraftHydrated(true);
   }, [courseId]);
@@ -227,9 +274,10 @@ export function StudyPlanCreatePage() {
       startDate,
       endDate,
       dailyMinutes,
+      preference,
       diagnosticProfile,
     });
-  }, [courseId, dailyMinutes, diagnosticProfile, endDate, goalText, isDraftHydrated, startDate]);
+  }, [courseId, dailyMinutes, diagnosticProfile, endDate, goalText, isDraftHydrated, preference, startDate]);
 
   useEffect(() => {
     let ignore = false;
@@ -275,7 +323,7 @@ export function StudyPlanCreatePage() {
       start_date: startDate,
       end_date: endDate,
       daily_available_minutes: minutes,
-      preference: defaultPreference,
+      preference,
       material_scope: defaultScope,
     };
 
@@ -287,7 +335,7 @@ export function StudyPlanCreatePage() {
     }
 
     return baseDraft;
-  }, [dailyMinutes, diagnosticProfile, endDate, goalText, startDate]);
+  }, [dailyMinutes, diagnosticProfile, endDate, goalText, preference, startDate]);
 
   function validationMessage(): string | null {
     if (!goalText.trim()) {
@@ -306,8 +354,15 @@ export function StudyPlanCreatePage() {
     return null;
   }
 
-  function updateField(next: () => void) {
+  function markFieldResolved(fieldName: string) {
+    setUnresolvedFields((currentFields) => currentFields.filter((field) => field !== fieldName));
+  }
+
+  function updateField(next: () => void, resolvedField?: string) {
     next();
+    if (resolvedField) {
+      markFieldResolved(resolvedField);
+    }
     if (preview) {
       setIsPreviewStale(true);
     }
@@ -317,7 +372,55 @@ export function StudyPlanCreatePage() {
     updateField(() => {
       setGoalText(nextGoalText);
       setDiagnosticProfile(null);
-    });
+    }, "goal_text");
+  }
+
+  async function handleParseConfig() {
+    if (!courseId) {
+      return;
+    }
+
+    const trimmedGoalText = goalText.trim();
+    if (!trimmedGoalText) {
+      setError("请先输入一句学习目标，再解析配置。");
+      return;
+    }
+
+    setIsParsingConfig(true);
+    setError(null);
+
+    try {
+      const parsedConfig = await parseStudyPlanConfig(courseId, {
+        goal_text: trimmedGoalText,
+        material_scope: defaultScope,
+      });
+      const nextEndDate = parsedConfig.end_date ?? resolveEndDate(parsedConfig.start_date, parsedConfig.duration_days);
+
+      if (parsedConfig.goal_text) {
+        setGoalText(parsedConfig.goal_text);
+        setDiagnosticProfile(null);
+      }
+      if (parsedConfig.start_date) {
+        setStartDate(parsedConfig.start_date);
+      }
+      if (nextEndDate) {
+        setEndDate(nextEndDate);
+      }
+      if (parsedConfig.daily_available_minutes) {
+        setDailyMinutes(String(parsedConfig.daily_available_minutes));
+      }
+      if (parsedConfig.preference) {
+        setPreference(parsedConfig.preference);
+      }
+      setUnresolvedFields(parsedConfig.unresolved_fields);
+      if (preview) {
+        setIsPreviewStale(true);
+      }
+    } catch (nextError) {
+      setError(errorMessage(nextError, "解析配置失败"));
+    } finally {
+      setIsParsingConfig(false);
+    }
   }
 
   function handleDiagnosticProfileReady(nextProfile: StudyPlanDiagnosticProfile) {
@@ -412,7 +515,7 @@ export function StudyPlanCreatePage() {
           >
             返回课程
           </Button>
-          <Badge color="orange" variant="light">自动解析后续接入</Badge>
+          <Badge color="teal" variant="light">自动解析已接入</Badge>
         </Group>
 
         <Group align="flex-start" className="study-plan-header" justify="space-between">
@@ -420,7 +523,7 @@ export function StudyPlanCreatePage() {
             <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>
             <Title order={1}>创建学习计划</Title>
             <Text c="dimmed">
-              先由用户手动填写基础配置，再调用真实 preview。保存会提交已确认的预览任务树。
+              可先用自然语言解析回填配置，再由用户确认后调用真实 preview。保存会提交已确认的预览任务树。
             </Text>
           </Stack>
           <Badge color="teal" size="lg" variant="light">契约稳定版</Badge>
@@ -443,9 +546,11 @@ export function StudyPlanCreatePage() {
             <Group justify="space-between" wrap="nowrap">
               <Stack gap={2}>
                 <Title order={2}>计划配置</Title>
-                <Text c="dimmed" size="sm">当前使用“均衡学习”策略，保存会提交已确认的预览任务树。</Text>
+                <Text c="dimmed" size="sm">
+                  学习方式：{preferenceLabels[preference]}，保存采用 wizard_v1 契约。
+                </Text>
               </Stack>
-              <Badge color="orange" variant="outline">学情诊断后续接入</Badge>
+              <Badge color="teal" variant="outline">配置解析回填</Badge>
             </Group>
 
             <Textarea
@@ -455,18 +560,28 @@ export function StudyPlanCreatePage() {
               placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
               value={goalText}
             />
-            <Text c="dimmed" size="sm">保存为学习目标，并随请求发送默认“均衡学习”策略。</Text>
+            <Group justify="space-between" wrap="nowrap">
+              <Text c="dimmed" size="sm">保存为 goal_text，并随请求发送当前学习方式。</Text>
+              <Button
+                leftSection={<IconSparkles size={16} />}
+                loading={isParsingConfig}
+                onClick={handleParseConfig}
+                variant="light"
+              >
+                自动解析配置
+              </Button>
+            </Group>
 
             <Group align="flex-start" grow>
               <TextInput
                 label="开始日期"
-                onChange={(event) => updateField(() => setStartDate(event.currentTarget.value))}
+                onChange={(event) => updateField(() => setStartDate(event.currentTarget.value), "start_date")}
                 type="date"
                 value={startDate}
               />
               <TextInput
                 label="结束日期"
-                onChange={(event) => updateField(() => setEndDate(event.currentTarget.value))}
+                onChange={(event) => updateField(() => setEndDate(event.currentTarget.value), "end_date")}
                 type="date"
                 value={endDate}
               />
@@ -475,12 +590,36 @@ export function StudyPlanCreatePage() {
             <TextInput
               label="每日可用学习时长"
               min={minimumDailyMinutes}
-              onChange={(event) => updateField(() => setDailyMinutes(event.currentTarget.value))}
+              onChange={(event) => updateField(() => setDailyMinutes(event.currentTarget.value), "daily_available_minutes")}
               placeholder="60"
               rightSection={<Text c="dimmed" size="xs">分钟</Text>}
               type="number"
               value={dailyMinutes}
             />
+
+            <Select
+              allowDeselect={false}
+              data={preferenceOptions}
+              label="学习方式"
+              onChange={(value) => {
+                if (value) {
+                  updateField(() => setPreference(value as PlanPreference), "preference");
+                }
+              }}
+              value={preference}
+            />
+
+            {unresolvedFields.length > 0 ? (
+              <Alert color="yellow" role="status" title="仍需手动补齐" variant="light">
+                <Stack gap={4}>
+                  {unresolvedFields.map((fieldName) => (
+                    <Text key={fieldName} size="sm">
+                      {(unresolvedFieldLabels[fieldName] ?? fieldName)}：需手动补齐
+                    </Text>
+                  ))}
+                </Stack>
+              </Alert>
+            ) : null}
 
             <Paper className="study-plan-scope" radius="md" withBorder>
               <Group justify="space-between" wrap="nowrap">
