@@ -1,5 +1,9 @@
 # Runtime Flows v0.1
 
+## 2026-07-13 Independent Generation POC Flow
+
+The five independent generated-content modules use: scope validation -> all parsed chunks in stable order -> one merged context -> total token check -> one structured LLM call -> final schema validation -> stable IDs/order -> `ai_generated_contents`. They do not use batch map/reduce or write citations. Other subsystems may retain their own retrieval or batching flow.
+
 > 本文记录 CourseNexus 的关键运行链路。它关注模块如何协作，不展开具体 API 字段；字段和响应格式见 [../api-data/index.md](../api-data/index.md)。
 
 ## 当前基础设施落地范围（2026-07-10）
@@ -86,7 +90,7 @@ sequenceDiagram
 
 适用于 Quiz、Flashcard、Mindmap、复习提纲、知识点清单。
 
-G01已落地用途模型注入、全材料批次、生成器工厂、引用allow-list与ID回填、原子存储和引用响应。G02-G06 已分别实现 Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 的真实结构化提示词、map/reduce、业务 schema、引用绑定和质量测试；占位 fallback 只在具体生成器模块文件缺失时启用。
+G01-G06 已落地用途模型注入、完整选定材料上下文、总 token 检查、生成器工厂、单次结构化模型调用、最终业务 schema 校验、稳定 ID/顺序和 `AIGeneratedContent` 保存。五类链路不创建生成内容引用；Mindmap 在保存前额外调用后端 `markmap-lib` 预处理 Markdown。
 
 ```mermaid
 sequenceDiagram
@@ -97,28 +101,24 @@ sequenceDiagram
     participant Store as generated-content
 
     FE->>O: generate(content_type, course_id, material_scope, params)
-    O->>CTX: iter_material_context_batches(course_id, material_scope, token_budget)
-    CTX-->>O: all selected chunks in ordered batches
-    loop every material batch
-        O->>G: extract typed intermediate content
-        G-->>O: intermediate result + citation chunk ids
-    end
-    O->>G: reduce/deduplicate into final schema
-    G-->>O: content_json + item_id到chunk_id候选
-    O->>O: 过滤越界引用并回填citation ID
-    O->>Store: atomic save AIGeneratedContent + SourceCitation
-    Store-->>FE: GeneratedContentRead + source_citations
+    O->>CTX: resolve_generation_context(course_id, material_scope, total_token_limit)
+    CTX-->>O: complete ordered context or explicit overflow
+    O->>G: generate(context, parameters)
+    G->>G: one structured model call + final schema validation
+    G-->>O: title + content_json
+    O->>Store: save AIGeneratedContent
+    Store-->>FE: GeneratedContentRead + source_citations=[]
 ```
 
 解耦规则：
 
 - Flashcard、Mindmap、Quiz 等模块互不依赖。
-- 每份选中且已解析资料都必须进入至少一个 batch；这条链路不使用普通 Top-K 检索。
-- 超长材料使用 map-reduce，不能静默截断后宣称已使用全部材料。
+- 每份选中且已解析资料的全部 chunk 都进入一个完整上下文；这条链路不使用普通 Top-K 检索。
+- 超长材料返回 `MATERIAL_CONTEXT_TOO_LARGE`，不能静默截断后宣称已使用全部材料。
 - 每个模块只关心自己的输出结构。
 - 前端渲染方式不影响后端生成模块边界。
 - 生成内容统一进入 `AIGeneratedContent`，历史列表按 `content_type` 区分。
-- 参数、权限和无资料错误不落库；模型、schema和材料覆盖错误保存无部分JSON/引用的failed记录。
+- 参数、权限、无资料和上下文超限错误不落库；模型、最终 schema 和 Markmap 预处理错误保存无部分 JSON 的 failed 记录。
 
 ## 4. 学习计划生成链路
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class OutlineParameters(BaseModel):
@@ -13,28 +13,28 @@ class OutlineParameters(BaseModel):
     detail_level: Literal["concise", "standard", "detailed"] = "standard"
 
 
-class OutlineCandidate(BaseModel):
+class OutlineDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=160)
     summary: str = Field(min_length=1, max_length=2000)
     review_suggestion: str = Field(min_length=1, max_length=800)
-    source_order_key: str = Field(min_length=1, max_length=200)
-    source_chunk_ids: list[str] = Field(min_length=1)
+
+    @field_validator("title", "summary", "review_suggestion")
+    @classmethod
+    def trim_text(cls, value: str) -> str:
+        result = value.strip()
+        if not result:
+            raise ValueError("Outline text cannot be blank")
+        return result
 
 
-class OutlineMapResult(BaseModel):
+class OutlineGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    candidates: list[OutlineCandidate] = Field(default_factory=list)
-    citation_chunk_ids: list[str] = Field(default_factory=list)
+    sections: list[OutlineDraft] = Field(min_length=1)
 
 
-class OutlineSection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class OutlineSection(OutlineDraft):
     id: str = Field(pattern=r"^sec_\d{3}$")
-    title: str = Field(min_length=1, max_length=180)
-    summary: str = Field(min_length=1, max_length=2000)
-    review_suggestion: str = Field(min_length=1, max_length=800)
-    source_citation_ids: list[str] = Field(default_factory=list)
     sort_order: int = Field(ge=1)
 
 
@@ -48,4 +48,7 @@ class OutlineContent(BaseModel):
             raise ValueError("Outline IDs must be continuous")
         if [item.sort_order for item in self.sections] != list(range(1, len(self.sections) + 1)):
             raise ValueError("Outline order must be continuous")
+        titles = [" ".join(item.title.split()).casefold() for item in self.sections]
+        if len(titles) != len(set(titles)):
+            raise ValueError("Outline titles must be unique")
         return self

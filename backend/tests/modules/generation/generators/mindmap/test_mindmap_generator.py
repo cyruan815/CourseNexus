@@ -1,55 +1,52 @@
-from __future__ import annotations
-
 from app.modules.generation.generators.mindmap.generator import MindmapGenerator
-from app.modules.generation.generators.mindmap.schemas import MindmapMapResult
-from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
+from app.modules.generation.generators.mindmap.schemas import MindmapGenerationResult
+from app.modules.material_context.schemas import MaterialGenerationContext
 from tests.modules.generation.conftest import RecordingStructuredModelProvider
 
 
-def _batch(material: str, chunk: str, text: str) -> MaterialContextBatch:
-    return MaterialContextBatch(
-        chunks=[ContextChunk(material_id=material, chunk_id=chunk, material_name=f"{material}.md", page=None, page_index=None, heading=None, content_text=text)],
-        material_ids=[material], estimated_tokens=10,
-    )
+class FakePreprocessor:
+    def transform(self, markdown: str) -> dict[str, object]:
+        return {
+            "root": {"content": "Root", "children": []},
+            "features": {},
+            "assets": {"styles": [], "scripts": []},
+        }
 
 
-def test_generator_maps_all_batches_and_builds_markdown() -> None:
-    provider = RecordingStructuredModelProvider(
-        {"concepts": [
-            {"local_key": "root", "label": "Operating Systems", "summary": "Root", "parent_local_key": None, "source_chunk_ids": ["c1"]},
-            {"local_key": "process", "label": "Processes", "summary": "Process", "parent_local_key": "root", "source_chunk_ids": ["c1"]},
-        ], "relations": []},
-        {"concepts": [
-            {"local_key": "root2", "label": "Operating Systems", "summary": "Root", "parent_local_key": None, "source_chunk_ids": ["c2"]},
-            {"local_key": "memory", "label": "Memory", "summary": "Memory", "parent_local_key": "root2", "source_chunk_ids": ["c2"]},
-        ], "relations": []},
+def test_mindmap_validates_complete_graph_and_persists_markmap_data() -> None:
+    provider = RecordingStructuredModelProvider({
+        "root_node_id": "root",
+        "nodes": [
+            {"id": "root", "label": "Root", "summary": "Root summary", "level": 1},
+            {"id": "child", "label": "Child", "summary": "Child summary", "level": 2},
+        ],
+        "edges": [{"from": "root", "to": "child", "relation": "child"}],
+    })
+    context = MaterialGenerationContext(chunks=[], material_ids=["m1"], text="COMPLETE", estimated_tokens=4)
+    output = MindmapGenerator(model_provider=provider, markmap_preprocessor=FakePreprocessor()).generate(
+        context=context, parameters={"max_nodes": 10, "max_depth": 4}
     )
-    generator = MindmapGenerator(model_provider=provider)
-    output = generator.generate(
-        batches=(_batch("m1", "c1", "Processes"), _batch("m2", "c2", "Memory")),
-        expected_material_ids=frozenset({"m1", "m2"}), parameters={"center_topic": "Operating Systems"},
-    )
-    assert len(provider.calls) == 2
-    assert all(schema is MindmapMapResult for _, schema in provider.calls)
-    assert [node["id"] for node in output.content_json["nodes"]] == ["node_001", "node_002", "node_003"]
-    assert output.content_json["markmap_markdown"] == "- Operating Systems\n  - Processes\n  - Memory"
-    assert output.item_citation_chunk_ids["node_002"] == ["c1"]
-    assert output.item_citation_chunk_ids["node_003"] == ["c2"]
+    assert len(provider.calls) == 1
+    assert provider.calls[0][1] is MindmapGenerationResult
+    assert output.content_json["nodes"][0]["id"] == "node_001"
+    assert output.content_json["markmap_data"]["root"]["content"] == "Root"
+    assert "source_citation_ids" not in output.content_json["nodes"][0]
 
 
-def test_local_keys_are_scoped_to_each_batch() -> None:
-    provider = RecordingStructuredModelProvider(
-        {"concepts": [
-            {"local_key": "root", "label": "Course", "summary": "", "parent_local_key": None, "source_chunk_ids": ["c1"]},
-            {"local_key": "item", "label": "First", "summary": "", "parent_local_key": "root", "source_chunk_ids": ["c1"]},
-        ], "relations": []},
-        {"concepts": [
-            {"local_key": "root", "label": "Course", "summary": "", "parent_local_key": None, "source_chunk_ids": ["c2"]},
-            {"local_key": "item", "label": "Second", "summary": "", "parent_local_key": "root", "source_chunk_ids": ["c2"]},
-        ], "relations": []},
+def test_mindmap_uses_the_actual_root_for_title_when_model_order_differs() -> None:
+    provider = RecordingStructuredModelProvider({
+        "root_node_id": "root",
+        "nodes": [
+            {"id": "child", "label": "Child", "summary": "Child summary", "level": 2},
+            {"id": "root", "label": "Root", "summary": "Root summary", "level": 1},
+        ],
+        "edges": [{"from": "root", "to": "child", "relation": "child"}],
+    })
+    context = MaterialGenerationContext(chunks=[], material_ids=["m1"], text="COMPLETE", estimated_tokens=4)
+
+    output = MindmapGenerator(model_provider=provider, markmap_preprocessor=FakePreprocessor()).generate(
+        context=context, parameters={"max_nodes": 10, "max_depth": 4}
     )
-    output = MindmapGenerator(model_provider=provider).generate(
-        batches=(_batch("m1", "c1", "First"), _batch("m2", "c2", "Second")),
-        expected_material_ids=frozenset({"m1", "m2"}), parameters={"center_topic": "Course"},
-    )
-    assert output.content_json["markmap_markdown"] == "- Course\n  - First\n  - Second"
+
+    assert output.title == "Knowledge Mindmap: Root"
+    assert output.content_json["root_node_id"] == "node_002"

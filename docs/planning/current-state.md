@@ -1,5 +1,9 @@
 # Current State
 
+## 2026-07-13 Generation POC Refactor
+
+G01-G06 now use complete selected-material context with one structured model call per request. Total context overflow is explicit, item-level citations and generation citation writes are removed, and API responses keep `source_citations=[]`. Mindmap uses backend `markmap-lib@0.18.12` preprocessing and persists `root`, `features`, and used `assets` for frontend `markmap-view` rendering. Older batch/map-reduce generation notes below are historical and do not describe the current five-module path.
+
 ## 日期
 
 2026-07-12
@@ -53,10 +57,10 @@ CourseNexus 当前已从“空项目骨架”推进到“本地 POC 基础设施
    - 本地 RAG 技术栈为 FastAPI + LlamaIndex + Docling + Chroma + OpenAI API；RAGFlow 仅作为 future 方案。
 
 6. 生成和计划基础
-   - 已完成G01公共生成链路：用途模型提供器注入、生成器工厂注册、全材料批次读取、真实引用过滤和ID回填、成功内容与引用原子保存。
-   - 生成POST、课程历史和详情均返回稳定`source_citations`数组；失败记录不保存部分JSON或引用。
-   - 已覆盖跨用户课程/资料、无资料、非法参数、模型/schema/coverage失败、重复请求、引用去重和真实数据库回滚。
-   - 已提供 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的占位生成器，用于验证模块边界和存储契约。
+   - 已完成 G01 公共生成链路：用途模型提供器注入、生成器工厂注册、完整材料上下文、总 token 检查、单次模型调用和 `AIGeneratedContent` 保存。
+   - 生成 POST、课程历史和详情均返回稳定 `source_citations` 数组；五类 POC 内容固定为空，失败记录不保存部分 JSON。
+   - 已覆盖跨用户课程/资料、无资料、上下文超限、非法参数、模型/schema 失败、重复请求和真实数据库回滚。
+   - 已实现 Flashcard、Mindmap、Quiz、Outline、Knowledge List 的最终结构化生成器，覆盖稳定 ID/顺序、无逐条引用和失败记录；Mindmap 额外保存 `markmap-lib` 预处理结果。
    - 已实现单课程学习计划自然语言配置回填、全材料预览、用户调整后保存、幂等、重生成预览、原子替换、软删除、列表和详情接口。
    - 学习计划当前只生成计划 / 任务结构，不提前生成今日讲义、任务测试题或执行页内容。
    - 已完成 S01 计划学习模式表结构契约测试，确认现有 13 张核心表可支撑第一阶段计划、任务、打卡、生成内容和导出闭环；S01 不新增业务表、不创建 migration。

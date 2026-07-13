@@ -11,5 +11,8 @@
     "backend:test": "cd backend && conda run -n course-nexus python -m pytest",
     "backend:migrate": "cd backend && conda run -n course-nexus python -m alembic upgrade head",
     "test": "pnpm backend:test && pnpm frontend:test"
+  },
+  "dependencies": {
+    "markmap-lib": "0.18.12"
   }
 }

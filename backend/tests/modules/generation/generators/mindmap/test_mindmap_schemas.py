@@ -23,11 +23,16 @@ def _content(**updates: object) -> dict[str, object]:
     value: dict[str, object] = {
         "root_node_id": "node_001",
         "nodes": [
-            {"id": "node_001", "label": "Root", "summary": "", "level": 1, "source_citation_ids": []},
-            {"id": "node_002", "label": "Child", "summary": "", "level": 2, "source_citation_ids": []},
+            {"id": "node_001", "label": "Root", "summary": "", "level": 1},
+            {"id": "node_002", "label": "Child", "summary": "", "level": 2},
         ],
         "edges": [{"from": "node_001", "to": "node_002", "relation": "child"}],
         "markmap_markdown": "- Root\n  - Child",
+        "markmap_data": {
+            "root": {"content": "Root", "children": []},
+            "features": {},
+            "assets": {"styles": [], "scripts": []},
+        },
     }
     value.update(updates)
     return value
@@ -39,7 +44,7 @@ def test_final_graph_accepts_valid_tree() -> None:
 
 def test_final_graph_rejects_multiple_parents() -> None:
     nodes = _content()["nodes"] + [
-        {"id": "node_003", "label": "Other", "summary": "", "level": 2, "source_citation_ids": []}
+        {"id": "node_003", "label": "Other", "summary": "", "level": 2}
     ]
     edges = [
         {"from": "node_001", "to": "node_002", "relation": "child"},

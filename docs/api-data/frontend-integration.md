@@ -572,9 +572,9 @@
 - `outline`
 - `knowledge_list`
 
-G01已稳定五类入口共用的全材料、引用和失败契约；这些类型当前仍返回deterministic placeholder业务结构，直到G02-G06分别替换，不代表最终生成质量。
+G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 parsed 资料、检查总上下文上限，并对对应类型调用一次结构化模型。
 
-`source_citations`在生成POST、历史和详情中始终存在；无引用固定为`[]`。`page_index=0`且`page=null`表示来源没有可展示页码，前端显示“页码未知”，不得显示“第0页”。
+`source_citations` 在生成 POST、历史和详情中始终存在。Quiz、Flashcard、Mindmap、Outline、Knowledge List 固定返回 `[]`；Course QA、handout 和 task_test 等保留引用的能力继续按真实引用展示。
 
 ### 3.21 生成内容列表
 
@@ -596,7 +596,7 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 
 `POST /api/v1/courses/{course_id}/generations`
 
-要求：Bearer token。当前实现通过 `generation/orchestrator` 统一解析资料上下文、调用注册 generator、保存 `AIGeneratedContent` 和真实 `SourceCitation`。
+要求：Bearer token。五类独立 POC 生成通过 `generation/orchestrator` 构造完整资料上下文、调用注册 generator 一次，并只保存 `AIGeneratedContent`，不创建 `SourceCitation`。
 
 请求：
 
@@ -619,8 +619,11 @@ G01已稳定五类入口共用的全材料、引用和失败契约；这些类�
 | --- | --- |
 | `VALIDATION_ERROR` | `content_type`未注册，或具体生成器参数非法；不创建历史记录。 |
 | `NO_PARSED_MATERIAL` | 当前资料范围没有可用 parsed chunk。 |
+| `MATERIAL_CONTEXT_TOO_LARGE` | 完整选定材料超过总上下文上限；不调用模型且不创建历史记录。 |
 
-模型、schema或材料覆盖失败会保存`generation_status="failed"`记录，`error_code`分别为`GENERATION_FAILED`、`GENERATION_SCHEMA_INVALID`或`MATERIAL_COVERAGE_INCOMPLETE`；失败记录的`content_json=null`且`source_citations=[]`。重复请求会创建不同ID，当前没有持久化幂等键或retry-by-id接口。
+模型、最终 schema 或 Markmap 预处理失败会保存 `generation_status="failed"` 记录，`error_code` 为 `GENERATION_FAILED` 或 `GENERATION_SCHEMA_INVALID`；失败记录的 `content_json=null` 且 `source_citations=[]`。重复请求会创建不同 ID，当前没有持久化幂等键或 retry-by-id 接口。
+
+五类结果均使用稳定业务 ID 和连续 `sort_order`，业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。Quiz 当前只生成 A-D 四选一单选题；Flashcard 的 `mastery_status="unknown"` 只是初始展示值，当前没有掌握度写接口。
 
 ### 3.23.1 任务内容生成
 

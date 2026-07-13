@@ -20,6 +20,7 @@ from app.modules.material_context.repository import (
 from app.modules.material_context.schemas import (
     ContextChunk,
     MaterialContextBatch,
+    MaterialGenerationContext,
     MaterialContextResult,
     MaterialScope,
     MaterialQualitySummary,
@@ -180,6 +181,49 @@ def iter_material_context_batches(
     yield from _batch_context_chunks(chunks, max_tokens=max_tokens)
 
 
+def resolve_generation_context(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope | None,
+    max_tokens: int,
+) -> MaterialGenerationContext | None:
+    resolved_scope = _resolve_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_scope=material_scope,
+    )
+    if resolved_scope.empty_selection or not resolved_scope.eligible_material_ids:
+        return None
+
+    rows = list_parsed_context_chunks_for_scope(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_ids=list(resolved_scope.material_ids) or None,
+    )
+    chunks = [_to_context_chunk(chunk, material_name) for chunk, material_name in rows]
+    if not chunks:
+        return None
+
+    text = _format_generation_context(chunks)
+    estimated_tokens = _estimate_tokens(text)
+    if estimated_tokens > max(1, max_tokens):
+        raise CourseNexusError(
+            code="MATERIAL_CONTEXT_TOO_LARGE",
+            message="Selected material content exceeds the current generation limit",
+            status_code=400,
+        )
+    return MaterialGenerationContext(
+        chunks=chunks,
+        material_ids=list(dict.fromkeys(chunk.material_id for chunk in chunks)),
+        text=text,
+        estimated_tokens=estimated_tokens,
+    )
+
+
 def _resolve_scope(
     db: Session,
     *,
@@ -257,6 +301,26 @@ def _make_batch(chunks: list[ContextChunk], estimated_tokens: int) -> MaterialCo
         material_ids=list(dict.fromkeys(chunk.material_id for chunk in chunks)),
         estimated_tokens=estimated_tokens,
     )
+
+
+def _format_generation_context(chunks: list[ContextChunk]) -> str:
+    sections: list[str] = []
+    current_material_id: str | None = None
+    for chunk in chunks:
+        if chunk.material_id != current_material_id:
+            if sections:
+                sections.append("")
+            sections.append(f"===== Material: {chunk.material_name} =====")
+            current_material_id = chunk.material_id
+        location = chunk.page or (
+            f"page_index={chunk.page_index}" if chunk.page_index is not None else None
+        )
+        metadata = [value for value in (f"Heading: {chunk.heading}" if chunk.heading else None, location) if value]
+        if metadata:
+            sections.append(" | ".join(metadata))
+        sections.append(chunk.content_text.strip())
+        sections.append("")
+    return "\n".join(sections).strip()
 
 
 def _to_context_chunk(chunk: MaterialChunk, material_name: str, *, score: float | None = None) -> ContextChunk:

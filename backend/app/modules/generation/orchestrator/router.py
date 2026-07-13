@@ -80,7 +80,7 @@ def generate_content_endpoint(
         payload=payload,
         registry=registry,
         model_provider=model_provider,
-        max_batch_tokens=settings.material_batch_max_tokens,
+        max_context_tokens=settings.material_context_max_tokens,
     )
     data = build_generated_content_read(db, content).model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))

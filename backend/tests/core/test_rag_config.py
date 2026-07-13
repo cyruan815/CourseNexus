@@ -9,7 +9,7 @@ def test_rag_settings_use_local_persistent_defaults() -> None:
     assert settings.model_endpoint("embedding").model == "text-embedding-3-small"
     assert settings.rag_similarity_top_k == 8
     assert settings.rag_chunk_max_tokens == 800
-    assert settings.material_batch_max_tokens == 12_000
+    assert settings.material_context_max_tokens == 120_000
 
 
 def test_every_model_purpose_has_an_independent_endpoint() -> None:

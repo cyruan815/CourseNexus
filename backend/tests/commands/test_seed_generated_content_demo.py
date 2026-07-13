@@ -41,7 +41,6 @@ def test_seed_demo_generated_content_creates_loginable_demo_graph() -> None:
     material = db.get(CourseMaterial, result.material_id)
     chunk = db.get(MaterialChunk, result.chunk_id)
     content = db.get(AIGeneratedContent, result.generated_content_id)
-    citation = db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == content.id)).scalar_one()
 
     assert user is not None
     assert user.username == "demo@example.com"
@@ -57,10 +56,8 @@ def test_seed_demo_generated_content_creates_loginable_demo_graph() -> None:
     assert content.course_id == course.id
     assert content.content_type == "outline"
     assert content.generation_status == "success"
-    assert content.content_json["sections"][0]["title"] == "函数与极限"
-    assert citation.material_id == material.id
-    assert citation.chunk_id == chunk.id
-    assert citation.page_index == 0
+    assert content.content_json["sections"][0]["title"] == "1. Functions and Limits"
+    assert db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == content.id)).scalars().all() == []
 
 
 def test_seed_demo_generated_content_is_idempotent() -> None:
@@ -73,4 +70,4 @@ def test_seed_demo_generated_content_is_idempotent() -> None:
     assert len(db.execute(select(User)).scalars().all()) == 1
     assert len(db.execute(select(Course)).scalars().all()) == 1
     assert len(db.execute(select(AIGeneratedContent)).scalars().all()) == 1
-    assert len(db.execute(select(SourceCitation)).scalars().all()) == 1
+    assert len(db.execute(select(SourceCitation)).scalars().all()) == 0

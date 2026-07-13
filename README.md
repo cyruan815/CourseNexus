@@ -169,6 +169,7 @@ pnpm preview
 前置工具：
 
 - Node.js 24 或兼容版本。
+- 后端 Mindmap 生成也需要根目录已执行 `pnpm install`，因为 Markdown 预处理通过官方 `markmap-lib` Node helper 完成；Node 命令可用 `MARKMAP_NODE_COMMAND` 配置。
 - pnpm 11 或兼容版本。
 - Conda。
 - 后端 Python 版本固定为 3.12，由 [backend/environment.yml](./backend/environment.yml) 管理。
