@@ -694,6 +694,15 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
                 "self_check": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.self_check]),
             }
         )
+    try:
+        HandoutContent.model_validate(content_json)
+    except ValidationError as exc:
+        raise CourseNexusError(
+            code="GENERATION_SCHEMA_INVALID",
+            message="合并后的讲义内容不符合 HandoutContent 契约",
+            status_code=500,
+            details={"errors": exc.errors()},
+        ) from exc
     return GeneratorOutput(
         title="今日讲义",
         content_json=content_json,
