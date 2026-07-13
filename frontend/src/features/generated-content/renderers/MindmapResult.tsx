@@ -1,5 +1,5 @@
 import { Alert, Button, Group, Stack, Text, Title } from "@mantine/core";
-import { Markmap } from "markmap-view";
+import { loadCSS, loadJS, Markmap } from "markmap-view";
 import { useEffect, useRef, useState } from "react";
 import type { MindmapContent } from "../types";
 
@@ -9,6 +9,39 @@ type MarkmapInstance = {
   setData: (data: unknown) => void | Promise<void>;
   destroy?: () => void;
 };
+
+type LoadableStyles = Parameters<typeof loadCSS>[0];
+type LoadableScripts = Parameters<typeof loadJS>[0];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
+function loadableAssets(value: unknown): { styles: LoadableStyles; scripts: LoadableScripts } {
+  const styles: LoadableStyles = [];
+  const scripts: LoadableScripts = [];
+  if (!isRecord(value)) return { styles, scripts };
+  const rawStyles = Array.isArray(value.styles) ? value.styles : [];
+  const rawScripts = Array.isArray(value.scripts) ? value.scripts : [];
+  for (const item of rawStyles) {
+    if (!isRecord(item)) continue;
+    if (item.type === "style" && typeof item.data === "string") styles.push({ type: "style", data: item.data });
+    if (item.type === "stylesheet" && isRecord(item.data) && isHttpsUrl(item.data.href)) styles.push({ type: "stylesheet", data: { href: item.data.href } });
+  }
+  for (const item of rawScripts) {
+    if (!isRecord(item) || item.type !== "script" || !isRecord(item.data) || !isHttpsUrl(item.data.src)) continue;
+    const data: { src: string; async?: boolean; defer?: boolean } = { src: item.data.src };
+    if (typeof item.data.async === "boolean") data.async = item.data.async;
+    if (typeof item.data.defer === "boolean") data.defer = item.data.defer;
+    scripts.push({ type: "script", data });
+  }
+  return { styles, scripts };
+}
 
 function withFold(value: unknown, collapsed: boolean, isRoot = true): unknown {
   if (!value || typeof value !== "object") return value;
@@ -29,15 +62,24 @@ export function MindmapResult({ content }: { content: MindmapContent }) {
   useEffect(() => {
     if (!svgRef.current || !content.markmap_data?.root) { setFailed(true); return; }
     let cancelled = false;
-    try {
-      const instance = Markmap.create(svgRef.current) as unknown as MarkmapInstance;
-      instanceRef.current = instance;
-      void Promise.resolve(instance.setData(withFold(content.markmap_data.root, true, false))).then(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))).then(() => {
-        if (!cancelled) { void instance.fit(); setFailed(false); }
-      }).catch((error: unknown) => { if (!cancelled) { setFailureDetail(error instanceof Error ? error.message : "unknown error"); setFailed(true); } });
-    } catch (error: unknown) {
-      setFailureDetail(error instanceof Error ? error.message : "unknown error"); setFailed(true);
-    }
+    const initialize = async () => {
+      try {
+        const assets = loadableAssets(content.markmap_data.assets);
+        await loadCSS(assets.styles);
+        await loadJS(assets.scripts);
+        if (cancelled || !svgRef.current) return;
+        const instance = Markmap.create(svgRef.current) as unknown as MarkmapInstance;
+        instanceRef.current = instance;
+        await Promise.resolve(instance.setData(withFold(content.markmap_data.root, true, false)));
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (cancelled) return;
+        await Promise.resolve(instance.fit());
+        if (!cancelled) { setFailureDetail(""); setFailed(false); }
+      } catch (error: unknown) {
+        if (!cancelled) { setFailureDetail(error instanceof Error ? error.message : "unknown error"); setFailed(true); }
+      }
+    };
+    void initialize();
     return () => { cancelled = true; instanceRef.current?.destroy?.(); instanceRef.current = null; };
   }, [content]);
 

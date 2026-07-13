@@ -20,9 +20,14 @@ export interface KnowledgeItem {
   importance: "low" | "medium" | "high"; related_section: string;
 }
 
+export interface SerializedMarkmapAssets {
+  styles?: unknown[];
+  scripts?: unknown[];
+}
+
 export interface MindmapContent {
   root_node_id: string;
   nodes: Array<{ id: string; label: string; summary?: string; level: number }>;
   edges: Array<{ from: string; to: string; relation: "child" | "related" }>;
-  markmap_data: { root: Record<string, unknown>; features?: Record<string, unknown>; assets?: unknown };
+  markmap_data: { root: Record<string, unknown>; features?: Record<string, unknown>; assets?: SerializedMarkmapAssets };
 }

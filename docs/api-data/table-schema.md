@@ -606,7 +606,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - 节点必须有稳定 ID，便于前端展开收起。
 - 边表示节点之间的父子或关联关系。
-- 前端使用 `markmap-view` 渲染后端 `markmap-lib` 生成的 `markmap_data.root`，并按 `assets` 加载实际使用资源。
+- 前端使用 `markmap-view` 渲染后端 `markmap-lib` 生成的 `markmap_data.root`，并在创建视图前加载 `assets` 中可 JSON 序列化的样式和 HTTPS 外部脚本；函数型 `iife` loader 不进入持久化契约。
 
 ### outline
 

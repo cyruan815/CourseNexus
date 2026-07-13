@@ -28,15 +28,15 @@ Generate with `POST /api/v1/courses/{course_id}/generations` and `content_type="
 }
 ```
 
-`nodes` and `edges` are the business graph. `markmap_markdown` is the deterministic textual projection. `markmap_data` is the exact `markmap-lib` preprocessing result used for rendering.
+`nodes` and `edges` are the business graph. `markmap_markdown` is the deterministic textual projection. `markmap_data.root` and `features` come from `markmap-lib`; `assets` is the JSON-safe projection containing style entries and external script entries. Function-valued `iife` loader hooks are intentionally not persisted because JSON cannot preserve executable functions.
 
 ## Rendering
 
-1. Load any entries in `markmap_data.assets.styles` and `scripts` using Markmap-compatible asset loaders.
+1. Sanitize and load the serializable entries in `markmap_data.assets.styles` and `scripts` using the `markmap-view` asset loaders. The frontend accepts inline styles and HTTPS stylesheets/scripts, and ignores malformed or legacy `iife` entries.
 2. Create the SVG container.
 3. Create the `markmap-view` instance, then pass `markmap_data.root` directly to `instance.setData()` and fit after rendering completes.
 4. Use the view API for fit, expand, collapse, and updates.
 
-The frontend declares `markmap-view@0.18.12` as a direct dependency. If initialization fails, it renders the persisted `nodes` and `edges` as a read-only fallback. It must not import `markmap-lib` or call `Transformer.transform()`.
+The frontend declares `markmap-view@0.18.12` as a direct dependency. Asset loading completes before the view is created. If asset loading or initialization fails, it renders the persisted `nodes` and `edges` as a read-only fallback. It must not import `markmap-lib` or call `Transformer.transform()`.
 
 The frontend must not call `Transformer.transform` again and must not infer citations. Generated-content API responses keep `source_citations: []`.

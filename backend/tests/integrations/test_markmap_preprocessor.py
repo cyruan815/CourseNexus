@@ -69,3 +69,12 @@ def test_real_markmap_lib_transform_returns_renderable_tree() -> None:
     assert result["root"]["content"] == "Root"
     assert result["root"]["children"][0]["content"] == "Child"
     assert result["assets"] == {"styles": [], "scripts": []}
+
+
+def test_real_markmap_lib_transform_returns_json_safe_formula_assets() -> None:
+    result = MarkmapLibPreprocessor().transform("- $x^2$")
+
+    assert result["features"] == {"katex": True}
+    assert result["assets"]["styles"]
+    assert result["assets"]["scripts"]
+    assert all(item["type"] == "script" for item in result["assets"]["scripts"])
