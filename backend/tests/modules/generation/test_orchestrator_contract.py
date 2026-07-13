@@ -52,15 +52,20 @@ def test_generate_content_request_forbids_extra_fields() -> None:
         GenerateContentRequest(content_type="outline", unexpected=True)
 
 
-def test_generator_output_contains_only_business_result_fields() -> None:
+def test_generator_output_keeps_optional_citation_bindings_for_existing_consumers() -> None:
     output = GeneratorOutput(title="Outline", content_json={"sections": []})
     assert output.model_dump() == {
         "title": "Outline",
         "content": None,
         "content_json": {"sections": []},
+        "item_citation_chunk_ids": {},
     }
-    with pytest.raises(ValidationError):
-        GeneratorOutput(title="Outline", content_json={}, item_citation_chunk_ids={})
+    explicit = GeneratorOutput(
+        title="Outline",
+        content_json={},
+        item_citation_chunk_ids={"section_1": ["chunk_1"]},
+    )
+    assert explicit.item_citation_chunk_ids == {"section_1": ["chunk_1"]}
 
 
 def test_generator_protocol_uses_one_complete_context() -> None:

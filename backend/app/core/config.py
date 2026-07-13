@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     chroma_collection: str = "course_nexus_material_chunks"
     rag_similarity_top_k: int = 8
     rag_chunk_max_tokens: int = 800
+    material_batch_max_tokens: int = 12_000
     material_context_max_tokens: int = 120_000
     markmap_node_command: str = "node"
     markmap_transform_timeout_seconds: float = 15.0
