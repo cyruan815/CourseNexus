@@ -44,6 +44,11 @@ const defaultScope = {
 const defaultPreference = "balanced" as const;
 const minimumDailyMinutes = 30;
 
+function createStudyPlanIdempotencyKey(courseId: string): string {
+  const randomPart = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `study-plan-${courseId}-${randomPart}`;
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError || error instanceof Error) {
     return error.message;
@@ -149,6 +154,7 @@ export function StudyPlanCreatePage() {
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
+  const [previewSaveIdempotencyKey, setPreviewSaveIdempotencyKey] = useState<string | null>(null);
   const [isPreviewStale, setIsPreviewStale] = useState(false);
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -246,6 +252,7 @@ export function StudyPlanCreatePage() {
       const nextPreview = await previewStudyPlan(courseId, draft);
       setPreview(nextPreview);
       setPreviewSnapshot(draft);
+      setPreviewSaveIdempotencyKey(createStudyPlanIdempotencyKey(courseId));
       setIsPreviewStale(false);
     } catch (nextError) {
       setError(errorMessage(nextError, "生成预览失败"));
@@ -255,7 +262,7 @@ export function StudyPlanCreatePage() {
   }
 
   async function handleSave() {
-    if (!courseId || !previewSnapshot || !preview || isPreviewStale) {
+    if (!courseId || !previewSnapshot || !preview || !previewSaveIdempotencyKey || isPreviewStale) {
       return;
     }
 
@@ -271,7 +278,7 @@ export function StudyPlanCreatePage() {
           client_flow: "wizard_v1",
           tasks: preview.tasks,
         },
-        `study-plan-${courseId}-${Date.now()}`,
+        previewSaveIdempotencyKey,
       );
       navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
     } catch (nextError) {
@@ -409,7 +416,7 @@ export function StudyPlanCreatePage() {
                 生成预览
               </Button>
               <Button
-                disabled={!previewSnapshot || isPreviewStale}
+                disabled={!previewSnapshot || !previewSaveIdempotencyKey || isPreviewStale}
                 leftSection={<IconClipboardCheck size={16} />}
                 loading={isSaving}
                 onClick={handleSave}
