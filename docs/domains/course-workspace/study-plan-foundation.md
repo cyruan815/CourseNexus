@@ -48,3 +48,18 @@
 - `DELETE /api/v1/study-plans/{plan_id}`
 
 `types.ts` 对齐后端 S02 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview 和替换请求均有独立类型。跨域的 todos/calendar、learning execution、handout/task-test 和 export 接口暂不放入 `features/study-plans`，后续按对应上下文建立边界。
+
+## 2026-07-13 C2 学情诊断向导前端接入
+
+创建页已经从占位的“学情诊断 disabled”切换为真实轻量向导，入口为 `frontend/src/features/study-plans/components/DiagnosticWizard.tsx`，由 `frontend/src/pages/StudyPlanCreatePage.tsx` 挂载。
+
+- 点击“开始学情诊断”调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`，请求只发送当前 `goal_text` 和固定 `material_scope`。
+- 向导按后端返回的 `sort_order` 展示题目；`topic_mastery` 和 `weak_area` 使用单选，`diagnostic_note` 使用可选文本输入。
+- 点击“提交诊断”调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`，只把用户答案、`question_version` 和 `material_scope` 交给后端归纳，前端不伪造 profile。
+- 后端返回的 `StudyPlanDiagnosticProfile` 保存在创建页状态中；后续点击“生成预览”时作为 `diagnostic_profile` 放入 `StudyPlanPreviewRequest`。
+- 修改 `goal_text` 或重新获取诊断题会清空已有诊断 profile；修改日期或每日时长只会让 preview 过期，默认保留诊断结果。
+- `NO_PARSED_MATERIAL` 在向导内提示先上传并等待资料解析完成；`DIAGNOSTIC_STALE` 提示重新获取问题并作答；其他错误透传 API message 或显示通用失败提示。
+
+验证入口：
+
+- `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖诊断题加载、答题、profile 生成以及 preview payload 携带 `diagnostic_profile`。
