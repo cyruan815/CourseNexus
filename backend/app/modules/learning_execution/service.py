@@ -336,7 +336,10 @@ def _merge_task_content_parameters(
     if content_type != "task_test":
         return dict(parameters)
     stored_parameters = _stored_task_generation_parameters(target=target, content_type=content_type)
-    merged = {**stored_parameters, **parameters}
+    merged = _merge_task_test_parameters(
+        stored_parameters=stored_parameters,
+        request_parameters=dict(parameters),
+    )
     try:
         return TaskTestGenerationParameters.model_validate(merged).model_dump(mode="json")
     except ValidationError as exc:
@@ -346,6 +349,34 @@ def _merge_task_content_parameters(
             status_code=500,
             details={"field": "generation_parameters.task_test", "errors": exc.errors()},
         ) from exc
+
+
+def _merge_task_test_parameters(
+    *,
+    stored_parameters: dict[str, object],
+    request_parameters: dict[str, object],
+) -> dict[str, object]:
+    stored = dict(stored_parameters)
+    request = dict(request_parameters)
+    if _has_request_question_type_counts(request):
+        stored.pop("question_type_counts", None)
+        stored.pop("question_count", None)
+        stored.pop("question_types", None)
+    elif "question_count" in request or "question_types" in request:
+        stored.pop("question_type_counts", None)
+    return {**stored, **request}
+
+
+def _has_request_question_type_counts(parameters: dict[str, object]) -> bool:
+    if isinstance(parameters.get("question_type_counts"), list):
+        return True
+    for key in ("items", "question_types"):
+        raw_items = parameters.get(key)
+        if isinstance(raw_items, list) and raw_items and all(isinstance(item, dict) for item in raw_items):
+            return True
+    if any(key in parameters for key in ("single_choice", "multiple_choice", "true_false", "short_answer")):
+        return True
+    return any(isinstance(key, str) and "道" in key for key in parameters)
 
 
 def _handout_task_context_parameters(target: repository.ExecutionTarget) -> dict[str, object]:

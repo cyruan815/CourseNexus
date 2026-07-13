@@ -9,6 +9,10 @@ from app.modules.material_context.schemas import MaterialScope
 
 
 PlanPreferenceLiteral = Literal["balanced", "fast_track", "mastery", "advanced", "sprint"]
+StudyPreference = Literal["fast_track", "balanced", "mastery", "sprint"]
+ContentDepth = Literal["concise", "standard", "detailed"]
+IntensityLevel = Literal["low", "standard", "high"]
+AmbiguousConfigField = Literal["start_date", "end_date", "duration_days", "daily_available_minutes", "preference"]
 DailyMinutesSource = Literal["user_text", "system_estimated", "user_modified"]
 StudyPlanClientFlow = Literal["legacy", "wizard_v1"]
 SubTaskTypeLiteral = Literal["learn", "review", "quiz", "test"]
@@ -53,6 +57,12 @@ def _normalize_subtask_type(value: object) -> object:
 
 SubTaskType = Annotated[SubTaskTypeLiteral, BeforeValidator(_normalize_subtask_type)]
 
+class StudyPreferenceOverrides(BaseModel):
+    content_depth: ContentDepth | None = None
+    example_intensity: IntensityLevel | None = None
+    assessment_intensity: IntensityLevel | None = None
+    review_intensity: IntensityLevel | None = None
+
 class StudyPlanBuildRequest(BaseModel):
     goal_text: str = Field(min_length=1)
     start_date: date
@@ -62,6 +72,7 @@ class StudyPlanBuildRequest(BaseModel):
     recommended_daily_minutes: int | None = Field(default=None, gt=0)
     daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference = "balanced"
+    preference_overrides: StudyPreferenceOverrides = Field(default_factory=StudyPreferenceOverrides)
     diagnostic_profile: dict[str, object] = Field(default_factory=dict)
     material_snapshot: dict[str, object] = Field(default_factory=dict)
     coverage: dict[str, object] = Field(default_factory=dict)
@@ -75,6 +86,11 @@ class StudyPlanBuildRequest(BaseModel):
         if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
             raise ValueError("daily_available_minutes must be at least 30")
         return value
+
+    @field_validator("preference_overrides", mode="before")
+    @classmethod
+    def normalize_nullable_preference_overrides(cls, value: object) -> object:
+        return {} if value is None else value
 
     @field_validator("preference", mode="after")
     @classmethod
@@ -108,6 +124,25 @@ class StudyPlanConfigParseRequest(BaseModel):
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
 
 
+
+class StudyPlanConfigExtraction(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
+    duration_days: int | None = Field(default=None, ge=1)
+    daily_available_minutes: int | None = Field(default=None, ge=1)
+    preference: StudyPreference | None = None
+    preference_overrides: StudyPreferenceOverrides = Field(default_factory=StudyPreferenceOverrides)
+    ambiguous_fields: list[AmbiguousConfigField] = Field(default_factory=list)
+
+    @field_validator("preference_overrides", mode="before")
+    @classmethod
+    def normalize_nullable_preference_overrides(cls, value: object) -> object:
+        return {} if value is None else value
+
+    @field_validator("ambiguous_fields", mode="before")
+    @classmethod
+    def normalize_nullable_ambiguous_fields(cls, value: object) -> object:
+        return [] if value is None else value
 
 class StudyPlanDiagnosticQuestionRequest(BaseModel):
     goal_text: str = Field(min_length=1)
@@ -169,6 +204,7 @@ class StudyPlanParsedConfig(BaseModel):
     recommended_daily_minutes: int | None = Field(default=None, gt=0)
     daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference | None = None
+    preference_overrides: StudyPreferenceOverrides = Field(default_factory=StudyPreferenceOverrides)
     diagnostic_profile: dict[str, object] = Field(default_factory=dict)
     material_snapshot: dict[str, object] = Field(default_factory=dict)
     coverage: dict[str, object] = Field(default_factory=dict)
@@ -176,6 +212,7 @@ class StudyPlanParsedConfig(BaseModel):
     generation_metadata: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope = Field(default_factory=MaterialScope)
     unresolved_fields: list[str] = Field(default_factory=list)
+    needs_confirmation_fields: list[str] = Field(default_factory=list)
 
     @field_validator("diagnostic_profile", "material_snapshot", "coverage", "capacity", "generation_metadata", mode="before")
     @classmethod
@@ -183,13 +220,10 @@ class StudyPlanParsedConfig(BaseModel):
         return {} if value is None else value
 
 
-    @field_validator("daily_available_minutes")
+    @field_validator("preference_overrides", mode="before")
     @classmethod
-    def validate_daily_available_minutes(cls, value: int | None) -> int | None:
-        if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
-            raise ValueError("daily_available_minutes must be at least 30")
-        return value
-
+    def normalize_nullable_overrides(cls, value: object) -> object:
+        return {} if value is None else value
     @field_validator("preference", mode="after")
     @classmethod
     def normalize_preference(cls, value: PlanPreference | None) -> PlanPreference | None:
@@ -267,6 +301,7 @@ class StudyPlanPreview(BaseModel):
     recommended_daily_minutes: int | None = None
     daily_minutes_source: DailyMinutesSource | None = None
     preference: PlanPreference = "balanced"
+    preference_overrides: StudyPreferenceOverrides = Field(default_factory=StudyPreferenceOverrides)
     diagnostic_profile: dict[str, object] = Field(default_factory=dict)
     material_snapshot: dict[str, object] = Field(default_factory=dict)
     material_scope: MaterialScope
@@ -281,6 +316,11 @@ class StudyPlanPreview(BaseModel):
         if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
             raise ValueError("daily_available_minutes must be at least 30")
         return value
+
+    @field_validator("preference_overrides", mode="before")
+    @classmethod
+    def normalize_nullable_preference_overrides(cls, value: object) -> object:
+        return {} if value is None else value
 
     @field_validator("preference", mode="after")
     @classmethod
@@ -302,6 +342,7 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
     duration_days: int | None = Field(default=None, gt=0)
     daily_available_minutes: int | None = Field(default=None, gt=0)
     preference: PlanPreference | None = None
+    preference_overrides: StudyPreferenceOverrides | None = None
     diagnostic_profile: dict[str, object] | None = None
     material_scope: MaterialScope | None = None
 
@@ -311,6 +352,11 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
         if value is not None and value < MIN_DAILY_AVAILABLE_MINUTES:
             raise ValueError("daily_available_minutes must be at least 30")
         return value
+
+    @field_validator("preference_overrides", mode="before")
+    @classmethod
+    def normalize_nullable_preference_overrides(cls, value: object) -> object:
+        return None if value is None else value
 
     @field_validator("preference", mode="after")
     @classmethod

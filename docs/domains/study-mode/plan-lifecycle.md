@@ -75,5 +75,20 @@
 - Preview 在结构校验前会确定性归一化同一天的二级任务顺序：`learn/review` 保持在前，`quiz/test` 移到当天最后并重排 `sort_order`；质量门仍保留“自测任务必须排在当天最后”的兜底校验。
 - 真实模型输出的二级任务类型别名会在 schema 层归一化为规范枚举：`practice` / `exercise` / `drill` / `assessment` 归一到 `quiz`，`exam` / `final-test` / `comprehensive-test` 归一到 `test`；入库和 API 响应仍只保存 `learn` / `review` / `quiz` / `test`。
 - 保存计划阶段仍只写 `study_plans`、`study_tasks` 和 `study_subtasks`，不创建 `AIGeneratedContent`、`SourceCitation` 或导出文件。
-- `generation_parameters.task_test` 接受规范对象，也兼容模型常见别名：按题型计数对象 `{"single_choice": 10, "short_answer": 3}`、题型计数列表 `[{"question_count": 10, "question_type": "single_choice"}, {"question_count": 3, "question_type": "short_answer"}]`、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象并可带 `total_question_count`，以及题量文案映射 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}`；保存快照前统一归一化为 `question_count`、`question_types`、`difficulty`。
+- `generation_parameters.task_test` 接受规范对象，也兼容模型常见别名：按题型计数对象 `{"single_choice": 10, "short_answer": 3}`、题型计数列表 `[{"question_count": 10, "question_type": "single_choice"}, {"question_count": 3, "question_type": "short_answer"}]`、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象并可带 `total_question_count`，以及题量文案映射 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}`；也兼容 `task_test: "single_choice"` 搭配同级 `question_count` 的模型 shorthand。保存快照前统一归一化为 `question_count`、`question_types`、可选 `question_type_counts` 和 `difficulty`。当 `question_type_counts` 存在时，`question_count` 自动等于各题型数量总和，`question_types` 自动等于题型顺序去重结果。
 - 非法 `generation_parameters.task_test` 在保存/替换时返回 `VALIDATION_ERROR`；旧计划中若存在脏默认参数，运行 task-test 生成时返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 生成记录。
+- task-test 按需生成合并计划默认参数和本次请求时，显式 per-type counts 会覆盖快照分布；仅覆盖 `difficulty` 会保留快照分布；显式传 `question_count` 或字符串数组 `question_types` 但未传 per-type counts 时，会清掉快照里的 `question_type_counts`，退回旧的总题数 + 题型白名单契约。
+
+## 2026-07-13 一级任务收尾测试约束
+
+新生成和新保存的 study-mode 计划必须保持学习闭环：每个一级任务 `StudyTask` 的最后一个二级任务必须是测评型 subtask，`subtask_type` 为 `quiz` 或 `test`。`learn` / `review` 子任务用于讲义学习、回顾和练习，必须排在该一级任务的测评型子任务之前。
+
+该约束的含义：
+
+- planner preview 阶段应把 `quiz` / `test` 归一化到每个一级任务的最后，并重排 `sort_order`。
+- 保存 exact tasks 时仍要校验最终任务树；如果某个一级任务没有以 `quiz` 或 `test` 收尾，应返回稳定校验错误，而不是保存半闭环计划。
+- quiz/test 子任务继续通过 `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 按需生成 `task_test`；learn/review 子任务通过 `POST /api/v1/study-subtasks/{subtask_id}/handouts` 按需生成 `handout`。
+- 前端可把新计划的一级任务最后一个子任务视为测试入口，但读取历史计划时仍应容忍异常顺序：按后端返回的 `subtask_type` 决定展示“生成讲义”或“生成任务测试题”，不要只靠位置判断能力。
+- 该约束不代表每天只有一份讲义；每个 learn/review 二级任务都可以有自己的任务讲义，讲义通过 `study_subtask_id + content_type=handout` 幂等绑定。
+
+本约束的真实验证等待用户提供整轮 study-mode 测试 prompt 后执行，不在实施阶段运行局部测试。

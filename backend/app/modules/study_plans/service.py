@@ -46,18 +46,32 @@ from app.modules.study_plans.schemas import (
     StudyPlanDiagnosticQuestionRequest,
     StudyPlanDiagnosticQuestionsResponse,
     StudyPlanBuildRequest,
+    StudyPlanConfigExtraction,
     StudyPlanConfigParseRequest,
     StudyPlanParsedConfig,
     StudyPlanPreview,
     StudyPlanRegenerationPreviewRequest,
     StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
+    StudyPreferenceOverrides,
     StudySubTaskPreview,
     StudyTaskPreview,
 )
 
 
 logger = get_logger("study_plan.build")
+
+_CONFIG_PARSE_REFERENCE_TIMEZONE = "Asia/Shanghai"
+_CONFIG_PARSE_SYSTEM_FIELDS = {
+    "recommended_daily_minutes",
+    "daily_minutes_source",
+    "diagnostic_profile",
+    "material_snapshot",
+    "coverage",
+    "capacity",
+    "generation_metadata",
+    "material_scope",
+}
 
 
 def _new_plan_id() -> str:
@@ -81,15 +95,11 @@ def parse_study_plan_config(
     model_provider: ModelProvider,
 ) -> StudyPlanParsedConfig:
     course = assert_course_owner(db, user_id, course_id)
-    parsed = model_provider.generate_structured(
+    extraction = model_provider.generate_structured(
         prompt=_build_config_parse_prompt(course_name=course.name, payload=payload),
-        output_schema=StudyPlanParsedConfig,
+        output_schema=StudyPlanConfigExtraction,
     )
-    normalized = _normalize_relative_config(parsed, goal_text=payload.goal_text)
-    if normalized.daily_available_minutes is not None and normalized.daily_minutes_source is None:
-        normalized = normalized.model_copy(update={"daily_minutes_source": "user_text"})
-    return normalized.model_copy(update={"material_scope": payload.material_scope})
-
+    return _assemble_parsed_config(extraction=extraction, payload=payload, model_provider=model_provider)
 
 
 def build_study_plan_diagnostic_questions(
@@ -261,7 +271,7 @@ def preview_study_plan(
     if resolved_payload is None:
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
-    task_previews = _normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks)
+    task_previews = _normalize_task_sort_orders(_normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks))
     estimated_total_minutes = _task_previews_total_minutes(task_previews)
     daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
     recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
@@ -279,7 +289,7 @@ def preview_study_plan(
         available_total_minutes=available_total_minutes,
         daily_over_capacity=_has_daily_over_capacity(tasks_preview=task_previews, daily_available_minutes=daily_available_minutes),
     )
-    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, payload.preference_overrides)
     generation_metadata = _with_material_quality(
         _with_planner_strategy(
             payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
@@ -846,6 +856,26 @@ def _normalize_quiz_subtasks_to_day_end(tasks: list[StudyTaskPreview]) -> list[S
         ]
         normalized_tasks.append(task.model_copy(update={"subtasks": normalized_subtasks}))
     return normalized_tasks
+
+
+def _normalize_task_sort_orders(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
+    normalized_tasks: list[StudyTaskPreview] = []
+    for task_index, task in enumerate(tasks, start=1):
+        normalized_subtasks = [
+            subtask.model_copy(update={"sort_order": subtask_index})
+            for subtask_index, subtask in enumerate(task.subtasks, start=1)
+        ]
+        normalized_tasks.append(
+            task.model_copy(
+                update={
+                    "sort_order": task_index,
+                    "subtasks": normalized_subtasks,
+                }
+            )
+        )
+    return normalized_tasks
+
+
 def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
     enriched_tasks: list[StudyTaskPreview] = []
     for task in tasks:
@@ -856,6 +886,11 @@ def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[S
                 has_task_test_parameters = "task_test" in generation_parameters
                 raw_task_test_parameters = generation_parameters.get("task_test")
                 if has_task_test_parameters:
+                    raw_task_test_was_string = isinstance(raw_task_test_parameters, str)
+                    raw_task_test_parameters = _coerce_task_test_parameters_shorthand(
+                        generation_parameters=generation_parameters,
+                        raw_task_test_parameters=raw_task_test_parameters,
+                    )
                     if not isinstance(raw_task_test_parameters, (dict, list)):
                         raise CourseNexusError(
                             code="VALIDATION_ERROR",
@@ -872,10 +907,21 @@ def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[S
                             status_code=422,
                             details={"field": "generation_parameters.task_test", "errors": exc.errors()},
                         ) from exc
+                    if raw_task_test_was_string:
+                        for consumed_key in ("question_count", "total_question_count", "question_types", "difficulty"):
+                            generation_parameters.pop(consumed_key, None)
                 else:
-                    task_test_parameters = _infer_task_test_generation_parameters_from_text(
-                        " ".join(part for part in [subtask.title, subtask.description or ""] if part)
-                    )
+                    try:
+                        task_test_parameters = _infer_task_test_generation_parameters_from_text(
+                            " ".join(part for part in [subtask.title, subtask.description or ""] if part)
+                        )
+                    except ValidationError as exc:
+                        raise CourseNexusError(
+                            code="VALIDATION_ERROR",
+                            message="任务测试题生成参数无效",
+                            status_code=422,
+                            details={"field": "generation_parameters.task_test", "errors": exc.errors()},
+                        ) from exc
                 generation_parameters["task_test"] = task_test_parameters.model_dump(mode="json")
                 subtask = subtask.model_copy(update={"generation_parameters": generation_parameters})
             enriched_subtasks.append(subtask)
@@ -883,22 +929,42 @@ def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[S
     return enriched_tasks
 
 
+def _coerce_task_test_parameters_shorthand(
+    *,
+    generation_parameters: dict[str, object],
+    raw_task_test_parameters: object,
+) -> object:
+    if not isinstance(raw_task_test_parameters, str):
+        return raw_task_test_parameters
+    question_type = TaskTestGenerationParameters._normalize_question_type_value(raw_task_test_parameters)
+    if question_type is None:
+        return raw_task_test_parameters
+
+    normalized: dict[str, object] = {"question_types": [question_type]}
+    for key in ("question_count", "total_question_count", "difficulty"):
+        if key in generation_parameters:
+            normalized[key] = generation_parameters[key]
+    return normalized
+
+
 def _infer_task_test_generation_parameters_from_text(text: str) -> TaskTestGenerationParameters:
-    question_count = 0
+    counts_by_type: dict[str, int] = {}
     question_types: list[str] = []
     for match in re.finditer(r"([一二两三四五六七八九十\d]+)\s*道\s*(单选题|多选题|选择题|判断题|简答题|问答题|计算题|证明题)", text):
         count = _parse_day_count(match.group(1))
         if count is None:
             continue
-        question_count += count
         question_type = _question_type_for_plan_label(match.group(2))
+        counts_by_type[question_type] = counts_by_type.get(question_type, 0) + count
         if question_type not in question_types:
             question_types.append(question_type)
-    if question_count <= 0:
+    if not counts_by_type:
         return TaskTestGenerationParameters()
     return TaskTestGenerationParameters(
-        question_count=min(question_count, 20),
-        question_types=question_types or ["single_choice", "short_answer"],
+        question_type_counts=[
+            {"question_type": question_type, "question_count": counts_by_type[question_type]}
+            for question_type in question_types
+        ],
         difficulty="medium",
     )
 
@@ -987,7 +1053,7 @@ def _with_material_quality(metadata: dict[str, object], *, material_quality: dic
 
 
 def _build_confirmed_config(*, payload: StudyPlanSaveRequest, duration_days: int, recommended_daily_minutes: int | None, daily_minutes_source: str | None) -> dict[str, object]:
-    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, payload.preference_overrides)
     config: dict[str, object] = {
         "goal_text": payload.goal_text,
         "start_date": payload.start_date.isoformat(),
@@ -1039,7 +1105,7 @@ def _saved_config(
 ) -> dict[str, object]:
     duration_days = payload.duration_days or _duration_days_between(payload.start_date, payload.end_date)
     estimated_total_minutes = _task_previews_total_minutes(tasks_preview)
-    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
+    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, payload.preference_overrides)
     daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
         payload=payload,
         estimated_total_minutes=estimated_total_minutes,
@@ -1260,6 +1326,12 @@ def _config_int(config: dict[str, object], key: str) -> int | None:
     value = config.get(key)
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
+
+def _preference_overrides_from_config(config: dict[str, object]) -> StudyPreferenceOverrides | None:
+    value = config.get("preference_overrides")
+    if isinstance(value, dict):
+        return StudyPreferenceOverrides.model_validate(value)
+    return None
 def _material_scope_from_config(config: dict[str, object]) -> object:
     material_scope = config.get("material_scope")
     if isinstance(material_scope, dict):
@@ -1267,43 +1339,473 @@ def _material_scope_from_config(config: dict[str, object]) -> object:
     return {"include_all_parsed_materials": True, "material_ids": []}
 
 def _build_config_parse_prompt(*, course_name: str, payload: StudyPlanConfigParseRequest) -> str:
-    return "\n".join(
-        [
-            "你是 CourseNexus 的学习计划配置解析器。",
-            "只从用户目标中提取可编辑的学习计划字段，不创建计划，不编造无法确定的信息。",
-            "无法可靠确定的字段填 null，并把字段名加入 unresolved_fields。",
-            "相对日期解析规则：当用户写“今天是 YYYY年M月D日”时，可把该日期作为当前日期。",
-            "当用户写“两天学完”且给出今天日期时，start_date 为当天，end_date 为当天 + 1 天。",
-            "当用户写“N天学完/掌握/完成”且给出今天日期时，start_date 为当天，end_date 为当天 + (N - 1) 天。",
-            f"课程名称：{course_name}",
-            f"用户目标：{payload.goal_text}",
-            f"资料范围：{payload.material_scope.model_dump(mode='json')}",
-        ]
+    reference_date = _config_parse_reference_date().isoformat()
+    tomorrow_date = (_config_parse_reference_date() + timedelta(days=1)).isoformat()
+    prompt = """
+你是 CourseNexus 的学习计划配置解析器。
+
+你的唯一任务是从用户的自然语言学习目标中提取可编辑配置。
+你不生成学习计划、学习任务、讲义、测试题或推荐学习时间。
+
+当前日期上下文：
+- reference_date: {reference_date}
+- timezone: {timezone}
+
+课程名称：
+{course_name}
+
+用户原始输入：
+{goal_text}
+
+资料范围仅供理解上下文，不要改写或输出：
+{material_scope}
+
+请输出符合 StudyPlanConfigExtraction Schema 的 JSON。
+
+你只能提取以下字段：
+1. start_date
+2. end_date
+3. duration_days
+4. daily_available_minutes
+5. preference
+6. preference_overrides
+7. ambiguous_fields
+
+不要输出或推断以下系统字段：
+- recommended_daily_minutes
+- daily_minutes_source
+- material_scope
+- diagnostic_profile
+- material_snapshot
+- coverage
+- capacity
+- generation_metadata
+- unresolved_fields
+- needs_confirmation_fields
+
+日期规则：
+- “今天、明天、后天、下周”等相对日期必须以 reference_date 和 timezone 为基准。
+- 持续 N 天时，开始日算第 1 天。
+- “一周、1周、一个星期、一星期、一个礼拜”表示 duration_days=7；N 周/星期/礼拜表示 N*7 天。
+- 如果已知 start_date 和 duration_days，请计算 end_date。
+- 如果已知 start_date 和 end_date，请计算 duration_days。
+- 如果用户明确给出的日期互相冲突，不要自行覆盖，把相关字段加入 ambiguous_fields。
+- 无法可靠确定时返回 null，不要猜测。
+
+每日学习时间规则：
+- 只有用户明确表达“每天、每日、一天学习 X 分钟或小时”时，才填写 daily_available_minutes。
+- “两天总共学习三小时”不是每日学习时间，不得填写 daily_available_minutes。
+- 用户没有说明每日学习时间时返回 null。
+- 不得计算推荐每日学习时间。
+
+preference 只能是：fast_track、balanced、mastery、sprint、null。
+
+整体学习方式映射：
+- “速通、快速过一遍、时间紧、先建立框架、少讲一点、抓重点” -> fast_track
+- “正常节奏、均衡学习、日常学习” -> balanced
+- “深入掌握、深度掌握、系统掌握、真正理解、讲透、扎实掌握” -> mastery
+- “考前冲刺、查漏补缺、强化复习、重点回顾、易错点复盘” -> sprint
+
+注意：
+- 用户只是要求最后安排测试题，不等于 sprint。
+- 用户没有明确整体学习方式时，preference 返回 null。
+- 不得因为缺少学习方式就默认 balanced。
+- “深度学习”可能是学习方式，也可能是课程主题，必须结合句子语义判断。
+- “快速学习深度学习基础”中的“深度学习”是课程主题，整体方式应为 fast_track。
+- “用两天深度学习物理层”中的“深度学习”表示深入学习方式，可倾向 mastery。
+- 出现否定表达时，不得使用被否定的偏好，例如“不需要详细讲”“不要多给例题”“不是考前冲刺”。
+- 如果两个整体模式明确冲突且无法通过局部覆盖表达，将 preference 返回 null，并把 preference 加入 ambiguous_fields。
+
+preference_overrides 用于提取局部要求：
+
+content_depth:
+- “讲义详细、讲细、展开讲解” -> detailed
+- “简洁一点、少讲、只讲重点” -> concise
+- 没有明确表达 -> null
+
+example_intensity:
+- “多给例题、多举例、多做示范” -> high
+- “少一点例题、不需要太多例题” -> low
+- 没有明确表达 -> null
+
+assessment_intensity:
+- “多安排测试、加强练习、强化检测” -> high
+- “不要太多测试、少做题” -> low
+- 没有明确表达 -> null
+
+review_intensity:
+- “多复习、多回顾、重复巩固” -> high
+- “不用重复复习、少安排回顾” -> low
+- 没有明确表达 -> null
+
+局部覆盖和整体 preference 可以同时存在。
+
+示例一：
+输入：今天是 2026 年 7 月 13 日。我想用 2 天深入掌握物理层，讲义详细一点，多给公式例题。
+输出：
+{
+  "start_date": "2026-07-13",
+  "end_date": "2026-07-14",
+  "duration_days": 2,
+  "daily_available_minutes": null,
+  "preference": "mastery",
+  "preference_overrides": {
+    "content_depth": "detailed",
+    "example_intensity": "high",
+    "assessment_intensity": null,
+    "review_intensity": null
+  },
+  "ambiguous_fields": []
+}
+
+示例二：
+输入：我想明天快速过一遍第七章，公式部分详细讲，不要太多测试。
+输出：
+{
+  "start_date": "{tomorrow_date}",
+  "end_date": null,
+  "duration_days": null,
+  "daily_available_minutes": null,
+  "preference": "fast_track",
+  "preference_overrides": {
+    "content_depth": "detailed",
+    "example_intensity": null,
+    "assessment_intensity": "low",
+    "review_intensity": null
+  },
+  "ambiguous_fields": []
+}
+
+示例三：
+输入：考前冲刺两天，每天学习 90 分钟，重点查漏补缺并多安排测试。
+输出：
+{
+  "start_date": null,
+  "end_date": null,
+  "duration_days": 2,
+  "daily_available_minutes": 90,
+  "preference": "sprint",
+  "preference_overrides": {
+    "content_depth": null,
+    "example_intensity": null,
+    "assessment_intensity": "high",
+    "review_intensity": "high"
+  },
+  "ambiguous_fields": []
+}
+
+示例四：
+输入：我想快速学习深度学习基础。
+输出：
+{
+  "start_date": null,
+  "end_date": null,
+  "duration_days": null,
+  "daily_available_minutes": null,
+  "preference": "fast_track",
+  "preference_overrides": {
+    "content_depth": null,
+    "example_intensity": null,
+    "assessment_intensity": null,
+    "review_intensity": null
+  },
+  "ambiguous_fields": []
+}
+""".strip()
+    return (
+        prompt.replace("{reference_date}", reference_date)
+        .replace("{timezone}", _CONFIG_PARSE_REFERENCE_TIMEZONE)
+        .replace("{course_name}", course_name)
+        .replace("{goal_text}", payload.goal_text)
+        .replace("{material_scope}", str(payload.material_scope.model_dump(mode="json")))
+        .replace("{tomorrow_date}", tomorrow_date)
     )
 
 
-def _normalize_relative_config(parsed: StudyPlanParsedConfig, *, goal_text: str) -> StudyPlanParsedConfig:
+def _assemble_parsed_config(
+    *,
+    extraction: StudyPlanConfigExtraction,
+    payload: StudyPlanConfigParseRequest,
+    model_provider: ModelProvider,
+) -> StudyPlanParsedConfig:
+    ambiguous_fields = set(extraction.ambiguous_fields)
+    start_date, end_date, duration_days = _resolve_config_dates(
+        extraction=extraction,
+        goal_text=payload.goal_text,
+        ambiguous_fields=ambiguous_fields,
+    )
+    preference, preference_resolution = _resolve_config_preference(
+        preference=extraction.preference,
+        goal_text=payload.goal_text,
+        ambiguous_fields=ambiguous_fields,
+    )
+    preference_overrides, preference_overrides_resolution = _resolve_config_preference_overrides(
+        preference_overrides=extraction.preference_overrides,
+    )
+    unresolved_fields = _resolve_config_unresolved_fields(
+        start_date=start_date,
+        end_date=end_date,
+        duration_days=duration_days,
+        ambiguous_fields=ambiguous_fields,
+    )
+    needs_confirmation_fields = _resolve_config_confirmation_fields(ambiguous_fields=ambiguous_fields)
+    return StudyPlanParsedConfig(
+        goal_text=payload.goal_text,
+        start_date=start_date,
+        end_date=end_date,
+        duration_days=duration_days,
+        daily_available_minutes=extraction.daily_available_minutes,
+        recommended_daily_minutes=None,
+        daily_minutes_source="user_text" if extraction.daily_available_minutes is not None else None,
+        preference=preference,
+        preference_overrides=preference_overrides,
+        diagnostic_profile={},
+        material_snapshot={},
+        coverage={},
+        capacity={},
+        generation_metadata=_build_config_parse_metadata(
+            model_provider=model_provider,
+            preference_resolution=preference_resolution,
+            preference_overrides_resolution=preference_overrides_resolution,
+        ),
+        material_scope=payload.material_scope,
+        unresolved_fields=unresolved_fields,
+        needs_confirmation_fields=needs_confirmation_fields,
+    )
+
+def _config_parse_reference_date() -> date:
+    return datetime.now(timezone(timedelta(hours=8))).date()
+
+
+def _resolve_config_dates(
+    *,
+    extraction: StudyPlanConfigExtraction,
+    goal_text: str,
+    ambiguous_fields: set[str],
+) -> tuple[date | None, date | None, int | None]:
+    start_date = extraction.start_date
+    end_date = extraction.end_date
+    duration_days = extraction.duration_days
+
     explicit_today = _extract_explicit_today(goal_text)
-    duration_days = _extract_duration_days(goal_text)
-    if explicit_today is None or duration_days is None:
-        return parsed
+    if explicit_today is not None and start_date is None:
+        start_date = explicit_today
+    elif explicit_today is None and start_date is None and _mentions_today(goal_text):
+        start_date = _config_parse_reference_date()
 
-    start_date = parsed.start_date or explicit_today
-    end_date = parsed.end_date or (start_date + timedelta(days=duration_days - 1))
+    text_duration_days = _extract_duration_days(goal_text)
+    if text_duration_days is not None:
+        if duration_days is not None and duration_days != text_duration_days:
+            _raise_config_parse_validation_error(
+                "自然语言天数和模型解析天数不一致",
+                details={"duration_days": duration_days, "text_duration_days": text_duration_days},
+            )
+        duration_days = text_duration_days
+        ambiguous_fields.discard("duration_days")
 
-    unresolved_fields = [
-        field_name
-        for field_name in parsed.unresolved_fields
-        if field_name not in {"start_date", "end_date", "duration_days"}
-    ]
-    return parsed.model_copy(
-        update={
-            "start_date": start_date,
-            "end_date": end_date,
-            "duration_days": duration_days,
-            "unresolved_fields": unresolved_fields,
-        }
+    if (
+        start_date is None
+        and end_date is None
+        and duration_days is not None
+        and {"start_date", "end_date"} & ambiguous_fields
+        and not _mentions_explicit_date_signal(goal_text)
+    ):
+        ambiguous_fields.difference_update({"start_date", "end_date"})
+
+    has_date_ambiguity = bool({"start_date", "end_date", "duration_days"} & ambiguous_fields)
+    if not has_date_ambiguity and start_date is None and end_date is None and duration_days is not None:
+        start_date = _config_parse_reference_date()
+
+    if start_date is not None and duration_days is not None:
+        expected_end_date = start_date + timedelta(days=duration_days - 1)
+        if end_date is not None and end_date != expected_end_date:
+            _raise_config_parse_validation_error(
+                "日期范围和天数不一致",
+                details={
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "duration_days": duration_days,
+                    "expected_end_date": expected_end_date.isoformat(),
+                },
+            )
+        end_date = expected_end_date
+    elif start_date is not None and end_date is not None:
+        duration_days = (end_date - start_date).days + 1
+    elif end_date is not None and duration_days is not None:
+        start_date = end_date - timedelta(days=duration_days - 1)
+
+    if start_date is not None and end_date is not None:
+        if end_date < start_date:
+            _raise_config_parse_validation_error(
+                "结束日期不能早于开始日期",
+                details={"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
+            )
+        if duration_days is None:
+            duration_days = (end_date - start_date).days + 1
+        elif duration_days != (end_date - start_date).days + 1:
+            _raise_config_parse_validation_error(
+                "日期范围和天数不一致",
+                details={
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "duration_days": duration_days,
+                },
+            )
+    return start_date, end_date, duration_days
+
+def _mentions_today(goal_text: str) -> bool:
+    return bool(re.search(r"今天|今日|当天|从今天", goal_text))
+
+
+def _mentions_explicit_date_signal(goal_text: str) -> bool:
+    return bool(
+        re.search(
+            r"\d{4}\s*年|\d{1,2}\s*月\s*\d{1,2}\s*[日号]|\d{1,2}\s*号|今天|今日|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天]",
+            goal_text,
+        )
     )
+
+
+def _raise_config_parse_validation_error(message: str, *, details: dict[str, object]) -> None:
+    raise CourseNexusError(code="VALIDATION_ERROR", message=message, status_code=422, details=details)
+
+
+def _resolve_config_preference(
+    *,
+    preference: str | None,
+    goal_text: str,
+    ambiguous_fields: set[str],
+) -> tuple[str | None, str]:
+    if "preference" in ambiguous_fields:
+        return None, "unresolved"
+    if preference is not None:
+        return preference, "model"
+    guardrail_preference = _guardrail_preference(goal_text)
+    if guardrail_preference is not None:
+        return guardrail_preference, "rule_guardrail"
+    return None, "unresolved"
+
+def _resolve_config_preference_overrides(
+    *,
+    preference_overrides: StudyPreferenceOverrides,
+) -> tuple[StudyPreferenceOverrides, str]:
+    if _has_preference_overrides(preference_overrides):
+        return preference_overrides, "model"
+    return preference_overrides, "none"
+def _guardrail_preference(goal_text: str) -> str | None:
+    signals = {
+        "mastery": (
+            "深度学习",
+            "深入学习",
+            "深入掌握",
+            "深度掌握",
+            "真正掌握",
+            "系统掌握",
+            "扎实掌握",
+            "讲义详细",
+            "讲详细",
+            "讲细",
+            "详细一点",
+            "多给例题",
+            "多给公式",
+            "公式适用条件",
+            "多讲公式",
+            "多讲例题",
+            "讲透",
+        ),
+        "fast_track": (
+            "速通",
+            "快速过一遍",
+            "快速通关",
+            "快速学完",
+            "快速复习",
+            "时间紧",
+            "抓重点即可",
+            "少讲一点",
+            "先建立框架",
+            "先抓框架",
+        ),
+        "sprint": (
+            "考前冲刺",
+            "考试冲刺",
+            "冲刺复习",
+            "查漏补缺",
+            "强化测试",
+            "强化复习",
+            "易错点",
+            "考前最后检验",
+        ),
+        "balanced": ("正常节奏", "均衡", "日常学习"),
+    }
+    matched_preferences = {
+        preference
+        for preference, phrases in signals.items()
+        if any(_contains_non_negated_phrase(goal_text, phrase) for phrase in phrases)
+    }
+    if len(matched_preferences) == 1:
+        return next(iter(matched_preferences))
+    return None
+
+
+def _contains_non_negated_phrase(goal_text: str, phrase: str) -> bool:
+    for match in re.finditer(re.escape(phrase), goal_text):
+        prefix = goal_text[max(0, match.start() - 4) : match.start()]
+        if any(negator in prefix for negator in ("不", "不是", "不要", "无需", "不用", "别")):
+            continue
+        return True
+    return False
+
+
+def _resolve_config_unresolved_fields(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    duration_days: int | None,
+    ambiguous_fields: set[str],
+) -> list[str]:
+    unresolved_fields: list[str] = []
+    if start_date is None or "start_date" in ambiguous_fields:
+        unresolved_fields.append("start_date")
+    if (duration_days is None and end_date is None) or "duration_days" in ambiguous_fields or "end_date" in ambiguous_fields:
+        unresolved_fields.append("duration_days")
+    if "preference" in ambiguous_fields:
+        unresolved_fields.append("preference")
+    return _without_system_or_duplicate_fields(unresolved_fields)
+
+
+def _resolve_config_confirmation_fields(*, ambiguous_fields: set[str]) -> list[str]:
+    fields = ["preference"]
+    if "daily_available_minutes" in ambiguous_fields:
+        fields.append("daily_available_minutes")
+    return _without_system_or_duplicate_fields(fields)
+
+
+def _without_system_or_duplicate_fields(fields: list[str]) -> list[str]:
+    result: list[str] = []
+    for field in fields:
+        if field in _CONFIG_PARSE_SYSTEM_FIELDS or field in result:
+            continue
+        result.append(field)
+    return result
+
+
+def _build_config_parse_metadata(
+    *,
+    model_provider: ModelProvider,
+    preference_resolution: str,
+    preference_overrides_resolution: str,
+) -> dict[str, object]:
+    metadata = _build_generation_metadata(model_provider=model_provider)
+    metadata["config_parse"] = {
+        "preference_resolution": preference_resolution,
+        "preference_overrides_resolution": preference_overrides_resolution,
+    }
+    return metadata
+
+def _has_preference_overrides(preference_overrides: StudyPreferenceOverrides) -> bool:
+    return any(value is not None for value in preference_overrides.model_dump(mode="json").values())
+
+
 def _extract_explicit_today(goal_text: str) -> date | None:
     patterns = (
         r"今天是\s*(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日",
@@ -1319,10 +1821,16 @@ def _extract_explicit_today(goal_text: str) -> date | None:
 
 def _extract_duration_days(goal_text: str) -> int | None:
     match = re.search(r"([一二两三四五六七八九十\d]+)\s*天", goal_text)
-    if not match:
-        return None
-    day_count = _parse_day_count(match.group(1))
-    return day_count if day_count and day_count > 0 else None
+    if match:
+        day_count = _parse_day_count(match.group(1))
+        return day_count if day_count and day_count > 0 else None
+
+    match = re.search(r"([一二两三四五六七八九十\d]+|一个)\s*(?:周|星期|礼拜)", goal_text)
+    if match:
+        week_count = _parse_day_count(match.group(1).removesuffix("个"))
+        return week_count * 7 if week_count and week_count > 0 else None
+
+    return None
 
 
 def _parse_day_count(raw_value: str) -> int | None:

@@ -86,7 +86,7 @@ sequenceDiagram
 - S06 使用 `iter_material_context_batches()` 读取当前二级任务的全材料上下文，不使用 Top-K 检索，也不调用旧的 `resolve_context()`。
 - Handout 使用 `run_material_coverage()` 覆盖每个材料批次，再合并讲义章节。
 - Task test 不再“每个 batch 各生成一整套题再拼接”；它把当前二级任务的所有批次一次性传给 task-test generator，由 prompt 要求先在内部汇总候选考点，再只输出最终 `question_count` 道题。
-- Task test 的 `question_count` 是最终硬约束，输出多题、少题、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
+- Task test 的 `question_count` 是最终硬约束；当参数包含 `question_type_counts` 时，每种 `question_type` 的输出数量也是硬约束。输出多题、少题、每种题型数量不匹配、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
 - 引用必须来自本次材料上下文的 chunk id，不允许伪造 fallback 引用。task_test 的所有题目引用还必须落在当前二级任务允许的材料批次内。
 
 ## 内容结构
@@ -98,7 +98,7 @@ sequenceDiagram
 任务测试题结构不变量：
 
 - `questions.length == request.parameters.question_count`。
-- `question_type` 必须属于请求的 `question_types` 白名单。
+- `question_type` 必须属于请求的 `question_types` 白名单。`question_type_counts` 存在时，实际输出中每种题型数量必须与请求分布完全一致。
 - 题目 `id` 必须为 `q_1..q_N`，`sort_order` 必须为 `1..N`，二者都按最终题目顺序连续且唯一。
 - `single_choice` / `multiple_choice` 必须恰好有 4 个 options；生成器按每道题自己的 options 顺序将 option id 归一化为 `A`、`B`、`C`、`D`，并同步映射 `correct_answer`。
 - 单选答案必须是命中 option id 的字符串；多选答案必须是无重复字符串数组，且所有值命中 option id。
@@ -118,7 +118,7 @@ sequenceDiagram
 
 保存失败记录后，接口仍返回统一错误 envelope。失败记录只作为审计和重试依据，不参与幂等命中；下一次默认请求如果没有 success 会重新尝试生成。生成失败不修改二级任务完成状态，不汇总一级任务状态，也不写 `checkin_records`。
 
-如果 task_test 模型输出无法同时满足题量、题型、结构、去重和引用约束，后端返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录，不做静默截断、不用部分题目成功落库。
+如果 task_test 模型输出无法同时满足总题量、每种题型数量、题型白名单、结构、去重和引用约束，后端返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录，不做静默截断、不用部分题目成功落库。
 
 ## 错误码
 
@@ -176,7 +176,11 @@ Handout 生成参数由 learning-execution 注入当前二级任务上下文，�
 
 ### task-test 默认参数
 
-计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 合并参数时以计划默认值为底、本次请求为覆盖；因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题。模型若输出 `{ "single_choice": 10, "short_answer": 3 }` 这类题型计数别名，会归一化为 `question_count=13` 和对应 `question_types`；真正非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
+计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。模型或前端给出的 `{ "single_choice": 10, "short_answer": 3 }`、数组格式、`items` / `question_types` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象，以及 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}` 这类题量文案映射，都会归一化为规范测试题参数；`task_test: "single_choice"` 搭配同级 `question_count` 这类模型 shorthand 会归一化为总题数 + 题型白名单。因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题且分布为 10/3。
+
+合并计划默认参数和本次请求时以计划默认值为底：本次请求显式传 per-type counts 时用本次分布覆盖 stored 分布；本次请求只传 `difficulty` 时保留 stored 分布；本次请求显式传 `question_count` 或字符串数组形式的 `question_types`、但没有传 per-type counts 时，清掉 stored `question_type_counts`，退回“总题数 + 题型白名单”旧契约，避免旧 10/3 分布污染新请求。
+
+Task-test prompt 在 `question_type_counts` 存在时必须明确写出每种题型数量，例如 `single_choice 10 道，short_answer 3 道`；没有 `question_type_counts` 时只写总题数和题型白名单，不凭空平均分配。真正非法默认参数在保存/替换阶段返回 `VALIDATION_ERROR`；旧计划中若存在脏默认参数，运行 task-test 生成时返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
 
 ### task-test 选择题选项字母契约
 
@@ -185,3 +189,37 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 ### 术语质量校验
 
 物理层讲义生成后会扫描已知术语误拼，当前包括 `Nyquest -> Nyquist`、`Shanon -> Shannon`、`bandwith -> bandwidth`。命中明显错拼时返回 `GENERATION_SCHEMA_INVALID`，不静默落库，后续可扩展为课程领域 glossary。
+
+## 2026-07-13 任务讲义前端展示与引用脱敏契约
+
+### 任务讲义命名
+
+`handout` 是二级任务级学习内容，不是全局“今天唯一讲义”。旧文案中的“今日讲义”仅表示执行页当天任务可按需生成讲义；新生成内容标题应优先使用当前二级任务标题派生，格式为 `{StudySubTask.title}讲义`，例如 `Nyquist与Shannon公式（补基础）讲义`。`content_type` 仍保持 `handout`，API 路径和数据库表不改名。
+
+### 前端展示形态
+
+前端详情页展示 `handout` 时不得把后端内容当作 Markdown 或 HTML 注入。`GET /api/v1/generated-contents/{generated_content_id}` 返回的 `content_json` 是权威结构化数据，前端按以下字段渲染：
+
+- `overview`：讲义导读。
+- `learning_objectives[]`：学习目标列表。
+- `sections[]`：讲义正文分节；每节使用 `title`、`body`、`key_points[]` 和 `sort_order`。
+- `summary`：收束总结。
+
+`sections[].source_citation_ids` 仅用于把 section 绑定到 `source_citations[].id`，供内部追溯和调试。学生正文不逐节显示 raw citation snippet。
+
+### 引用展示与解析残留
+
+`source_citations[].hit_text` 保存的是资料解析 chunk 的原始命中文本快照，属于内部追溯数据，可能包含 PDF parser/OCR 残留，例如 `<!-- formula-not-decoded -->`、``、`` 或公式 glyph 乱序。后端不得在保存阶段改写该字段，也不得在导出层凭占位符重建公式。
+
+所有用户可见出口必须使用“可展示引用”口径：
+
+- 优先展示 `material_name` 和页码位置：`page` 优先，缺失时可用 `page_index + 1`，都缺失时显示页码未知。
+- 只有当 `hit_text` 不含解析残留且适合作为短摘录时，才可作为辅助说明展示。
+- 命中 `formula-not-decoded`、``、`` 等残留时，必须隐藏 `hit_text`，只展示资料名和页码。
+- `Sources: unavailable` 只表示内容 JSON 引用 ID 找不到对应 `source_citations[]`；已有有效 citation 但 snippet 不安全时，不得退化为 unavailable。
+
+任务测试题 Markdown 导出、任务讲义 PDF 导出、生成内容详情页引用面板以及验证脚本生成的临时 Markdown，都必须遵循同一用户可见引用口径。
+
+### 验证策略
+
+本轮修复实施时暂不运行单元测试、构建或局部脚本。最终验证等待用户提供整轮 study-mode prompt 后统一执行：从资料输入、解析、学前诊断、计划生成与保存，到任务讲义、任务测试题和导出文件全链路检查。验收时用户可见输出不得包含 `formula-not-decoded`、``、``；内部 JSON 的 `source_citations[].hit_text` 可以保留原始解析文本。
