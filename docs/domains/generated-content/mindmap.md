@@ -12,9 +12,9 @@ const { root, features } = transformer.transform(markdown);
 const assets = transformer.getUsedAssets(features);
 ```
 
-The result is persisted as `content_json.markmap_data = { root, features, assets }`. The frontend uses `markmap-view` with `markmap_data.root` and the returned assets; it does not run `markmap-lib` again. Nodes contain no citation fields.
+The result is persisted as `content_json.markmap_data = { root, features, assets }`. The Node bridge removes function-valued `iife` loader hooks that cannot survive JSON serialization and retains JSON-safe styles plus external scripts. The frontend uses `markmap-view` with `markmap_data.root` and the returned assets; it does not run `markmap-lib` again. Nodes contain no citation fields.
 
-The frontend now declares `markmap-view@0.18.12` directly. `MindmapResult.tsx` creates the view, awaits `setData(markmap_data.root)`, then fits the completed render. It exposes fit/zoom/expand/collapse controls and falls back to persisted business nodes if SVG initialization fails. It never transforms `markmap_markdown` in the browser.
+The frontend now declares `markmap-view@0.18.12` directly. `MindmapResult.tsx` sanitizes and loads JSON-safe style/script assets, creates the view, awaits `setData(markmap_data.root)`, then fits the completed render. It exposes fit/zoom/expand/collapse controls and falls back to persisted business nodes if asset loading or SVG initialization fails. It never transforms `markmap_markdown` in the browser.
 
 The initial view applies `fold: 1` to a cloned root tree, so only the center title is visible when the artifact opens. The persisted backend tree is not mutated; users can expand the root interactively or use the full-expand control, and full-collapse returns to the single-title view.
 
