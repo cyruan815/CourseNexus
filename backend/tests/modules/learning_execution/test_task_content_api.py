@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy import create_engine
 
+from app.core.errors import CourseNexusError
 from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
@@ -23,7 +24,11 @@ from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.learning_execution import router as learning_router
-from app.modules.learning_execution.service import _reduce_task_content_outputs, generate_task_test_for_subtask
+from app.modules.learning_execution.service import (
+    _reduce_task_content_outputs,
+    generate_handout_for_subtask,
+    generate_task_test_for_subtask,
+)
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -235,6 +240,56 @@ def _add_related_material_with_chunk(db: Session, *, user_id: str, subtask_id: s
     db.commit()
 
 
+def _set_plan_subtask_citation_scope(db: Session, *, citation_chunk_ids: object) -> None:
+    plan = db.get(StudyPlan, "sp_api_content")
+    assert plan is not None
+    plan.parsed_config_json = {
+        "task_snapshot": [
+            {
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "sort_order": 1,
+                        "citation_chunk_ids": citation_chunk_ids,
+                    }
+                ],
+            }
+        ]
+    }
+    db.add(plan)
+    db.commit()
+
+
+class CountingHandoutModelProvider:
+    def __init__(self, *, citation_chunk_id: str = "chunk_api_content") -> None:
+        self.prompts: list[str] = []
+        self.citation_chunk_id = citation_chunk_id
+
+    def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
+        raise AssertionError("answer_question should not be called")
+
+    def generate_structured(self, *, prompt, output_schema):
+        self.prompts.append(prompt)
+        assert output_schema is HandoutContent
+        return HandoutContent.model_validate(
+            {
+                "overview": "学习任务范围内的知识点。",
+                "learning_objectives": ["解释当前任务知识点"],
+                "sections": [
+                    {
+                        "id": "sec_1",
+                        "title": "任务知识点",
+                        "body": "根据任务范围生成讲义。",
+                        "key_points": ["只使用任务范围内的引用"],
+                        "source_citation_ids": [self.citation_chunk_id],
+                        "sort_order": 1,
+                    }
+                ],
+                "summary": "完成任务范围学习。",
+            }
+        )
+
+
 class CountingTaskTestModelProvider:
     def __init__(self) -> None:
         self.prompts: list[str] = []
@@ -413,6 +468,7 @@ def test_generate_task_test_multi_batch_generates_requested_question_count_once(
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
     _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    _set_plan_subtask_citation_scope(api.db, citation_chunk_ids=["chunk_api_content"])
     provider = CountingTaskTestModelProvider()
 
     result = generate_task_test_for_subtask(
@@ -432,6 +488,76 @@ def test_generate_task_test_multi_batch_generates_requested_question_count_once(
     assert [question["id"] for question in result.content_json["questions"]] == ["q_1", "q_2"]
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
     assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
+
+
+def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    _set_plan_subtask_citation_scope(api.db, citation_chunk_ids=["chunk_api_content"])
+    provider = CountingHandoutModelProvider()
+
+    result = generate_handout_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"language": "zh-CN", "detail_level": "standard"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert len(provider.prompts) == 1
+    assert "chunk_id=chunk_api_content;" in provider.prompts[0]
+    assert "chunk_api_content_second" not in provider.prompts[0]
+    citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
+    assert [citation.chunk_id for citation in citations] == ["chunk_api_content"]
+
+
+def test_generate_handout_without_stored_citation_scope_keeps_material_scope(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    provider = CountingHandoutModelProvider()
+
+    generate_handout_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"language": "zh-CN", "detail_level": "standard"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert len(provider.prompts) == 1
+    assert "chunk_id=chunk_api_content;" in provider.prompts[0]
+    assert "chunk_id=chunk_api_content_second;" in provider.prompts[0]
+
+
+def test_generate_handout_stored_citation_scope_without_matching_chunks_saves_failed_record(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    _set_plan_subtask_citation_scope(api.db, citation_chunk_ids=["chunk_missing"])
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        generate_handout_for_subtask(
+            api.db,
+            user_id=user_id,
+            subtask_id=subtask_id,
+            parameters={"language": "zh-CN", "detail_level": "standard"},
+            force_regenerate=True,
+            model_provider=BrokenModelProvider(),
+            max_tokens=10_000,
+        )
+
+    assert exc_info.value.code == "NO_PARSED_MATERIAL"
+    content = api.db.execute(select(AIGeneratedContent)).scalar_one()
+    assert content.content_type == "handout"
+    assert content.study_subtask_id == subtask_id
+    assert content.generation_status == "failed"
+    assert content.error_code == "NO_PARSED_MATERIAL"
 
 
 def test_generate_handout_is_idempotent_for_existing_success(api: ApiHarness) -> None:

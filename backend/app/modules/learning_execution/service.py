@@ -225,6 +225,11 @@ def _generate_task_content(
         if not batches:
             raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前任务没有已解析资料上下文", status_code=400)
 
+        if content_type == "handout":
+            citation_scope = _stored_subtask_citation_chunk_ids(target)
+            if citation_scope:
+                batches = _filter_batches_by_citation_scope(batches=batches, citation_chunk_ids=citation_scope)
+
         if content_type == "task_test":
             output = generator.generate(
                 batches=tuple(batches),
@@ -232,9 +237,10 @@ def _generate_task_content(
                 parameters=effective_parameters,
             )
         else:
+            expected_material_ids = {material_id for batch in batches for material_id in batch.material_ids}
             output = run_material_coverage(
                 batches=batches,
-                expected_material_ids=set(material_ids),
+                expected_material_ids=expected_material_ids,
                 map_batch=lambda batch: generator.generate(
                     batches=(batch,),
                     expected_material_ids=frozenset(batch.material_ids),
@@ -366,6 +372,58 @@ def _stored_task_generation_parameters(
             content_parameters = generation_parameters.get(content_type)
             return dict(content_parameters) if isinstance(content_parameters, dict) else {}
     return {}
+
+
+def _stored_subtask_citation_chunk_ids(target: repository.ExecutionTarget) -> list[str]:
+    config = target.plan.parsed_config_json
+    if not isinstance(config, dict):
+        return []
+    task_snapshot = config.get("task_snapshot")
+    if not isinstance(task_snapshot, list):
+        return []
+    for task in task_snapshot:
+        if not isinstance(task, dict) or task.get("sort_order") != target.task.sort_order:
+            continue
+        subtasks = task.get("subtasks")
+        if not isinstance(subtasks, list):
+            return []
+        for subtask in subtasks:
+            if not isinstance(subtask, dict) or subtask.get("sort_order") != target.subtask.sort_order:
+                continue
+            citation_chunk_ids = subtask.get("citation_chunk_ids")
+            if not isinstance(citation_chunk_ids, list) or not all(
+                isinstance(chunk_id, str) for chunk_id in citation_chunk_ids
+            ):
+                return []
+            return list(dict.fromkeys(citation_chunk_ids))
+    return []
+
+
+def _filter_batches_by_citation_scope(
+    *,
+    batches: list[MaterialContextBatch],
+    citation_chunk_ids: list[str],
+) -> list[MaterialContextBatch]:
+    allowed_chunk_ids = set(citation_chunk_ids)
+    scoped_batches: list[MaterialContextBatch] = []
+    for batch in batches:
+        scoped_chunks = [chunk for chunk in batch.chunks if chunk.chunk_id in allowed_chunk_ids]
+        if not scoped_chunks:
+            continue
+        scoped_batches.append(
+            MaterialContextBatch(
+                chunks=scoped_chunks,
+                material_ids=list(dict.fromkeys(chunk.material_id for chunk in scoped_chunks)),
+                estimated_tokens=batch.estimated_tokens,
+            )
+        )
+    if not scoped_batches:
+        raise CourseNexusError(
+            code="NO_PARSED_MATERIAL",
+            message="当前任务没有匹配任务引用范围的已解析资料上下文",
+            status_code=400,
+        )
+    return scoped_batches
 
 
 def _new_task_generated_content(
