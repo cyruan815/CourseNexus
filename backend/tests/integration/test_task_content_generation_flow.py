@@ -218,6 +218,12 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     task_test = task_test_response.json()["data"]
     assert handout["study_subtask_id"] == learn_subtask_id
     assert task_test["study_subtask_id"] == quiz_subtask_id
+    assert handout["source_citations"]
+    assert task_test["source_citations"]
+    handout_citation_ids = {citation["id"] for citation in handout["source_citations"]}
+    task_test_citation_ids = {citation["id"] for citation in task_test["source_citations"]}
+    assert set(handout["content_json"]["sections"][0]["source_citation_ids"]).issubset(handout_citation_ids)
+    assert set(task_test["content_json"]["questions"][0]["source_citation_ids"]).issubset(task_test_citation_ids)
 
     learn_context = api.client.get(f"/api/v1/study-subtasks/{learn_subtask_id}/execution-context", headers=headers).json()["data"]
     quiz_context = api.client.get(f"/api/v1/study-subtasks/{quiz_subtask_id}/execution-context", headers=headers).json()["data"]
@@ -228,6 +234,11 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     task_test_citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == task_test["id"])).scalars().all()
     assert {citation.chunk_id for citation in handout_citations} == {"chunk_flow_1", "chunk_flow_2"}
     assert {citation.chunk_id for citation in task_test_citations} == {"chunk_flow_1", "chunk_flow_2"}
+
+    markdown_response = api.client.get(f"/api/v1/generated-contents/{task_test['id']}/exports/markdown", headers=headers)
+    assert markdown_response.status_code == 200
+    assert "Sources: unavailable" not in markdown_response.text
+    assert "主键.pdf, p.1" in markdown_response.text
 
     learn_subtask = api.db.get(StudySubTask, learn_subtask_id)
     quiz_subtask = api.db.get(StudySubTask, quiz_subtask_id)
@@ -314,3 +325,72 @@ def test_execution_context_returns_latest_successful_task_content_after_regenera
     quiz_context = quiz_context_response.json()["data"]
     assert learn_context["handout_content_id"] == second_handout["id"]
     assert quiz_context["task_test_content_id"] == second_task_test["id"]
+
+
+def test_task_test_generation_defaults_to_saved_subtask_parameters(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    _, quiz_subtask_id = _seed_plan_with_materials(api.db, user_id=user_id)
+    plan = api.db.get(StudyPlan, "sp_flow")
+    assert plan is not None
+    plan.parsed_config_json = {
+        "task_snapshot": [
+            {
+                "sort_order": 1,
+                "subtasks": [
+                    {"sort_order": 1},
+                    {
+                        "sort_order": 2,
+                        "generation_parameters": {
+                            "task_test": {
+                                "question_count": 2,
+                                "question_types": ["single_choice", "short_answer"],
+                                "difficulty": "hard",
+                            }
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+    api.db.add(plan)
+    api.db.commit()
+
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
+        structured_outputs={
+            TaskTestContent: {
+                "instructions": "完成下列题目。",
+                "questions": [
+                    {
+                        "id": "q_1",
+                        "question_type": "single_choice",
+                        "question_text": "主键的作用是什么？",
+                        "options": [{"id": "A", "text": "唯一标识一行"}, {"id": "B", "text": "表达外键"}],
+                        "correct_answer": "A",
+                        "explanation": "主键唯一标识一行。",
+                        "source_citation_ids": ["chunk_flow_1"],
+                        "sort_order": 1,
+                    },
+                    {
+                        "id": "q_2",
+                        "question_type": "short_answer",
+                        "question_text": "说明外键的作用。",
+                        "options": [],
+                        "correct_answer": "外键用于表达两个表之间的关系。",
+                        "explanation": "外键把一张表的字段关联到另一张表的主键或唯一键。",
+                        "source_citation_ids": ["chunk_flow_2"],
+                        "sort_order": 2,
+                    },
+                ],
+            }
+        }
+    )
+
+    response = api.client.post(
+        f"/api/v1/study-subtasks/{quiz_subtask_id}/task-tests",
+        headers=headers,
+        json={"force_regenerate": True},
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert len(data["content_json"]["questions"]) == 2

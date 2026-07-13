@@ -94,3 +94,34 @@ def test_handout_generator_rejects_schema_without_citation() -> None:
         )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+
+def test_handout_generator_rejects_known_physical_layer_term_misspelling() -> None:
+    provider = MockModelProvider(
+        structured_outputs={
+            HandoutContent: {
+                "overview": "Nyquest criterion is a physical layer formula.",
+                "learning_objectives": ["Distinguish Nyquest and Shannon"],
+                "sections": [
+                    {
+                        "id": "sec_1",
+                        "title": "Nyquest and Shannon",
+                        "body": "Nyquest should be spelled Nyquist in physical layer materials.",
+                        "key_points": ["Nyquest is a misspelling"],
+                        "source_citation_ids": ["chunk_1"],
+                        "sort_order": 1,
+                    }
+                ],
+                "summary": "Fix Nyquest before saving the handout.",
+            }
+        }
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        HandoutGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={},
+        )
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details == {"term": "Nyquest", "expected": "Nyquist"}

@@ -223,6 +223,13 @@ def test_plan_preference_accepts_sprint_and_normalizes_legacy_advanced() -> None
     assert preference_adapter.validate_python("advanced") == "sprint"
 
 
+def test_subtask_type_normalizes_model_aliases() -> None:
+    practice = _subtask(subtask_type="practice")
+    final_test = _subtask(subtask_type="final-test")
+
+    assert practice.subtask_type == "quiz"
+    assert final_test.subtask_type == "test"
+
 def test_derive_planner_strategy_maps_each_preference() -> None:
     assert planner.derive_planner_strategy("fast_track") == {
         "preference": "fast_track",
@@ -492,6 +499,25 @@ def test_validate_preview_completion_goal_requires_final_assessment() -> None:
         planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
 
+
+
+def test_config_parse_schema_normalizes_nullable_trace_fields() -> None:
+    parsed = StudyPlanParsedConfig.model_validate(
+        {
+            "goal_text": "两天学习物理层",
+            "diagnostic_profile": None,
+            "material_snapshot": None,
+            "coverage": None,
+            "capacity": None,
+            "generation_metadata": None,
+        }
+    )
+
+    assert parsed.diagnostic_profile == {}
+    assert parsed.material_snapshot == {}
+    assert parsed.coverage == {}
+    assert parsed.capacity == {}
+    assert parsed.generation_metadata == {}
 def test_config_parse_prompt_explains_relative_day_rules() -> None:
     prompt = study_plan_service._build_config_parse_prompt(
         course_name="计算机网络",
@@ -644,3 +670,257 @@ def test_preview_schema_carries_wizard_metadata_fields() -> None:
     assert preview.material_snapshot["mode"] == "selected"
     assert preview.capacity["feasibility_status"] == "ok"
     assert preview.generation_metadata["schema_version"] == 1
+
+
+
+
+
+def test_capacity_marks_over_capacity_when_any_day_exceeds_daily_minutes() -> None:
+    capacity = study_plan_service._build_capacity_summary(
+        estimated_total_minutes=100,
+        available_total_minutes=120,
+        daily_over_capacity=True,
+    )
+
+    assert capacity["feasibility_status"] == "over_capacity"
+    assert capacity["warnings"] == ["PLAN_OVER_CAPACITY"]
+def test_normalizes_quiz_subtasks_to_day_end() -> None:
+    task = StudyTaskPreview(
+        title="第一天任务",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="阶段自测",
+                subtask_type="quiz",
+                related_material_ids=["mat_net"],
+                estimated_minutes=20,
+                citation_chunk_ids=["chk_001"],
+                sort_order=1,
+            ),
+            StudySubTaskPreview(
+                title="公式复习",
+                subtask_type="review",
+                related_material_ids=["mat_net"],
+                estimated_minutes=30,
+                citation_chunk_ids=["chk_001"],
+                sort_order=2,
+            ),
+        ],
+    )
+
+    normalized = study_plan_service._normalize_quiz_subtasks_to_day_end([task])
+
+    assert [subtask.subtask_type for subtask in normalized[0].subtasks] == ["review", "quiz"]
+    assert [subtask.sort_order for subtask in normalized[0].subtasks] == [1, 2]
+def test_enriches_quiz_subtask_generation_parameters_from_task_text() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="物理层综合测试",
+                subtask_type="test",
+                description="完成 10 道选择题和 3 道计算题，覆盖 Nyquist/Shannon 公式。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    params = enriched[0].subtasks[0].generation_parameters["task_test"]
+    assert params == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+
+
+
+def test_normalizes_model_question_type_count_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="物理层综合测试",
+                subtask_type="test",
+                description="包括10道选择题和3道计算题。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={"task_test": {"single_choice": 10, "short_answer": 3, "question_count": 13}},
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+
+def test_normalizes_model_question_type_list_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="最终测试：10道选择题和3道计算题",
+                subtask_type="test",
+                description="10道选择题覆盖物理层功能；3道计算题应用Nyquist/Shannon公式。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={
+                    "task_test": [
+                        {"question_count": 10, "question_type": "single_choice"},
+                        {"question_count": 3, "question_type": "short_answer"},
+                    ]
+                },
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+
+def test_normalizes_model_question_label_map_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="最终测试：10道选择题和3道计算题",
+                subtask_type="test",
+                description="10道选择题覆盖物理层功能；3道计算题应用Nyquist/Shannon公式。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={"task_test": {"10道选择题": "single_choice", "3道计算题": "short_answer"}},
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+def test_normalizes_model_question_type_objects_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="最终测试：10道选择题和3道计算题",
+                subtask_type="test",
+                description="10道选择题覆盖物理层功能；3道计算题应用Nyquist/Shannon公式。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={
+                    "task_test": {
+                        "question_types": [
+                            {"type": "single_choice", "count": 10},
+                            {"type": "short_answer", "count": 3},
+                        ],
+                        "total_question_count": 13,
+                    }
+                },
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+def test_normalizes_model_items_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="最终测试：10道选择题和3道计算题",
+                subtask_type="test",
+                description="10道选择题覆盖物理层功能；3道计算题应用Nyquist/Shannon公式。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={
+                    "task_test": {
+                        "items": [
+                            {"question_type": "single_choice", "question_count": 10},
+                            {"question_type": "short_answer", "question_count": 3},
+                        ]
+                    }
+                },
+                sort_order=1,
+            )
+        ],
+    )
+
+    enriched = study_plan_service._with_subtask_generation_parameters([task])
+
+    assert enriched[0].subtasks[0].generation_parameters["task_test"] == {
+        "question_count": 13,
+        "question_types": ["single_choice", "short_answer"],
+        "difficulty": "medium",
+    }
+
+def test_rejects_invalid_quiz_subtask_generation_parameters() -> None:
+    task = StudyTaskPreview(
+        title="第二天综合测试",
+        task_date=date(2026, 7, 13),
+        sort_order=1,
+        subtasks=[
+            StudySubTaskPreview(
+                title="物理层综合测试",
+                subtask_type="test",
+                description="完成测试题。",
+                related_material_ids=["mat_net"],
+                estimated_minutes=90,
+                citation_chunk_ids=["chk_001"],
+                generation_parameters={"task_test": {"question_count": 0}},
+                sort_order=1,
+            )
+        ],
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        study_plan_service._with_subtask_generation_parameters([task])
+
+    assert exc_info.value.code == "VALIDATION_ERROR"
+    assert exc_info.value.details["field"] == "generation_parameters.task_test"

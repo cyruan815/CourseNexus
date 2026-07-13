@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
@@ -15,10 +16,11 @@ from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate
 from app.modules.course_qa.service import ask_course_question
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentRead
+from app.modules.generated_content.service import build_generated_content_read
 from app.modules.generation.generators.handout import build_generator as build_handout_generator
 from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test import build_generator as build_task_test_generator
-from app.modules.generation.generators.task_test.schemas import TaskTestContent
+from app.modules.generation.generators.task_test.schemas import TaskTestContent, TaskTestGenerationParameters
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.generation.orchestrator.registry import GeneratorRegistry
 from app.modules.learning_execution import repository
@@ -198,13 +200,14 @@ def _generate_task_content(
             content_type=content_type,
         )
         if existing_content is not None:
-            return GeneratedContentRead.model_validate(existing_content)
+            return build_generated_content_read(db, existing_content)
 
     material_ids = _material_ids(target.subtask)
     material_scope = MaterialScope(include_all_parsed_materials=False, material_ids=material_ids)
     content_id = f"gen_{uuid4().hex}"
 
     try:
+        effective_parameters = _merge_task_content_parameters(content_type=content_type, target=target, parameters=parameters)
         if not material_ids:
             raise CourseNexusError(code="NO_PARSED_MATERIAL", message="当前任务没有关联已解析资料", status_code=400)
 
@@ -226,7 +229,7 @@ def _generate_task_content(
             output = generator.generate(
                 batches=tuple(batches),
                 expected_material_ids=frozenset(material_ids),
-                parameters=parameters,
+                parameters=effective_parameters,
             )
         else:
             output = run_material_coverage(
@@ -235,7 +238,7 @@ def _generate_task_content(
                 map_batch=lambda batch: generator.generate(
                     batches=(batch,),
                     expected_material_ids=frozenset(batch.material_ids),
-                    parameters=parameters,
+                    parameters=effective_parameters,
                 ),
                 reduce_results=lambda outputs: _reduce_task_content_outputs(content_type=content_type, outputs=outputs),
             ).value
@@ -254,12 +257,15 @@ def _generate_task_content(
         content.error_code = None
         db.add(content)
         db.flush()
-        _save_task_content_citations(
+        citation_ids_by_item = _save_task_content_citations(
             db,
             generated_content_id=content.id,
             batches=batches,
             item_citation_chunk_ids=output.item_citation_chunk_ids,
         )
+        content.content_json = _bind_source_citation_ids(output.content_json, citation_ids_by_item)
+        db.add(content)
+        db.flush()
         db.commit()
     except CourseNexusError as exc:
         db.rollback()
@@ -289,7 +295,7 @@ def _generate_task_content(
         raise CourseNexusError(code="GENERATION_FAILED", message="任务内容生成失败", status_code=502) from exc
 
     db.refresh(content)
-    return GeneratedContentRead.model_validate(content)
+    return build_generated_content_read(db, content)
 
 
 def _task_qa_context(target: repository.ExecutionTarget) -> str:
@@ -311,6 +317,55 @@ def _task_content_registry() -> GeneratorRegistry:
     registry.register("handout", build_handout_generator)
     registry.register("task_test", build_task_test_generator)
     return registry
+
+
+def _merge_task_content_parameters(
+    *,
+    content_type: str,
+    target: repository.ExecutionTarget,
+    parameters: dict[str, object],
+) -> dict[str, object]:
+    if content_type != "task_test":
+        return dict(parameters)
+    stored_parameters = _stored_task_generation_parameters(target=target, content_type=content_type)
+    merged = {**stored_parameters, **parameters}
+    try:
+        return TaskTestGenerationParameters.model_validate(merged).model_dump(mode="json")
+    except ValidationError as exc:
+        raise CourseNexusError(
+            code="GENERATION_SCHEMA_INVALID",
+            message="任务测试题生成参数无效",
+            status_code=500,
+            details={"field": "generation_parameters.task_test", "errors": exc.errors()},
+        ) from exc
+
+
+def _stored_task_generation_parameters(
+    *,
+    target: repository.ExecutionTarget,
+    content_type: str,
+) -> dict[str, object]:
+    config = target.plan.parsed_config_json
+    if not isinstance(config, dict):
+        return {}
+    task_snapshot = config.get("task_snapshot")
+    if not isinstance(task_snapshot, list):
+        return {}
+    for task in task_snapshot:
+        if not isinstance(task, dict) or task.get("sort_order") != target.task.sort_order:
+            continue
+        subtasks = task.get("subtasks")
+        if not isinstance(subtasks, list):
+            return {}
+        for subtask in subtasks:
+            if not isinstance(subtask, dict) or subtask.get("sort_order") != target.subtask.sort_order:
+                continue
+            generation_parameters = subtask.get("generation_parameters")
+            if not isinstance(generation_parameters, dict):
+                return {}
+            content_parameters = generation_parameters.get(content_type)
+            return dict(content_parameters) if isinstance(content_parameters, dict) else {}
+    return {}
 
 
 def _new_task_generated_content(
@@ -465,16 +520,21 @@ def _save_task_content_citations(
     generated_content_id: str,
     batches: list[MaterialContextBatch],
     item_citation_chunk_ids: dict[str, list[str]],
-) -> None:
+) -> dict[str, list[str]]:
     chunk_by_id = {chunk.chunk_id: chunk for batch in batches for chunk in batch.chunks}
     citation_chunk_ids = _ordered_unique_chunk_ids(item_citation_chunk_ids)
     selected_chunks = [chunk_by_id[chunk_id] for chunk_id in citation_chunk_ids if chunk_id in chunk_by_id]
     if not selected_chunks:
         raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="生成结果没有有效引用", status_code=500)
-    db.add_all(
-        [
+
+    citation_ids_by_chunk_id: dict[str, str] = {}
+    citations: list[SourceCitation] = []
+    for sort_order, chunk in enumerate(selected_chunks, start=1):
+        citation_id = f"cit_{uuid4().hex}"
+        citation_ids_by_chunk_id[chunk.chunk_id] = citation_id
+        citations.append(
             SourceCitation(
-                id=f"cit_{uuid4().hex}",
+                id=citation_id,
                 generated_content_id=generated_content_id,
                 material_id=chunk.material_id,
                 chunk_id=chunk.chunk_id,
@@ -482,12 +542,29 @@ def _save_task_content_citations(
                 page=chunk.page,
                 page_index=chunk.page_index if chunk.page_index is not None else 0,
                 hit_text=chunk.content_text[:500],
-                sort_order=index,
+                sort_order=sort_order,
             )
-            for index, chunk in enumerate(selected_chunks)
-        ]
-    )
+        )
+    db.add_all(citations)
     db.flush()
+    return {
+        item_id: [citation_ids_by_chunk_id[chunk_id] for chunk_id in chunk_ids if chunk_id in citation_ids_by_chunk_id]
+        for item_id, chunk_ids in item_citation_chunk_ids.items()
+    }
+
+
+def _bind_source_citation_ids(value: object, bindings: dict[str, list[str]]) -> object:
+    if isinstance(value, dict):
+        bound = {key: _bind_source_citation_ids(child, bindings) for key, child in value.items()}
+        item_id = value.get("id")
+        if isinstance(item_id, str) and item_id in bindings:
+            bound["source_citation_ids"] = list(bindings[item_id])
+        elif "source_citation_ids" in value:
+            bound["source_citation_ids"] = []
+        return bound
+    if isinstance(value, list):
+        return [_bind_source_citation_ids(child, bindings) for child in value]
+    return value
 
 
 def _latest_content_id(db: Session, *, user_id: str, subtask_id: str, content_type: str) -> str | None:

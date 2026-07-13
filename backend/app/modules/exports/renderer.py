@@ -272,22 +272,44 @@ def _page_object(content_object_id: int) -> bytes:
 
 def _content_stream_object(lines: list[PDFLine]) -> bytes:
     commands = ["BT", f"{PAGE_MARGIN_X} {PAGE_TOP_Y} Td"]
-    current_font_size: int | None = None
+    current_font: tuple[str, int] | None = None
     for text, font_size in lines:
-        if font_size != current_font_size:
-            commands.append(f"/F1 {font_size} Tf")
-            current_font_size = font_size
-        if text:
-            commands.append(f"{_pdf_hex_text(text)} Tj")
+        for font_name, segment in _font_segments(text):
+            font = (font_name, font_size)
+            if font != current_font:
+                commands.append(f"/{font_name} {font_size} Tf")
+                current_font = font
+            commands.append(f"{_pdf_text_operand(segment, font_name)} Tj")
         commands.append(f"0 -{_line_leading(font_size)} Td")
     commands.append("ET")
     stream = ("\n".join(commands) + "\n").encode("ascii")
     return b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"endstream"
 
 
-def _pdf_hex_text(text: str) -> str:
+def _font_segments(text: str) -> list[tuple[str, str]]:
+    segments: list[tuple[str, str]] = []
+    current_font: str | None = None
+    chars: list[str] = []
+    for char in text:
+        font_name = "F2" if _is_latin_pdf_char(char) else "F1"
+        if current_font is not None and font_name != current_font:
+            segments.append((current_font, "".join(chars)))
+            chars = []
+        current_font = font_name
+        chars.append(char)
+    if current_font is not None:
+        segments.append((current_font, "".join(chars)))
+    return segments
+
+
+def _is_latin_pdf_char(char: str) -> bool:
+    return " " <= char <= "~"
+
+
+def _pdf_text_operand(text: str, font_name: str) -> str:
     cleaned = "".join(char if char >= " " else " " for char in text)
-    return "<" + cleaned.encode("utf-16-be", errors="replace").hex().upper() + ">"
+    encoding = "cp1252" if font_name == "F2" else "utf-16-be"
+    return "<" + cleaned.encode(encoding, errors="replace").hex().upper() + ">"
 
 
 def _line_leading(font_size: int) -> int:

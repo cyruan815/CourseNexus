@@ -8,6 +8,7 @@ from math import ceil
 from time import perf_counter
 from uuid import uuid4
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.core.logging import get_logger
 from app.integrations.model_provider.base import ModelProvider
 from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
+from app.modules.generation.generators.task_test.schemas import TaskTestGenerationParameters
 from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
 from app.modules.material_context.service import (
@@ -259,7 +261,7 @@ def preview_study_plan(
     if resolved_payload is None:
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
-    task_previews = coverage_result.value.tasks
+    task_previews = _normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks)
     estimated_total_minutes = _task_previews_total_minutes(task_previews)
     daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
     recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
@@ -275,6 +277,7 @@ def preview_study_plan(
     capacity = _build_capacity_summary(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
+        daily_over_capacity=_has_daily_over_capacity(tasks_preview=task_previews, daily_available_minutes=daily_available_minutes),
     )
     planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile)
     generation_metadata = _with_material_quality(
@@ -387,6 +390,8 @@ def save_study_plan(
             task_previews=tasks_preview,
         )
         save_payload = _resolve_save_payload_daily_minutes(save_payload, tasks_preview=tasks_preview)
+
+    tasks_preview = _with_subtask_generation_parameters(tasks_preview)
 
     plan_id = _new_plan_id()
     now = datetime.now(timezone.utc)
@@ -538,12 +543,13 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         task_previews=payload.tasks,
     )
     payload = _resolve_save_payload_daily_minutes(payload, tasks_preview=payload.tasks)
+    tasks_preview = _with_subtask_generation_parameters(payload.tasks)
     parsed_config = _saved_config(
         payload,
         coverage=None,
         capacity=None,
         generation_metadata=None,
-        tasks_preview=payload.tasks,
+        tasks_preview=tasks_preview,
         tasks_source="confirmed",
         key_hash=None,
         request_hash=_hash_request(payload),
@@ -577,7 +583,7 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
         plan.status = "active"
         plan.updated_at = updated_at
         plan.parsed_config_json = parsed_config
-        tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=plan.course_id, task_previews=payload.tasks)
+        tasks, subtasks = _rows_from_task_previews(plan_id=plan_id, course_id=plan.course_id, task_previews=tasks_preview)
         db.add_all(tasks)
         db.add_all(subtasks)
         db.flush()
@@ -658,6 +664,7 @@ def _resolve_save_payload_daily_minutes(
     capacity = _build_capacity_summary(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=daily_available_minutes * duration_days,
+        daily_over_capacity=_has_daily_over_capacity(tasks_preview=tasks_preview, daily_available_minutes=daily_available_minutes),
     )
     return payload.model_copy(
         update={
@@ -824,6 +831,88 @@ def _resolve_daily_minutes(
     return payload.daily_available_minutes, recommended_daily_minutes, payload.daily_minutes_source or "user_text"
 
 
+
+
+def _normalize_quiz_subtasks_to_day_end(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
+    normalized_tasks: list[StudyTaskPreview] = []
+    for task in tasks:
+        subtasks = sorted(
+            task.subtasks,
+            key=lambda subtask: (subtask.subtask_type in {"quiz", "test"}, subtask.sort_order),
+        )
+        normalized_subtasks = [
+            subtask.model_copy(update={"sort_order": sort_order})
+            for sort_order, subtask in enumerate(subtasks, start=1)
+        ]
+        normalized_tasks.append(task.model_copy(update={"subtasks": normalized_subtasks}))
+    return normalized_tasks
+def _with_subtask_generation_parameters(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
+    enriched_tasks: list[StudyTaskPreview] = []
+    for task in tasks:
+        enriched_subtasks: list[StudySubTaskPreview] = []
+        for subtask in task.subtasks:
+            if subtask.subtask_type in {"quiz", "test"}:
+                generation_parameters = dict(subtask.generation_parameters)
+                has_task_test_parameters = "task_test" in generation_parameters
+                raw_task_test_parameters = generation_parameters.get("task_test")
+                if has_task_test_parameters:
+                    if not isinstance(raw_task_test_parameters, (dict, list)):
+                        raise CourseNexusError(
+                            code="VALIDATION_ERROR",
+                            message="任务测试题生成参数无效",
+                            status_code=422,
+                            details={"field": "generation_parameters.task_test"},
+                        )
+                    try:
+                        task_test_parameters = TaskTestGenerationParameters.model_validate(raw_task_test_parameters)
+                    except ValidationError as exc:
+                        raise CourseNexusError(
+                            code="VALIDATION_ERROR",
+                            message="任务测试题生成参数无效",
+                            status_code=422,
+                            details={"field": "generation_parameters.task_test", "errors": exc.errors()},
+                        ) from exc
+                else:
+                    task_test_parameters = _infer_task_test_generation_parameters_from_text(
+                        " ".join(part for part in [subtask.title, subtask.description or ""] if part)
+                    )
+                generation_parameters["task_test"] = task_test_parameters.model_dump(mode="json")
+                subtask = subtask.model_copy(update={"generation_parameters": generation_parameters})
+            enriched_subtasks.append(subtask)
+        enriched_tasks.append(task.model_copy(update={"subtasks": enriched_subtasks}))
+    return enriched_tasks
+
+
+def _infer_task_test_generation_parameters_from_text(text: str) -> TaskTestGenerationParameters:
+    question_count = 0
+    question_types: list[str] = []
+    for match in re.finditer(r"([一二两三四五六七八九十\d]+)\s*道\s*(单选题|多选题|选择题|判断题|简答题|问答题|计算题|证明题)", text):
+        count = _parse_day_count(match.group(1))
+        if count is None:
+            continue
+        question_count += count
+        question_type = _question_type_for_plan_label(match.group(2))
+        if question_type not in question_types:
+            question_types.append(question_type)
+    if question_count <= 0:
+        return TaskTestGenerationParameters()
+    return TaskTestGenerationParameters(
+        question_count=min(question_count, 20),
+        question_types=question_types or ["single_choice", "short_answer"],
+        difficulty="medium",
+    )
+
+
+def _question_type_for_plan_label(label: str) -> str:
+    if label == "多选题":
+        return "multiple_choice"
+    if label == "判断题":
+        return "true_false"
+    if label in {"简答题", "问答题", "计算题", "证明题"}:
+        return "short_answer"
+    return "single_choice"
+
+
 def _require_resolved_daily_minutes(value: int | None) -> int:
     if value is None:
         raise CourseNexusError(code="VALIDATION_ERROR", message="每日学习时间未解析", status_code=422)
@@ -855,8 +944,16 @@ def _build_material_snapshot(*, material_scope: object, expected_material_ids: s
     }
 
 
-def _build_capacity_summary(*, estimated_total_minutes: int, available_total_minutes: int) -> dict[str, object]:
-    if estimated_total_minutes > available_total_minutes:
+
+
+def _has_daily_over_capacity(*, tasks_preview: list[StudyTaskPreview], daily_available_minutes: int) -> bool:
+    return any(
+        sum(subtask.estimated_minutes for subtask in task.subtasks) > daily_available_minutes
+        for task in tasks_preview
+    )
+
+def _build_capacity_summary(*, estimated_total_minutes: int, available_total_minutes: int, daily_over_capacity: bool = False) -> dict[str, object]:
+    if daily_over_capacity or estimated_total_minutes > available_total_minutes:
         feasibility_status = "over_capacity"
         warnings = ["PLAN_OVER_CAPACITY"]
     elif estimated_total_minutes >= max(1, round(available_total_minutes * 0.8)):
@@ -964,6 +1061,7 @@ def _saved_config(
     capacity_value = _build_capacity_summary(
         estimated_total_minutes=estimated_total_minutes,
         available_total_minutes=available_total_minutes,
+        daily_over_capacity=_has_daily_over_capacity(tasks_preview=tasks_preview, daily_available_minutes=daily_available_minutes),
     )
     generation_metadata_value = _with_planner_strategy(
         generation_metadata or {"schema_version": 1, "generated_at": datetime.now(timezone.utc).isoformat()},
