@@ -1162,3 +1162,41 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 - 若 `sections[].source_citation_ids` 找不到对应 `source_citations[].id`，前端不得补造来源；应展示引用缺失兜底或仅隐藏该条绑定。
 
 任务测试题 Markdown 导出也遵循同一引用展示规则：有效 citation 存在但 `hit_text` 不适合展示时，只输出资料名和页码，不输出 `Sources: unavailable`。
+
+### 3.23.5 HandoutContent v2 结构化渲染契约
+
+下一阶段 `handout.content_json.schema_version = 2` 时，前端仍以 `GeneratedContentRead.content_json` 为权威数据源。模型输出不得作为 HTML 注入页面，也不把整篇自由 Markdown 当作讲义正文渲染；前端必须按 typed blocks 渲染讲义，并由组件负责间距、溢出、响应式和导出兼容。
+
+v2 讲义详情页的顶层渲染顺序建议为：
+
+1. `title`：优先使用 `GeneratedContentRead.title`，缺失时使用 `content_json.title`。
+2. `overview`：讲义导读。
+3. `learning_objectives[]`：学习目标列表。
+4. `prerequisites[]`：必要前置知识，只展示与当前二级任务直接相关的补基础内容。
+5. `knowledge_map`：讲义级知识关系图；没有该字段时不展示占位图。
+6. `sections[]`：按 `sort_order` 渲染每节的 `lead`、`blocks[]` 和 `key_points[]`。
+7. `formula_cards[]`、`exam_focus[]`、`self_check[]`：分别作为公式速查、考试重点和自测区块。
+8. `summary`：讲义总结。
+
+typed block 展示规则：
+
+| block type | 前端展示规则 |
+| --- | --- |
+| `paragraph` | 渲染为普通正文，可按 `role` 使用定义、解释、结论等弱样式；不得执行 HTML。 |
+| `formula` | 使用 KaTeX 兼容 LaTeX 渲染；公式容器必须支持横向滚动或自动换行，变量、适用条件和限制分组展示。 |
+| `example` | 使用题干、步骤、答案、解析和易错提醒组成例题块；步骤按有序列表渲染。 |
+| `table` | 使用结构化 `columns` 和 `rows` 生成表格，不解析 Markdown 表格文本；小屏幕允许横向滚动。 |
+| `callout` | 用于重点、提示、警告和易错点；样式由前端根据 `tone` 控制。 |
+| `steps` | 用于推导、流程或解题步骤，必须保持稳定编号和缩进。 |
+| `mindmap` | 使用树形 `root.children[]` 渲染为 Markmap 或自定义树组件；节点文本不得当作 HTML。 |
+| `mermaid` | 只允许流程图或关系图，必须同时展示标题和解释；渲染失败时回退为文本代码块。 |
+| `chart` | 只展示资料中可追溯的数值数据；缺少数值、单位或引用时前端应回退为表格或隐藏图表。 |
+
+排版和安全约束：
+
+- 数学公式只从 `latex` 字段读取，模型不得在正文里混入需要前端猜测的公式图片或 HTML。
+- 表格列宽、公式溢出、图表高度、思维导图节点间距和移动端滚动都由前端组件控制，不能依赖模型输出空格、换行或 HTML 标签来排版。
+- `mermaid` 只接受受控图类型；首版不接受模型输出的 `svg` 字符串。
+- `chart` 必须有明确数值、单位和 `source_citation_ids`，不得根据模型推测的趋势画图。
+- 任一 block 的 `source_citation_ids` 都只用于绑定 `source_citations[].id` 或保存前的 chunk id；学生正文默认不展示 raw snippet。
+- 历史 `schema_version` 缺失或为 1 的 handout 继续按旧版 `overview`、`learning_objectives`、`sections[].body`、`summary` 渲染。

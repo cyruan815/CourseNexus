@@ -95,6 +95,111 @@ sequenceDiagram
 
 `task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
 
+### HandoutContent v2 目标契约
+
+下一阶段讲义生成升级后，`handout.content_json` 仍是讲义的权威持久化内容。模型不得输出整篇 HTML，也不得把整篇讲义作为自由 Markdown 文档返回；模型必须输出经过后端 schema 校验的结构化 JSON。Markdown 只允许作为受控文本字段中的轻量行内表达，公式、表格、图表、思维导图、例题、自测题和引用都必须落到专门字段或 typed blocks 中。
+
+`schema_version = 2` 的目标结构如下：
+
+```json
+{
+  "schema_version": 2,
+  "title": "Nyquist 与 Shannon 公式讲义",
+  "overview": "本讲义解决什么问题、适合什么学习目标。",
+  "difficulty": "medium",
+  "estimated_minutes": 40,
+  "learning_objectives": [
+    "区分带宽、码元速率和数据率",
+    "计算 Nyquist 和 Shannon 公式题"
+  ],
+  "prerequisites": [
+    {
+      "id": "pre_1",
+      "title": "对数基础",
+      "explanation": "只补足 log2 在公式中的含义。",
+      "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
+      "source_citation_ids": ["chunk_1"],
+      "sort_order": 1
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec_1",
+      "title": "信道容量与带宽",
+      "lead": "先说结论：带宽限制信号能携带的信息变化速度。",
+      "source_citation_ids": ["chunk_2"],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "role": "definition",
+          "text": "带宽是信道可通过的频率范围，单位是 Hz。",
+          "source_citation_ids": ["chunk_2"]
+        },
+        {
+          "type": "formula",
+          "title": "Shannon 公式",
+          "latex": "C = W \\log_2(1 + S/N)",
+          "purpose": "估算有噪声信道的理论最大数据率。",
+          "variables": [
+            {"symbol": "C", "meaning": "最大数据率", "unit": "bps"},
+            {"symbol": "W", "meaning": "信道带宽", "unit": "Hz"},
+            {"symbol": "S/N", "meaning": "信噪比倍数，不是 dB", "unit": null}
+          ],
+          "conditions": ["有噪声信道"],
+          "limitations": ["这是理论上限，不等于实际吞吐率"],
+          "source_citation_ids": ["chunk_3"]
+        }
+      ],
+      "key_points": ["Shannon 公式关注噪声，Nyquist 公式关注电平级数。"],
+      "sort_order": 1
+    }
+  ],
+  "knowledge_map": {
+    "type": "mindmap",
+    "title": "物理层知识关系",
+    "root": {
+      "label": "物理层",
+      "children": [
+        {"label": "信号与码元", "children": [{"label": "波特率", "children": []}]},
+        {"label": "信道容量", "children": [{"label": "Nyquist", "children": []}, {"label": "Shannon", "children": []}]}
+      ]
+    },
+    "source_citation_ids": ["chunk_2", "chunk_3"]
+  },
+  "formula_cards": [],
+  "exam_focus": [],
+  "self_check": [],
+  "summary": "本节的核心是区分不同通信速率概念，并能按条件选公式。"
+}
+```
+
+v2 讲义的字段语义：
+
+- `title` 使用当前二级任务标题派生，保持二级任务级讲义口径。
+- `difficulty` 表示讲义整体难度，建议取值为 `easy`、`medium`、`hard`。
+- `estimated_minutes` 来自当前二级任务或生成参数，不由模型随意扩展学习时长。
+- `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课。
+- `sections[].blocks[]` 是正文主体；旧版 `sections[].body` 在 v2 中被 typed blocks 替代。
+- `source_citation_ids` 在模型输出阶段必须引用本次 material-context 中的 chunk id；保存成功后由 learning-execution 回绑为 `SourceCitation.id`。
+- `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空。
+- `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
+- `exam_focus[]` 用于保存考试或测验常见考法、易错点和解题提醒。
+- `self_check[]` 用于保存讲义后的短自测，服务学习闭环，不替代 `task_test`。
+
+v2 typed block 的第一阶段范围：
+
+- `paragraph`：概念解释、结论、背景、过渡说明。
+- `formula`：KaTeX 兼容 LaTeX、变量解释、适用条件、限制和示例。
+- `example`：题干、步骤、答案、解析、易错提醒。
+- `table`：结构化 `columns` 和 `rows`，不使用 Markdown 表格字符串。
+- `callout`：重点、易错点、提示、警告或学习建议。
+- `steps`：流程、推导或解题步骤。
+- `mindmap`：树形知识结构，可被前端渲染为思维导图。
+- `mermaid`：只用于流程图或关系图，必须包含标题和解释。
+- `chart`：只在资料中存在可追溯数值数据时使用。
+
+首版 v2 不接受模型输出的原始 HTML。`svg` 也不进入首版模型输出范围，除非后续明确渲染、安全和清洗策略。
+
 任务测试题结构不变量：
 
 - `questions.length == request.parameters.question_count`。
