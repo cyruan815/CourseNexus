@@ -188,6 +188,16 @@ def _render_handout_v2_markdown(
     for objective in handout.learning_objectives:
         lines.append(f"- {objective}")
 
+    if handout.prerequisites:
+        lines.extend(["", "## Prerequisites"])
+        for index, prerequisite in enumerate(
+            sorted(handout.prerequisites, key=lambda item: item.sort_order),
+            start=1,
+        ):
+            lines.extend(["", f"### {index}. {prerequisite.title}", "", prerequisite.explanation])
+            if prerequisite.example:
+                lines.extend(["", f"Example: {prerequisite.example}"])
+
     if handout.knowledge_map is not None:
         lines.extend(["", "## Knowledge Map", ""])
         lines.extend(_render_handout_block_markdown(handout.knowledge_map))
@@ -203,6 +213,23 @@ def _render_handout_v2_markdown(
             lines.extend(["", "Key points:", ""])
             for point in section.key_points:
                 lines.append(f"- {point}")
+
+    if handout.formula_cards:
+        lines.extend(["", "## Formula Cards"])
+        for formula in handout.formula_cards:
+            lines.extend(["", *_render_formula_block_markdown(formula, heading_level=3)])
+
+    if handout.exam_focus:
+        lines.extend(["", "## Exam Focus"])
+        for index, item in enumerate(sorted(handout.exam_focus, key=lambda value: value.sort_order), start=1):
+            lines.extend(["", f"### {index}. {item.title}", "", item.description])
+
+    if handout.self_check:
+        lines.extend(["", "## Self Check"])
+        for index, item in enumerate(sorted(handout.self_check, key=lambda value: value.sort_order), start=1):
+            lines.extend(["", f"### {index}. {item.question}", "", f"Answer: {item.answer}"])
+            if item.explanation:
+                lines.extend(["", f"Explanation: {item.explanation}"])
 
     lines.extend(["", "## Summary", "", handout.summary])
     return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
@@ -244,10 +271,10 @@ def _render_handout_block_markdown(block: object) -> list[str]:
     return []
 
 
-def _render_formula_block_markdown(block: object) -> list[str]:
+def _render_formula_block_markdown(block: object, *, heading_level: int = 4) -> list[str]:
     block_title = str(getattr(block, "title", "")).strip()
     latex = str(getattr(block, "latex", "")).strip()
-    lines = [f"#### {block_title}", "", "$$", latex, "$$"]
+    lines = [f"{'#' * heading_level} {block_title}", "", "$$", latex, "$$"]
     purpose = str(getattr(block, "purpose", "")).strip()
     if purpose:
         lines.extend(["", f"Purpose: {purpose}"])

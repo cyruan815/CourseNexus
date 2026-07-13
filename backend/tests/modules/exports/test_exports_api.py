@@ -177,7 +177,16 @@ def _handout_v2_json() -> dict[str, object]:
         "difficulty": "medium",
         "estimated_minutes": 40,
         "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
-        "prerequisites": [],
+        "prerequisites": [
+            {
+                "id": "pre_1",
+                "title": "对数基础",
+                "explanation": "理解二进制对数的含义。",
+                "example": "log2(8) = 3。",
+                "sort_order": 1,
+                "source_citation_ids": ["cit_task_test"],
+            }
+        ],
         "sections": [
             {
                 "id": "sec_1",
@@ -216,9 +225,37 @@ def _handout_v2_json() -> dict[str, object]:
                 "children": [{"label": "Shannon", "children": []}],
             },
         },
-        "formula_cards": [],
-        "exam_focus": [],
-        "self_check": [],
+        "formula_cards": [
+            {
+                "type": "formula",
+                "title": "Nyquist 公式",
+                "latex": "C = 2W \\log_2 M",
+                "purpose": "计算无噪声信道上限。",
+                "variables": [{"symbol": "W", "meaning": "带宽", "unit": "Hz"}],
+                "conditions": ["理想无噪声信道"],
+                "limitations": ["不考虑噪声"],
+                "source_citation_ids": ["cit_task_test"],
+            }
+        ],
+        "exam_focus": [
+            {
+                "id": "exam_1",
+                "title": "公式选择",
+                "description": "先判断题目是否考虑噪声。",
+                "sort_order": 1,
+                "source_citation_ids": ["cit_task_test"],
+            }
+        ],
+        "self_check": [
+            {
+                "id": "check_1",
+                "question": "有噪声信道应使用哪个公式？",
+                "answer": "Shannon 公式。",
+                "explanation": "Shannon 公式显式考虑信噪比。",
+                "sort_order": 1,
+                "source_citation_ids": ["cit_task_test"],
+            }
+        ],
         "summary": "按条件选公式。",
     }
 
@@ -451,6 +488,17 @@ def test_render_handout_v2_markdown_uses_block_fallbacks_and_safe_notice() -> No
     assert "| Shannon | 有噪声信道 |" in rendered
     assert "- 信道容量" in rendered
     assert "  - Shannon" in rendered
+    assert "## Prerequisites" in rendered
+    assert "理解二进制对数的含义" in rendered
+    assert "Example: log2(8) = 3" in rendered
+    assert "## Formula Cards" in rendered
+    assert "### Nyquist 公式" in rendered
+    assert "C = 2W \\log_2 M" in rendered
+    assert "## Exam Focus" in rendered
+    assert "先判断题目是否考虑噪声" in rendered
+    assert "## Self Check" in rendered
+    assert "Answer: Shannon 公式" in rendered
+    assert "Explanation: Shannon 公式显式考虑信噪比" in rendered
     assert "formula-not-decoded" not in rendered
     assert "" not in rendered
 

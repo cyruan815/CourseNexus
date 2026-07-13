@@ -273,6 +273,8 @@ Handout 生成参数由 learning-execution 注入当前二级任务上下文，�
 
 今日讲义 PDF renderer 采用 `content_json -> Markdown -> HTML -> Playwright Chromium -> PDF` 链路。`backend/app/modules/exports/renderer.py` 使用 `markdown-it-py` 渲染标题、列表、表格和代码块，用内置 Jinja2 模板和 print CSS 控制 A4 边距、中文字体、表格宽度、代码换行和标题分页；模板只对代码内可信 `_PDF_CSS` 使用 `safe`，避免字体声明中的引号被转义，正文 HTML 仍建立在 Markdown renderer 禁用原始 HTML 的前提下；`render_handout_pdf()` 保持同步接口并由 `exports.service` 将未知异常包装为 `EXPORT_FAILED`。
 
+`schema_version=2` 的 PDF 必须按结构化字段完整输出非空内容区块：overview、learning objectives、prerequisites、knowledge map、sections、formula cards、exam focus、self check 和 summary。prerequisite 的 explanation / example、公式卡片的变量与适用条件、考试重点描述、自测答案与解释都不得只停留在 JSON 而从导出结果中丢失；空的可选区块不输出标题或占位内容。
+
 结构化 `handout` 导出只在标题后展示一行来源说明，格式为 `来源说明：本讲义根据《资料名.pdf》《补充资料.pdf》中“知识点”相关内容生成。`。资料名来自 `GeneratedContentRead.source_citations[].material_name` 去重；知识点短期从 handout section 标题合并推导，后续若导出层可取得 subtask title 应优先使用 subtask title。PDF 不在每个 section 下展示 `Sources`，不生成文末 `Source Details`，也不展示 `hit_text`。
 
 独立 Markdown 回归转换会清洗 `Sources` 段中的 parser/OCR 残留：命中 `formula-not-decoded`、``、``、`` 时保留资料名和页码前缀，隐藏不安全摘录或延续行，避免解析残留进入学生讲义 PDF。`source_citations` 仍保留在 API 返回和数据库中供内部追溯。

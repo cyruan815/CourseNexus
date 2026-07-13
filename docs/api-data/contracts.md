@@ -417,7 +417,7 @@ Markdown 内容包含标题、instructions、题目、选项、正确答案、�
 - `Content-Type: application/pdf`
 - `Content-Disposition: attachment; filename="handout-{generated_content_id}.pdf"`
 
-PDF 内容包含标题、overview、learning objectives、sections、key points、summary 和引用来源。轻量阶段仅支持今日讲义 PDF；`task_test` 调用 PDF 导出返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，任务测试题使用 Markdown 导出。
+PDF 内容包含标题、overview、learning objectives、prerequisites、knowledge map、sections、key points、formula cards、exam focus、self check、summary 和引用来源。空的可选区块不输出标题或占位内容。轻量阶段仅支持今日讲义 PDF；`task_test` 调用 PDF 导出返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，任务测试题使用 Markdown 导出。
 
 错误码：
 
