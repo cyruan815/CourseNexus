@@ -47,6 +47,14 @@
 - 补充 provider 单元测试，以及课程问答和 Study Mode 任务级问答的真实 provider E2E；验证报告不得再以跳过任务级问答作为通过条件。
 - 修复后同步更新模型配置说明、相关领域文档和本技术债状态。
 
+### 2026-07-13 补充：PR #1 候选回退与后续统一收口
+
+- PR #1 最新分支已在同一公共 `OpenAIModelProvider.answer_question()` 中加入候选回退：先调用 `responses.create()`，仅在异常状态码为 404 时调用同一 provider 的 `chat.completions.create()`。课程详情 Agent 问答与 Study Mode 任务级问答仍复用该公共入口，不存在业务模块各自实现一套问答调用的情况。
+- 该改动可作为验证 DeepSeek 当前 `/responses` 404 问题的 POC 兼容措施，但不能据此关闭 TD-015。HTTP 404 还可能来自错误的 `base_url`、模型或部署不存在、网关路由异常等配置/运行问题；仅按状态码回退可能掩盖真实故障，也会让只支持 Chat Completions 的 provider 在每次问答时先产生一次失败请求。
+- 当前决定：允许业务 PR 合并后统一完成 provider 协议适配；合并前对候选回退至少验证不破坏 Responses API provider、能覆盖真实 DeepSeek 问答、且不会把 401、403、429、5xx 或网络错误误回退。
+- 后续公共基础设施应提供显式协议模式（建议 `responses`、`chat_completions`、`auto`），使已知 provider 可直接选择正确 endpoint；`auto` 仅可在可确认的 endpoint 不支持场景下回退，并应按 `base_url + model` 缓存已探测的能力，避免每次请求重复试错。
+- 设计/实现时需记录实际选择的协议和回退原因，但不得记录 API key、完整 prompt、资料正文或用户问题；若新增公共配置字段或 provider 策略，应同步更新配置契约、相关领域文档，并评估是否需要 ADR。
+
 ## 更新规则
 
 - 新增、关闭或拆分技术债时更新本表。
