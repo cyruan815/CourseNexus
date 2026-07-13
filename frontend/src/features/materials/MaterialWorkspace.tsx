@@ -20,7 +20,6 @@ import type { Material, MaterialFolder, MaterialScope } from "./types";
 import "./material-workspace.css";
 
 type ContextMenu =
-  | { kind: "workspace"; x: number; y: number }
   | { folder: MaterialFolder; kind: "folder"; x: number; y: number }
   | { kind: "material"; material: Material; x: number; y: number }
   | null;
@@ -38,6 +37,7 @@ type ActionTarget =
 interface MaterialWorkspaceProps {
   courseId: string;
   materialScope: MaterialScope;
+  onParsedMaterialsChange?: (materials: Material[]) => void;
   onMaterialScopeChange: (scope: MaterialScope) => void;
   openUploadPrompt?: boolean;
 }
@@ -66,6 +66,7 @@ function materialMatchesSearch(material: Material, query: string): boolean {
 export function MaterialWorkspace({
   courseId,
   materialScope,
+  onParsedMaterialsChange,
   onMaterialScopeChange,
   openUploadPrompt = false,
 }: MaterialWorkspaceProps) {
@@ -133,6 +134,18 @@ export function MaterialWorkspace({
     () => materials.filter((material) => material.parse_status === "parsed").map((material) => material.id),
     [materials],
   );
+  const checkedParsedMaterialIds = materialScope.material_ids.filter((id) => parsedMaterialIds.includes(id));
+  const isExplicitAllParsedScope =
+    parsedMaterialIds.length > 0 && checkedParsedMaterialIds.length === parsedMaterialIds.length;
+
+  const parsedMaterials = useMemo(
+    () => materials.filter((material) => material.parse_status === "parsed"),
+    [materials],
+  );
+
+  useEffect(() => {
+    onParsedMaterialsChange?.(parsedMaterials);
+  }, [onParsedMaterialsChange, parsedMaterials]);
 
   const searchedMaterials = useMemo(
     () => materials.filter((material) => materialMatchesSearch(material, searchQuery.trim())),
@@ -169,19 +182,14 @@ export function MaterialWorkspace({
   }
 
   function toggleMaterial(materialId: string) {
-    if (materialScope.include_all_parsed_materials) {
-      onMaterialScopeChange({
-        include_all_parsed_materials: false,
-        material_ids: parsedMaterialIds.filter((id) => id !== materialId),
-      });
-      return;
-    }
-    const selected = materialScope.material_ids.includes(materialId);
+    const selected = checkedParsedMaterialIds.includes(materialId);
+    const nextMaterialIds = selected
+      ? checkedParsedMaterialIds.filter((id) => id !== materialId)
+      : [...checkedParsedMaterialIds, materialId];
     onMaterialScopeChange({
-      include_all_parsed_materials: false,
-      material_ids: selected
-        ? materialScope.material_ids.filter((id) => id !== materialId)
-        : [...materialScope.material_ids, materialId],
+      include_all_parsed_materials:
+        nextMaterialIds.length === 0 || nextMaterialIds.length === parsedMaterialIds.length,
+      material_ids: nextMaterialIds,
     });
   }
 
@@ -335,9 +343,10 @@ export function MaterialWorkspace({
           return next;
         });
         if (!materialScope.include_all_parsed_materials && removedMaterialIds.length > 0) {
+          const nextMaterialIds = materialScope.material_ids.filter((id) => !removedMaterialIds.includes(id));
           onMaterialScopeChange({
-            include_all_parsed_materials: false,
-            material_ids: materialScope.material_ids.filter((id) => !removedMaterialIds.includes(id)),
+            include_all_parsed_materials: nextMaterialIds.length === 0,
+            material_ids: nextMaterialIds,
           });
         }
       } else {
@@ -345,9 +354,10 @@ export function MaterialWorkspace({
         await deleteMaterial(materialId);
         setMaterials((current) => current.filter((item) => item.id !== materialId));
         if (!materialScope.include_all_parsed_materials) {
+          const nextMaterialIds = materialScope.material_ids.filter((id) => id !== materialId);
           onMaterialScopeChange({
-            include_all_parsed_materials: false,
-            material_ids: materialScope.material_ids.filter((id) => id !== materialId),
+            include_all_parsed_materials: nextMaterialIds.length === 0,
+            material_ids: nextMaterialIds,
           });
         }
       }
@@ -409,15 +419,11 @@ export function MaterialWorkspace({
     }
   }
 
-  function openWorkspaceMenu(event: MouseEvent<HTMLElement>) {
-    event.preventDefault();
-    setContextMenu({ kind: "workspace", x: event.clientX, y: event.clientY });
-  }
-
   function openFolderMenu(event: MouseEvent<HTMLElement>, folder: MaterialFolder) {
     event.preventDefault();
     event.stopPropagation();
-    setContextMenu({ folder, kind: "folder", x: event.clientX, y: event.clientY });
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu({ folder, kind: "folder", x: Math.max(8, rect.right - 148), y: rect.bottom + 4 });
   }
 
   function openMaterialMenu(event: MouseEvent<HTMLElement>, material: Material) {
@@ -435,8 +441,7 @@ export function MaterialWorkspace({
 
   function renderMaterialRow(material: Material) {
     const isParsed = material.parse_status === "parsed";
-    const checked = isParsed &&
-      (materialScope.include_all_parsed_materials || materialScope.material_ids.includes(material.id));
+    const checked = isParsed && materialScope.material_ids.includes(material.id);
 
     return (
       <li
@@ -486,15 +491,11 @@ export function MaterialWorkspace({
   function renderFolderSection(folderId: string, folderName: string, folder?: MaterialFolder) {
     const folderMaterials = materialsByFolder.get(folderId) ?? [];
     const isExpanded = expandedFolderIds.has(folderId);
-    const contextMenuHandler = folder
-      ? (event: MouseEvent<HTMLElement>) => openFolderMenu(event, folder)
-      : undefined;
 
     return (
       <section
         className="material-workspace__folder-section"
         key={folderId}
-        onContextMenu={contextMenuHandler}
         onDragOver={(event) => event.preventDefault()}
         onDrop={() => {
           if (draggedMaterialId) {
@@ -503,21 +504,32 @@ export function MaterialWorkspace({
           }
         }}
       >
-        <button
-          aria-expanded={isExpanded}
-          className="material-workspace__folder-title"
-          onClick={() => toggleFolder(folderId)}
-          type="button"
-        >
-          <span className="material-workspace__folder-chevron" aria-hidden>
-            {isExpanded ? "v" : ">"}
-          </span>
-          <span className="material-workspace__folder-icon" aria-hidden>
-            Folder
-          </span>
-          <span>{folderName}</span>
+        <div className="material-workspace__folder-head">
+          <button
+            aria-expanded={isExpanded}
+            className="material-workspace__folder-title"
+            onClick={() => toggleFolder(folderId)}
+            type="button"
+          >
+            <span className={`material-workspace__folder-chevron ${isExpanded ? "is-expanded" : ""}`} aria-hidden />
+            <span className="material-workspace__folder-icon" aria-hidden>
+              Folder
+            </span>
+            <span>{folderName}</span>
+          </button>
           <span className="material-workspace__folder-count">{folderMaterials.length}</span>
-        </button>
+          {folder ? (
+            <button
+              aria-label={`${folderName} 更多操作`}
+              className="material-workspace__folder-actions"
+              disabled={isMutating}
+              onClick={(event) => openFolderMenu(event, folder)}
+              type="button"
+            >
+              <IconDotsVertical size={18} stroke={1.8} />
+            </button>
+          ) : null}
+        </div>
         {isExpanded ? (
           folderMaterials.length > 0 ? (
             <ul aria-label={`${folderName} 资料列表`} className="material-workspace__file-list">
@@ -549,13 +561,16 @@ export function MaterialWorkspace({
           <button disabled={isMutating} onClick={() => openUploadDialog(null)} type="button">
             上传资料
           </button>
+          <button disabled={isMutating} onClick={openCreateLinkModal} type="button">
+            添加链接
+          </button>
           <label className="material-workspace__scope-all">
             <input
-              checked={materialScope.include_all_parsed_materials}
-              onChange={(event) =>
+              checked={isExplicitAllParsedScope}
+              onChange={() =>
                 onMaterialScopeChange({
-                  include_all_parsed_materials: event.target.checked,
-                  material_ids: [],
+                  include_all_parsed_materials: true,
+                  material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
                 })
               }
               type="checkbox"
@@ -574,9 +589,11 @@ export function MaterialWorkspace({
             <div className="material-workspace__upload-dialog-head">
               <div>
                 <h3 id="material-upload-dialog-title">上传课程资料</h3>
-                <p>
-                  上传到：{uploadTargetName}。上传后会自动进入解析流程，解析完成后可用于问答、生成内容和学习计划。
+                <p className="material-workspace__upload-target">
+                  <span>上传到：</span>
+                  <strong>{uploadTargetName}</strong>
                 </p>
+                <p>上传后会自动进入解析流程，解析完成后可用于问答、生成内容和学习计划。</p>
               </div>
               <button
                 aria-label="关闭上传资料弹窗"
@@ -631,12 +648,12 @@ export function MaterialWorkspace({
             </label>
           </div>
 
-          <div aria-label="资料列表区域" className="material-workspace__content" onContextMenu={openWorkspaceMenu}>
+          <div aria-label="资料列表区域" className="material-workspace__content">
             {renderFolderSection("unfiled", "未分类")}
             {folders.map((folder) => renderFolderSection(folder.id, folder.name, folder))}
             <div className="material-workspace__context-zone">
               <Text c="dimmed" size="sm">
-                在这里右键新建文件夹、上传资料或添加链接
+                可在顶部按钮新建文件夹、上传资料或添加链接
               </Text>
             </div>
           </div>
@@ -650,26 +667,6 @@ export function MaterialWorkspace({
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          {contextMenu.kind === "workspace" ? (
-            <>
-              <button onClick={openCreateFolderModal} role="menuitem" type="button">
-                新建文件夹
-              </button>
-              <button
-                onClick={() => {
-                  setContextMenu(null);
-                  openUploadDialog(null);
-                }}
-                role="menuitem"
-                type="button"
-              >
-                上传资料
-              </button>
-              <button onClick={openCreateLinkModal} role="menuitem" type="button">
-                添加链接
-              </button>
-            </>
-          ) : null}
           {contextMenu.kind === "folder" ? (
             <>
               <button onClick={() => openRenameFolderModal(contextMenu.folder)} role="menuitem" type="button">

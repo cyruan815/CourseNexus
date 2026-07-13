@@ -1,10 +1,11 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MaterialWorkspace } from "../../../src/features/materials/MaterialWorkspace";
 import * as materialsApi from "../../../src/features/materials/api";
+import type { MaterialScope } from "../../../src/features/materials/types";
 
 vi.mock("../../../src/features/materials/api");
 
@@ -68,6 +69,14 @@ async function openMaterialActions(name = "第一章.pdf") {
   fireEvent.click(await screen.findByRole("button", { name: `${name} 更多操作` }));
 }
 
+async function openFolderActions(name = "第一周") {
+  fireEvent.click(await screen.findByRole("button", { name: `${name} 更多操作` }));
+}
+
+async function findFirstFolderToggle() {
+  return screen.findByRole("button", { name: "第一周" });
+}
+
 describe("MaterialWorkspace", () => {
   beforeEach(() => {
     vi.mocked(materialsApi.listMaterialFolders).mockResolvedValue([folder]);
@@ -85,7 +94,7 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    expect(await screen.findByRole("button", { name: /第一周/ })).toBeInTheDocument();
+    expect(await findFirstFolderToggle()).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "第一周" })).not.toBeInTheDocument();
 
     const parsedMaterial = screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" });
@@ -94,12 +103,119 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.click(parsedMaterial);
     expect(onScopeChange).toHaveBeenCalledWith({
-      include_all_parsed_materials: false,
+      include_all_parsed_materials: true,
       material_ids: ["mat_1"],
     });
 
     fireEvent.click(screen.getByText("待解析.md"));
     expect(await screen.findByRole("alert")).toHaveTextContent("资料需解析成功后才能选择。");
+  });
+
+  it("returns to all parsed materials when the last selected material is cleared", async () => {
+    const onScopeChange = vi.fn();
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={onScopeChange}
+      />,
+    );
+
+    const parsedMaterial = await screen.findByRole("checkbox", { name: "选择资料 第一章.pdf" });
+    fireEvent.click(parsedMaterial);
+
+    expect(onScopeChange).toHaveBeenCalledWith({
+      include_all_parsed_materials: true,
+      material_ids: [],
+    });
+  });
+
+  it("keeps individual material checkboxes empty for the all parsed materials scope", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("checkbox", { name: "全部已解析资料" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" })).not.toBeChecked();
+  });
+
+  it("uses explicit item checks to enter and leave the all parsed materials scope", async () => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      materials[0],
+      {
+        ...materials[1],
+        id: "mat_2",
+        name: "第二章.pdf",
+        parse_status: "parsed",
+      },
+    ]);
+    const onScopeChange = vi.fn();
+
+    function ControlledWorkspace() {
+      const [scope, setScope] = useState<MaterialScope>({ include_all_parsed_materials: true, material_ids: [] });
+
+      return (
+        <MaterialWorkspace
+          courseId="crs_1"
+          materialScope={scope}
+          onMaterialScopeChange={(nextScope) => {
+            onScopeChange(nextScope);
+            setScope(nextScope);
+          }}
+        />
+      );
+    }
+
+    renderWorkspace(<ControlledWorkspace />);
+
+    const allScope = await screen.findByRole("checkbox", { name: "全部已解析资料" });
+    const firstMaterial = screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" });
+    const secondMaterial = screen.getByRole("checkbox", { name: "选择资料 第二章.pdf" });
+
+    expect(allScope).not.toBeChecked();
+    expect(firstMaterial).not.toBeChecked();
+    expect(secondMaterial).not.toBeChecked();
+
+    fireEvent.click(firstMaterial);
+    expect(onScopeChange).toHaveBeenLastCalledWith({
+      include_all_parsed_materials: false,
+      material_ids: ["mat_1"],
+    });
+    expect(firstMaterial).toBeChecked();
+    expect(secondMaterial).not.toBeChecked();
+    expect(allScope).not.toBeChecked();
+
+    fireEvent.click(secondMaterial);
+    expect(onScopeChange).toHaveBeenLastCalledWith({
+      include_all_parsed_materials: true,
+      material_ids: ["mat_1", "mat_2"],
+    });
+    expect(firstMaterial).toBeChecked();
+    expect(secondMaterial).toBeChecked();
+    expect(allScope).toBeChecked();
+
+    fireEvent.click(secondMaterial);
+    expect(onScopeChange).toHaveBeenLastCalledWith({
+      include_all_parsed_materials: false,
+      material_ids: ["mat_1"],
+    });
+    expect(firstMaterial).toBeChecked();
+    expect(secondMaterial).not.toBeChecked();
+    expect(allScope).not.toBeChecked();
+
+    fireEvent.click(firstMaterial);
+    expect(onScopeChange).toHaveBeenLastCalledWith({
+      include_all_parsed_materials: true,
+      material_ids: [],
+    });
+    expect(allScope).not.toBeChecked();
+    expect(firstMaterial).not.toBeChecked();
+    expect(secondMaterial).not.toBeChecked();
   });
 
   it("creates folders and moves a material without selecting the folder", async () => {
@@ -124,7 +240,7 @@ describe("MaterialWorkspace", () => {
     });
 
     fireEvent.dragStart(screen.getByText("待解析.md"));
-    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
+    fireEvent.drop(await findFirstFolderToggle());
     await waitFor(() => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
     });
@@ -223,8 +339,7 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    const folderButton = await screen.findByRole("button", { name: /第一周/ });
-    fireEvent.contextMenu(folderButton);
+    await openFolderActions();
     fireEvent.click(screen.getByRole("menuitem", { name: "删除文件夹" }));
 
     expect(screen.getByRole("dialog", { name: "删除文件夹" })).toHaveTextContent(
@@ -236,11 +351,77 @@ describe("MaterialWorkspace", () => {
     await waitFor(() => {
       expect(materialsApi.deleteMaterialFolder).toHaveBeenCalledWith("fld_1");
     });
-    expect(screen.queryByRole("button", { name: /第一周/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "第一周" })).not.toBeInTheDocument();
     expect(screen.queryByText("第一章.pdf")).not.toBeInTheDocument();
   });
 
-  it("creates a link material from the workspace context menu", async () => {
+  it("shows the upload target on its own line with a strong folder name", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    await openFolderActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "上传到此文件夹" }));
+
+    const dialog = screen.getByRole("dialog", { name: "上传课程资料" });
+    expect(within(dialog).getByText("上传到：")).toBeInTheDocument();
+    expect(within(dialog).getByText(folder.name).tagName).toBe("STRONG");
+    expect(within(dialog).queryByText(`上传到：${folder.name}。`)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/上传后会自动进入解析流程/)).toBeInTheDocument();
+  });
+
+  it("does not expose workspace actions from right-clicking the blank area", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    const blankArea = await screen.findByText("可在顶部按钮新建文件夹、上传资料或添加链接");
+    fireEvent.contextMenu(blankArea);
+
+    expect(screen.queryByRole("menuitem", { name: "新建文件夹" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "添加链接" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/右键/)).not.toBeInTheDocument();
+  });
+
+  it("does not open folder actions from right-clicking a folder row", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(await findFirstFolderToggle());
+
+    expect(screen.queryByRole("menuitem", { name: "删除文件夹" })).not.toBeInTheDocument();
+  });
+
+  it("keeps folder actions in the folder header instead of the blank prompt area", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    const folderAction = await screen.findByRole("button", { name: "第一周 更多操作" });
+    const blankPrompt = await screen.findByText("可在顶部按钮新建文件夹、上传资料或添加链接");
+
+    expect(folderAction.closest(".material-workspace__folder-head")).not.toBeNull();
+    expect(blankPrompt.closest(".material-workspace__context-zone")?.querySelector("button")).toBeNull();
+  });
+
+  it("creates a link material from the top action button", async () => {
     vi.mocked(materialsApi.createMaterialLink).mockResolvedValue({
       ...materials[1],
       id: "mat_link",
@@ -259,8 +440,7 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    fireEvent.contextMenu(await screen.findByLabelText("资料列表区域"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "添加链接" }));
+    fireEvent.click(await screen.findByRole("button", { name: "添加链接" }));
     fireEvent.change(screen.getByRole("textbox", { name: /资料名称/ }), { target: { value: "课程网站" } });
     fireEvent.change(screen.getByRole("textbox", { name: /资料链接/ }), {
       target: { value: "https://example.com/course" },
@@ -352,7 +532,7 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByRole("dialog", { name: "删除资料" })).toBeInTheDocument();
   });
 
-  it("closes the context menu when left-clicking elsewhere", async () => {
+  it("closes the material actions menu when left-clicking elsewhere", async () => {
     renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
@@ -361,27 +541,12 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    fireEvent.contextMenu(await screen.findByLabelText("资料列表区域"));
-    expect(screen.getByRole("menuitem", { name: "添加链接" })).toBeInTheDocument();
+    await openMaterialActions();
+    expect(screen.getByRole("menuitem", { name: "重命名资料" })).toBeInTheDocument();
 
     fireEvent.mouseDown(document.body);
 
-    expect(screen.queryByRole("menuitem", { name: "添加链接" })).not.toBeInTheDocument();
-  });
-
-  it("opens the workspace context menu from the bottom blank area", async () => {
-    renderWorkspace(
-      <MaterialWorkspace
-        courseId="crs_1"
-        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
-        onMaterialScopeChange={vi.fn()}
-      />,
-    );
-
-    fireEvent.contextMenu(await screen.findByText("在这里右键新建文件夹、上传资料或添加链接"));
-
-    expect(screen.getByRole("menuitem", { name: "新建文件夹" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "添加链接" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "重命名资料" })).not.toBeInTheDocument();
   });
 
   it("moves a material by dragging it onto a folder", async () => {
@@ -396,7 +561,7 @@ describe("MaterialWorkspace", () => {
     );
 
     fireEvent.dragStart(await screen.findByText("待解析.md"));
-    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
+    fireEvent.drop(await findFirstFolderToggle());
 
     await waitFor(() => {
       expect(materialsApi.moveMaterialToFolder).toHaveBeenCalledWith("mat_2", "fld_1");
@@ -416,7 +581,7 @@ describe("MaterialWorkspace", () => {
     );
 
     fireEvent.dragStart(await screen.findByText("待解析.md"));
-    fireEvent.drop(screen.getByRole("button", { name: /第一周/ }));
+    fireEvent.drop(await findFirstFolderToggle());
 
     expect(await screen.findByRole("alert")).toHaveTextContent("资料索引配置缺失");
     expect(screen.getByText("待解析.md")).toBeInTheDocument();
