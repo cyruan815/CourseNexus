@@ -423,6 +423,137 @@ def test_reduce_handout_outputs_preserves_section_citation_bindings_after_reinde
     }
 
 
+def _v2_handout_output(*, section_id: str, section_title: str, chunk_id: str, latex: str) -> GeneratorOutput:
+    return GeneratorOutput(
+        title="结构化讲义",
+        content_json={
+            "schema_version": 2,
+            "title": "结构化讲义",
+            "overview": "围绕信道容量建立公式和直觉。",
+            "difficulty": "medium",
+            "estimated_minutes": 40,
+            "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
+            "prerequisites": [],
+            "sections": [
+                {
+                    "id": section_id,
+                    "title": section_title,
+                    "lead": "先说结论。",
+                    "source_citation_ids": [chunk_id],
+                    "blocks": [
+                        {
+                            "type": "formula",
+                            "title": "Shannon 公式",
+                            "latex": latex,
+                            "purpose": "计算理论最大数据率。",
+                            "variables": [{"symbol": "C", "meaning": "最大数据率", "unit": "bps"}],
+                            "conditions": ["有噪声信道"],
+                            "limitations": ["理论上限"],
+                            "source_citation_ids": [chunk_id],
+                        }
+                    ],
+                    "key_points": ["按条件选公式。"],
+                    "sort_order": 1,
+                }
+            ],
+            "knowledge_map": None,
+            "formula_cards": [],
+            "exam_focus": [],
+            "self_check": [],
+            "summary": "按条件选公式。",
+        },
+        item_citation_chunk_ids={section_id: [chunk_id]},
+    )
+
+
+def test_reduce_handout_outputs_preserves_v2_blocks_and_schema() -> None:
+    reduced = _reduce_task_content_outputs(
+        content_type="handout",
+        outputs=[
+            _v2_handout_output(section_id="sec_a", section_title="Shannon", chunk_id="chunk_primary", latex="C = W"),
+            _v2_handout_output(section_id="sec_b", section_title="Nyquist", chunk_id="chunk_secondary", latex="C = 2B"),
+        ],
+    )
+
+    assert reduced.content_json["schema_version"] == 2
+    assert [section["id"] for section in reduced.content_json["sections"]] == ["sec_1", "sec_2"]
+    assert reduced.content_json["sections"][0]["blocks"][0]["type"] == "formula"
+    assert reduced.item_citation_chunk_ids == {"sec_1": ["chunk_primary"], "sec_2": ["chunk_secondary"]}
+
+
+def test_generate_handout_binds_v2_section_and_block_citations(api: ApiHarness) -> None:
+    class StructuredHandoutModelProvider:
+        def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
+            raise AssertionError("answer_question should not be called")
+
+        def generate_structured(self, *, prompt, output_schema):
+            assert output_schema is HandoutContent
+            return HandoutContent.model_validate(
+                {
+                    "schema_version": 2,
+                    "title": "结构化讲义",
+                    "overview": "围绕信道容量建立公式和直觉。",
+                    "difficulty": "medium",
+                    "estimated_minutes": 40,
+                    "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
+                    "prerequisites": [],
+                    "sections": [
+                        {
+                            "id": "sec_1",
+                            "title": "Shannon 公式",
+                            "lead": "先说结论。",
+                            "source_citation_ids": ["chunk_api_content"],
+                            "blocks": [
+                                {
+                                    "type": "formula",
+                                    "title": "Shannon 公式",
+                                    "latex": "C = W \\\\log_2(1 + S/N)",
+                                    "purpose": "计算理论最大数据率。",
+                                    "variables": [{"symbol": "C", "meaning": "最大数据率", "unit": "bps"}],
+                                    "conditions": ["有噪声信道"],
+                                    "limitations": ["理论上限"],
+                                    "source_citation_ids": ["chunk_api_content_second"],
+                                }
+                            ],
+                            "key_points": ["按条件选公式。"],
+                            "sort_order": 1,
+                        }
+                    ],
+                    "knowledge_map": None,
+                    "formula_cards": [],
+                    "exam_focus": [],
+                    "self_check": [],
+                    "summary": "按条件选公式。",
+                }
+            )
+
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+
+    result = generate_handout_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"language": "zh-CN"},
+        force_regenerate=True,
+        model_provider=StructuredHandoutModelProvider(),
+        max_tokens=10_000,
+    )
+
+    section = result.content_json["sections"][0]
+    block = section["blocks"][0]
+    assert len(section["source_citation_ids"]) == 1
+    assert len(block["source_citation_ids"]) == 1
+    assert section["source_citation_ids"] != block["source_citation_ids"]
+    assert all(citation_id.startswith("cit_") for citation_id in section["source_citation_ids"])
+    assert all(citation_id.startswith("cit_") for citation_id in block["source_citation_ids"])
+    assert "chunk_api_content" not in str(result.content_json)
+    assert "chunk_api_content_second" not in str(result.content_json)
+    citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
+    assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
+
+
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")

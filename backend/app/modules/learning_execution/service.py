@@ -633,14 +633,33 @@ def _reduce_task_content_outputs(*, content_type: str, outputs: list[GeneratorOu
 
 def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
     contents = [HandoutContent.model_validate(output.content_json) for output in outputs]
+    is_v2 = any(content.schema_version == 2 for content in contents)
     objectives: list[str] = []
     sections: list[dict[str, object]] = []
     item_citation_chunk_ids: dict[str, list[str]] = {}
+    handout_level_chunk_ids: list[str] = []
     sort_order = 1
+    formula_cards: list[dict[str, object]] = []
+    seen_formula_latex: set[str] = set()
+    knowledge_map: dict[str, object] | None = None
+
     for output, content in zip(outputs, contents, strict=True):
         for objective in content.learning_objectives:
             if objective not in objectives:
                 objectives.append(objective)
+        old_section_ids = {section.id for section in content.sections}
+        for item_id, chunk_ids in output.item_citation_chunk_ids.items():
+            if item_id not in old_section_ids:
+                _extend_unique(handout_level_chunk_ids, chunk_ids)
+        if is_v2 and knowledge_map is None and content.knowledge_map is not None:
+            knowledge_map = content.knowledge_map.model_dump(mode="json")
+        if is_v2:
+            for formula in content.formula_cards:
+                data = formula.model_dump(mode="json")
+                latex = str(data.get("latex") or "")
+                if latex and latex not in seen_formula_latex:
+                    seen_formula_latex.add(latex)
+                    formula_cards.append(data)
         for section in sorted(content.sections, key=lambda item: item.sort_order):
             old_id = section.id
             new_id = f"sec_{sort_order}"
@@ -648,22 +667,77 @@ def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
             data["id"] = new_id
             data["sort_order"] = sort_order
             sections.append(data)
-            item_citation_chunk_ids[new_id] = list(
-                dict.fromkeys(output.item_citation_chunk_ids.get(old_id, section.source_citation_ids))
-            )
+            chunk_ids = output.item_citation_chunk_ids.get(old_id) or _collect_source_citation_ids(data)
+            item_citation_chunk_ids[new_id] = list(dict.fromkeys(chunk_ids))
             sort_order += 1
 
-    content_json = {
+    if handout_level_chunk_ids:
+        item_citation_chunk_ids["__handout__"] = handout_level_chunk_ids
+
+    content_json: dict[str, object] = {
         "overview": contents[0].overview,
         "learning_objectives": objectives,
         "sections": sections,
         "summary": contents[-1].summary,
     }
+    if is_v2:
+        content_json.update(
+            {
+                "schema_version": 2,
+                "title": contents[0].title or "今日讲义",
+                "difficulty": contents[0].difficulty,
+                "estimated_minutes": _sum_estimated_minutes(contents),
+                "prerequisites": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.prerequisites]),
+                "knowledge_map": knowledge_map,
+                "formula_cards": formula_cards,
+                "exam_focus": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.exam_focus]),
+                "self_check": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.self_check]),
+            }
+        )
     return GeneratorOutput(
         title="今日讲义",
         content_json=content_json,
         item_citation_chunk_ids=item_citation_chunk_ids,
     )
+
+
+def _extend_unique(target: list[str], values: list[str]) -> None:
+    for value in values:
+        if value not in target:
+            target.append(value)
+
+
+def _sum_estimated_minutes(contents: list[HandoutContent]) -> int | None:
+    values = [content.estimated_minutes for content in contents if content.estimated_minutes is not None]
+    return sum(values) if values else None
+
+
+def _merge_by_id(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    merged: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in items:
+        key = str(item.get("id") or item.get("title") or item)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+
+def _collect_source_citation_ids(value: object) -> list[str]:
+    chunk_ids: list[str] = []
+    if isinstance(value, dict):
+        source_ids = value.get("source_citation_ids")
+        if isinstance(source_ids, list):
+            for source_id in source_ids:
+                if isinstance(source_id, str) and source_id.strip() and source_id not in chunk_ids:
+                    chunk_ids.append(source_id)
+        for child in value.values():
+            _extend_unique(chunk_ids, _collect_source_citation_ids(child))
+    elif isinstance(value, list):
+        for child in value:
+            _extend_unique(chunk_ids, _collect_source_citation_ids(child))
+    return chunk_ids
 
 
 def _reduce_task_test_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
@@ -756,24 +830,48 @@ def _save_task_content_citations(
         )
     db.add_all(citations)
     db.flush()
-    return {
+    bindings = {
         item_id: [citation_ids_by_chunk_id[chunk_id] for chunk_id in chunk_ids if chunk_id in citation_ids_by_chunk_id]
         for item_id, chunk_ids in item_citation_chunk_ids.items()
     }
+    for chunk_id, citation_id in citation_ids_by_chunk_id.items():
+        bindings[f"__chunk__:{chunk_id}"] = [citation_id]
+    return bindings
 
 
-def _bind_source_citation_ids(value: object, bindings: dict[str, list[str]]) -> object:
+def _bind_source_citation_ids(
+    value: object,
+    bindings: dict[str, list[str]],
+    inherited_citation_ids: list[str] | None = None,
+) -> object:
     if isinstance(value, dict):
-        bound = {key: _bind_source_citation_ids(child, bindings) for key, child in value.items()}
         item_id = value.get("id")
-        if isinstance(item_id, str) and item_id in bindings:
-            bound["source_citation_ids"] = list(bindings[item_id])
-        elif "source_citation_ids" in value:
-            bound["source_citation_ids"] = []
+        item_citation_ids = bindings.get(item_id, []) if isinstance(item_id, str) else []
+        source_citation_ids = _citation_ids_for_raw_sources(value.get("source_citation_ids"), bindings)
+        current_citation_ids = source_citation_ids or item_citation_ids or list(inherited_citation_ids or [])
+        bound = {
+            key: _bind_source_citation_ids(child, bindings, current_citation_ids)
+            for key, child in value.items()
+        }
+        if "source_citation_ids" in value:
+            bound["source_citation_ids"] = list(dict.fromkeys(current_citation_ids))
         return bound
     if isinstance(value, list):
-        return [_bind_source_citation_ids(child, bindings) for child in value]
+        return [_bind_source_citation_ids(child, bindings, inherited_citation_ids) for child in value]
     return value
+
+
+def _citation_ids_for_raw_sources(value: object, bindings: dict[str, list[str]]) -> list[str]:
+    citation_ids: list[str] = []
+    if not isinstance(value, list):
+        return citation_ids
+    for source_id in value:
+        if not isinstance(source_id, str):
+            continue
+        for citation_id in bindings.get(f"__chunk__:{source_id}", []):
+            if citation_id not in citation_ids:
+                citation_ids.append(citation_id)
+    return citation_ids
 
 
 def _latest_content_id(db: Session, *, user_id: str, subtask_id: str, content_type: str) -> str | None:

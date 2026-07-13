@@ -222,10 +222,43 @@ def _context_value(value: str | None) -> str:
 
 
 def _collect_item_citation_chunk_ids(content: HandoutContent) -> dict[str, list[str]]:
-    return {
-        section.id: list(dict.fromkeys(section.source_citation_ids))
-        for section in sorted(content.sections, key=lambda item: item.sort_order)
-    }
+    content_data = content.model_dump(mode="json")
+    bindings: dict[str, list[str]] = {}
+    section_chunk_ids: list[str] = []
+    for section in sorted(content.sections, key=lambda item: item.sort_order):
+        section_data = section.model_dump(mode="json")
+        chunk_ids = _collect_source_citation_ids(section_data)
+        bindings[section.id] = chunk_ids
+        for chunk_id in chunk_ids:
+            if chunk_id not in section_chunk_ids:
+                section_chunk_ids.append(chunk_id)
+
+    extra_chunk_ids = [
+        chunk_id for chunk_id in _collect_source_citation_ids(content_data) if chunk_id not in section_chunk_ids
+    ]
+    if extra_chunk_ids:
+        bindings["__handout__"] = extra_chunk_ids
+    return {item_id: chunk_ids for item_id, chunk_ids in bindings.items() if chunk_ids}
+
+
+def _collect_source_citation_ids(value: object) -> list[str]:
+    chunk_ids: list[str] = []
+    if isinstance(value, dict):
+        source_ids = value.get("source_citation_ids")
+        if isinstance(source_ids, list):
+            for source_id in source_ids:
+                if isinstance(source_id, str) and source_id.strip() and source_id not in chunk_ids:
+                    chunk_ids.append(source_id)
+        for child in value.values():
+            for chunk_id in _collect_source_citation_ids(child):
+                if chunk_id not in chunk_ids:
+                    chunk_ids.append(chunk_id)
+    elif isinstance(value, list):
+        for child in value:
+            for chunk_id in _collect_source_citation_ids(child):
+                if chunk_id not in chunk_ids:
+                    chunk_ids.append(chunk_id)
+    return chunk_ids
 
 
 def _page_label(chunk: object) -> str | int | None:
