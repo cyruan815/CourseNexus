@@ -27,6 +27,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
+import { StudyPlanTaskDescription } from "../features/study-plans/components/StudyPlanTaskDescription";
 import {
   deleteStudyPlan,
   fetchStudyPlan,
@@ -109,10 +110,6 @@ function subtaskTypeColor(type: string): string {
     test: "orange",
   };
   return colors[type] ?? "gray";
-}
-
-function relatedMaterialIds(subtask: StudySubtaskRead): string[] {
-  return subtask.related_material_ids_json ?? subtask.related_material_ids ?? [];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -748,22 +745,15 @@ export function StudyPlanDetailPage() {
                   <Stack gap="xs" mt="sm">
                     {(subtasksByTaskId.get(task.id) ?? []).map((subtask) => (
                       <Paper className="study-plan-subtask" key={subtask.id} radius="md" withBorder>
-                        <Group align="flex-start" justify="space-between" wrap="nowrap">
-                          <Stack gap={4}>
+                        <Stack gap={8}>
+                          <Group align="flex-start" className="study-plan-subtask-header" justify="space-between" wrap="nowrap">
                             <Text fw={700}>{subtask.title}</Text>
-                            {subtask.description ? (
-                              <Text c="dimmed" size="sm">{subtask.description}</Text>
-                            ) : null}
-                            {relatedMaterialIds(subtask).length > 0 ? (
-                              <Text c="dimmed" size="xs">
-                                关联资料：{relatedMaterialIds(subtask).join(", ")}
-                              </Text>
-                            ) : null}
-                          </Stack>
-                          <Stack align="flex-end" gap="xs">
-                            <Badge color={subtaskTypeColor(subtask.subtask_type)} variant="light">
+                            <Badge className="study-plan-type-badge" color={subtaskTypeColor(subtask.subtask_type)} variant="light">
                               {subtaskTypeLabel(subtask.subtask_type)}
                             </Badge>
+                          </Group>
+                          <StudyPlanTaskDescription description={subtask.description} />
+                          <Group justify="flex-end">
                             <Button
                               aria-label={`进入学习：${subtask.title}`}
                               component={Link}
@@ -774,8 +764,8 @@ export function StudyPlanDetailPage() {
                             >
                               进入学习
                             </Button>
-                          </Stack>
-                        </Group>
+                          </Group>
+                        </Stack>
                       </Paper>
                     ))}
                   </Stack>

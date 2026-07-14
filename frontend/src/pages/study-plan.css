@@ -57,12 +57,22 @@
 }
 
 .study-plan-create-flow {
-  flex: 1;
-  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 860px);
+  grid-template-columns: minmax(0, 900px);
   justify-content: center;
+  overflow: visible;
+}
+
+.study-plan-create-shell {
   overflow: auto;
+  padding-block: 18px 28px;
+}
+
+.study-plan-create-flow > .study-plan-panel {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
 }
 
 .study-plan-panel,
@@ -144,6 +154,41 @@
   border-color: #e5edf5;
   background: #ffffff;
   padding: 12px;
+}
+
+.study-plan-subtask-header {
+  gap: 12px;
+}
+
+.study-plan-subtask-header > p {
+  min-width: 0;
+}
+
+.study-plan-type-badge {
+  flex: 0 0 auto;
+  min-width: 44px;
+}
+
+.study-plan-type-badge .mantine-Badge-label {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.study-plan-task-description,
+.study-plan-description-content {
+  line-height: 1.72;
+  text-wrap: pretty;
+}
+
+.study-plan-description-part {
+  display: grid;
+  grid-template-columns: 4.8em minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.study-plan-description-label {
+  color: #334155;
 }
 
 .study-plan-detail-hero {

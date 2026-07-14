@@ -8,13 +8,15 @@
 
 ## 2026-07-14 前端 C13 落地说明
 
-当前前端创建页已按“目标输入 + 资料范围 + 必选学情诊断 + 预览确认”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示。
+当前前端创建页已按“目标输入 + 资料范围 + 必选学情诊断 + 预览确认”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示，也不再在前端单独补问日期。
 
 - 自然语言解析出的 `start_date`、`duration_days` / `end_date`、`daily_available_minutes` 和 `preference` 会作为确认配置进入诊断题请求。
-- 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，前端保留一个轻量日期兜底区，仅在日期未解析出时出现。
+- 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，若自然语言没有解析出日期，preview 可能仍由后端返回校验错误。后续应由后端诊断题或 build 契约承接缺失日期，不再回到前端日期兜底表单。
 - 学情诊断在创建页为必填；没有 `diagnostic_profile` 时不生成 preview。
 - `daily_available_minutes` 不必填；只有自然语言明确解析出有效分钟数时才提交，否则由后端估算。
 - 计划 preview 使用大 Modal 展示，Modal 内完成重新生成和保存；保存仍提交 `client_flow = "wizard_v1"` 与用户看到的 exact preview tasks。
+- “指定资料”模式从 0 份已选开始，未勾选任何 parsed 资料时前端提示必须选择至少一份资料。
+- 预览和详情页的任务说明改为用户阅读结构：按 `含义 / 条件 / 步骤 / 练习检查` 等片段分行；详情页隐藏内部 `mat_xxx` 资料 ID。
 
 ## 已实施入口：每日学习时间规则
 
