@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ describe("GeneratedContentDetailPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads generated content detail and renders outline sections with citations", async () => {
+  it("loads generated content detail without metadata and citation panels", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       successResponse({
         id: "gen_1",
@@ -77,12 +77,14 @@ describe("GeneratedContentDetailPage", () => {
     renderDetailPage();
 
     expect(await screen.findByRole("heading", { name: "期末复习提纲" })).toBeInTheDocument();
-    expect(screen.getByText("复习提纲")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "函数与极限" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "复习提纲" })).toBeInTheDocument();
+    expect(screen.getByText("函数与极限")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "函数与极限" }));
     expect(screen.getByText("梳理极限定义和常见计算方法")).toBeInTheDocument();
     expect(screen.getByText("先复盘定义，再做典型题")).toBeInTheDocument();
-    expect(screen.getByText("第一章.md · 页码未知")).toBeInTheDocument();
-    expect(screen.getByText("极限定义")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "生成信息" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "引用来源" })).not.toBeInTheDocument();
+    expect(screen.queryByText("第一章.md · 页码未知")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/generated-contents/gen_1",
       expect.objectContaining({ method: "GET" }),
@@ -118,7 +120,7 @@ describe("GeneratedContentDetailPage", () => {
 
     expect(await screen.findByRole("heading", { name: "课程自测" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("GENERATION_SCHEMA_INVALID");
-    expect(screen.getByText("当前没有可展示的引用来源")).toBeInTheDocument();
+    expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });
 
   it("renders task test generated content as a readonly review view", async () => {

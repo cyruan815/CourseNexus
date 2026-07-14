@@ -2,7 +2,7 @@ export type ChoiceId = "A" | "B" | "C" | "D";
 
 export interface QuizQuestion {
   id: string; sort_order: number; question_text: string;
-  options: Array<{ id: ChoiceId; text: string }>;
+  options: Array<{ id: ChoiceId; text: string; explanation?: string | null }>;
   correct_answer: ChoiceId; explanation: string; difficulty: string; hint?: string | null;
 }
 

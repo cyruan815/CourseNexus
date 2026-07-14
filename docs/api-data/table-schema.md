@@ -475,7 +475,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
       "options": [
         {
           "id": "A",
-          "text": "选项"
+          "text": "选项",
+          "explanation": "该选项正确或错误的逐项解析"
         }
       ],
       "correct_answer": "A",
@@ -490,6 +491,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - 当前独立 Quiz 只支持 `single_choice`，每题固定包含 A-D 四个选项。
+- 新生成 Quiz 的每个选项必须包含 `explanation`。错误选项解析必须说明该选项自身错误的具体知识逻辑，不通过透露正确答案或正确结论来解释错误；历史 JSON 可能缺少该字段，前端按兼容模式展示。
 - 课程自测使用 `content_type = quiz`；任务测试题使用独立 `task_test` 结构。
 - 五类独立 POC 业务 JSON 不包含引用字段；任务讲义和任务测试题仍可保存真实引用。
 

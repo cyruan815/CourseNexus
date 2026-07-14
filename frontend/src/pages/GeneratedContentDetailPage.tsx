@@ -1,10 +1,10 @@
 import { Alert, Badge, Box, Button, Group, Paper, Skeleton, Stack, Text, Title } from "@mantine/core";
-import { IconArrowLeft, IconQuote } from "@tabler/icons-react";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../api/errors";
 import { getGeneratedContent } from "../features/course-workspace/api";
-import type { GeneratedContent, SourceCitation } from "../features/course-workspace/types";
+import type { GeneratedContent } from "../features/course-workspace/types";
 import { GeneratedContentRenderer } from "../features/generated-content/GeneratedContentRenderer";
 import "../features/generated-content/generated-content.css";
 import "./generated-content-detail.css";
@@ -12,17 +12,6 @@ import "./generated-content-detail.css";
 const labels: Record<string, string> = { quiz: "Quiz", flashcard: "Flashcards", mindmap: "Mind Map", outline: "复习提纲", knowledge_list: "知识点清单", handout: "今日讲义", task_test: "任务测试题" };
 const statusColor = (status: string) => status === "success" ? "teal" : status === "failed" ? "red" : "yellow";
 const errorMessage = (error: unknown) => error instanceof ApiError || error instanceof Error ? error.message : "生成内容加载失败";
-
-function formatCitationLocation(citation: SourceCitation) {
-  if (citation.page !== null && citation.page !== undefined && String(citation.page).trim()) return String(citation.page);
-  if (typeof citation.page_index === "number" && citation.page_index > 0) return `第 ${citation.page_index + 1} 页`;
-  return "页码未知";
-}
-
-function CitationPanel({ citations }: { citations: SourceCitation[] }) {
-  if (!citations.length) return <Stack className="generated-content-citation-empty" gap="xs"><IconQuote size={28} /><Text fw={700}>当前没有可展示的引用来源</Text><Text c="dimmed" size="sm">该类生成内容未提供逐条来源引用。</Text></Stack>;
-  return <Stack gap="sm">{citations.map((citation, index) => <Paper className="generated-content-citation" key={citation.id ?? `${citation.material_id}-${index}`} withBorder><Text fw={700} size="sm">{citation.material_name} · {formatCitationLocation(citation)}</Text><Text c="dimmed" size="sm">{citation.hit_text}</Text></Paper>)}</Stack>;
-}
 
 export function GeneratedContentDetailPage() {
   const { generatedContentId } = useParams();
@@ -43,6 +32,6 @@ export function GeneratedContentDetailPage() {
   return <Box className="generated-content-page"><Box className="generated-content-shell" component="main"><Stack gap="md">
     <Group justify="space-between"><Button component={Link} leftSection={<IconArrowLeft size={16} />} to={`/courses/${content.course_id}`} variant="subtle">返回课程详情</Button><Badge color={statusColor(content.generation_status)} variant="light">{content.generation_status}</Badge></Group>
     <header className="generated-content-header"><Group gap="xs"><Badge variant="light">{labels[content.content_type] ?? content.content_type}</Badge><Text c="dimmed" size="sm">{content.created_at}</Text></Group><Title order={1}>{content.title}</Title></header>
-    <div className="generated-content-layout"><Paper className="generated-content-main" withBorder><GeneratedContentRenderer content={content} /></Paper><aside className="generated-content-side"><section><Title order={2}>生成信息</Title><Text size="sm">类型：{labels[content.content_type] ?? content.content_type}</Text><Text size="sm">状态：{content.generation_status}</Text></section><section><Title order={2}>引用来源</Title><CitationPanel citations={content.source_citations ?? []} /></section></aside></div>
+    <Paper className="generated-content-main" withBorder><GeneratedContentRenderer content={content} /></Paper>
   </Stack></Box></Box>;
 }

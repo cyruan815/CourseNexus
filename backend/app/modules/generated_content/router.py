@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_required_user
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents
+from app.modules.generated_content.schemas import FlashcardCardsUpdate
+from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents, update_flashcard_cards
 from app.modules.users.models import User
 from app.shared.responses import success_response
 
@@ -35,3 +36,20 @@ def get_generated_content_endpoint(
     content = get_generated_content_detail(db, user_id=current_user.id, generated_content_id=generated_content_id)
     data = content.model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))
+
+
+@router.patch("/generated-contents/{generated_content_id}/flashcards")
+def update_flashcard_cards_endpoint(
+    generated_content_id: str,
+    payload: FlashcardCardsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    content = update_flashcard_cards(
+        db,
+        user_id=current_user.id,
+        generated_content_id=generated_content_id,
+        cards=[card.model_dump(mode="json") for card in payload.cards],
+    )
+    return success_response(content.model_dump(mode="json"), request_id=get_request_id(request))

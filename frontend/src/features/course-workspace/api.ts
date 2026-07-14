@@ -32,6 +32,13 @@ export function getGeneratedContent(generatedContentId: string): Promise<Generat
   return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}`, { method: "GET" });
 }
 
+export function updateFlashcards(generatedContentId: string, cards: Array<{ front: string; back: string; tags: string[]; explanation?: string | null }>): Promise<GeneratedContent> {
+  return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}/flashcards`, {
+    method: "PATCH",
+    body: { cards },
+  });
+}
+
 export function generateCourseContent(courseId: string, payload: GenerateContentRequest): Promise<GeneratedContent> {
   return apiRequest<GeneratedContent>(`/api/v1/courses/${courseId}/generations`, {
     method: "POST",

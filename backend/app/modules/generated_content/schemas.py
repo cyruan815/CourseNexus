@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.modules.generation.generators.flashcard.schemas import FlashcardDraft
 
 
 class GeneratedContentCitationRead(BaseModel):
@@ -37,3 +38,7 @@ class GeneratedContentRead(BaseModel):
     updated_at: datetime
     deleted_at: datetime | None
     source_citations: list[GeneratedContentCitationRead] = Field(default_factory=list)
+
+
+class FlashcardCardsUpdate(BaseModel):
+    cards: list[FlashcardDraft] = Field(min_length=1)

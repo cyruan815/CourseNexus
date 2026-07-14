@@ -15,8 +15,8 @@ def _question(text: str) -> dict[str, object]:
         "question_type": "single_choice",
         "question_text": text,
         "options": [
-            {"id": "A", "text": "A"}, {"id": "B", "text": "B"},
-            {"id": "C", "text": "C"}, {"id": "D", "text": "D"},
+            {"id": "A", "text": "A", "explanation": "Reason A"}, {"id": "B", "text": "B", "explanation": "Reason B"},
+            {"id": "C", "text": "C", "explanation": "Reason C"}, {"id": "D", "text": "D", "explanation": "Reason D"},
         ],
         "correct_answer": "A",
         "explanation": "Because A",
@@ -34,5 +34,7 @@ def test_quiz_uses_one_final_model_result_and_assigns_ids() -> None:
     assert "ALL MATERIALS" in provider.calls[0][0]
     assert [item["id"] for item in output.content_json["questions"]] == ["q_001", "q_002"]
     assert "source_citation_ids" not in output.content_json["questions"][0]
+    assert output.content_json["questions"][0]["options"][1]["explanation"] == "Reason B"
     assert "plausible distractors" in provider.calls[0][0]
     assert "conceptual understanding" in provider.calls[0][0]
+    assert "do not reveal the correct answer" in provider.calls[0][0]
