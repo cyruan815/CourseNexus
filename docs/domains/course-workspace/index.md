@@ -11,6 +11,7 @@
 - 2026-07-13: The study-plan area shows at most one plan, selected by latest `updated_at` / `created_at`. Existing plans render as a rounded bordered summary card that links to `/courses/{course_id}/study-plans/{plan_id}`; the action row stays right-aligned and includes a blue "查看更多" entry to `/calendar?courseId={course_id}`. The calendar route is an integration point for later course-filtered calendar behavior, not a fully closed study-mode calendar in this task.
 - 2026-07-13: The study-plan create page now saves through the new wizard contract: `client_flow = "wizard_v1"`, exact preview `tasks`, and an `Idempotency-Key` header. The page still keeps diagnostic, regeneration, replacement, execution, and calendar views as follow-up front-end work instead of pretending those flows are complete.
 - 2026-07-14: `/calendar?courseId={course_id}` now opens the real single-course study calendar. It reads the S03 course month endpoint for date summaries and the course day endpoint after the user selects a date; it remains read-only and links tasks back to existing study plan detail pages instead of inventing an execution route.
+- 2026-07-14: The home workbench mini calendar intentionally stays compact: each day cell shows one task title line with ellipsis plus one independent progress line. Multi-task per-day expansion belongs to the full calendar page, not the mini calendar.
 
 ## 概述
 
