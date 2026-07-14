@@ -301,7 +301,7 @@ describe("CourseDetailPage", () => {
 
   it("loads backend workspace data and sends course questions", async () => {
     const answer = {
-      answer_text: "模型用于描述和解释现象。",
+      answer_text: "模型用于描述和解释现象。 [[cite:1]]",
       answer_type: "grounded",
       assistant_message_id: "msg_assistant",
       conversation_id: "cnv_1",
@@ -357,9 +357,17 @@ describe("CourseDetailPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "发送问题" }));
 
-    expect(await screen.findByText("模型用于描述和解释现象。")).toBeInTheDocument();
-    expect(screen.getByText("理论模型概述.pdf · 12")).toBeInTheDocument();
-    expect(screen.getByText("引用来源")).toBeInTheDocument();
+    expect(await screen.findByText("模型用于描述和解释现象。", { exact: false })).toBeInTheDocument();
+    const citationMarker = screen.getByRole("button", { name: "查看引用 1：理论模型概述.pdf" });
+    expect(citationMarker).toHaveTextContent("1");
+    expect(screen.queryByText("模型描述现象")).not.toBeInTheDocument();
+    fireEvent.mouseEnter(citationMarker);
+    await waitFor(() => expect(screen.getByLabelText("引用 1 详情")).toHaveStyle({ opacity: "1" }));
+    const citationTooltip = screen.getByLabelText("引用 1 详情");
+    expect(citationTooltip).toHaveTextContent("理论模型概述.pdf");
+    expect(citationTooltip).toHaveTextContent("第 12 页");
+    expect(citationTooltip).toHaveTextContent("模型描述现象");
+    expect(screen.queryByText("引用来源")).not.toBeInTheDocument();
     expect(screen.queryByText(/寮|鏉|簮|锟/)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -375,6 +383,83 @@ describe("CourseDetailPage", () => {
         }),
       );
     });
+  });
+
+  it("restores inline citation popovers from conversation history", async () => {
+    const citation = {
+      chunk_id: "chk_history",
+      hit_text: "历史回答引用的资料片段。",
+      material_id: "mat_history",
+      material_name: "历史资料.pdf",
+      page: null,
+      page_index: 2,
+    };
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/courses/crs_123/conversations")) {
+        return Promise.resolve(successResponse([{
+          id: "cnv_history",
+          user_id: "usr_123",
+          course_id: "crs_123",
+          title: "历史问题",
+          source_page: "course_detail",
+          status: "active",
+          created_at: "2026-07-14T00:00:00Z",
+          updated_at: "2026-07-14T00:00:00Z",
+          deleted_at: null,
+        }], "req_conversations"));
+      }
+      if (url.endsWith("/conversations/cnv_history/messages")) {
+        return Promise.resolve(successResponse([
+          {
+            id: "msg_history_user",
+            conversation_id: "cnv_history",
+            course_id: "crs_123",
+            role: "user",
+            content: "历史问题",
+            answer_type: null,
+            generation_status: null,
+            error_code: null,
+            material_scope_json: null,
+            source_citations: [],
+            created_at: "2026-07-14T00:00:00Z",
+          },
+          {
+            id: "msg_history_assistant",
+            conversation_id: "cnv_history",
+            course_id: "crs_123",
+            role: "assistant",
+            content: "这是旧格式历史回答。",
+            answer_type: "grounded",
+            generation_status: "success",
+            error_code: null,
+            material_scope_json: null,
+            source_citations: [citation],
+            created_at: "2026-07-14T00:00:01Z",
+          },
+        ], "req_messages"));
+      }
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage();
+
+    expect(await screen.findByText("这是旧格式历史回答。", { exact: false })).toBeInTheDocument();
+    const marker = screen.getByRole("button", { name: "查看引用 1：历史资料.pdf" });
+    fireEvent.mouseEnter(marker);
+    await waitFor(() => expect(screen.getByLabelText("引用 1 详情")).toHaveStyle({ opacity: "1" }));
+    const tooltip = screen.getByLabelText("引用 1 详情");
+    expect(tooltip).toHaveTextContent("第 3 页");
+    expect(tooltip).toHaveTextContent("历史回答引用的资料片段。");
   });
 
   it("syncs the visible material scope and question payload as selections change", async () => {

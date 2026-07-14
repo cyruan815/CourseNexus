@@ -49,6 +49,7 @@ export interface Message {
   generation_status: string | null;
   error_code: string | null;
   material_scope_json: unknown;
+  source_citations: SourceCitation[];
   created_at: string;
 }
 

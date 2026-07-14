@@ -147,5 +147,28 @@ function PreviewMaterialPanel() {
 }
 
 export function CourseDetailPreviewPage() {
-  return <CourseDetailWorkbench course={previewCourse} materialPanel={<PreviewMaterialPanel />} />;
+  return (
+    <CourseDetailWorkbench
+      course={previewCourse}
+      materialPanel={<PreviewMaterialPanel />}
+      qaMessages={[
+        { content: "理论模型的主要作用是什么？", id: "preview-question", role: "user" },
+        {
+          answerType: "grounded",
+          citations: [{
+            chunk_id: "preview-chunk",
+            hit_text: "理论模型通过抽象关键变量和关系，帮助学习者描述现象、解释规律，并形成可检验的分析框架。",
+            material_id: "preview-material",
+            material_name: "03.1 理论模型概述.pdf",
+            page: "12",
+            page_index: 11,
+          }],
+          content: "理论模型用于抽象复杂现象中的关键变量与关系，帮助我们描述现象、解释规律并检验假设。 [[cite:1]]",
+          id: "preview-answer",
+          role: "assistant",
+          status: "done",
+        },
+      ]}
+    />
+  );
 }

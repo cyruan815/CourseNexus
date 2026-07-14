@@ -12,6 +12,7 @@
 - 2026-07-13: The study-plan create page now saves through the new wizard contract: `client_flow = "wizard_v1"`, exact preview `tasks`, and an `Idempotency-Key` header. The page still keeps diagnostic, regeneration, replacement, execution, and calendar views as follow-up front-end work instead of pretending those flows are complete.
 - 2026-07-14: `/calendar?courseId={course_id}` now opens the real single-course study calendar. It reads the S03 course month endpoint for date summaries and the course day endpoint after the user selects a date; it remains read-only and links tasks back to existing study plan detail pages instead of inventing an execution route.
 - 2026-07-14: The home workbench mini calendar intentionally stays compact: each day cell shows one task title line with ellipsis plus one independent progress line. Multi-task per-day expansion belongs to the full calendar page, not the mini calendar.
+- 2026-07-15: Grounded answers render backend `[[cite:N]]` markers as small inline citation buttons. Hovering a marker shows the source material name, page and saved `hit_text` snapshot. Historical messages use the same `source_citations` contract; legacy answers with citations but no inline markers append their markers at the end instead of losing the sources.
 
 ## 概述
 
@@ -31,6 +32,7 @@
 - 正式路由 `/courses/:courseId` 读取 `GET /api/v1/courses/{course_id}`。
 - 左侧资料区复用 `MaterialWorkspace`，读取资料文件夹、资料列表，并支持上传、解析、重试、删除和资料范围选择。首页创建课程成功后跳转到课程详情页时，会通过路由 state 触发一次可关闭的上传资料提示。
 - 中间问答区调用 `POST /api/v1/courses/{course_id}/qa/questions`，传入当前 `material_scope`，展示回答、`grounded` / `no_source` 状态和真实引用来源。
+- 回答中的 `[[cite:N]]` 引用标记渲染为行内序号角标，鼠标悬停后显示资料名、页码和引用片段；历史消息接口返回同一引用快照，刷新后仍可查看。
 - 问答区以连续消息形式展示当前会话内的用户消息和 AI 消息；发送中只使用发送按钮 loading 表示，失败时保留用户问题并追加短错误气泡。
 - 课程详情页顶部不展示课程简介；学期字段在前端统一转换为用户可读季节标签。
 - 右侧工具区调用 `POST /api/v1/courses/{course_id}/generations`，支持后端当前注册的 `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；支持生成的工具以整张卡片作为操作入口，不再额外显示内嵌“生成”按钮。
@@ -41,7 +43,7 @@
 
 未实现：
 
-- 资料预览视图和引用点击定位。
+- 资料预览视图和引用点击定位；当前悬浮卡片只展示后端保存的引用快照。
 - 对话历史选择、会话管理完整 UI 和跨会话切换。
 - Quiz、Flashcard、Mindmap、复习提纲、知识点清单的最终专属学习交互页；当前仅有生成内容基础详情页。
 - 计划今日待办的真实当日任务聚合和任务执行入口。
@@ -92,7 +94,7 @@
 
 当前后端已有但前端未完全实现：
 
-- 对话列表和消息列表 API 已有，但前端尚未提供会话列表、历史消息切换和完整连续追问 UI。
+- 对话列表和消息列表 API 已有，当前会加载最新对话及其带引用消息，但前端尚未提供会话列表、跨历史会话切换和完整会话管理 UI。
 - 生成内容详情 API 已接入基础详情页，但尚未提供各内容类型的最终专属学习交互。
 - 学习计划预览、保存、列表和详情 API 已有；课程详情页已接入计划列表摘要、创建入口和详情入口，创建页保存已使用 `wizard_v1` 确认任务树契约，本课程日历已接入课程维度 S03 只读聚合接口。
 
@@ -107,6 +109,7 @@ PRD 要求但当前后端能力不足或未形成完整接口：
 
 - API 测试：`frontend/tests/features/course-workspace/api.test.ts`
 - 页面测试：`frontend/tests/pages/course-detail.test.tsx`
+- 行内引用测试覆盖新回答角标、悬浮引用片段、页码展示、历史消息引用恢复和旧回答兼容。
 - 路由测试：`frontend/tests/pages/app-router.test.tsx`
 - 当前阶段验证命令：
 
