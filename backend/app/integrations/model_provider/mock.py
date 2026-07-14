@@ -15,7 +15,7 @@ class MockModelProvider:
     def answer_question(self, *, question: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
         first_chunk = context_chunks[0]
         return ModelAnswer(
-            answer_text=f"Mock answer based on: {first_chunk.content_text} [[cite:{first_chunk.chunk_id}]]",
+            answer_text=f"Mock answer based on: {first_chunk.content_text}",
             citation_chunk_ids=[first_chunk.chunk_id],
         )
 
