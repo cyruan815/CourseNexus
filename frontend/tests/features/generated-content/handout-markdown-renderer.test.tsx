@@ -38,7 +38,7 @@ describe("HandoutMarkdownRenderer", () => {
     expect(screen.getByTestId("handout-callout-tip")).toHaveClass("handout-callout-tip");
   });
 
-  it("keeps ordinary blockquotes and renders formulas and tables with handout classes", () => {
+  it("keeps ordinary blockquotes and renders math and tables with the formal renderer", () => {
     render(
       <HandoutMarkdownRenderer
         markdown={[
@@ -47,6 +47,8 @@ describe("HandoutMarkdownRenderer", () => {
           "$$",
           "C = B \\log_2(1 + S/N)",
           "$$",
+          "",
+          "行内公式 $R_B = 2 \\times R_b$ 也应该渲染。",
           "",
           "| 符号 | 含义 |",
           "| --- | --- |",
@@ -57,7 +59,7 @@ describe("HandoutMarkdownRenderer", () => {
     );
 
     expect(screen.getByText("普通引用不会被当成提示块。").closest("blockquote")).toHaveClass("handout-blockquote");
-    expect(screen.getByText("C = B \\log_2(1 + S/N)")).toHaveClass("handout-formula-text");
+    expect(document.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("table")).toHaveClass("handout-table");
     expect(screen.getByRole("columnheader", { name: "符号" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "信道容量" })).toBeInTheDocument();
