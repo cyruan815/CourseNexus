@@ -33,6 +33,18 @@ _MARKDOWN_CHOICE_QUESTION_TYPES = {"single_choice", "multiple_choice"}
 _KATEX_DIST_ENV_VAR = "COURSENEXUS_KATEX_DIST"
 _KATEX_REQUIRED_ASSETS = ("katex.min.css", "katex.min.js", "contrib/auto-render.min.js")
 _UNSAFE_CITATION_SNIPPET_MARKERS = ("formula-not-decoded", "", "", "")
+_PDF_CALLOUT_TITLES = {
+    "NOTE": "注意",
+    "EXAMPLE": "例题",
+    "SUMMARY": "核心结论",
+    "WARNING": "易错点",
+    "TIP": "解题提示",
+}
+_PDF_CALLOUT_BLOCKQUOTE_RE = re.compile(r"<blockquote>\n(?P<body>.*?)\n</blockquote>", flags=re.DOTALL)
+_PDF_CALLOUT_FIRST_PARAGRAPH_RE = re.compile(
+    r"\A<p>\[!(?P<kind>NOTE|EXAMPLE|SUMMARY|WARNING|TIP)\]\s*(?P<payload>.*?)</p>(?P<rest>.*)\Z",
+    flags=re.DOTALL,
+)
 
 
 def render_task_test_markdown(content: GeneratedContentRead) -> str:
@@ -121,9 +133,37 @@ def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
 
 def render_markdown_pdf_html(markdown: str, *, title: str = "CourseNexus") -> str:
     safe_markdown = _sanitize_markdown_for_pdf(markdown)
-    body_html = _build_markdown_renderer().render(safe_markdown)
+    body_html = _decorate_pdf_callouts(_build_markdown_renderer().render(safe_markdown))
     template = _html_environment().from_string(_PDF_HTML_TEMPLATE)
     return template.render(title=title, body_html=body_html, css=_PDF_CSS, **_katex_assets())
+
+def _decorate_pdf_callouts(html: str) -> str:
+    return _PDF_CALLOUT_BLOCKQUOTE_RE.sub(_render_pdf_callout_html, html)
+
+
+def _render_pdf_callout_html(match: re.Match[str]) -> str:
+    body = match.group("body")
+    paragraph_match = _PDF_CALLOUT_FIRST_PARAGRAPH_RE.match(body)
+    if not paragraph_match:
+        return match.group(0)
+
+    kind = paragraph_match.group("kind")
+    payload = paragraph_match.group("payload").strip()
+    if "\n" in payload:
+        title, first_body = payload.split("\n", 1)
+    else:
+        title, first_body = payload, ""
+    title = title.strip() or _PDF_CALLOUT_TITLES[kind]
+
+    content_parts: list[str] = []
+    if first_body.strip():
+        content_parts.append(f"<p>{first_body.strip()}</p>")
+    rest = paragraph_match.group("rest").strip()
+    if rest:
+        content_parts.append(rest)
+    content_html = "\n".join(content_parts)
+    kind_class = kind.lower()
+    return f'<div class="pdf-callout pdf-callout-{kind_class}">\n<p class="pdf-callout-title">{title}</p>\n{content_html}\n</div>'
 
 
 def _build_markdown_renderer() -> MarkdownIt:
@@ -587,6 +627,64 @@ code {
 .katex {
   font-size: 1em;
 }
+
+.pdf-callout {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  break-inside: avoid-page;
+}
+
+.pdf-callout p {
+  margin: 6px 0;
+}
+
+.pdf-callout-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.pdf-callout-note {
+  background: #fbf7f3;
+}
+
+.pdf-callout-note .pdf-callout-title {
+  color: #8c725e;
+}
+
+.pdf-callout-example {
+  background: #f6f9f5;
+}
+
+.pdf-callout-example .pdf-callout-title {
+  color: #667c69;
+}
+
+.pdf-callout-summary {
+  background: #f8f6fb;
+}
+
+.pdf-callout-summary .pdf-callout-title {
+  color: #706982;
+}
+
+.pdf-callout-warning {
+  background: #fbf3ee;
+}
+
+.pdf-callout-warning .pdf-callout-title {
+  color: #9b6048;
+}
+
+.pdf-callout-tip {
+  background: #f3f7fa;
+}
+
+.pdf-callout-tip .pdf-callout-title {
+  color: #597089;
+}
+
 blockquote {
   margin: 12px 0;
   padding: 8px 12px;

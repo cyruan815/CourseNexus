@@ -449,6 +449,23 @@ def test_render_markdown_pdf_html_enables_katex_math_rendering() -> None:
     assert '"pre", "code"' in html
 
 
+def test_render_markdown_pdf_html_decorates_handout_callouts() -> None:
+    html = render_markdown_pdf_html(
+        "> [!NOTE] 注意\n> 物理层并不是具体的传输媒体本身。\n\n> [!EXAMPLE] 例题 1\n> 已知带宽 $B = 3$ kHz。\n",
+        title="今日讲义",
+    )
+
+    assert "[!NOTE]" not in html
+    assert "[!EXAMPLE]" not in html
+    assert 'class="pdf-callout pdf-callout-note"' in html
+    assert 'class="pdf-callout pdf-callout-example"' in html
+    assert 'class="pdf-callout-title">注意</p>' in html
+    assert 'class="pdf-callout-title">例题 1</p>' in html
+    assert "#fbf7f3" in html
+    assert "#f6f9f5" in html
+    assert "border-radius: 8px" in html
+    assert "$B = 3$" in html
+
 def test_render_markdown_pdf_html_leaves_code_blocks_for_katex_to_ignore() -> None:
     html = render_markdown_pdf_html(
         "# 今日讲义\n\n```text\n$not_math$\n```\n\n普通公式 $E = mc^2$\n",
