@@ -149,6 +149,24 @@ describe("GeneratedContentDetailPage", () => {
                 explanation: "向量空间需要对加法和数乘封闭。",
                 sort_order: 1,
               },
+              {
+                id: "q_002",
+                question_type: "true_false",
+                question_text: "TCP 是面向连接的协议。",
+                options: [],
+                correct_answer: true,
+                explanation: "TCP 会在传输数据前建立连接。",
+                sort_order: 2,
+              },
+              {
+                id: "q_003",
+                question_type: "true_false",
+                question_text: "UDP 会在传输数据前建立连接。",
+                options: [],
+                correct_answer: false,
+                explanation: "UDP 是无连接协议。",
+                sort_order: 3,
+              },
             ],
           },
           generation_status: "success",
@@ -167,6 +185,10 @@ describe("GeneratedContentDetailPage", () => {
     expect(await screen.findByRole("heading", { name: "基础题任务测试题" })).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.getByText("正确答案：A")).toBeInTheDocument();
+    expect(screen.getByText("TCP 是面向连接的协议。")).toBeInTheDocument();
+    expect(screen.getByText("正确答案：正确")).toBeInTheDocument();
+    expect(screen.getByText("UDP 会在传输数据前建立连接。")).toBeInTheDocument();
+    expect(screen.getByText("正确答案：错误")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
   });
 });

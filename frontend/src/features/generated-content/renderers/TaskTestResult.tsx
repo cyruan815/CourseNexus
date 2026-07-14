@@ -2,7 +2,8 @@ import { Badge, Paper, Stack, Text } from "@mantine/core";
 
 import type { TaskTestQuestion } from "../types";
 
-function answerLabel(answer: string | string[]) {
+function answerLabel(answer: string | boolean | string[]) {
+  if (typeof answer === "boolean") return answer ? "正确" : "错误";
   return Array.isArray(answer) ? answer.join("、") : answer;
 }
 

@@ -26,7 +26,7 @@ export interface TaskTestQuestion {
   question_text: string;
   question_type: string;
   options: Array<{ id: string; text: string }>;
-  correct_answer: string | string[];
+  correct_answer: string | boolean | string[];
   explanation?: string | null;
 }
 
