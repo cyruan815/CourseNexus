@@ -18,7 +18,7 @@ from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentRead
 from app.modules.generated_content.service import build_generated_content_read
 from app.modules.generation.generators.handout import build_generator as build_handout_generator
-from app.modules.generation.generators.handout.schemas import HandoutContent
+from app.modules.generation.generators.handout.generator import ensure_handout_header
 from app.modules.generation.generators.task_test import build_generator as build_task_test_generator
 from app.modules.generation.generators.task_test.schemas import TaskTestContent, TaskTestGenerationParameters
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
@@ -229,6 +229,11 @@ def _generate_task_content(
             citation_scope = _stored_subtask_citation_chunk_ids(target)
             if citation_scope:
                 batches = _filter_batches_by_citation_scope(batches=batches, citation_chunk_ids=citation_scope)
+            effective_parameters = {
+                **effective_parameters,
+                "handout_title": _generated_task_content_title(content_type=content_type, target=target),
+                "source_note": _handout_source_note(batches=batches, subtask_title=target.subtask.title),
+            }
 
         if content_type == "task_test":
             output = generator.generate(
@@ -246,7 +251,12 @@ def _generate_task_content(
                     expected_material_ids=frozenset(batch.material_ids),
                     parameters=effective_parameters,
                 ),
-                reduce_results=lambda outputs: _reduce_task_content_outputs(content_type=content_type, outputs=outputs),
+                reduce_results=lambda outputs: _reduce_task_content_outputs(
+                    content_type=content_type,
+                    outputs=outputs,
+                    model_provider=model_provider,
+                    parameters=effective_parameters,
+                ),
             ).value
         content = _new_task_generated_content(
             content_id=content_id,
@@ -256,34 +266,25 @@ def _generate_task_content(
             content_type=content_type,
             material_scope=material_scope,
         )
-        content.title = output.title
+        content.title = _generated_task_content_title(content_type=content_type, target=target)
         content.content = output.content
         content.content_json = output.content_json
         content.generation_status = "success"
         content.error_code = None
         db.add(content)
         db.flush()
-        citation_ids_by_item = _save_task_content_citations(
-            db,
-            generated_content_id=content.id,
-            batches=batches,
-            item_citation_chunk_ids=output.item_citation_chunk_ids,
-        )
-        content.content_json = _bind_source_citation_ids(
-            output.content_json,
-            citation_ids_by_item,
-            is_handout_root=content_type == "handout",
-        )
-        if content_type == "handout":
-            try:
-                HandoutContent.model_validate(content.content_json)
-            except ValidationError as exc:
-                raise CourseNexusError(
-                    code="GENERATION_SCHEMA_INVALID",
-                    message="引用回绑后的讲义内容不符合 HandoutContent 契约",
-                    status_code=500,
-                    details={"errors": exc.errors()},
-                ) from exc
+        if output.item_citation_chunk_ids:
+            citation_ids_by_item = _save_task_content_citations(
+                db,
+                generated_content_id=content.id,
+                batches=batches,
+                item_citation_chunk_ids=output.item_citation_chunk_ids,
+            )
+            content.content_json = _bind_source_citation_ids(
+                output.content_json,
+                citation_ids_by_item,
+                is_handout_root=False,
+            )
         db.add(content)
         db.flush()
         db.commit()
@@ -635,92 +636,96 @@ def _save_failed_task_content(
     db.commit()
 
 
-def _reduce_task_content_outputs(*, content_type: str, outputs: list[GeneratorOutput]) -> GeneratorOutput:
+def _generated_task_content_title(*, content_type: str, target: repository.ExecutionTarget) -> str:
+    base_title = target.subtask.title.strip() or target.task.title.strip() or "任务内容"
+    if content_type == "handout":
+        return f"{base_title}讲义"
+    if content_type == "task_test":
+        return f"{base_title}测试题"
+    return base_title
+
+
+def _handout_source_note(*, batches: list[MaterialContextBatch], subtask_title: str) -> str:
+    material_names: list[str] = []
+    for batch in batches:
+        for chunk in batch.chunks:
+            name = chunk.material_name.strip() if isinstance(chunk.material_name, str) else ""
+            if name and name not in material_names:
+                material_names.append(name)
+    quoted_materials = "".join(f"《{name}》" for name in material_names) or "当前资料"
+    topic = subtask_title.strip() if isinstance(subtask_title, str) and subtask_title.strip() else "当前知识点"
+    return f"本讲义基于{quoted_materials}中“{topic}”相关内容生成。"
+
+
+def _reduce_task_content_outputs(
+    *,
+    content_type: str,
+    outputs: list[GeneratorOutput],
+    model_provider: ModelProvider | None = None,
+    parameters: dict[str, object] | None = None,
+) -> GeneratorOutput:
     if not outputs:
         raise CourseNexusError(code="NO_PARSED_MATERIAL", message="没有可生成的材料批次", status_code=400)
     if content_type == "handout":
-        return _reduce_handout_outputs(outputs)
+        return _reduce_handout_outputs(outputs, model_provider=model_provider, parameters=parameters)
     if content_type == "task_test":
         return _reduce_task_test_outputs(outputs)
     raise CourseNexusError(code="VALIDATION_ERROR", message="生成类型不支持", status_code=422)
 
 
-def _reduce_handout_outputs(outputs: list[GeneratorOutput]) -> GeneratorOutput:
-    contents = [HandoutContent.model_validate(output.content_json) for output in outputs]
-    is_v2 = any(content.schema_version == 2 for content in contents)
-    objectives: list[str] = []
-    sections: list[dict[str, object]] = []
-    item_citation_chunk_ids: dict[str, list[str]] = {}
-    handout_level_chunk_ids: list[str] = []
-    sort_order = 1
-    formula_cards: list[dict[str, object]] = []
-    seen_formula_latex: set[str] = set()
-    knowledge_map: dict[str, object] | None = None
+def _reduce_handout_outputs(
+    outputs: list[GeneratorOutput],
+    *,
+    model_provider: ModelProvider | None = None,
+    parameters: dict[str, object] | None = None,
+) -> GeneratorOutput:
+    markdown_parts = [str(output.content or "").strip() for output in outputs if str(output.content or "").strip()]
+    if not markdown_parts:
+        raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
 
-    for output, content in zip(outputs, contents, strict=True):
-        for objective in content.learning_objectives:
-            if objective not in objectives:
-                objectives.append(objective)
-        old_section_ids = {section.id for section in content.sections}
-        for item_id, chunk_ids in output.item_citation_chunk_ids.items():
-            if item_id not in old_section_ids:
-                _extend_unique(handout_level_chunk_ids, chunk_ids)
-        if is_v2 and knowledge_map is None and content.knowledge_map is not None:
-            knowledge_map = content.knowledge_map.model_dump(mode="json")
-        if is_v2:
-            for formula in content.formula_cards:
-                data = formula.model_dump(mode="json")
-                latex = str(data.get("latex") or "")
-                if latex and latex not in seen_formula_latex:
-                    seen_formula_latex.add(latex)
-                    formula_cards.append(data)
-        for section in sorted(content.sections, key=lambda item: item.sort_order):
-            old_id = section.id
-            new_id = f"sec_{sort_order}"
-            data = section.model_dump(mode="json")
-            data["id"] = new_id
-            data["sort_order"] = sort_order
-            sections.append(data)
-            chunk_ids = output.item_citation_chunk_ids.get(old_id) or list(section.source_citation_ids)
-            item_citation_chunk_ids[new_id] = list(dict.fromkeys(chunk_ids))
-            sort_order += 1
-
-    if handout_level_chunk_ids:
-        item_citation_chunk_ids["__handout__"] = handout_level_chunk_ids
-
-    content_json: dict[str, object] = {
-        "overview": contents[0].overview,
-        "learning_objectives": objectives,
-        "sections": sections,
-        "summary": contents[-1].summary,
-    }
-    if is_v2:
-        content_json.update(
-            {
-                "schema_version": 2,
-                "title": contents[0].title or "今日讲义",
-                "difficulty": contents[0].difficulty,
-                "estimated_minutes": _sum_estimated_minutes(contents),
-                "prerequisites": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.prerequisites]),
-                "knowledge_map": knowledge_map,
-                "formula_cards": formula_cards,
-                "exam_focus": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.exam_focus]),
-                "self_check": _merge_by_id([item.model_dump(mode="json") for content in contents for item in content.self_check]),
-            }
+    params = dict(parameters or {})
+    title = str(params.get("handout_title") or outputs[0].title or "讲义").strip() or "讲义"
+    source_note = _optional_string(params.get("source_note"))
+    if len(markdown_parts) == 1:
+        markdown = ensure_handout_header(markdown=markdown_parts[0], title=title, source_note=source_note)
+    else:
+        if model_provider is None:
+            raise CourseNexusError(code="GENERATION_FAILED", message="多批次讲义缺少最终合成模型", status_code=502)
+        synthesis_prompt = _build_handout_synthesis_prompt(
+            title=title,
+            source_note=source_note,
+            markdown_parts=markdown_parts,
         )
-    try:
-        HandoutContent.model_validate(content_json)
-    except ValidationError as exc:
-        raise CourseNexusError(
-            code="GENERATION_SCHEMA_INVALID",
-            message="合并后的讲义内容不符合 HandoutContent 契约",
-            status_code=500,
-            details={"errors": exc.errors()},
-        ) from exc
+        markdown = ensure_handout_header(
+            markdown=model_provider.generate_text(prompt=synthesis_prompt),
+            title=title,
+            source_note=source_note,
+        )
+    if not markdown:
+        raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
     return GeneratorOutput(
-        title="今日讲义",
-        content_json=content_json,
-        item_citation_chunk_ids=item_citation_chunk_ids,
+        title=title,
+        content=markdown,
+        content_json={"format": "markdown", "schema_version": 1},
+        item_citation_chunk_ids={},
+    )
+
+
+def _build_handout_synthesis_prompt(*, title: str, source_note: str | None, markdown_parts: list[str]) -> str:
+    draft_sections = "\n\n".join(
+        f"## 批次草稿 {index}\n\n{markdown}"
+        for index, markdown in enumerate(markdown_parts, start=1)
+    )
+    source_rule = f"一级标题下一段必须原样写入来源说明：{source_note}" if source_note else "不需要额外来源说明。"
+    return "\n\n".join(
+        [
+            "你是 CourseNexus 的讲义终稿编辑。下面是同一个二级任务在不同资料批次上生成的 Markdown 草稿。",
+            "请把它们合成为一整篇上下连贯、去重后的最终 Markdown 讲义，不要简单拼接，不要保留批次标题。",
+            f"最终讲义一级标题必须是：{title}",
+            source_rule,
+            "只输出 Markdown 正文，不要输出 JSON，不要输出 HTML，不要包裹代码块，不要写逐条 citation 或 source_citation_ids。",
+            draft_sections,
+        ]
     )
 
 
@@ -730,9 +735,6 @@ def _extend_unique(target: list[str], values: list[str]) -> None:
             target.append(value)
 
 
-def _sum_estimated_minutes(contents: list[HandoutContent]) -> int | None:
-    values = [content.estimated_minutes for content in contents if content.estimated_minutes is not None]
-    return sum(values) if values else None
 
 
 def _merge_by_id(items: list[dict[str, object]]) -> list[dict[str, object]]:

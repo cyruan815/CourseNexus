@@ -63,7 +63,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
-| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 课程问答和 S06 任务内容继续保存真实引用；五类独立 POC 生成不创建逐条引用。 |
+| `SourceCitation` | `source_citations` | 已建表 | `course-qa` / `generated-content` | 课程问答和 `task_test` 继续保存真实引用；新生成 `handout` 与五类独立 POC 生成不创建逐条引用。 |
 | `AIGeneratedContent` | `ai_generated_contents` | 已建表并已接入 S06 | `generated-content` | 已支持任务讲义和任务测试题按需生成落库；历史列表、详情查询和 PDF 导出入口仍需后续完善。 |
 | `StudyPlan` | `study_plans` | 已建表并已接入 API | `study-plans` | 已实现自然语言配置回填、计划预览、保存、替换、删除和计划状态汇总。 |
 | `StudyTask` | `study_tasks` | 已建表并已接入 API | `study-plans` / `learning-execution` | 已实现保存计划时生成一级任务，并由二级任务完成状态汇总一级任务状态。 |
@@ -359,11 +359,11 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - 保存为笔记统一使用 `content_type = note`，不新增 Note 表。
-- 今日讲义使用 `content_type = handout`，并关联 `study_subtask_id`。
-- 计划执行中的任务测试题使用 `content_type = task_test`，并关联测试类 `study_subtask_id`。
+- 任务讲义使用 `content_type = handout`，并关联 `study_subtask_id`；新生成讲义的完整 Markdown 正文保存于 `content`，正文顶部包含来源说明句，`content_json` 只保存格式元信息，标题为 `{StudySubTask.title}讲义`。
+- 计划执行中的任务测试题使用 `content_type = task_test`，并关联测试类 `study_subtask_id`；标题为 `{StudySubTask.title}测试题`，内容仍保留结构化 JSON。
 - S06 进入生成流程后的失败也写入本表，`generation_status = failed` 且 `error_code` 为稳定错误码。
 - 课程详情页生成的课程自测 Quiz 使用 `content_type = quiz`。
-- 引用来源统一通过 `source_citations.generated_content_id` 关联。
+- 保留逐条引用的能力通过 `source_citations.generated_content_id` 关联；新生成 `handout` 不写该表，`task_test` 继续写逐题引用。
 
 ## study_plans
 
@@ -493,7 +493,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 当前独立 Quiz 只支持 `single_choice`，每题固定包含 A-D 四个选项。
 - 新生成 Quiz 的每个选项必须包含 `explanation`。错误选项解析必须说明该选项自身错误的具体知识逻辑，不通过透露正确答案或正确结论来解释错误；历史 JSON 可能缺少该字段，前端按兼容模式展示。
 - 课程自测使用 `content_type = quiz`；任务测试题使用独立 `task_test` 结构。
-- 五类独立 POC 业务 JSON 不包含引用字段；任务讲义和任务测试题仍可保存真实引用。
+- 五类独立 POC 业务 JSON 不包含引用字段；任务测试题仍可保存真实引用，新生成任务讲义不写逐条引用。
 
 ### handout
 
@@ -714,6 +714,19 @@ S06 已实现任务讲义和任务测试题按需生成，表结构结论不变�
 
 - `handout` 和 `task_test` 复用 `ai_generated_contents`。
 - S06 生成记录必须写入 `study_subtask_id`，用于绑定二级任务和执行上下文最近成功内容查询。
-- `source_citations.generated_content_id` 关联生成内容引用来源，不允许没有材料来源的伪引用。
-- S06 生成器输出仍以 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation`，并将 `handout` / `task_test` 的 `content_json.source_citation_ids` 回绑为 `SourceCitation.id`。
+- `source_citations.generated_content_id` 关联保留逐条引用的生成内容来源，不允许没有材料来源的伪引用；新生成 `handout` 不写该表。
+- `task_test` 生成器输出仍以 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation`，并将 `task_test.content_json.questions[].source_citation_ids` 回绑为 `SourceCitation.id`。新生成 `handout` 不在 `content_json` 中保存 section/block 级引用。
 - 不创建 `handouts`、`task_tests`、`task_test_questions` 或 `generation_jobs`。
+
+### handout Markdown-first
+
+新生成 `handout` 使用 `ai_generated_contents.content` 保存完整 Markdown 正文。`content_json` 不再保存结构化讲义组件树，只保存轻量元信息：
+
+```json
+{
+  "format": "markdown",
+  "schema_version": 1
+}
+```
+
+POC 阶段新生成 handout 不写 `source_citations`；资料范围由 `material_scope_json` 保存，用户可见来源说明写入 Markdown 正文顶部。历史结构化 handout 不做兼容导出要求；多 batch handout 必须经模型合成为最终整篇 Markdown，不把批次草稿直接硬拼。

@@ -55,7 +55,7 @@ flowchart TB
         MM["mindmap-generator<br/>Mindmap"]
         OL["outline-generator<br/>复习提纲"]
         KL["knowledge-list-generator<br/>知识点清单"]
-        HO["handout-generator<br/>今日讲义"]
+        HO["handout-generator<br/>任务讲义 Markdown"]
         TT["task-test-generator<br/>任务测试题"]
     end
 
@@ -125,14 +125,14 @@ flowchart TB
 | `mindmap-generator` | 基于完整资料上下文生成知识结构图。 | `AIGeneratedContent(content_type=mindmap)`。 | 节点、边、层级、Markmap 数据。 | 不保存逐节点引用。 |
 | `outline-generator` | 基于完整资料上下文生成复习提纲。 | `AIGeneratedContent(content_type=outline)`。 | 章节化提纲、重点、复习建议。 | 不生成计划任务，不保存逐节引用。 |
 | `knowledge-list-generator` | 基于完整资料上下文生成知识点清单。 | `AIGeneratedContent(content_type=knowledge_list)`。 | 知识点、解释、重要程度。 | 不维护学习掌握度模型，不保存逐条引用。 |
-| `handout-generator` | 基于当前二级任务和关联资料生成今日讲义。 | `AIGeneratedContent(content_type=handout)`、`SourceCitation`。 | 讲义正文、重点解释、引用。 | 不更新二级任务完成状态。 |
+| `handout-generator` | 基于当前二级任务和关联资料生成 Markdown 任务讲义。 | `AIGeneratedContent(content_type=handout)`；新生成 handout 不写 `SourceCitation`。 | 完整 Markdown 正文、顶部来源说明、讲义标题。 | 不更新二级任务完成状态，不输出结构化 handout JSON。 |
 | `task-test-generator` | 基于测试类二级任务和关联资料生成任务测试题。 | `AIGeneratedContent(content_type=task_test)`、`SourceCitation`。 | 测试题、答案、解析、引用。 | 不等同课程自测 Quiz。 |
-| `generated-content` | 统一保存和查询 AI 生成内容、内容类型、生成状态、结构化 JSON 和引用。 | `AIGeneratedContent`、`SourceCitation`。 | 生成内容详情、历史记录、引用来源。 | 不决定具体生成算法，不更新任务完成状态。 |
+| `generated-content` | 统一保存和查询 AI 生成内容、内容类型、生成状态、正文/结构化 JSON 和引用。 | `AIGeneratedContent`、`SourceCitation`。 | 生成内容详情、历史记录、引用来源。 | 不决定具体生成算法，不更新任务完成状态。 |
 | `study-plans` | 自然语言配置回填、学前诊断题生成、diagnostic_profile 归纳、计划预览、保存单课程计划、生成一级任务和二级任务。 | `StudyPlan`、`StudyTask`、`StudySubTask`；诊断题/profile 不新增表。 | 诊断问题、diagnostic_profile、计划结构、任务结构。 | 不把配置补问交给诊断模型，不提前生成讲义、任务测试题或学习笔记。 |
 | `todos-calendar` | 首页今日待办、首页大日历、全局当日待办弹窗、课程详情页今日任务和课程月历查询。 | 不拥有主写模型，读取 `StudyPlan`、`StudyTask`、`StudySubTask`。 | 日期摘要、最多 3 条任务摘要、课程分组、二级任务数组、执行跳转 ID 和计划详情 `plan_id`。 | 不创建、编辑、删除或重新生成学习计划；不创建 `todos` 或 `calendar_events` 表；不实现 S04-S07。 |
-| `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态，并编排 S06 任务内容按需生成。 | `StudySubTask.status`、派生更新 `StudyTask.status`；S06 写入 `AIGeneratedContent(content_type=handout/task_test)` 和 `SourceCitation`。 | 今日任务、任务完成结果、执行页上下文、任务讲义和任务测试题生成结果。 | 不生成计划，不管理资料，不直接修改打卡算法。 |
+| `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态，并编排 S06 任务内容按需生成。 | `StudySubTask.status`、派生更新 `StudyTask.status`；S06 写入 `AIGeneratedContent(content_type=handout/task_test)`；`task_test` 继续写 `SourceCitation`，新生成 `handout` 不写逐条引用。 | 今日任务、任务完成结果、执行页上下文、任务讲义和任务测试题生成结果。 | 不生成计划，不管理资料，不直接修改打卡算法。 |
 | `checkins` | 根据当日二级任务完成比例维护学习完成记录和颜色等级。 | `CheckinRecord`。 | `completion_ratio`、`color_level`。 | 不做完整统计报表，不做手动打卡。 |
-| `exports` | 将已生成讲义或任务测试题导出 PDF。 | 不拥有业务表，读取 `AIGeneratedContent` 和 `SourceCitation` 后流式返回 PDF。 | PDF 文件或下载信息。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表。 |
+| `exports` | 将已生成 handout Markdown 导出 Markdown/PDF，将 task_test 导出 Markdown。 | 不拥有业务表，读取 `AIGeneratedContent`；task_test 导出可读取 `SourceCitation`。 | Markdown 或 PDF 文件流。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表。 |
 
 ## 5. 独立生成模块的统一契约
 
@@ -235,4 +235,4 @@ S06 的 public API 放在 `learning_execution`，因为入口是二级任务执�
 
 S06 不复用通用 `generation-orchestrator` service 的 Top-K / `resolve_context()` 路径；它只复用公共 `Generator` 协议、`GeneratorRegistry`、`ModelProvider`、`iter_material_context_batches()` 和 `run_material_coverage()`。这样可以保证任务内容覆盖二级任务绑定资料，并禁止无来源 fallback 引用。
 
-`handout-generator` 和 `task-test-generator` 只负责结构化内容和引用 chunk id，不更新 `StudySubTask.status`、不汇总 `StudyTask.status`、不写 `checkin_records`。生成成功或进入生成流程后的失败由 `learning_execution` 保存到 `AIGeneratedContent`。
+`handout-generator` 负责输出完整 Markdown 讲义正文，不输出逐条引用；`task-test-generator` 继续负责结构化题目和引用 chunk id。两者都不更新 `StudySubTask.status`、不汇总 `StudyTask.status`、不写 `checkin_records`。生成成功或进入生成流程后的失败由 `learning_execution` 保存到 `AIGeneratedContent`。

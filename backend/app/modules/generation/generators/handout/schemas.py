@@ -17,6 +17,8 @@ class HandoutGenerationParameters(BaseModel):
     plan_goal: str | None = None
     task_title: str | None = None
     subtask_title: str | None = None
+    handout_title: str | None = None
+    source_note: str | None = None
     subtask_type: Literal["learn", "review"] | None = None
     subtask_description: str | None = None
     estimated_minutes: int | None = Field(default=None, ge=1, le=480)

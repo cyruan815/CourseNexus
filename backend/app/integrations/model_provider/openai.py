@@ -62,6 +62,39 @@ class OpenAIModelProvider:
         return answer
 
 
+    def generate_text(self, *, prompt: str) -> str:
+        started_at = perf_counter()
+        if self._uses_deepseek_chat_completions():
+            text = self._generate_text_with_chat(prompt=prompt)
+        else:
+            try:
+                response = self.client.responses.create(model=self.model, input=prompt)
+            except Exception as exc:
+                if not _is_not_found_error(exc):
+                    raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+                text = self._generate_text_with_chat(prompt=prompt)
+            else:
+                text = getattr(response, "output_text", None) or ""
+        logger.info(
+            "模型调用成功 | operation=generate_text model=%s cost_ms=%.2f",
+            self.model,
+            (perf_counter() - started_at) * 1000,
+        )
+        return text
+
+    def _generate_text_with_chat(self, *, prompt: str) -> str:
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You generate polished Markdown only."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
+        return _first_chat_content(response)
+
     def generate_structured(
         self,
         *,

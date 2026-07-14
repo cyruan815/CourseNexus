@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import html
 from pathlib import Path
 import re
 import textwrap
@@ -50,9 +51,9 @@ def render_task_test_markdown(content: GeneratedContentRead) -> str:
 
 
 def render_handout_pdf(content: GeneratedContentRead) -> bytes:
-    handout = _validate_handout_content(content.content_json)
-    citations_by_id = {citation.id: citation for citation in content.source_citations}
-    markdown = _render_handout_pdf_markdown(content.title, handout, citations_by_id)
+    markdown = content.content.strip() if isinstance(content.content, str) else ""
+    if not markdown:
+        raise _invalid_content_error()
     return render_markdown_pdf(markdown, title=content.title)
 
 
@@ -106,7 +107,7 @@ def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
 
 def render_markdown_pdf_html(markdown: str, *, title: str = "CourseNexus") -> str:
     safe_markdown = _sanitize_markdown_for_pdf(markdown)
-    body_html = _build_markdown_renderer().render(safe_markdown)
+    body_html = _render_math_html(_build_markdown_renderer().render(safe_markdown))
     template = _html_environment().from_string(_PDF_HTML_TEMPLATE)
     return template.render(title=title, body_html=body_html, css=_PDF_CSS)
 
@@ -126,6 +127,29 @@ def _html_environment() -> Environment:
     return Environment(autoescape=select_autoescape(("html", "xml")))
 
 
+def _render_math_html(body_html: str) -> str:
+    return re.sub(r"<p>\$\$\n(.+?)\n\$\$</p>", _math_block_replacement, body_html, flags=re.DOTALL)
+
+
+def _math_block_replacement(match: re.Match[str]) -> str:
+    latex = html.unescape(match.group(1)).strip()
+    return f'<div class="math-display"><span class="katex">{_latex_to_readable_html(latex)}</span></div>'
+
+
+def _latex_to_readable_html(latex: str) -> str:
+    readable = latex.strip()
+    readable = readable.replace(r"\times", "×")
+    readable = readable.replace(r"\cdot", "·")
+    readable = readable.replace(r"\leq", "≤")
+    readable = readable.replace(r"\geq", "≥")
+    readable = readable.replace(r"\approx", "≈")
+    readable = readable.replace(r"\log", "log")
+    escaped = html.escape(readable)
+    escaped = re.sub(r"([A-Za-z])_\{?([A-Za-z0-9]+)\}?", r"\1<sub>\2</sub>", escaped)
+    escaped = re.sub(r"([A-Za-z0-9)]+)\^\{?([A-Za-z0-9+\-/]+)\}?", r"\1<sup>\2</sup>", escaped)
+    return escaped
+
+
 def _render_handout_pdf_markdown(
     title: str,
     handout: HandoutContent,
@@ -139,16 +163,16 @@ def _render_handout_pdf_markdown(
         "",
         _handout_source_notice(handout, citations_by_id),
         "",
-        "## Overview",
+        "## 概览",
         "",
         handout.overview,
         "",
-        "## Learning Objectives",
+        "## 学习目标",
         "",
     ]
     for objective in handout.learning_objectives:
         lines.append(f"- {objective}")
-    lines.extend(["", "## Sections"])
+    lines.extend(["", "## 正文"])
     for index, section in enumerate(sorted(handout.sections, key=lambda item: item.sort_order), start=1):
         lines.extend(
             [
@@ -157,13 +181,13 @@ def _render_handout_pdf_markdown(
                 "",
                 section.body,
                 "",
-                "Key points:",
+                "要点：",
                 "",
             ]
         )
         for point in section.key_points:
             lines.append(f"- {point}")
-    lines.extend(["", "## Summary", "", handout.summary])
+    lines.extend(["", "## 总结", "", handout.summary])
     return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
 
 
@@ -178,31 +202,31 @@ def _render_handout_v2_markdown(
         "",
         _handout_source_notice(handout, citations_by_id),
         "",
-        "## Overview",
+        "## 概览",
         "",
         handout.overview,
         "",
-        "## Learning Objectives",
+        "## 学习目标",
         "",
     ]
     for objective in handout.learning_objectives:
         lines.append(f"- {objective}")
 
     if handout.prerequisites:
-        lines.extend(["", "## Prerequisites"])
+        lines.extend(["", "## 前置知识"])
         for index, prerequisite in enumerate(
             sorted(handout.prerequisites, key=lambda item: item.sort_order),
             start=1,
         ):
             lines.extend(["", f"### {index}. {prerequisite.title}", "", prerequisite.explanation])
             if prerequisite.example:
-                lines.extend(["", f"Example: {prerequisite.example}"])
+                lines.extend(["", f"示例：{prerequisite.example}"])
 
     if handout.knowledge_map is not None:
-        lines.extend(["", "## Knowledge Map", ""])
+        lines.extend(["", "## 知识地图", ""])
         lines.extend(_render_handout_block_markdown(handout.knowledge_map))
 
-    lines.extend(["", "## Sections"])
+    lines.extend(["", "## 正文"])
     for index, section in enumerate(sorted(handout.sections, key=lambda item: item.sort_order), start=1):
         lines.extend(["", f"### {index}. {section.title}"])
         if section.lead:
@@ -210,28 +234,22 @@ def _render_handout_v2_markdown(
         for block in section.blocks:
             lines.extend(["", *_render_handout_block_markdown(block)])
         if section.key_points:
-            lines.extend(["", "Key points:", ""])
+            lines.extend(["", "要点：", ""])
             for point in section.key_points:
                 lines.append(f"- {point}")
 
     if handout.formula_cards:
-        lines.extend(["", "## Formula Cards"])
+        lines.extend(["", "## 公式卡片"])
         for formula in handout.formula_cards:
             lines.extend(["", *_render_formula_block_markdown(formula, heading_level=3)])
 
     if handout.exam_focus:
-        lines.extend(["", "## Exam Focus"])
+        lines.extend(["", "## 考试重点"])
         for index, item in enumerate(sorted(handout.exam_focus, key=lambda value: value.sort_order), start=1):
             lines.extend(["", f"### {index}. {item.title}", "", item.description])
 
-    if handout.self_check:
-        lines.extend(["", "## Self Check"])
-        for index, item in enumerate(sorted(handout.self_check, key=lambda value: value.sort_order), start=1):
-            lines.extend(["", f"### {index}. {item.question}", "", f"Answer: {item.answer}"])
-            if item.explanation:
-                lines.extend(["", f"Explanation: {item.explanation}"])
 
-    lines.extend(["", "## Summary", "", handout.summary])
+    lines.extend(["", "## 总结", "", handout.summary])
     return _sanitize_markdown_for_pdf("\n".join(lines).rstrip() + "\n")
 
 
@@ -277,18 +295,18 @@ def _render_formula_block_markdown(block: object, *, heading_level: int = 4) -> 
     lines = [f"{'#' * heading_level} {block_title}", "", "$$", latex, "$$"]
     purpose = str(getattr(block, "purpose", "")).strip()
     if purpose:
-        lines.extend(["", f"Purpose: {purpose}"])
+        lines.extend(["", f"用途：{purpose}"])
     variables = list(getattr(block, "variables", []))
     if variables:
-        lines.extend(["", "Variables:"])
+        lines.extend(["", "变量："])
         for variable in variables:
             symbol = str(getattr(variable, "symbol", "")).strip()
             meaning = str(getattr(variable, "meaning", "")).strip()
             unit = getattr(variable, "unit", None)
             suffix = f" ({unit})" if unit else ""
             lines.append(f"- `{symbol}`: {meaning}{suffix}")
-    _append_optional_bullets(lines, "Conditions", getattr(block, "conditions", []))
-    _append_optional_bullets(lines, "Limitations", getattr(block, "limitations", []))
+    _append_optional_bullets(lines, "适用条件", getattr(block, "conditions", []))
+    _append_optional_bullets(lines, "限制", getattr(block, "limitations", []))
     return lines
 
 
@@ -320,13 +338,13 @@ def _render_example_block_markdown(block: object) -> list[str]:
     problem = str(getattr(block, "problem", "")).strip()
     answer = str(getattr(block, "answer", "")).strip()
     explanation = str(getattr(block, "explanation", "")).strip()
-    lines = [f"#### Example: {block_title}", "", f"Problem: {problem}"]
+    lines = [f"#### 示例：{block_title}", "", f"题目：{problem}"]
     steps = list(getattr(block, "steps", []))
     if steps:
-        lines.extend(["", "Steps:"])
+        lines.extend(["", "步骤："])
         for index, step in enumerate(steps, start=1):
             lines.append(f"{index}. {step}")
-    lines.extend(["", f"Answer: {answer}", "", f"Explanation: {explanation}"])
+    lines.extend(["", f"答案：{answer}", "", f"解析：{explanation}"])
     return lines
 
 
@@ -346,7 +364,7 @@ def _render_chart_block_markdown(block: object) -> list[str]:
     for series in getattr(block, "series", []):
         for point in getattr(series, "points", []):
             rows.append([str(getattr(series, "name", "")), str(getattr(point, "label", "")), _stringify_markdown_value(getattr(point, "value", "")), str(unit)])
-    return [f"#### {block_title}", "", explanation, "", *_markdown_table(["Series", "Label", "Value", "Unit"], rows)]
+    return [f"#### {block_title}", "", explanation, "", *_markdown_table(["系列", "标签", "数值", "单位"], rows)]
 
 
 def _append_optional_bullets(lines: list[str], title: str, values: object) -> None:
@@ -502,6 +520,21 @@ pre {
 
 code {
   font-family: Consolas, "JetBrains Mono", monospace;
+}
+
+.math-display {
+  margin: 12px 0;
+  padding: 8px 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+  background: #f7f7f7;
+}
+
+.katex {
+  font-family: "Cambria Math", "Times New Roman", "Microsoft YaHei", serif;
+  font-size: 12pt;
+  line-height: 1.5;
 }
 
 blockquote {

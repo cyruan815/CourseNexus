@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import pytest
-
-from app.core.errors import CourseNexusError
 from app.integrations.model_provider.mock import MockModelProvider
-from app.modules.generation.generators.handout.generator import HandoutGenerator
-from app.modules.generation.generators.handout.schemas import HandoutContent
+from app.modules.generation.generators.handout.generator import HandoutGenerator, normalize_markdown_math
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch, MaterialContextResult
 
 
@@ -32,299 +28,34 @@ def _batch() -> MaterialContextBatch:
     return MaterialContextBatch(chunks=context.chunks, material_ids=["mat_1"], estimated_tokens=10)
 
 
-def _valid_handout_v2_payload() -> dict:
-    return {
-        "schema_version": 2,
-        "title": "信道容量讲义",
-        "overview": "围绕信道容量建立公式和直觉。",
-        "difficulty": "medium",
-        "estimated_minutes": 40,
-        "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
-        "prerequisites": [],
-        "sections": [
-            {
-                "id": "sec_1",
-                "title": "Shannon 公式",
-                "lead": "有噪声信道的容量由带宽和信噪比共同限制。",
-                "source_citation_ids": ["chunk_1"],
-                "blocks": [
-                    {
-                        "type": "formula",
-                        "title": "Shannon 公式",
-                        "latex": "C = W \\\\log_2(1 + S/N)",
-                        "purpose": "计算理论最大数据率。",
-                        "variables": [
-                            {"symbol": "C", "meaning": "最大数据率", "unit": "bps"},
-                            {"symbol": "W", "meaning": "带宽", "unit": "Hz"},
-                        ],
-                        "conditions": ["有噪声信道"],
-                        "limitations": ["理论上限"],
-                        "source_citation_ids": ["chunk_1"],
-                    }
-                ],
-                "key_points": ["不要把 dB 直接代入 S/N。"],
-                "sort_order": 1,
-            }
-        ],
-        "knowledge_map": {
-            "type": "mindmap",
-            "title": "关系图",
-            "root": {"label": "信道容量", "children": []},
-            "source_citation_ids": ["chunk_1"],
-        },
-        "formula_cards": [],
-        "exam_focus": [],
-        "self_check": [],
-        "summary": "按条件选公式。",
-    }
-
-
-def test_handout_content_v2_accepts_structured_formula_and_mindmap_blocks() -> None:
-    content = HandoutContent.model_validate(_valid_handout_v2_payload())
-
-    assert content.schema_version == 2
-    assert content.title == "信道容量讲义"
-    assert content.sections[0].blocks[0].type == "formula"
-    assert content.knowledge_map.type == "mindmap"
-
-
-def test_handout_content_v2_allows_blocks_to_omit_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    del payload["sections"][0]["blocks"][0]["source_citation_ids"]
-    del payload["knowledge_map"]["source_citation_ids"]
-
-    content = HandoutContent.model_validate(payload)
-
-    assert content.sections[0].source_citation_ids == ["chunk_1"]
-    assert content.sections[0].blocks[0].source_citation_ids == []
-    assert content.knowledge_map.source_citation_ids == []
-
-
-def test_handout_content_v2_allows_prerequisites_to_omit_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["prerequisites"] = [
-        {
-            "id": "pre_1",
-            "title": "对数基础",
-            "explanation": "理解二进制对数在公式中的含义。",
-            "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
-            "source_citation_ids": [],
-            "sort_order": 1,
-        }
-    ]
-
-    content = HandoutContent.model_validate(payload)
-
-    assert content.prerequisites[0].source_citation_ids == []
-
-class PromptCapturingModelProvider(MockModelProvider):
-    def __init__(self, structured_outputs: dict[type[HandoutContent], dict]) -> None:
-        super().__init__(structured_outputs=structured_outputs)
+class PromptCapturingTextProvider(MockModelProvider):
+    def __init__(self, text: str) -> None:
+        super().__init__(text_outputs=[text])
         self.prompts: list[str] = []
 
-    def generate_structured(self, *, prompt, output_schema):
+    def generate_text(self, *, prompt: str) -> str:
         self.prompts.append(prompt)
-        return super().generate_structured(prompt=prompt, output_schema=output_schema)
+        return super().generate_text(prompt=prompt)
 
 
-def test_handout_generator_returns_structured_output_and_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    output = HandoutGenerator(model_provider=provider).generate(
-        batches=(_batch(),),
-        expected_material_ids=frozenset({"mat_1"}),
-        parameters={"language": "zh-CN", "detail_level": "standard"},
-    )
-
-    assert output.title == "今日讲义"
-    assert output.content_json is not None
-    assert output.content_json["schema_version"] == 2
-    assert output.content_json["overview"] == payload["overview"]
-    assert output.item_citation_chunk_ids == {
-        "sec_1": ["chunk_1"],
-        "__handout__": ["chunk_1"],
-    }
-
-
-def test_handout_generator_rejects_output_without_explicit_v2_schema_version() -> None:
-    payload = _valid_handout_v2_payload()
-    payload.pop("schema_version")
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    with pytest.raises(CourseNexusError) as exc_info:
-        HandoutGenerator(model_provider=provider).generate(
-            batches=(_batch(),),
-            expected_material_ids=frozenset({"mat_1"}),
-            parameters={},
-        )
-
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
-    assert exc_info.value.details == {"schema_version": 1, "expected_schema_version": 2}
-
-
-def test_handout_generator_uses_section_citations_only_for_v2_blocks() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["sections"][0]["blocks"][0]["source_citation_ids"] = ["chunk_extra"]
-    payload["knowledge_map"] = None
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    output = HandoutGenerator(model_provider=provider).generate(
-        batches=(
-            _batch(),
-            MaterialContextBatch(
-                chunks=[
-                    ContextChunk(
-                        material_id="mat_1",
-                        chunk_id="chunk_extra",
-                        chunk_index=1,
-                        material_name="数据库讲义.pdf",
-                        page="2",
-                        page_index=1,
-                        heading="补充公式",
-                        content_text="额外公式说明。",
-                    )
-                ],
-                material_ids=["mat_1"],
-                estimated_tokens=10,
-            ),
-        ),
-        expected_material_ids=frozenset({"mat_1"}),
-        parameters={"language": "zh-CN"},
-    )
-
-    assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
-
-
-def test_handout_generator_collects_and_validates_top_level_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["knowledge_map"] = None
-    payload["prerequisites"] = [
-        {
-            "id": "pre_1",
-            "title": "对数基础",
-            "explanation": "理解二进制对数。",
-            "sort_order": 1,
-            "source_citation_ids": ["chunk_extra"],
-        }
-    ]
-    payload["formula_cards"] = [payload["sections"][0]["blocks"][0] | {"source_citation_ids": ["chunk_extra"]}]
-    payload["exam_focus"] = [
-        {
-            "id": "exam_1",
-            "title": "单位换算",
-            "description": "不要把 dB 直接代入。",
-            "sort_order": 1,
-            "source_citation_ids": ["chunk_extra"],
-        }
-    ]
-    payload["self_check"] = [
-        {
-            "id": "check_1",
-            "question": "带宽增加会怎样？",
-            "answer": "容量上限提高。",
-            "sort_order": 1,
-            "source_citation_ids": ["chunk_extra"],
-        }
-    ]
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    output = HandoutGenerator(model_provider=provider).generate(
-        batches=(
-            _batch(),
-            MaterialContextBatch(
-                chunks=[
-                    ContextChunk(
-                        material_id="mat_1",
-                        chunk_id="chunk_extra",
-                        chunk_index=1,
-                        material_name="数据库讲义.pdf",
-                        page="2",
-                        page_index=1,
-                        heading="补充公式",
-                        content_text="额外公式说明。",
-                    )
-                ],
-                material_ids=["mat_1"],
-                estimated_tokens=10,
-            ),
-        ),
-        expected_material_ids=frozenset({"mat_1"}),
-        parameters={"language": "zh-CN"},
-    )
-
-    assert output.item_citation_chunk_ids == {
-        "sec_1": ["chunk_1"],
-        "__handout__": ["chunk_extra"],
-    }
-
-
-def test_handout_generator_ignores_empty_prerequisite_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["knowledge_map"] = None
-    payload["prerequisites"] = [
-        {
-            "id": "pre_1",
-            "title": "对数基础",
-            "explanation": "理解二进制对数在公式中的含义。",
-            "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
-            "source_citation_ids": [],
-            "sort_order": 1,
-        }
-    ]
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+def test_handout_generator_returns_markdown_content_without_structured_json_or_citations() -> None:
+    markdown = "# 主键讲义\n\n## 概览\n\n主键用于唯一标识表中的一行。"
+    provider = PromptCapturingTextProvider(markdown)
 
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
         expected_material_ids=frozenset({"mat_1"}),
-        parameters={"language": "zh-CN"},
+        parameters={"language": "zh-CN", "detail_level": "standard", "handout_title": "主键讲义", "source_note": "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。"},
     )
 
-    assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
-
-def test_handout_generator_rejects_top_level_formula_without_citations() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["formula_cards"] = [payload["sections"][0]["blocks"][0] | {"source_citation_ids": []}]
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    with pytest.raises(CourseNexusError) as exc_info:
-        HandoutGenerator(model_provider=provider).generate(
-            batches=(_batch(),),
-            expected_material_ids=frozenset({"mat_1"}),
-            parameters={"language": "zh-CN"},
-        )
-
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
-    assert exc_info.value.details == {"formula_cards_without_citations": ["Shannon 公式"]}
+    assert output.title == "主键讲义"
+    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n主键用于唯一标识表中的一行。"
+    assert output.content_json == {"format": "markdown", "schema_version": 1}
+    assert output.item_citation_chunk_ids == {}
 
 
-def test_handout_generator_rejects_top_level_citation_outside_context() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["prerequisites"] = [
-        {
-            "id": "pre_1",
-            "title": "对数基础",
-            "explanation": "理解二进制对数。",
-            "sort_order": 1,
-            "source_citation_ids": ["chunk_outside"],
-        }
-    ]
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    with pytest.raises(CourseNexusError) as exc_info:
-        HandoutGenerator(model_provider=provider).generate(
-            batches=(_batch(),),
-            expected_material_ids=frozenset({"mat_1"}),
-            parameters={"language": "zh-CN"},
-        )
-
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
-
-def test_handout_generator_prompt_includes_task_context_and_quality_requirements() -> None:
-    payload = _valid_handout_v2_payload()
-    provider = PromptCapturingModelProvider(
-        structured_outputs={HandoutContent: payload}
-    )
+def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() -> None:
+    provider = PromptCapturingTextProvider("# 物理层概念讲义\n\n正文")
 
     HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
@@ -347,78 +78,102 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
             "diagnostic_weak_topics": ["Nyquist / Shannon 公式"],
             "diagnostic_note": "希望多讲公式怎么用。",
             "teaching_strategy_hint": "加强公式变量、单位、适用条件、代入步骤和计算例题。",
+            "handout_title": "物理层概念与通信基础讲义",
+            "source_note": "本讲义基于《计算机网络.pdf》中“物理层概念与通信基础”相关内容生成。",
         },
     )
 
     prompt = provider.prompts[0]
     assert "课程名称：计算机网络" in prompt
-    assert "一级任务标题：物理层核心概念" in prompt
     assert "当前二级任务标题：物理层概念与通信基础" in prompt
-    assert "当前二级任务类型：learn" in prompt
-    assert "当前二级任务描述：理解物理层基本概念和通信模型。" in prompt
     assert "预计学习时间：45 分钟" in prompt
-    assert "内容深度：detailed" in prompt
-    assert "例题强度：high" in prompt
-    assert "测试强度：high" in prompt
-    assert "复习强度：standard" in prompt
-    assert "学习计划目标：两天内深度学习计算机网络物理层。" in prompt
     assert "诊断薄弱方向：calculation" in prompt
-    assert "薄弱知识点：Nyquist / Shannon 公式" in prompt
-    assert "诊断补充说明：希望多讲公式怎么用。" in prompt
-    assert "教学策略提示：加强公式变量、单位、适用条件、代入步骤和计算例题。" in prompt
-    assert "建议讲解风格" not in prompt
-    assert "diagnostic_explanation_style" not in prompt
-    assert "不生成整章摘要" in prompt
-    assert "适用条件和变量含义" in prompt
-    assert "每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个" in prompt
-    assert "prerequisites 可不填写 source_citation_ids" in prompt
-    assert "每个顶层条目必须独立填写 source_citation_ids" in prompt
-    assert "学生导出讲义不会逐节展示 citation" in prompt
-    assert "正文不要写“来源如下”“引用如下”" in prompt
-    assert "你的任务不是简单总结资料" in prompt
-    assert "不要输出完整 Markdown 文档" in prompt
+    assert "请直接输出一份完整 Markdown 讲义" in prompt
+    assert "讲义标题必须是：物理层概念与通信基础讲义" in prompt
+    assert "一级标题下一段必须原样写入来源说明：本讲义基于《计算机网络.pdf》中“物理层概念与通信基础”相关内容生成。" in prompt
+    assert "块级数学公式必须使用 $$ 独立公式块" in prompt
+    assert "不要使用 \\[...\\] 或单独一行 [ / ] 包裹公式" in prompt
+    assert "不要输出 JSON" in prompt
     assert "不要输出 HTML" in prompt
-    assert "只输出符合 HandoutContent schema 的 JSON 对象" in prompt
-    assert "schema_version 必须为 2" in prompt
-    assert "subtask_type=learn：优先讲清新知识" in prompt
-    assert "subtask_type=review：优先帮助回顾和查漏" in prompt
-    assert "weak_area=calculation：公式必须说明用途、变量、单位、适用条件、限制条件，并给出代入步骤" in prompt
-    assert "数学公式必须放入 type=formula block" in prompt
-    assert "对比内容必须放入 type=table block" in prompt
-    assert "知识关系优先使用 knowledge_map 的 mindmap tree" in prompt
-    assert "Chart 只在资料提供真实数值时生成，不得编造数据" in prompt
-    assert "不生成 SVG" in prompt
-    assert "每个 section 必须填写 source_citation_ids" in prompt
-    assert "block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids" in prompt
-    assert "每个 block 需要 source_citation_ids" not in prompt
+    assert "不要写 citation marker" in prompt
+    assert "只输出符合 HandoutContent schema 的 JSON 对象" not in prompt
+    assert "每个 section 必须填写 source_citation_ids" not in prompt
 
 
-def test_handout_generator_rejects_schema_without_citation() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["sections"][0]["source_citation_ids"] = []
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+def test_handout_generator_strips_markdown_code_fence_wrappers() -> None:
+    provider = PromptCapturingTextProvider("```markdown\n# 主键讲义\n\n正文\n```")
 
-    with pytest.raises(CourseNexusError) as exc_info:
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={},
+    )
+
+    assert output.content == "# 主键讲义\n\n正文"
+
+
+
+def test_handout_generator_normalizes_bracket_wrapped_latex_blocks() -> None:
+    provider = PromptCapturingTextProvider(
+        "# 信噪比讲义\n\n"
+        "从 dB 转换为线性比值：\n\n"
+        "[\n"
+        "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
+        "]\n\n"
+        "也可以写为：\n\n"
+        "\\[\n"
+        "\\text{SNR (dB)} = 10 \\log_{10}\\left(\\frac{S}{N}\\right)\n"
+        "\\]\n\n"
+        "行内公式 \\(C = B \\log_2(1 + S/N)\\) 用来说明信道容量。"
+    )
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={},
+    )
+
+    assert "[\n\\frac" not in output.content
+    assert "\\[\n" not in output.content
+    assert "\\(" not in output.content
+    assert "$$\n\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n$$" in output.content
+    assert "$$\n\\text{SNR (dB)} = 10 \\log_{10}\\left(\\frac{S}{N}\\right)\n$$" in output.content
+    assert "$C = B \\log_2(1 + S/N)$" in output.content
+
+
+def test_normalize_markdown_math_converts_single_line_latex_block() -> None:
+    markdown = "单行公式：\\[C = B \\log_2(1 + S/N)\\]"
+
+    assert normalize_markdown_math(markdown) == "单行公式：$$\nC = B \\log_2(1 + S/N)\n$$"
+
+
+def test_normalize_markdown_math_keeps_regular_markdown_brackets() -> None:
+    markdown = "\n".join(
+        [
+            "# 普通说明",
+            "",
+            "链接 [CourseNexus](https://example.com) 应保持不变。",
+            "",
+            "- 选项列表：",
+            "[",
+            "alpha, beta, gamma",
+            "]",
+            "",
+            "- [ ] 待办项也应保持不变。",
+        ]
+    )
+
+    assert normalize_markdown_math(markdown) == markdown
+def test_handout_generator_rejects_empty_markdown() -> None:
+    provider = PromptCapturingTextProvider("   ")
+
+    try:
         HandoutGenerator(model_provider=provider).generate(
             batches=(_batch(),),
             expected_material_ids=frozenset({"mat_1"}),
             parameters={},
         )
-
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
-
-
-def test_handout_generator_rejects_known_physical_layer_term_misspelling() -> None:
-    payload = _valid_handout_v2_payload()
-    payload["overview"] = "Nyquest criterion is a physical layer formula."
-    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
-
-    with pytest.raises(CourseNexusError) as exc_info:
-        HandoutGenerator(model_provider=provider).generate(
-            batches=(_batch(),),
-            expected_material_ids=frozenset({"mat_1"}),
-            parameters={},
-        )
-
-    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
-    assert exc_info.value.details == {"term": "Nyquest", "expected": "Nyquist"}
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "GENERATION_SCHEMA_INVALID"
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("empty markdown should be rejected")
