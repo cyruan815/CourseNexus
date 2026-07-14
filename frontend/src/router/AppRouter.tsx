@@ -6,6 +6,7 @@ import { CourseDetailPage } from "../pages/CourseDetailPage";
 import { CourseDetailPreviewPage } from "../pages/CourseDetailPreviewPage";
 import { CalendarPage } from "../pages/CalendarPage";
 import { GeneratedContentDetailPage } from "../pages/GeneratedContentDetailPage";
+import { HandoutPreviewPage } from "../pages/HandoutPreviewPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { ProfilePage } from "../pages/ProfilePage";
@@ -34,6 +35,7 @@ export function AppRouter() {
     <BrowserRouter>
       <Routes>
         {import.meta.env.DEV ? <Route element={<CourseDetailPreviewPage />} path="/preview/course-detail" /> : null}
+        {import.meta.env.DEV ? <Route element={<HandoutPreviewPage />} path="/dev/handout-preview" /> : null}
         <Route element={<WelcomePage />} path="/welcome" />
         <Route element={<LoginPage />} path="/login" />
         <Route element={<RegisterPage />} path="/register" />
