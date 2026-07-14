@@ -1,7 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setSessionToken } from "../../src/features/auth/session";
 import { ProfilePage } from "../../src/pages/ProfilePage";
@@ -29,7 +29,13 @@ function renderProfilePage() {
 }
 
 describe("ProfilePage", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 6, 14, 12));
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     window.localStorage.clear();
   });
