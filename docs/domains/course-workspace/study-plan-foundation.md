@@ -56,6 +56,8 @@
 
 `types.ts` 对齐后端 S02/S03/S04/S06 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview、替换请求、today todos、全局 calendar、单课程 study calendar、learning execution、任务级问答、handout/task-test 和 export 均有独立类型。
 
+2026-07-14 前端计划详情页改为课程计划页结构：`StudyPlanDetailPage` 先读取当前 `GET /api/v1/study-plans/{plan_id}`，同时读取 `GET /api/v1/courses/{course_id}/study-plans` 作为左侧计划列表；左侧按 `updated_at/created_at` 倒序列出本课程多个计划，点击计划卡走 `/courses/{course_id}/study-plans/{plan_id}` 路由切换；右侧保留原计划详情、重生成、删除、开始学习和任务结构内容。该页面仍是工作台页，外层固定视口，左侧计划列表和右侧详情各自滚动。
+
 ## 2026-07-14 C5 本课程计划日历前端接入
 
 `frontend/src/pages/CalendarPage.tsx` 已识别 `/calendar?courseId={course_id}` 并进入本课程日历模式；无 `courseId` 时继续保留全局大日历占位，等待 C7。

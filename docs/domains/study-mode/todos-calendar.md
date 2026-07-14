@@ -83,6 +83,7 @@ repository 显式过滤：
 5. 课程分组按 `course_name` 排序，`plan_ids` 去重并保留出现顺序。
 6. 月历按日期聚合，统计课程数、一级任务数、二级任务数、已完成二级任务数。
 7. 月历日期格只取前 3 条一级任务摘要，`hidden_task_count = max(task_count - 3, 0)`。
+8. 前端月历日期格按多行展示一级任务名；空间不足时最后一个任务行显示 `...`，完成进度 `completed_subtask_count/subtask_count 完成` 始终作为独立底部行展示，不与任务名重叠。
 
 ## 状态派生
 

@@ -403,6 +403,20 @@ export function StudyTaskExecutionPage() {
   }, [selectedSubtaskId]);
 
   useEffect(() => {
+    if (!generationNotice) {
+      return undefined;
+    }
+
+    const noticeTimer = window.setTimeout(() => {
+      setGenerationNotice(null);
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(noticeTimer);
+    };
+  }, [generationNotice]);
+
+  useEffect(() => {
     let ignore = false;
 
     if (!selectedSubtaskId) {
@@ -985,58 +999,62 @@ export function StudyTaskExecutionPage() {
                 </Stack>
 
                 <Paper className="study-plan-task-qa" radius="md" withBorder>
-                  <Stack component="form" gap="sm" onSubmit={(event) => void handleAskQuestion(event)}>
-                    {qaAnswer ? (
-                      <Paper className="study-plan-task-qa-answer" radius="md">
-                        <Stack gap={6}>
-                          <Group gap="xs">
-                            <IconMessageCircle size={16} />
-                            <Text fw={750} size="sm">助教回答</Text>
-                            <Badge color={qaAnswer.answer_type === "no_source" ? "gray" : "teal"} size="xs" variant="light">
-                              {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
-                            </Badge>
-                          </Group>
-                          <Text size="sm">{qaAnswer.answer_text}</Text>
-                          {qaAnswer.source_citations.length > 0 ? (
-                            <Stack gap={4}>
-                              {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
-                                <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
-                                  {citation.material_name}
-                                  {citation.page ? ` · p.${citation.page}` : ""}
-                                </Text>
-                              ))}
-                            </Stack>
-                          ) : null}
-                        </Stack>
-                      </Paper>
-                    ) : (
-                      <Text c="dimmed" size="sm">
-                        可以问“这一步先看哪份资料？”或“这个概念怎么理解？”。
-                      </Text>
-                    )}
+                  <Stack className="study-plan-task-qa-form" component="form" gap="sm" onSubmit={(event) => void handleAskQuestion(event)}>
+                    <Stack className="study-plan-task-qa-response" gap="sm">
+                      {qaAnswer ? (
+                        <Paper className="study-plan-task-qa-answer" radius="md">
+                          <Stack gap={6}>
+                            <Group gap="xs">
+                              <IconMessageCircle size={16} />
+                              <Text fw={750} size="sm">助教回答</Text>
+                              <Badge color={qaAnswer.answer_type === "no_source" ? "gray" : "teal"} size="xs" variant="light">
+                                {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
+                              </Badge>
+                            </Group>
+                            <Text size="sm">{qaAnswer.answer_text}</Text>
+                            {qaAnswer.source_citations.length > 0 ? (
+                              <Stack gap={4}>
+                                {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
+                                  <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
+                                    {citation.material_name}
+                                    {citation.page ? ` · p.${citation.page}` : ""}
+                                  </Text>
+                                ))}
+                              </Stack>
+                            ) : null}
+                          </Stack>
+                        </Paper>
+                      ) : (
+                        <Text c="dimmed" size="sm">
+                          可以问“这一步先看哪份资料？”或“这个概念怎么理解？”。
+                        </Text>
+                      )}
 
-                    {qaError ? (
-                      <Alert color="red" role="alert" title="提问失败" variant="light">
-                        {qaError}
-                      </Alert>
-                    ) : null}
+                      {qaError ? (
+                        <Alert color="red" role="alert" title="提问失败" variant="light">
+                          {qaError}
+                        </Alert>
+                      ) : null}
+                    </Stack>
 
-                    <Textarea
-                      aria-label="向 AI 助教提问"
-                      minRows={3}
-                      onChange={(event) => setQaQuestion(event.currentTarget.value)}
-                      placeholder="围绕当前任务提问"
-                      value={qaQuestion}
-                    />
-                    <Button
-                      disabled={!qaQuestion.trim()}
-                      leftSection={<IconSend size={15} />}
-                      loading={isAsking}
-                      type="submit"
-                      variant="light"
-                    >
-                      提问
-                    </Button>
+                    <Stack className="study-plan-task-qa-composer" gap="sm">
+                      <Textarea
+                        aria-label="向 AI 助教提问"
+                        minRows={3}
+                        onChange={(event) => setQaQuestion(event.currentTarget.value)}
+                        placeholder="围绕当前任务提问"
+                        value={qaQuestion}
+                      />
+                      <Button
+                        disabled={!qaQuestion.trim()}
+                        leftSection={<IconSend size={15} />}
+                        loading={isAsking}
+                        type="submit"
+                        variant="light"
+                      >
+                        提问
+                      </Button>
+                    </Stack>
                   </Stack>
                 </Paper>
               </Stack>

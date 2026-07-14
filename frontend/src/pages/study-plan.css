@@ -161,6 +161,49 @@
   white-space: pre-wrap;
 }
 
+.study-plan-course-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.3fr) minmax(520px, 0.7fr);
+  gap: 10px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.study-plan-plan-switcher {
+  overflow: auto;
+}
+
+.study-plan-switcher-item {
+  display: block;
+  border-color: #e5edf5;
+  background: #fbfdff;
+  color: inherit;
+  padding: 12px;
+  text-decoration: none;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.study-plan-switcher-item:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.study-plan-switcher-item.is-current {
+  border-color: #9dd6ce;
+  background: #f3fffc;
+  box-shadow: inset 3px 0 0 #14b8a6;
+}
+
+.study-plan-course-detail-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+}
+
 .study-plan-detail-layout {
   flex: 1;
   min-height: 0;
@@ -269,8 +312,8 @@
 }
 
 .study-plan-completion-actions.is-pinned-bottom {
-  margin-top: 18px;
-  padding: 10px 10px 4px 0;
+  margin-top: auto;
+  padding: 18px 10px 8px 0;
   flex: 0 0 auto;
 }
 
@@ -376,6 +419,9 @@
 }
 
 .study-plan-task-qa {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border-color: #dbeafe;
   background: #f8fbff;
   padding: 12px;
@@ -383,6 +429,22 @@
 
 .study-plan-execution-ai .study-plan-task-qa {
   flex: 1;
+}
+
+.study-plan-task-qa-form {
+  min-height: 0;
+  flex: 1;
+}
+
+.study-plan-task-qa-response {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.study-plan-task-qa-composer {
+  flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .study-plan-task-qa-answer {
@@ -421,14 +483,14 @@
 }
 
 .study-plan-material-summary-list {
-  max-height: 150px;
+  max-height: 108px;
   overflow: auto;
 }
 
 .study-plan-material-row {
   border-color: #e5edf5;
   background: #fbfdff;
-  padding: 8px 10px;
+  padding: 7px 9px;
 }
 
 .study-plan-material-name {
@@ -447,6 +509,7 @@
 
 @media (max-width: 900px) {
   .study-plan-grid,
+  .study-plan-course-layout,
   .study-plan-detail-layout,
   .study-plan-execution-grid,
   .study-plan-lifecycle-fields {

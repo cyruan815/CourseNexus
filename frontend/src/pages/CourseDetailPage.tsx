@@ -20,7 +20,6 @@ import {
   IconCalendarStats,
   IconCards,
   IconChecklist,
-  IconCube,
   IconHome2,
   IconMap,
   IconMessageCircle2,
@@ -118,14 +117,6 @@ const toolItems = [
     status: "生成入口",
     tone: "orange",
     type: "knowledge_list",
-  },
-  {
-    description: "保存问答回答后形成笔记",
-    icon: IconCube,
-    label: "学习笔记",
-    status: "保存入口",
-    tone: "indigo",
-    type: null,
   },
 ];
 
@@ -313,7 +304,7 @@ function ToolCard({
   const ToolIcon = item.icon;
   const canGenerate = Boolean(item.type);
   return (
-    <Card aria-label={canGenerate ? `生成 ${item.label}` : `${item.label} 暂未接入`} className={`course-detail-tool-card course-detail-tool-card-${item.tone}`} component="button" disabled={!canGenerate || isGenerating} onClick={() => item.type && onGenerate(item.type)} padding="md" radius="md" type="button" withBorder>
+    <Card aria-label={canGenerate ? `生成 ${item.label}` : `${item.label} 暂未接入`} className={`course-detail-tool-card course-detail-tool-card-${item.tone}${item.type === "knowledge_list" ? " is-wide" : ""}`} component="button" disabled={!canGenerate || isGenerating} onClick={() => item.type && onGenerate(item.type)} padding="md" radius="md" type="button" withBorder>
       <Group className="course-detail-tool-head" justify="space-between" wrap="nowrap">
         <Box className="course-detail-tool-icon"><ToolIcon size={30} stroke={1.65} /></Box>
         <Stack gap={3}><Text fw={750}>{item.label}</Text><Text c="dimmed" size="sm">{item.description}</Text></Stack>

@@ -30,12 +30,14 @@ import { fetchCourse } from "../features/courses/api";
 import {
   deleteStudyPlan,
   fetchStudyPlan,
+  listStudyPlans,
   previewStudyPlanRegeneration,
   replaceStudyPlan,
 } from "../features/study-plans/api";
 import type {
   PlanPreference,
   StudyPlanDetail,
+  StudyPlanRead,
   StudyPlanPreview,
   StudySubtaskRead,
 } from "../features/study-plans/types";
@@ -152,11 +154,21 @@ function optionalRecord(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
 }
 
+function sortPlansByRecent(plans: StudyPlanRead[]): StudyPlanRead[] {
+  return [...plans].sort((left, right) => {
+    const leftTime = Date.parse(left.updated_at || left.created_at);
+    const rightTime = Date.parse(right.updated_at || right.created_at);
+    return rightTime - leftTime;
+  });
+}
+
 export function StudyPlanDetailPage() {
   const { courseId, planId } = useParams();
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [detail, setDetail] = useState<StudyPlanDetail | null>(null);
+  const [coursePlans, setCoursePlans] = useState<StudyPlanRead[]>([]);
+  const [coursePlansError, setCoursePlansError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLifecycleOpen, setIsLifecycleOpen] = useState(false);
@@ -208,6 +220,34 @@ export function StudyPlanDetailPage() {
       ignore = true;
     };
   }, [courseId, planId]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (!courseId) {
+      setCoursePlans([]);
+      setCoursePlansError(null);
+      return;
+    }
+
+    setCoursePlansError(null);
+    listStudyPlans(courseId)
+      .then((plans) => {
+        if (!ignore) {
+          setCoursePlans(sortPlansByRecent(plans));
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setCoursePlansError(errorMessage(nextError, "课程学习计划列表加载失败"));
+          setCoursePlans([]);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [courseId]);
 
   useEffect(() => {
     if (!detail) {
@@ -262,6 +302,11 @@ export function StudyPlanDetailPage() {
   }
 
   const sortedTasks = [...detail.tasks].sort((left, right) => left.sort_order - right.sort_order);
+  const displayPlans = coursePlans.length > 0
+    ? coursePlans
+    : detail.plan.course_id === courseId
+      ? [detail.plan]
+      : [];
   const firstRunnableSubtask = sortedTasks
     .flatMap((task) => subtasksByTaskId.get(task.id) ?? [])
     .find((subtask) => subtask.status !== "completed")
@@ -337,6 +382,9 @@ export function StudyPlanDetailPage() {
         expected_updated_at: currentDetail.plan.updated_at,
       });
       setDetail(nextDetail);
+      setCoursePlans((current) => sortPlansByRecent(current.map((plan) => (
+        plan.id === nextDetail.plan.id ? nextDetail.plan : plan
+      ))));
       setIsLifecycleOpen(false);
       setRegenerationPreview(null);
     } catch (nextError) {
@@ -411,6 +459,50 @@ export function StudyPlanDetailPage() {
           </Group>
         </Group>
 
+        <Box className="study-plan-course-layout">
+          <Paper className="study-plan-panel study-plan-plan-switcher" radius="md" withBorder>
+            <Group justify="space-between" wrap="nowrap">
+              <Stack gap={2}>
+                <Title order={2}>本课程计划</Title>
+                <Text c="dimmed" size="sm">切换左侧计划，右侧查看具体计划详情。</Text>
+              </Stack>
+              <Badge color="blue" variant="light">{displayPlans.length} 个</Badge>
+            </Group>
+            {coursePlansError ? (
+              <Alert color="yellow" role="status" title="计划列表加载失败" variant="light">
+                {coursePlansError}
+              </Alert>
+            ) : null}
+            <Stack gap="xs">
+              {displayPlans.map((plan) => {
+                const isCurrent = plan.id === detail.plan.id;
+                return (
+                  <Paper
+                    aria-current={isCurrent ? "page" : undefined}
+                    className={isCurrent ? "study-plan-switcher-item is-current" : "study-plan-switcher-item"}
+                    component={Link}
+                    key={plan.id}
+                    radius="md"
+                    to={`/courses/${plan.course_id}/study-plans/${plan.id}`}
+                    withBorder
+                  >
+                    <Stack gap={6}>
+                      <Group justify="space-between" wrap="nowrap">
+                        <Text fw={760} lineClamp={2}>{plan.title}</Text>
+                        <Badge color={statusColor(plan.status)} size="xs" variant="light">
+                          {statusLabel(plan.status)}
+                        </Badge>
+                      </Group>
+                      <Text c="dimmed" size="xs">{plan.start_date} - {plan.end_date}</Text>
+                      <Text c="dimmed" lineClamp={2} size="sm">{plan.goal_text}</Text>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          </Paper>
+
+          <Box className="study-plan-course-detail-pane">
         <Paper className="study-plan-detail-hero" radius="md" withBorder>
           <Group align="flex-start" justify="space-between">
             <Stack gap={6}>
@@ -691,6 +783,8 @@ export function StudyPlanDetailPage() {
               ))}
             </Stack>
           </Paper>
+        </Box>
+          </Box>
         </Box>
       </Box>
     </Box>

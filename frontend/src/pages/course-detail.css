@@ -593,8 +593,8 @@
   color: var(--tool-color);
 }
 
-.course-detail-tool-card:last-child {
-  grid-column: auto;
+.course-detail-tool-card.is-wide {
+  grid-column: 1 / -1;
 }
 
 .course-detail-generated {
@@ -738,7 +738,7 @@
     grid-template-columns: 1fr;
   }
 
-  .course-detail-tool-card:last-child {
+  .course-detail-tool-card.is-wide {
     grid-column: auto;
   }
 
