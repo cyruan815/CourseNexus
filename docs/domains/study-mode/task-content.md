@@ -9,7 +9,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `learn` 表示学习讲义和新内容；`review` 表示复习讲义，只回顾计划中此前已经安排学习过的内容；只有 `quiz` / `test` 可以携带 `generation_parameters.task_test` 和明确题量要求。
 - `learn` 讲义使用计划阶段清理后的正文 chunk 引用；目录页、版权页、感谢页和章节小结页不得与正文 chunk 混合作为普通 `learn` 范围，避免提前混入后续主题。
 - 生成内容统一写入 `ai_generated_contents`，通过 `study_subtask_id` 绑定二级任务。
-- 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration，不修改前端。
+- 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration；前端只接入任务内容的生成、只读展示与导出入口。
 - 当前只保存二级任务级 `related_material_ids_json`；P0 不新增 chunk 级任务范围字段，引用范围由当次材料上下文批次校验保证。
 
 ## 代码入口
@@ -45,7 +45,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
-- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-14 前端为 `task_test` 增加只读题目展示：执行页在本次按需生成返回 `GeneratedContentRead.content_json.questions` 后展示题干、选项、正确答案和解析；生成内容详情页也按同一结构渲染只读视图。该视图不提供作答、提交、判分或 attempt 历史。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-14 前端为 `task_test` 增加只读题目展示：执行页在本次按需生成返回 `GeneratedContentRead.content_json.questions` 后展示题干、选项、正确答案和解析；生成内容详情页也按同一结构渲染只读视图。`true_false` 的 boolean 答案按 `true = 正确`、`false = 错误` 展示。该视图不提供作答、提交、判分或 attempt 历史。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
 - C9 不接入测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
@@ -110,7 +110,7 @@ sequenceDiagram
 
 `handout.content_json` 包含 `overview`、`learning_objectives`、`sections` 和 `summary`。每个 section 包含 `id`、`title`、`body`、`key_points`、`source_citation_ids` 和 `sort_order`。
 
-`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
+`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`；其中 `true_false.correct_answer` 是 boolean，其他题型分别使用字符串或字符串数组。
 
 ### HandoutContent v2 目标契约
 

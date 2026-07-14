@@ -10,9 +10,19 @@ export function quizQuestions(value: unknown): QuizQuestion[] | null {
   const valid = list.filter((item): item is Record<string, unknown> => isRecord(item) && text(item.id) && number(item.sort_order) && text(item.question_text) && Array.isArray(item.options) && item.options.length === 4 && text(item.correct_answer) && text(item.explanation));
   return valid.length === list.length && valid.length ? valid as unknown as QuizQuestion[] : null;
 }
+
+function taskTestAnswer(questionType: unknown, answer: unknown): boolean {
+  if (questionType === "single_choice" || questionType === "short_answer") return text(answer);
+  if (questionType === "true_false") return typeof answer === "boolean";
+  if (questionType === "multiple_choice") {
+    return Array.isArray(answer) && answer.length > 0 && answer.every(text);
+  }
+  return false;
+}
+
 export function taskTestQuestions(value: unknown): TaskTestQuestion[] | null {
   const list = arrayAt(value, "questions"); if (!list) return null;
-  const valid = list.filter((item) => isRecord(item) && text(item.id) && number(item.sort_order) && text(item.question_text) && text(item.question_type) && (text(item.correct_answer) || Array.isArray(item.correct_answer)));
+  const valid = list.filter((item) => isRecord(item) && text(item.id) && number(item.sort_order) && text(item.question_text) && taskTestAnswer(item.question_type, item.correct_answer));
   return valid.length === list.length && valid.length ? valid as unknown as TaskTestQuestion[] : null;
 }
 export function flashcards(value: unknown): Flashcard[] | null { const list = arrayAt(value, "cards"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.front) && text(i.back)); return valid.length === list.length && valid.length ? valid as Flashcard[] : null; }
