@@ -869,8 +869,20 @@ def _bind_source_citation_ids(
     *,
     allow_raw_block_citations: bool = False,
     is_handout_root: bool = False,
+    suppress_source_citations: bool = False,
 ) -> object:
     if isinstance(value, dict):
+        if suppress_source_citations:
+            return {
+                key: _bind_source_citation_ids(
+                    child,
+                    bindings,
+                    None,
+                    suppress_source_citations=True,
+                )
+                for key, child in value.items()
+            }
+
         item_id = value.get("id")
         block_type = value.get("type")
         is_block = isinstance(block_type, str)
@@ -887,6 +899,7 @@ def _bind_source_citation_ids(
                 bindings,
                 current_citation_ids,
                 allow_raw_block_citations=is_handout_root and key in {"knowledge_map", "formula_cards"},
+                suppress_source_citations=key == "rows",
             )
             for key, child in value.items()
         }
@@ -900,6 +913,7 @@ def _bind_source_citation_ids(
                 bindings,
                 inherited_citation_ids,
                 allow_raw_block_citations=allow_raw_block_citations,
+                suppress_source_citations=suppress_source_citations,
             )
             for child in value
         ]

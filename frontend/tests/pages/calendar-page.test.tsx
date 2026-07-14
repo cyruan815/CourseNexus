@@ -1,7 +1,7 @@
 import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CalendarPage } from "../../src/pages/CalendarPage";
 
@@ -94,7 +94,38 @@ const dayResponse = {
   ],
 };
 
+const coursesResponse = [
+  {
+    id: "crs_123",
+    user_id: "usr_123",
+    name: "计算机网络",
+    description: null,
+    teacher: "CourseNexus",
+    term: "2025-2026-spring",
+    status: "active",
+    created_at: "2026-07-01T00:00:00+00:00",
+    updated_at: "2026-07-01T00:00:00+00:00",
+    deleted_at: null,
+  },
+  {
+    id: "crs_math",
+    user_id: "usr_123",
+    name: "高等数学",
+    description: null,
+    teacher: null,
+    term: null,
+    status: "active",
+    created_at: "2026-07-01T00:00:00+00:00",
+    updated_at: "2026-07-01T00:00:00+00:00",
+    deleted_at: null,
+  },
+];
+
 describe("CalendarPage", () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -107,6 +138,9 @@ describe("CalendarPage", () => {
       }
       if (url.endsWith("/study-calendar/days/2026-07-14")) {
         return Promise.resolve(successResponse(dayResponse, "req_day"));
+      }
+      if (url.endsWith("/courses")) {
+        return Promise.resolve(successResponse(coursesResponse, "req_courses"));
       }
 
       return Promise.reject(new Error(`Unexpected request: ${url}`));
@@ -122,12 +156,12 @@ describe("CalendarPage", () => {
     expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
 
     expect(await screen.findByRole("heading", { level: 1, name: "学习日历" })).toBeInTheDocument();
-    expect(screen.getByText("计算机网络")).toBeInTheDocument();
+    expect(screen.getAllByText("计算机网络").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByText("物理层复习")).toBeInTheDocument();
+    expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("gridcell", { name: "查看 2026-07-14 的课程任务" }));
 
@@ -201,6 +235,9 @@ describe("CalendarPage", () => {
           ],
         }, "req_global_day"));
       }
+      if (url.endsWith("/courses")) {
+        return Promise.resolve(successResponse(coursesResponse, "req_courses"));
+      }
 
       return Promise.reject(new Error(`Unexpected request: ${url}`));
     });
@@ -241,5 +278,45 @@ describe("CalendarPage", () => {
       "/api/v1/calendar/days/2026-07-14/todos",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("lets users manually filter the global calendar by course and clear the filter", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses")) {
+        return Promise.resolve(successResponse(coursesResponse, "req_courses"));
+      }
+      if (url.endsWith("/calendar/month?month=2026-07")) {
+        return Promise.resolve(successResponse({ month: "2026-07", days: [] }, "req_global_month"));
+      }
+      if (url.endsWith("/courses/crs_123/study-calendar?month=2026-07")) {
+        return Promise.resolve(successResponse(monthResponse, "req_course_month"));
+      }
+      if (url.endsWith("/courses/crs_123/study-calendar/days/2026-07-14")) {
+        return Promise.resolve(successResponse(dayResponse, "req_course_day"));
+      }
+
+      return Promise.reject(new Error(`Unexpected request: ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderCalendarPage("/calendar?date=2026-07-14");
+
+    expect(await screen.findByRole("combobox", { name: "课程筛选" })).toHaveValue("全部课程");
+    fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    fireEvent.click(await screen.findByRole("option", { name: "计算机网络", hidden: true }));
+
+    expect((await screen.findAllByText(monthResponse.days[0].task_summaries[0].title)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("combobox", { name: "课程筛选" })).toHaveValue("计算机网络");
+
+    fireEvent.click(screen.getByRole("button", { name: "清除课程筛选" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/calendar/month?month=2026-07",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    expect(screen.getByRole("combobox", { name: "课程筛选" })).toHaveValue("全部课程");
   });
 });

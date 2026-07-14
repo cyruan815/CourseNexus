@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Alert,
@@ -20,7 +20,6 @@ import {
   IconCheck,
   IconCircle,
   IconDownload,
-  IconExternalLink,
   IconFileText,
   IconMessageCircle,
   IconPlayerPlay,
@@ -39,6 +38,7 @@ import {
   fetchSubtaskExecutionContext,
   generateSubtaskHandout,
   generateSubtaskTaskTest,
+  getGeneratedContentDetail,
   updateSubtaskCompletion,
 } from "../features/study-plans/api";
 import type {
@@ -61,6 +61,11 @@ interface ReadonlyTaskTestQuestion {
   correct_answer: string | string[] | null;
   explanation: string | null;
   sort_order: number;
+}
+
+interface ContentSourceSummary {
+  key: string;
+  text: string;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -246,6 +251,49 @@ function answerLabel(answer: string | string[] | null): string {
   return Array.isArray(answer) ? answer.join("、") : answer;
 }
 
+function formatGeneratedContentSource(citation: unknown, index: number): ContentSourceSummary | null {
+  if (!isRecord(citation)) {
+    return null;
+  }
+
+  const materialName = toText(citation.material_name);
+  if (!materialName) {
+    return null;
+  }
+
+  const page = toText(citation.page);
+  const pageIndex = typeof citation.page_index === "number" ? citation.page_index : null;
+  const pageLabel = page
+    ? `第 ${page} 页`
+    : pageIndex !== null && pageIndex >= 0
+      ? `第 ${pageIndex + 1} 页`
+      : null;
+  const key = toText(citation.id) ?? `${toText(citation.material_id) ?? "source"}-${index}`;
+
+  return {
+    key,
+    text: pageLabel ? `${materialName} · ${pageLabel}` : materialName,
+  };
+}
+
+function generatedContentSourceSummary(content: GeneratedContentRead | null): {
+  sources: ContentSourceSummary[];
+  total: number;
+} {
+  if (!content) {
+    return { sources: [], total: 0 };
+  }
+
+  const allSources = content.source_citations
+    .map((citation, index) => formatGeneratedContentSource(citation, index))
+    .filter((source): source is ContentSourceSummary => Boolean(source));
+
+  return {
+    sources: allSources.slice(0, 2),
+    total: allSources.length,
+  };
+}
+
 function materialAvailabilityLabel(material: ExecutionMaterialRead): string {
   if (material.availability === "available") {
     return material.parse_status === "parsed" ? "可用资料" : material.parse_status ?? "可用";
@@ -323,6 +371,8 @@ function saveDownloadedFile(blob: Blob, filename: string): void {
 
 export function StudyTaskExecutionPage() {
   const { subtaskId } = useParams();
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(subtaskId ?? null);
+  const selectedSubtaskIdRef = useRef<string | null>(subtaskId ?? null);
   const [context, setContext] = useState<ExecutionContextRead | null>(null);
   const [completionResult, setCompletionResult] = useState<SubtaskCompletionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -331,25 +381,43 @@ export function StudyTaskExecutionPage() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContentRead | null>(null);
+  const [generatedContentBySubtask, setGeneratedContentBySubtask] = useState<Record<string, GeneratedContentRead>>({});
   const [qaAnswer, setQaAnswer] = useState<StudySubtaskQuestionAnswer | null>(null);
   const [qaConversationId, setQaConversationId] = useState<string | null>(null);
   const [qaQuestion, setQaQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitchingSubtask, setIsSwitchingSubtask] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingSubtaskId, setGeneratingSubtaskId] = useState<string | null>(null);
+  const [isContentLoading, setIsContentLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
+  const [generationNotice, setGenerationNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedSubtaskId(subtaskId ?? null);
+  }, [subtaskId]);
+
+  useEffect(() => {
+    selectedSubtaskIdRef.current = selectedSubtaskId;
+  }, [selectedSubtaskId]);
 
   useEffect(() => {
     let ignore = false;
 
-    if (!subtaskId) {
+    if (!selectedSubtaskId) {
       setError("学习任务不存在");
       setIsLoading(false);
+      setIsSwitchingSubtask(false);
       return;
     }
 
-    setIsLoading(true);
+    const shouldShowPageSkeleton = context === null;
+    if (shouldShowPageSkeleton) {
+      setIsLoading(true);
+    } else {
+      setIsSwitchingSubtask(true);
+    }
     setError(null);
     setCompletionError(null);
     setGenerationError(null);
@@ -361,7 +429,7 @@ export function StudyTaskExecutionPage() {
     setQaConversationId(null);
     setQaQuestion("");
 
-    fetchSubtaskExecutionContext(subtaskId)
+    fetchSubtaskExecutionContext(selectedSubtaskId)
       .then((nextContext) => {
         if (!ignore) {
           setContext(nextContext);
@@ -374,23 +442,36 @@ export function StudyTaskExecutionPage() {
       })
       .finally(() => {
         if (!ignore) {
-          setIsLoading(false);
+          if (shouldShowPageSkeleton) {
+            setIsLoading(false);
+          }
+          setIsSwitchingSubtask(false);
         }
       });
 
     return () => {
       ignore = true;
     };
-  }, [subtaskId]);
+  }, [selectedSubtaskId]);
 
   const sortedTasks = useMemo(() => sortTasks(context?.tasks ?? []), [context?.tasks]);
   const currentSubtask = useMemo(() => findCurrentSubtask(context), [context]);
   const contentType = currentSubtask ? taskContentType(currentSubtask.subtask_type) : null;
   const contentLabel = contentType ? taskContentLabel(contentType) : null;
   const existingContentId = contentType === "handout" ? context?.handout_content_id : context?.task_test_content_id;
-  const activeContentId = generatedContent?.id ?? existingContentId ?? null;
-  const activeContentTitle = generatedContent?.title ?? null;
-  const readonlyTaskTestQuestions = useMemo(() => parseTaskTestQuestions(generatedContent), [generatedContent]);
+  const currentGeneratedContent = currentSubtask
+    ? generatedContentBySubtask[currentSubtask.subtask_id]
+      ?? (generatedContent?.study_subtask_id === currentSubtask.subtask_id ? generatedContent : null)
+    : null;
+  const activeContentId = generationError ? null : currentGeneratedContent?.id ?? existingContentId ?? null;
+  const activeContentTitle = currentGeneratedContent?.title ?? null;
+  const isGeneratingCurrentSubtask = Boolean(currentSubtask && generatingSubtaskId === currentSubtask.subtask_id);
+  const isGeneratingOtherSubtask = Boolean(currentSubtask && generatingSubtaskId && generatingSubtaskId !== currentSubtask.subtask_id);
+  const readonlyTaskTestQuestions = useMemo(() => parseTaskTestQuestions(currentGeneratedContent), [currentGeneratedContent]);
+  const contentSourceSummary = useMemo(
+    () => generatedContentSourceSummary(currentGeneratedContent),
+    [currentGeneratedContent],
+  );
   const completedCount = sortedTasks.reduce(
     (total, task) => total + task.subtasks.filter((subtask) => subtask.status === "completed").length,
     0,
@@ -398,8 +479,62 @@ export function StudyTaskExecutionPage() {
   const totalCount = sortedTasks.reduce((total, task) => total + task.subtasks.length, 0);
   const progressValue = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+  useEffect(() => {
+    let ignore = false;
+
+    if (!existingContentId || generationError) {
+      setIsContentLoading(false);
+      if (generatedContent && generatedContent.study_subtask_id !== currentSubtask?.subtask_id) {
+        setGeneratedContent(null);
+      }
+      return;
+    }
+
+    if (currentGeneratedContent?.id === existingContentId) {
+      setIsContentLoading(false);
+      return;
+    }
+
+    setIsContentLoading(true);
+    getGeneratedContentDetail(existingContentId)
+      .then((content) => {
+        if (!ignore) {
+          setGeneratedContent(content);
+          if (content.study_subtask_id) {
+            setGeneratedContentBySubtask((current) => ({
+              ...current,
+              [content.study_subtask_id as string]: content,
+            }));
+          }
+          setGenerationError(null);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setGenerationError(generationErrorMessage(nextError));
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsContentLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    currentGeneratedContent?.id,
+    currentSubtask?.subtask_id,
+    existingContentId,
+    generationError,
+    generatedContent,
+    generatedContentBySubtask,
+  ]);
+
   const handleCompletion = async (completed: boolean) => {
-    if (!subtaskId || !context) {
+    const activeSubtaskId = currentSubtask?.subtask_id;
+    if (!activeSubtaskId || !context) {
       return;
     }
 
@@ -407,7 +542,7 @@ export function StudyTaskExecutionPage() {
     setCompletionError(null);
 
     try {
-      const result = await updateSubtaskCompletion(subtaskId, completed);
+      const result = await updateSubtaskCompletion(activeSubtaskId, completed);
       setCompletionResult(result);
       setContext((current) => (current ? applyCompletionResult(current, result) : current));
     } catch (nextError) {
@@ -418,23 +553,49 @@ export function StudyTaskExecutionPage() {
   };
 
   const handleGenerateContent = async (forceRegenerate: boolean) => {
-    if (!subtaskId || !contentType) {
+    const targetSubtaskId = currentSubtask?.subtask_id;
+    const targetContentType = contentType;
+    if (!targetSubtaskId || !targetContentType) {
       return;
     }
 
-    setIsGenerating(true);
+    if (generatingSubtaskId && generatingSubtaskId !== targetSubtaskId) {
+      setGenerationNotice("另一个任务的内容仍在后台生成中，完成前暂不能同时发起新的生成。");
+      return;
+    }
+
+    setGeneratingSubtaskId(targetSubtaskId);
+    setGenerationNotice(null);
     setGenerationError(null);
 
     try {
-      const content = contentType === "handout"
-        ? await generateSubtaskHandout(subtaskId, { force_regenerate: forceRegenerate })
-        : await generateSubtaskTaskTest(subtaskId, { force_regenerate: forceRegenerate });
-      setGeneratedContent(content);
+      const content = targetContentType === "handout"
+        ? await generateSubtaskHandout(targetSubtaskId, { force_regenerate: forceRegenerate })
+        : await generateSubtaskTaskTest(targetSubtaskId, { force_regenerate: forceRegenerate });
+      setGeneratedContentBySubtask((current) => ({
+        ...current,
+        [targetSubtaskId]: content,
+      }));
+      if (selectedSubtaskIdRef.current === targetSubtaskId) {
+        setGeneratedContent(content);
+      } else {
+        setGenerationNotice(null);
+      }
       setExportError(null);
     } catch (nextError) {
-      setGenerationError(generationErrorMessage(nextError));
+      const message = generationErrorMessage(nextError);
+      if (selectedSubtaskIdRef.current === targetSubtaskId) {
+        setGenerationError(message);
+      } else {
+        setGenerationNotice(`刚才那个任务的内容生成失败：${message}`);
+      }
     } finally {
-      setIsGenerating(false);
+      setGeneratingSubtaskId((current) => (current === targetSubtaskId ? null : current));
+      setGenerationNotice((current) => (
+        current && (current.includes("已切换任务") || current.includes("后台生成"))
+          ? null
+          : current
+      ));
     }
   };
 
@@ -461,8 +622,9 @@ export function StudyTaskExecutionPage() {
   const handleAskQuestion = async (event: FormEvent) => {
     event.preventDefault();
     const question = qaQuestion.trim();
+    const activeSubtaskId = currentSubtask?.subtask_id;
 
-    if (!subtaskId || !question) {
+    if (!activeSubtaskId || !question) {
       return;
     }
 
@@ -470,7 +632,7 @@ export function StudyTaskExecutionPage() {
     setQaError(null);
 
     try {
-      const answer = await askStudySubtaskQuestion(subtaskId, {
+      const answer = await askStudySubtaskQuestion(activeSubtaskId, {
         conversation_id: qaConversationId,
         question,
       });
@@ -483,6 +645,18 @@ export function StudyTaskExecutionPage() {
       setIsAsking(false);
     }
   };
+
+  function handleSelectSubtask(nextSubtaskId: string) {
+    if (nextSubtaskId === selectedSubtaskId || isSwitchingSubtask) {
+      return;
+    }
+
+    if (generatingSubtaskId && generatingSubtaskId !== nextSubtaskId) {
+      setGenerationNotice("已切换任务；原任务内容仍在后台生成，不会影响当前页面。");
+    }
+
+    setSelectedSubtaskId(nextSubtaskId);
+  }
 
   if (isLoading) {
     return (
@@ -573,13 +747,19 @@ export function StudyTaskExecutionPage() {
                   <Stack className="study-plan-execution-taskrail" gap="xs" key={task.task_id}>
                     <Text fw={750} size="sm">{task.title}</Text>
                     {task.subtasks.map((subtask) => {
-                      const isCurrent = subtask.subtask_id === context.current_subtask_id;
+                      const isCurrent = subtask.subtask_id === selectedSubtaskId;
                       const isCompleted = subtask.status === "completed";
                       return (
                         <Paper
+                          aria-current={isCurrent ? "step" : undefined}
+                          aria-label={`切换到任务 ${subtask.title}`}
                           className={isCurrent ? "study-plan-execution-step is-current" : "study-plan-execution-step"}
+                          component="button"
+                          disabled={isSwitchingSubtask}
                           key={subtask.subtask_id}
+                          onClick={() => handleSelectSubtask(subtask.subtask_id)}
                           radius="md"
+                          type="button"
                           withBorder
                         >
                           <Group align="flex-start" gap="sm" wrap="nowrap">
@@ -606,7 +786,12 @@ export function StudyTaskExecutionPage() {
             </Stack>
           </Paper>
 
-          <Paper className="study-plan-execution-main has-pinned-completion" radius="md" withBorder>
+          <Paper
+            aria-busy={isSwitchingSubtask || undefined}
+            className="study-plan-execution-main has-pinned-completion"
+            radius="md"
+            withBorder
+          >
             <Stack className="study-plan-execution-main-stack" gap="lg">
               <Stack gap={8}>
                 <Group gap="xs">
@@ -647,10 +832,26 @@ export function StudyTaskExecutionPage() {
                           {generationError}
                         </Alert>
                       ) : null}
+                      {generationNotice ? (
+                        <Alert color="blue" role="status" title="生成状态" variant="light">
+                          {generationNotice}
+                        </Alert>
+                      ) : null}
+                      {isGeneratingOtherSubtask ? (
+                        <Alert color="yellow" role="status" title="后台生成中" variant="light">
+                          另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。
+                        </Alert>
+                      ) : null}
                       {exportError ? (
                         <Alert color="red" role="alert" title="文件导出失败" variant="light">
                           {exportError}
                         </Alert>
+                      ) : null}
+                      {isContentLoading ? (
+                        <Stack gap="sm" role="status">
+                          <Text c="dimmed" size="sm">正在加载已生成内容...</Text>
+                          <Skeleton height={72} radius="md" />
+                        </Stack>
                       ) : null}
                       {activeContentId ? (
                         <>
@@ -662,15 +863,6 @@ export function StudyTaskExecutionPage() {
                               </Stack>
                               <Group gap="xs" wrap="nowrap">
                                 <Button
-                                  component={Link}
-                                  leftSection={<IconExternalLink size={15} />}
-                                  size="xs"
-                                  to={`/generated-contents/${activeContentId}`}
-                                  variant="light"
-                                >
-                                  查看{contentLabel}
-                                </Button>
-                                <Button
                                   leftSection={<IconDownload size={15} />}
                                   loading={isExporting}
                                   onClick={() => void handleExportContent()}
@@ -681,7 +873,8 @@ export function StudyTaskExecutionPage() {
                                 </Button>
                                 <Button
                                   leftSection={<IconRefresh size={15} />}
-                                  loading={isGenerating}
+                                  disabled={isGeneratingOtherSubtask}
+                                  loading={isGeneratingCurrentSubtask}
                                   onClick={() => void handleGenerateContent(true)}
                                   size="xs"
                                   variant="subtle"
@@ -690,6 +883,14 @@ export function StudyTaskExecutionPage() {
                                 </Button>
                               </Group>
                             </Group>
+                            {contentSourceSummary.sources.length > 0 ? (
+                              <Text c="dimmed" className="study-plan-generated-sources" size="xs">
+                                来源：{contentSourceSummary.sources.map((source) => source.text).join("、")}
+                                {contentSourceSummary.total > contentSourceSummary.sources.length
+                                  ? `，等 ${contentSourceSummary.total} 处来源`
+                                  : ""}
+                              </Text>
+                            ) : null}
                           </Paper>
                           {contentType === "task_test" && readonlyTaskTestQuestions.length > 0 ? (
                             <Stack className="study-plan-task-test-preview" gap="sm">
@@ -728,8 +929,9 @@ export function StudyTaskExecutionPage() {
                         <Group justify="space-between" wrap="nowrap">
                           <Badge color="gray" variant="light">{contentLabel}待生成</Badge>
                           <Button
+                            disabled={isGeneratingOtherSubtask}
                             leftSection={<IconBook2 size={16} />}
-                            loading={isGenerating}
+                            loading={isGeneratingCurrentSubtask}
                             onClick={() => void handleGenerateContent(false)}
                             variant="light"
                           >
@@ -750,6 +952,7 @@ export function StudyTaskExecutionPage() {
                 {currentSubtask.status === "completed" ? (
                   <Button
                     color="gray"
+                    disabled={isSwitchingSubtask}
                     leftSection={<IconX size={16} />}
                     loading={isUpdating}
                     onClick={() => void handleCompletion(false)}
@@ -759,6 +962,7 @@ export function StudyTaskExecutionPage() {
                   </Button>
                 ) : (
                   <Button
+                    disabled={isSwitchingSubtask}
                     leftSection={<IconCheck size={16} />}
                     loading={isUpdating}
                     onClick={() => void handleCompletion(true)}
@@ -771,112 +975,115 @@ export function StudyTaskExecutionPage() {
           </Paper>
 
           <Paper className="study-plan-execution-aside" radius="md" withBorder>
-            <Stack gap="md">
-              <Stack gap={4}>
-                <Title order={2}>AI 助教</Title>
-                <Text c="dimmed" size="sm">
-                  只围绕当前任务的关联资料回答，资料范围由后端按任务锁定。
-                </Text>
-              </Stack>
-
-              <Paper className="study-plan-task-qa" radius="md" withBorder>
-                <Stack component="form" gap="sm" onSubmit={(event) => void handleAskQuestion(event)}>
-                  {qaAnswer ? (
-                    <Paper className="study-plan-task-qa-answer" radius="md">
-                      <Stack gap={6}>
-                        <Group gap="xs">
-                          <IconMessageCircle size={16} />
-                          <Text fw={750} size="sm">助教回答</Text>
-                          <Badge color={qaAnswer.answer_type === "no_source" ? "gray" : "teal"} size="xs" variant="light">
-                            {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
-                          </Badge>
-                        </Group>
-                        <Text size="sm">{qaAnswer.answer_text}</Text>
-                        {qaAnswer.source_citations.length > 0 ? (
-                          <Stack gap={4}>
-                            {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
-                              <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
-                                {citation.material_name}
-                                {citation.page ? ` · p.${citation.page}` : ""}
-                              </Text>
-                            ))}
-                          </Stack>
-                        ) : null}
-                      </Stack>
-                    </Paper>
-                  ) : (
-                    <Text c="dimmed" size="sm">
-                      可以问“这一步先看哪份资料？”或“这个概念怎么理解？”。
-                    </Text>
-                  )}
-
-                  {qaError ? (
-                    <Alert color="red" role="alert" title="提问失败" variant="light">
-                      {qaError}
-                    </Alert>
-                  ) : null}
-
-                  <Textarea
-                    aria-label="向 AI 助教提问"
-                    minRows={3}
-                    onChange={(event) => setQaQuestion(event.currentTarget.value)}
-                    placeholder="围绕当前任务提问"
-                    value={qaQuestion}
-                  />
-                  <Button
-                    disabled={!qaQuestion.trim()}
-                    leftSection={<IconSend size={15} />}
-                    loading={isAsking}
-                    type="submit"
-                    variant="light"
-                  >
-                    提问
-                  </Button>
-                </Stack>
-              </Paper>
-
-              <Stack gap={4}>
-                <Title order={2}>任务摘要</Title>
-                <Text c="dimmed" size="sm">
-                  完成状态和资料范围都以当前二级任务为准。
-                </Text>
-              </Stack>
-
-              <Paper className="study-plan-checkin-card" radius="md" withBorder>
+            <Stack className="study-plan-execution-aside-layout" gap="md">
+              <Stack className="study-plan-execution-ai" gap="md">
                 <Stack gap={4}>
-                  <Text fw={750}>打卡进度：{completionResult?.checkin.completed_subtask_count ?? completedCount}/{completionResult?.checkin.planned_subtask_count ?? totalCount}</Text>
+                  <Title order={2}>AI 助教</Title>
                   <Text c="dimmed" size="sm">
-                    完成状态会由后端同步汇总一级任务、计划和当日打卡。
+                    只围绕当前任务的关联资料回答，资料范围由后端按任务锁定。
                   </Text>
                 </Stack>
-              </Paper>
 
-              <Stack gap="xs">
-                {context.related_materials.length > 0 ? (
-                  context.related_materials.map((material) => (
-                    <Paper className="study-plan-material-row" key={material.material_id} radius="md" withBorder>
-                      <Stack gap={4}>
-                        <Group justify="space-between" wrap="nowrap">
-                          <Text fw={700}>{material.name ?? material.material_id}</Text>
-                          <Badge
-                            color={material.availability === "available" ? "teal" : "gray"}
-                            size="sm"
-                            variant="light"
-                          >
-                            {materialAvailabilityLabel(material)}
-                          </Badge>
-                        </Group>
-                        <Text c="dimmed" size="xs">
-                          {material.material_type ?? "未知类型"} · {material.material_id}
-                        </Text>
-                      </Stack>
-                    </Paper>
-                  ))
-                ) : (
-                  <Alert color="yellow" variant="light">
-                    当前任务没有返回关联资料。
-                  </Alert>
-                )}
+                <Paper className="study-plan-task-qa" radius="md" withBorder>
+                  <Stack component="form" gap="sm" onSubmit={(event) => void handleAskQuestion(event)}>
+                    {qaAnswer ? (
+                      <Paper className="study-plan-task-qa-answer" radius="md">
+                        <Stack gap={6}>
+                          <Group gap="xs">
+                            <IconMessageCircle size={16} />
+                            <Text fw={750} size="sm">助教回答</Text>
+                            <Badge color={qaAnswer.answer_type === "no_source" ? "gray" : "teal"} size="xs" variant="light">
+                              {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
+                            </Badge>
+                          </Group>
+                          <Text size="sm">{qaAnswer.answer_text}</Text>
+                          {qaAnswer.source_citations.length > 0 ? (
+                            <Stack gap={4}>
+                              {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
+                                <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
+                                  {citation.material_name}
+                                  {citation.page ? ` · p.${citation.page}` : ""}
+                                </Text>
+                              ))}
+                            </Stack>
+                          ) : null}
+                        </Stack>
+                      </Paper>
+                    ) : (
+                      <Text c="dimmed" size="sm">
+                        可以问“这一步先看哪份资料？”或“这个概念怎么理解？”。
+                      </Text>
+                    )}
+
+                    {qaError ? (
+                      <Alert color="red" role="alert" title="提问失败" variant="light">
+                        {qaError}
+                      </Alert>
+                    ) : null}
+
+                    <Textarea
+                      aria-label="向 AI 助教提问"
+                      minRows={3}
+                      onChange={(event) => setQaQuestion(event.currentTarget.value)}
+                      placeholder="围绕当前任务提问"
+                      value={qaQuestion}
+                    />
+                    <Button
+                      disabled={!qaQuestion.trim()}
+                      leftSection={<IconSend size={15} />}
+                      loading={isAsking}
+                      type="submit"
+                      variant="light"
+                    >
+                      提问
+                    </Button>
+                  </Stack>
+                </Paper>
+              </Stack>
+
+              <Stack className="study-plan-execution-summary" gap="sm">
+                <Group className="study-plan-summary-header" justify="space-between" wrap="nowrap">
+                  <Title order={3}>任务摘要</Title>
+                  <Badge color="blue" variant="light">{context.related_materials.length} 份资料</Badge>
+                </Group>
+
+                <Paper className="study-plan-checkin-card" radius="md" withBorder>
+                  <Group justify="space-between" wrap="nowrap">
+                    <Text c="dimmed" size="sm">打卡进度</Text>
+                    <Text fw={750}>{completionResult?.checkin.completed_subtask_count ?? completedCount}/{completionResult?.checkin.planned_subtask_count ?? totalCount}</Text>
+                  </Group>
+                </Paper>
+
+                <Stack className="study-plan-material-summary-list" gap={6}>
+                  {context.related_materials.length > 0 ? (
+                    context.related_materials.map((material) => (
+                      <Paper className="study-plan-material-row" key={material.material_id} radius="md" withBorder>
+                        <Stack gap={4}>
+                          <Group justify="space-between" wrap="nowrap">
+                            <Text className="study-plan-material-name" fw={700} lineClamp={1}>
+                              {material.name ?? material.material_id}
+                            </Text>
+                            <Badge
+                              color={material.availability === "available" ? "teal" : "gray"}
+                              className="study-plan-material-badge"
+                              size="xs"
+                              variant="light"
+                            >
+                              {materialAvailabilityLabel(material)}
+                            </Badge>
+                          </Group>
+                          <Text c="dimmed" className="study-plan-material-meta" size="xs">
+                            {material.material_type ?? "未知类型"} · {material.material_id}
+                          </Text>
+                        </Stack>
+                      </Paper>
+                    ))
+                  ) : (
+                    <Alert color="yellow" variant="light">
+                      当前任务没有返回关联资料。
+                    </Alert>
+                  )}
+                </Stack>
               </Stack>
             </Stack>
           </Paper>

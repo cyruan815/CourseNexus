@@ -344,7 +344,18 @@ const generatedHandout = {
     material_ids: ["mat_1"],
   },
   error_code: null,
-  source_citations: [],
+  source_citations: [
+    {
+      id: "cite_handout_1",
+      material_id: "mat_1",
+      chunk_id: "chunk_1",
+      material_name: "线代第一章.pdf",
+      page: "3",
+      page_index: 2,
+      hit_text: "向量空间定义",
+      sort_order: 1,
+    },
+  ],
   created_at: "2026-07-13T03:00:00+00:00",
   updated_at: "2026-07-13T03:00:00+00:00",
   deleted_at: null,
@@ -1248,7 +1259,8 @@ describe("study plan pages", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "取消完成" })).toBeInTheDocument());
-    expect(screen.getByText("打卡进度：2/2")).toBeInTheDocument();
+    expect(screen.getByText("打卡进度")).toBeInTheDocument();
+    expect(screen.getAllByText("2/2").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "取消完成" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "完成任务" })).toBeInTheDocument());
@@ -1324,11 +1336,14 @@ describe("study plan pages", () => {
     });
   });
 
-  it("shows an existing handout link without generating new content", async () => {
+  it("switches subtasks inside the execution workspace without leaving the page", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
-        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+        return Promise.resolve(successResponse(executionContext, "req_execution_1"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_2/execution-context")) {
+        return Promise.resolve(successResponse(quizExecutionContext, "req_execution_2"));
       }
 
       return Promise.resolve(successResponse({}));
@@ -1338,10 +1353,36 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes("/study-subtasks/subtask_1");
 
     expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看任务讲义" })).toHaveAttribute(
-      "href",
-      "/generated-contents/gen_handout_1",
-    );
+    fireEvent.click(screen.getAllByRole("button", { name: /切换到任务/ })[1]);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_2/execution-context",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    expect(screen.getByRole("button", { name: /完成|瀹屾垚/ })).toBeInTheDocument();
+  });
+
+  it("shows an existing handout preview without generating new content", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return Promise.resolve(successResponse(generatedHandout, "req_generated_content"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
+    expect(await screen.findByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成任务讲义" })).not.toBeInTheDocument();
   });
 
@@ -1437,10 +1478,8 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成任务讲义" }));
 
     expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看任务讲义" })).toHaveAttribute(
-      "href",
-      "/generated-contents/gen_handout_1",
-    );
+    expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
+    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1473,10 +1512,8 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成任务测试题" }));
 
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看任务测试题" })).toHaveAttribute(
-      "href",
-      "/generated-contents/gen_task_test_1",
-    );
+    expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
+    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.getByText("正确答案：A")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
@@ -1490,5 +1527,78 @@ describe("study plan pages", () => {
         }),
       );
     });
+  });
+
+  it("keeps switched task content independent and clears the background generation notice", async () => {
+    let resolveHandout: ((value: Response) => void) | undefined;
+    const pendingHandout = new Promise<Response>((resolve) => {
+      resolveHandout = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContext, "req_execution"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_2/execution-context")) {
+        return Promise.resolve(successResponse(quizExecutionContextWithTaskTest, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_task_test_1")) {
+        return Promise.resolve(successResponse(generatedTaskTest, "req_generated_content"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return pendingHandout;
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "生成任务讲义" }));
+    fireEvent.click(screen.getByRole("button", { name: /切换到任务 练习: 基础题/ }));
+
+    expect(await screen.findByRole("heading", { name: "练习: 基础题" })).toBeInTheDocument();
+    expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
+    expect(screen.getByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).toBeInTheDocument();
+    expect(screen.getByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).toBeInTheDocument();
+    expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
+
+    resolveHandout?.(successResponse(generatedHandout, "req_handout"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).not.toBeInTheDocument();
+    expect(screen.getByText("基础题任务测试题")).toBeInTheDocument();
+    expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
+  });
+
+  it("loads an existing task test detail when reopening the execution page", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_2/execution-context")) {
+        return Promise.resolve(successResponse(quizExecutionContextWithTaskTest, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_task_test_1")) {
+        return Promise.resolve(successResponse(generatedTaskTest, "req_generated_content"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_2");
+
+    expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
+    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
+    expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
+    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_task_test_1",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });
