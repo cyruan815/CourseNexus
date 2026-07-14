@@ -10,17 +10,19 @@
 - 课程详情左侧学习计划卡片读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时跳转创建页，有计划时计划标题跳转详情页。
 - 2026-07-13 C1 已将前端学习计划 API/type 适配层扩展到 S02 生命周期接口：配置解析、学前诊断问题、诊断 profile、preview、保存、列表、详情、重生成 preview、替换和删除。该变更只提供 adapter，不在现有页面启用诊断、重生成、替换或删除交互。
 - 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 只展示当前页面真实可编辑且仍无有效值的字段，系统追溯字段不展示为“需手动补齐”。
+- 2026-07-14 C13 已将创建页从配置表单页改为“学习目标 + 资料范围 + 必选学情诊断 + 预览确认”流程页。预览改为大 Modal，保存计划和重新生成都在 Modal 内完成；右侧常驻预览栏已移除。
 
 ## 创建页状态流转
 
-- 用户手动填写 `goal_text`、`start_date`、`end_date`、`daily_available_minutes`。
-- 用户也可以点击“自动解析配置”，用当前 `goal_text` 和固定 `material_scope` 请求配置解析；解析结果只作为表单回填，用户仍需确认后再生成 preview。
-- `material_scope` 当前固定为 `{ include_all_parsed_materials: true, material_ids: [] }`；资料范围选择器应进入 C4 完整创建向导或独立前置小提交，且只能提交具体资料 ID，不能提交文件夹 ID。
-- `preference` 由创建页学习方式控件维护，默认 `balanced`，解析回填可更新为 `fast_track`、`balanced`、`mastery` 或 `sprint`；API 仍只发送英文枚举，界面展示中文标签。
-- 点击“生成预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`。
+- 用户先填写自然语言 `goal_text`，选择 `material_scope`，再点击“开始学情诊断”。创建页不再一开始展示开始日期、结束日期、每日时长和学习方式的大表单。
+- 用户可以点击“自动解析配置”，用当前 `goal_text` 和当前 `material_scope` 请求配置解析；解析结果会回填目标、日期、每日时长和学习方式。
+- 当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。因此前端仅在自然语言未解析出日期时展示轻量“必要信息补齐”区域，作为后端契约兜底。
+- `daily_available_minutes` 不作为创建页必填项；只有自然语言解析出有效每日时长时才随 preview 请求提交，否则省略，让后端按资料量估算。`preference` 未解析时使用默认 `balanced`。
+- 点击“生成计划预览”前必须已有 `diagnostic_profile`，且资料范围内必须至少有一份 parsed 资料；否则不调用 preview。
+- 点击“生成计划预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`，成功后打开预览 Modal。
 - 前端保存产生预览时的请求快照；若表单字段在预览后变化，旧预览标记为过期并禁用保存。
 - 配置解析回填属于会改变 preview 请求体的操作；如果已有 preview，回填后必须标记为过期并禁用保存。
-- 点击“保存计划”调用 `POST /api/v1/courses/{course_id}/study-plans`，请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview 中展示过的 `tasks`；保存成功后跳转计划详情页。同一份未变化 preview 的保存重试复用同一个幂等键，只有重新生成 preview 后才创建新的保存幂等键。
+- Modal 内“重新生成”重新调用 preview；Modal 内“保存计划”调用 `POST /api/v1/courses/{course_id}/study-plans`，请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview 中展示过的 exact `tasks`；保存成功后跳转计划详情页。同一份未变化 preview 的保存重试复用同一个幂等键，只有重新生成 preview 后才创建新的保存幂等键。
 
 ## 详情页状态流转
 
@@ -76,13 +78,12 @@
 
 创建页已经从占位的“学情诊断 disabled”切换为真实轻量向导，入口为 `frontend/src/features/study-plans/components/DiagnosticWizard.tsx`，由 `frontend/src/pages/StudyPlanCreatePage.tsx` 挂载。
 
-- 点击“开始学情诊断”调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`，请求只发送当前 `goal_text` 和固定 `material_scope`。
+- 点击“开始学情诊断”调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`，请求发送当前 `goal_text`、当前 `material_scope` 和 `confirmed_config`。`confirmed_config` 包含前端已确认或已解析出的 `start_date`、`duration_days`、`preference`、`daily_available_minutes` 和 `daily_minutes_source`；字段可为 `null`。
 - 向导按后端返回的 `sort_order` 展示题目；`topic_mastery` 和 `weak_area` 使用单选，`diagnostic_note` 使用可选文本输入。
 - 点击“提交诊断”调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`，只把用户答案、`question_version` 和 `material_scope` 交给后端归纳，前端不伪造 profile。
 - 后端返回的 `StudyPlanDiagnosticProfile` 保存在创建页状态中；后续点击“生成预览”时作为 `diagnostic_profile` 放入 `StudyPlanPreviewRequest`。
-- 学情诊断是可选增强项；未完成诊断时，创建页仍允许直接生成 preview，且请求体不携带 `diagnostic_profile`。
-- 修改 `goal_text` 或重新获取诊断题会清空已有诊断 profile；修改日期或每日时长只会让 preview 过期，默认保留诊断结果。
-- 配置解析回填 `goal_text` 时同样清空已有诊断 profile；仅回填日期、每日时长或学习方式时保留已生成 profile，但旧 preview 仍过期。
+- 学情诊断在创建页为必填；未完成诊断时不允许生成 preview。
+- 修改 `goal_text` 或 `material_scope` 会清空已有诊断 profile；修改日期或解析回填每日时长、学习方式只会让 preview 过期，默认保留诊断结果。
 - 创建页会按 courseId 将 `goal_text`、日期、每日时长和已生成的诊断 profile 写入浏览器 `localStorage` 草稿；刷新页面后恢复这些输入，保存计划成功后清理草稿。preview 结果本身不持久化，刷新期间仍在运行的后端 preview 请求不会自动回填到新页面。
 - `NO_PARSED_MATERIAL` 在向导内提示先上传并等待资料解析完成；`DIAGNOSTIC_STALE` 提示重新获取问题并作答；其他错误透传 API message 或显示通用失败提示。
 
@@ -100,4 +101,15 @@
 - 配置解析、学前诊断问题、诊断 profile、preview 和 save 都读取同一份 `materialScope`。因此用户切换资料范围后，后续所有请求都会使用最新选择。
 - 资料范围变化会清空当前配置解析未补齐提示、清空已有 `diagnostic_profile`，并把已生成 preview 标记为过期，从而禁用保存，要求用户重新生成 preview。
 - 创建页草稿会随 courseId 持久化 `materialScope`，刷新后恢复用户选择；保存计划成功后仍清理草稿。
-- 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加“指定已解析资料进入 parse 和 preview 请求”的用例。当前本地 Vitest 仍受 `entities ./decode` exports 问题阻塞在测试收集前，需以 build 和后续依赖修复后的 Vitest 共同验证。
+- 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 覆盖“指定已解析资料进入 parse 和 preview 请求”、必选诊断、预览 Modal、保存幂等键复用和重新生成后幂等键刷新。
+
+## 2026-07-14 C13 创建页流程重构
+
+创建页已按后端诊断承接未解析信息的方向重构，但保留日期兜底以匹配当前后端强校验。
+
+- 页面主体只保留自然语言学习目标、资料范围选择器、必填学情诊断和生成预览入口；不再展示开始日期、结束日期、每日时长、学习方式的大表单。
+- 当前后端 preview / save 构建请求仍要求日期范围，因此当前端既没有从自然语言解析出日期，也没有草稿日期时，展示轻量“必要信息补齐”区域，只收集开始日期和结束日期。
+- 每日学习时长不再由创建页要求用户填写；只有自然语言解析出有效分钟数时才提交 `daily_available_minutes` 与 `daily_minutes_source = "user_text"`，否则由后端估算并在 preview 响应中展示“每日建议”。
+- `DiagnosticWizard` 语义从“可选”改为“必填 / 已完成”，并接收创建页传入的 `confirmedConfig` 后发送给 `study-plan-diagnostic-questions`。目标或资料范围变化会清空已有诊断结果。
+- 预览展示改为 Mantine 大 Modal；Modal 内展示任务树、日期、每日建议时长和容量提示，并提供“重新生成”和“保存计划”。创建页不再保留右侧工作台预览栏。
+- 保存仍走 `wizard_v1 + exact preview tasks + Idempotency-Key`，不在保存时重新生成计划。

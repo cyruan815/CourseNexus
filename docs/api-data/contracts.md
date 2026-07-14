@@ -210,7 +210,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 已实现 | 自然语言配置回填；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` | 已实现 | 基于目标、确认配置和当前 parsed 资料范围生成固定 3 个 topic 掌握问题、1 个薄弱方向问题和 1 个可选补充输入；模型失败或输出不足时 fallback 补足；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` | 已实现 | 校验 topic 仍属于当前资料范围，并归纳 `prior_knowledge_level`、`foundation_needed`、`weak_topics`、`weak_area` 和 `explanation_style`；不写数据库。 |
-| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于全部已解析资料、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy`、当前资料范围的 `generation_metadata.material_quality` 和基于最终任务树统计的 `capacity`。 |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于当前 `material_scope`、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，但当前 schema 仍要求 `start_date` 且要求 `end_date` 或 `duration_days` 至少一个。响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy`、当前资料范围的 `generation_metadata.material_quality` 和基于最终任务树统计的 `capacity`。当前前端创建页把学情诊断作为生成 preview 的必填前置条件。 |
 | `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；请求体 `client_flow` 默认为 `legacy`。新向导必须传 `client_flow = "wizard_v1"` 和 preview 中确认后的非空 `tasks`；旧客户端省略 `tasks` 时仍先生成 preview。 |
 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 已实现 | 基于已保存配置生成新 preview，不写数据库；请求覆盖项优先，未传 `diagnostic_profile` 时继承保存值。 |
 | `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |

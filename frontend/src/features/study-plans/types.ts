@@ -64,6 +64,13 @@ export interface StudyPlanConfigParseResponse {
 export interface StudyPlanDiagnosticQuestionRequest {
   goal_text: string;
   material_scope: MaterialScope;
+  confirmed_config?: {
+    start_date?: string | null;
+    duration_days?: number | null;
+    preference?: PlanPreference | null;
+    daily_available_minutes?: number | null;
+    daily_minutes_source?: DailyMinutesSource | null;
+  };
 }
 
 export interface StudyPlanDiagnosticQuestionOption {
@@ -84,7 +91,7 @@ export interface StudyPlanDiagnosticQuestion {
 }
 
 export interface StudyPlanDiagnosticQuestionsResponse {
-  question_version: "study_plan_diagnostic_v1";
+  question_version: "study_plan_diagnostic_v2";
   questions: StudyPlanDiagnosticQuestion[];
 }
 
@@ -95,7 +102,7 @@ export interface StudyPlanTopicMasteryAnswer {
 }
 
 export interface StudyPlanDiagnosticProfileRequest {
-  question_version: "study_plan_diagnostic_v1";
+  question_version: "study_plan_diagnostic_v2";
   topic_mastery: StudyPlanTopicMasteryAnswer[];
   weak_area: WeakArea;
   diagnostic_note?: string | null;
@@ -103,7 +110,7 @@ export interface StudyPlanDiagnosticProfileRequest {
 }
 
 export interface StudyPlanDiagnosticProfile {
-  question_version: "study_plan_diagnostic_v1";
+  question_version: "study_plan_diagnostic_v2";
   prior_knowledge_level: PriorKnowledgeLevel;
   foundation_needed: boolean;
   weak_topics: string[];
