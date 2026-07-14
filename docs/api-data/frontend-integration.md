@@ -672,7 +672,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 ### 3.23.1 任务内容生成
 
-`POST /api/v1/study-subtasks/{subtask_id}/handouts` 为 `learn` / `review` 二级任务生成今日讲义；`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 为 `quiz` / `test` 二级任务生成任务测试题。两个接口都要求 Bearer token，成功响应 `data` 为 `GeneratedContentRead`，失败响应使用统一 error envelope。
+`POST /api/v1/study-subtasks/{subtask_id}/handouts` 为 `learn` / `review` 二级任务生成任务讲义；`POST /api/v1/study-subtasks/{subtask_id}/task-tests` 为 `quiz` / `test` 二级任务生成任务测试题。两个接口都要求 Bearer token，成功响应 `data` 为 `GeneratedContentRead`，失败响应使用统一 error envelope。
 
 讲义请求：
 
@@ -712,7 +712,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 前端调用前应先通过 execution-context 获取 `task_test_content_id`，或通过 `GET /api/v1/generated-contents/{generated_content_id}` 确认内容为当前用户可访问的成功 `task_test`。错误响应仍使用统一 error envelope：`EXPORT_UNSUPPORTED_CONTENT_TYPE` 表示不是任务测试题；`EXPORT_CONTENT_NOT_READY` 表示生成未成功；`EXPORT_CONTENT_INVALID` 表示历史内容结构畸形；`NOT_FOUND` 表示内容不存在或不属于当前用户。
 
 
-### 3.23.3 今日讲义 PDF 导出
+### 3.23.3 任务讲义 PDF 导出
 
 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 导出已成功生成的 `handout` PDF 文件。接口要求 Bearer token，成功时直接返回 `application/pdf` 文件流，`Content-Disposition` 文件名为 `handout-{generated_content_id}.pdf`，不包统一 `{data, meta}` envelope。
 
@@ -1198,7 +1198,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 - 学习计划保存后的 `parsed_config_json.task_snapshot` 会保留 quiz/test 子任务的 `generation_parameters.task_test` 默认参数。前端后续调用 task-test 生成时可省略 `parameters`，后端会使用计划默认值；若前端显式传入字段，则以请求值覆盖默认值。
 - `GeneratedContentRead.source_citations` 是保留逐条引用能力的事实来源。新生成 handout 不再提供逐条引用，前端不要展示引用侧栏；`task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id，前端展示 task_test 引用时按 `source_citations[].id` 建映射。
 - 任务测试题 Markdown 导出在有效引用存在时不应出现 `Sources: unavailable`；若出现该文本，应视为引用链断裂或历史坏数据。
-- 今日讲义 PDF 混排由后端 renderer 处理：中文使用 `STSong-Light`，英文、数字、公式和 `Overview`、`Nyquist/Shannon` 等术语使用 `Helvetica`。前端只按文件流下载或预览，不需要自行修复字体。
+- 任务讲义 PDF 混排由后端 renderer 处理。后端生成阶段不正则改写数学公式；模型应按 prompt 输出 `$...$` / `$$...$$`，前端 Markdown 详情页和 PDF renderer 分别负责数学排版。
 
 ### 3.23.4 任务讲义详情前端展示契约
 
