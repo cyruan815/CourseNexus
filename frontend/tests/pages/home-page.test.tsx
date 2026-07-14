@@ -145,10 +145,13 @@ function renderHomePage() {
 
 describe("HomePage", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 6, 14, 12));
     Element.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     localStorage.clear();
     vi.unstubAllGlobals();
   });
