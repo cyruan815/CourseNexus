@@ -132,6 +132,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- 变量解释用普通 Markdown 列表，不要混进公式块。",
             "- 输出前检查所有数学公式分隔符。",
             "- 对比内容使用 Markdown 表格。",
+            "- 自测题或填空题的空格线使用全角低线，例如：＿＿＿＿；不要使用连续 ASCII 下划线 ______，避免 Markdown 渲染吞掉填空线。",
             "- 如果课程材料不足以支持某个结论，明确说明课程材料未提供足够信息，不要自行编造。",
             "- 只服务当前 subtask 的学习目标，不生成整章摘要或泛泛课程总结。",
         ]

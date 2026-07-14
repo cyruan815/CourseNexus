@@ -132,7 +132,7 @@ flowchart TB
 | `todos-calendar` | 首页今日待办、首页大日历、全局当日待办弹窗、课程详情页今日任务和课程月历查询。 | 不拥有主写模型，读取 `StudyPlan`、`StudyTask`、`StudySubTask`。 | 日期摘要、最多 3 条任务摘要、课程分组、二级任务数组、执行跳转 ID 和计划详情 `plan_id`。 | 不创建、编辑、删除或重新生成学习计划；不创建 `todos` 或 `calendar_events` 表；不实现 S04-S07。 |
 | `learning-execution` | 查询今日任务、展示执行上下文、更新二级任务完成状态，并编排 S06 任务内容按需生成。 | `StudySubTask.status`、派生更新 `StudyTask.status`；S06 写入 `AIGeneratedContent(content_type=handout/task_test)`；`task_test` 继续写 `SourceCitation`，新生成 `handout` 不写逐条引用。 | 今日任务、任务完成结果、执行页上下文、任务讲义和任务测试题生成结果。 | 不生成计划，不管理资料，不直接修改打卡算法。 |
 | `checkins` | 根据当日二级任务完成比例维护学习完成记录和颜色等级。 | `CheckinRecord`。 | `completion_ratio`、`color_level`。 | 不做完整统计报表，不做手动打卡。 |
-| `exports` | 将已生成 handout Markdown 导出 Markdown/PDF，将 task_test 导出 Markdown。 | 不拥有业务表，读取 `AIGeneratedContent`；task_test 导出可读取 `SourceCitation`。 | Markdown 或 PDF 文件流。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表。 |
+| `exports` | 将已生成 handout Markdown 导出 Markdown/PDF，将 task_test 导出 Markdown。 | 不拥有业务表，读取 `AIGeneratedContent`；task_test 导出可读取 `SourceCitation`；handout PDF 可在导出用临时 HTML 中使用本地 KaTeX 做数学排版。 | Markdown 或 PDF 文件流。 | 不生成讲义正文或测试题正文；不创建 `export_records` 表；不改变前端详情页渲染职责。 |
 
 ## 5. 独立生成模块的统一契约
 

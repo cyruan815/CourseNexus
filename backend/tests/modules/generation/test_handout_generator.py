@@ -94,6 +94,8 @@ def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() 
     assert "块级公式只使用独立的 $$...$$" in prompt
     assert "禁止使用 \\(...\\) 和 \\[...\\]" in prompt
     assert "禁止用单独一行的 [ 和 ] 包裹公式" in prompt
+    assert "自测题或填空题的空格线使用全角低线" in prompt
+    assert "不要使用连续 ASCII 下划线 ______" in prompt
     assert "不要输出 JSON" in prompt
     assert "不要输出 HTML" in prompt
     assert "不要写 citation marker" in prompt
