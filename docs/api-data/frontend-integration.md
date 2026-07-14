@@ -1196,7 +1196,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 - Course QA 和执行页任务级 QA 的前端接口、请求体和响应体不变；后端在 `/responses` 404 时会自动回退 Chat Completions，前端不需要区分模型接口形态。
 - 学习计划保存后的 `parsed_config_json.task_snapshot` 会保留 quiz/test 子任务的 `generation_parameters.task_test` 默认参数。前端后续调用 task-test 生成时可省略 `parameters`，后端会使用计划默认值；若前端显式传入字段，则以请求值覆盖默认值。
-- `GeneratedContentRead.source_citations` 是保留逐条引用能力的事实来源。新生成 handout 不再提供逐条引用，前端不要展示引用侧栏；`task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id，前端展示 task_test 引用时按 `source_citations[].id` 建映射。
+- `GeneratedContentRead.source_citations` 是保留逐条引用能力的事实来源。新生成 handout 不再提供逐条引用；`task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id，后端导出和内部追溯按 `source_citations[].id` 建映射。生成内容详情页不展示引用侧栏。
 - 任务测试题 Markdown 导出在有效引用存在时不应出现 `Sources: unavailable`；若出现该文本，应视为引用链断裂或历史坏数据。
 - 任务讲义 PDF 混排由后端 renderer 处理。后端生成阶段不正则改写数学公式；模型应按 prompt 输出 `$...$` / `$$...$$`。PDF renderer 在临时 HTML 中使用本地 KaTeX 排版公式；前端 Markdown 详情页若要漂亮显示公式，需要前端 renderer 另行接入数学渲染。
 
@@ -1234,4 +1234,4 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 - 新生成 handout 不提供逐条 `source_citations`，详情页不要展示引用侧栏、引用列表、逐节来源入口，也不要显示“当前没有可展示的引用来源”空引用面板。
 - 旧 `content_json.sections/blocks` 结构化 handout 不再作为新数据兼容目标；前端可以按通用畸形内容兜底处理。
 
-`task_test` 暂时保持结构化 JSON 展示和逐题引用逻辑，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`，引用侧栏仍按 `source_citations` 展示。
+`task_test` 暂时保持结构化 JSON 展示和逐题引用数据，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`。逐题引用继续用于后端导出和内部追溯，生成内容详情页不展示引用侧栏。
