@@ -570,7 +570,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 规则：
 
-- `mastery_status` 支持 `unknown`、`not_mastered`、`mastered`。
+- `mastery_status` 当前固定为 `unknown`；答对 / 答错和错卡重练只存在前端页面内存，不写入该字段。
+- Flashcard 编辑接口按完整牌组替换 `cards`，牌组数量为 1-100，正面规范化后不可重复；保存时重新生成连续 `card_001...` 和 `sort_order`。
 - v0.1 不实现复杂间隔复习算法。
 
 ### mindmap
