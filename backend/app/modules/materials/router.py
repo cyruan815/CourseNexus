@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_rag_index, get_required_user
@@ -27,6 +28,7 @@ from app.modules.materials.service import (
     delete_material_folder,
     delete_material,
     get_material_detail,
+    get_material_pdf_content,
     list_material_folders,
     list_course_materials,
     move_material_to_folder,
@@ -178,6 +180,28 @@ def get_material_endpoint(
 ) -> dict[str, object]:
     material = get_material_detail(db, current_user.id, material_id)
     return success_response(_material_data(material), request_id=get_request_id(request))
+
+
+@router.get("/materials/{material_id}/content", response_class=FileResponse)
+def get_material_content_endpoint(
+    material_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+    storage: FileStorage = Depends(get_material_storage),
+) -> FileResponse:
+    material, file_path = get_material_pdf_content(
+        db,
+        user_id=current_user.id,
+        material_id=material_id,
+        storage_root=getattr(storage, "root_path", get_settings().file_storage_path),
+    )
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=material.name,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.patch("/materials/{material_id}")

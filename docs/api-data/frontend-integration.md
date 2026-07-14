@@ -368,6 +368,14 @@
 
 重命名只修改用户可见的 `name` 和 `updated_at`，不修改 `file_url`、`source_url`、解析状态、chunk 或向量索引，也不回写历史 `SourceCitation.material_name`。
 
+### 3.14.2 PDF 资料原文预览
+
+`GET /api/v1/materials/{material_id}/content`
+
+要求：Bearer token。只能读取当前用户自己的本地 PDF 资料。成功时直接返回 `application/pdf` 文件流，`Content-Disposition` 为 `inline`，不包统一 `{data, meta}` envelope，并通过 `Cache-Control: private, no-store` 避免缓存私有资料。
+
+当前非 PDF 或链接资料返回 `415 PREVIEW_UNSUPPORTED`；原文文件丢失或存储路径不可用返回 `404 PREVIEW_FILE_UNAVAILABLE`；资料不存在或不属于当前用户统一返回 `404 NOT_FOUND`。前端应使用带鉴权头的 `fetch` 读取 Blob，再用临时 object URL 在页面弹窗内展示；不得直接访问 `file_url`。
+
 ### 3.15 资料删除
 
 `DELETE /api/v1/materials/{material_id}`

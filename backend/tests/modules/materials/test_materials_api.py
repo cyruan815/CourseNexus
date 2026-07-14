@@ -129,6 +129,51 @@ def test_create_link_material(client: TestClient) -> None:
     assert material["source_url"] == "https://example.com/course"
 
 
+def test_preview_pdf_material_returns_owned_original_file(client: TestClient) -> None:
+    token = register_and_token(client, "alice")
+    course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
+    pdf_content = b"%PDF-1.4\nCourseNexus preview\n%%EOF"
+    upload_response = client.post(
+        f"/api/v1/courses/{course_id}/materials",
+        headers=headers,
+        files={"file": ("第一章.pdf", pdf_content, "application/pdf")},
+    )
+    material_id = upload_response.json()["data"]["id"]
+
+    response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
+
+    assert response.status_code == 200
+    assert response.content == pdf_content
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "private, no-store"
+    assert response.headers["content-disposition"].startswith("inline;")
+
+
+def test_preview_material_rejects_unsupported_type_and_cross_user_access(client: TestClient) -> None:
+    alice_token = register_and_token(client, "alice")
+    bob_token = register_and_token(client, "bob")
+    alice_course_id = create_course(client, alice_token)
+    headers = {"Authorization": f"Bearer {alice_token}"}
+    upload_response = client.post(
+        f"/api/v1/courses/{alice_course_id}/materials",
+        headers=headers,
+        files={"file": ("notes.md", b"# Intro", "text/markdown")},
+    )
+    material_id = upload_response.json()["data"]["id"]
+
+    unsupported_response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
+    cross_user_response = client.get(
+        f"/api/v1/materials/{material_id}/content",
+        headers={"Authorization": f"Bearer {bob_token}"},
+    )
+
+    assert unsupported_response.status_code == 415
+    assert unsupported_response.json()["error"]["code"] == "PREVIEW_UNSUPPORTED"
+    assert cross_user_response.status_code == 404
+    assert cross_user_response.json()["error"]["code"] == "NOT_FOUND"
+
+
 def test_parse_retry_parses_uploaded_text_material(client: TestClient) -> None:
     token = register_and_token(client, "alice")
     course_id = create_course(client, token)

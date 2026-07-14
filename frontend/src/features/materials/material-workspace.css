@@ -182,6 +182,26 @@
   white-space: nowrap;
 }
 
+.material-workspace button.material-workspace__file-name-button {
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  min-height: 28px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.material-workspace button.material-workspace__file-name-button:hover {
+  color: #1769aa;
+  text-decoration: underline;
+}
+
+.material-workspace button.material-workspace__file-name-button:focus-visible {
+  outline: 2px solid #1769aa;
+  outline-offset: 2px;
+}
+
 .material-workspace__status {
   color: #5b6570;
   font-size: 13px;
@@ -383,6 +403,32 @@
   position: absolute;
   white-space: nowrap;
   width: 1px;
+}
+
+.material-workspace__preview-modal {
+  height: min(86vh, 920px);
+}
+
+.material-workspace__preview-body {
+  display: flex;
+  height: calc(100% - 60px);
+  padding: 0;
+}
+
+.material-workspace__preview-content {
+  align-items: center;
+  background: #eef1f4;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.material-workspace__preview-content iframe {
+  border: 0;
+  height: 100%;
+  width: 100%;
 }
 
 @media (max-width: 760px) {

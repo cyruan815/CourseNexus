@@ -125,6 +125,46 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     return material
 
 
+def get_material_pdf_content(
+    db: Session,
+    *,
+    user_id: str,
+    material_id: str,
+    storage_root: str | Path,
+) -> tuple[CourseMaterial, Path]:
+    material = get_material_detail(db, user_id, material_id)
+    if (
+        material.source_type != "file"
+        or material.material_type != "pdf"
+        or material.mime_type != "application/pdf"
+        or material.file_url is None
+    ):
+        raise CourseNexusError(
+            code="PREVIEW_UNSUPPORTED",
+            message="当前仅支持预览 PDF 资料",
+            status_code=415,
+        )
+
+    root_path = Path(storage_root).resolve()
+    file_path = (root_path / material.file_url).resolve()
+    try:
+        file_path.relative_to(root_path)
+    except ValueError as exc:
+        raise CourseNexusError(
+            code="PREVIEW_FILE_UNAVAILABLE",
+            message="资料原文件不可用",
+            status_code=404,
+        ) from exc
+
+    if not file_path.is_file():
+        raise CourseNexusError(
+            code="PREVIEW_FILE_UNAVAILABLE",
+            message="资料原文件不可用",
+            status_code=404,
+        )
+    return material, file_path
+
+
 def rename_material(
     db: Session,
     *,

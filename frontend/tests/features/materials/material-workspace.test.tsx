@@ -79,8 +79,39 @@ async function findFirstFolderToggle() {
 
 describe("MaterialWorkspace", () => {
   beforeEach(() => {
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:material-preview"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
     vi.mocked(materialsApi.listMaterialFolders).mockResolvedValue([folder]);
     vi.mocked(materialsApi.listMaterials).mockResolvedValue(materials);
+  });
+
+  it("opens a PDF preview modal when clicking the material name", async () => {
+    vi.mocked(materialsApi.getMaterialPdf).mockResolvedValue(
+      new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+    );
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "预览资料 第一章.pdf" }));
+
+    expect(await screen.findByRole("dialog", { name: "第一章.pdf" })).toBeInTheDocument();
+    await waitFor(() => expect(materialsApi.getMaterialPdf).toHaveBeenCalledWith("mat_1"));
+    expect(await screen.findByTitle("第一章.pdf PDF 预览")).toHaveAttribute("src", "blob:material-preview");
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭资料预览" }));
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:material-preview");
   });
 
   it("uses folders only for organization and selects individual parsed files", async () => {

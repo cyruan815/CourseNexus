@@ -1,4 +1,4 @@
-import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 import { IconDotsVertical, IconUpload, IconX } from "@tabler/icons-react";
 
@@ -8,6 +8,7 @@ import {
   createMaterialLink,
   deleteMaterial,
   deleteMaterialFolder,
+  getMaterialPdf,
   listMaterialFolders,
   listMaterials,
   moveMaterialToFolder,
@@ -89,6 +90,11 @@ export function MaterialWorkspace({
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const previewRequestId = useRef(0);
 
   useEffect(() => {
     let ignore = false;
@@ -129,6 +135,15 @@ export function MaterialWorkspace({
     document.addEventListener("mousedown", closeContextMenu);
     return () => document.removeEventListener("mousedown", closeContextMenu);
   }, [contextMenu]);
+
+  useEffect(
+    () => () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    },
+    [previewUrl],
+  );
 
   const parsedMaterialIds = useMemo(
     () => materials.filter((material) => material.parse_status === "parsed").map((material) => material.id),
@@ -439,6 +454,40 @@ export function MaterialWorkspace({
     });
   }
 
+  async function openPdfPreview(material: Material) {
+    const requestId = previewRequestId.current + 1;
+    previewRequestId.current = requestId;
+    setPreviewMaterial(material);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setIsPreviewLoading(true);
+    try {
+      const blob = await getMaterialPdf(material.id);
+      const objectUrl = URL.createObjectURL(blob);
+      if (previewRequestId.current !== requestId) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      setPreviewUrl(objectUrl);
+    } catch (nextError) {
+      if (previewRequestId.current === requestId) {
+        setPreviewError(errorMessage(nextError));
+      }
+    } finally {
+      if (previewRequestId.current === requestId) {
+        setIsPreviewLoading(false);
+      }
+    }
+  }
+
+  function closePdfPreview() {
+    previewRequestId.current += 1;
+    setPreviewMaterial(null);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setIsPreviewLoading(false);
+  }
+
   function renderMaterialRow(material: Material) {
     const isParsed = material.parse_status === "parsed";
     const checked = isParsed && materialScope.material_ids.includes(material.id);
@@ -450,7 +499,7 @@ export function MaterialWorkspace({
         key={material.id}
         onDragStart={() => setDraggedMaterialId(material.id)}
       >
-        <label
+        <div
           className="material-workspace__material-select"
           onClick={(event) => {
             if (!isParsed) {
@@ -470,8 +519,22 @@ export function MaterialWorkspace({
           <span className="material-workspace__file-icon" aria-hidden>
             {material.source_type === "url" ? "Link" : "File"}
           </span>
-          <span className="material-workspace__file-name">{material.name}</span>
-        </label>
+          {material.source_type === "file" && material.material_type === "pdf" ? (
+            <button
+              aria-label={`预览资料 ${material.name}`}
+              className="material-workspace__file-name material-workspace__file-name-button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void openPdfPreview(material);
+              }}
+              type="button"
+            >
+              {material.name}
+            </button>
+          ) : (
+            <span className="material-workspace__file-name">{material.name}</span>
+          )}
+        </div>
         <span className={`material-workspace__status material-workspace__status--${material.parse_status}`}>
           {statusText(material.parse_status)}
         </span>
@@ -722,7 +785,51 @@ export function MaterialWorkspace({
         target={actionTarget}
         url={actionUrl}
       />
+      <PdfPreviewModal
+        error={previewError}
+        isLoading={isPreviewLoading}
+        material={previewMaterial}
+        onClose={closePdfPreview}
+        url={previewUrl}
+      />
     </section>
+  );
+}
+
+function PdfPreviewModal({
+  error,
+  isLoading,
+  material,
+  onClose,
+  url,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  material: Material | null;
+  onClose: () => void;
+  url: string | null;
+}) {
+  return (
+    <Modal
+      centered
+      classNames={{ body: "material-workspace__preview-body", content: "material-workspace__preview-modal" }}
+      closeButtonProps={{ "aria-label": "关闭资料预览" }}
+      onClose={onClose}
+      opened={Boolean(material)}
+      size="min(1120px, calc(100vw - 32px))"
+      title={material?.name}
+      transitionProps={{ duration: 0 }}
+    >
+      <div className="material-workspace__preview-content">
+        {isLoading ? <Text role="status">正在加载 PDF...</Text> : null}
+        {error ? (
+          <Alert color="red" role="alert" title="预览失败" variant="light">
+            {error}
+          </Alert>
+        ) : null}
+        {url && material ? <iframe src={url} title={`${material.name} PDF 预览`} /> : null}
+      </div>
+    </Modal>
   );
 }
 

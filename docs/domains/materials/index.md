@@ -6,7 +6,7 @@
 
 一级文件夹只帮助用户整理和浏览资料，不代表 Agent 上下文。用户可以使用课程全部已解析资料，或选择一个、多个具体资料；不能选择整个文件夹。
 
-当前非目标包括嵌套目录、资料正文预览、下载、后台解析队列和链接内容抓取。
+当前非目标包括嵌套目录、非 PDF 资料正文预览、下载、后台解析队列和链接内容抓取。
 
 ## 2. 所有权与代码地图
 
@@ -14,7 +14,7 @@
 - 历史引用脱钩边界：`backend/app/modules/course_qa/citations.py`，只允许资料删除流程清空引用外键，不删除问答或生成内容。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，包括顶部工具栏、搜索、文件夹折叠、空白区域右键菜单、文件夹右键菜单、资料右键菜单和拖拽资料移动到文件夹。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击 PDF 资料名称在页面悬浮弹窗中预览原文。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -44,6 +44,7 @@ flowchart LR
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；用户确认删除后物理移除。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
+- PDF 原文通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、PDF 类型、实际文件存在性和解析后路径仍在存储根目录内。
 - 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
 - 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。
@@ -115,6 +116,13 @@ PDF 解析：
 3. 只更新 `CourseMaterial.name` 和 `updated_at`，不调用文件存储、Parser 或 RagIndex。
 4. 历史 `SourceCitation.material_name` 作为生成时快照保留原值，新问答使用重命名后的资料名。
 
+PDF 原文预览：
+
+1. 按当前用户读取未删除资料，先完成所有权隔离，再校验 `source_type = file`、`material_type = pdf` 和 PDF MIME 类型。
+2. 将内部 `file_url` 拼接到存储根目录并解析真实路径；路径逃逸存储根目录或文件不存在时返回 `PREVIEW_FILE_UNAVAILABLE`。
+3. 后端以 `application/pdf`、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
+4. 前端带 Bearer token 拉取完整 Blob，创建临时 object URL 交给弹窗内浏览器 PDF 查看器；关闭、替换预览或组件卸载时释放 URL，过期异步请求的结果也会立即释放。
+
 ### 5.3 复杂度与资源预算
 
 - 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
@@ -123,13 +131,14 @@ PDF 解析：
 - 正常级联删除不调用 Embedding；只有 RAG 或数据库失败后的补偿恢复才会重新计算被恢复 chunk 的 embedding。补偿仍失败时必须使用 `rebuild_rag_index` 运维命令恢复派生索引。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 - PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
+- 预览大小为 `s` 字节的 PDF 时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 和浏览器查看器的时间、网络和内存预算均为 `O(s)`。上传上限使单份预览原文件当前不超过 50 MiB，不调用 Parser、RAG、Embedding 或模型。
 
 ## 6. 测试与验收
 
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、PDF 名称点击预览、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、链接资料创建、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 - 真实 PDF 从上传、Docling 解析、Chroma 写入到资料/文件夹物理删除的端到端验证：[validation/real-pdf-permanent-deletion-e2e-2026-07-13.md](validation/real-pdf-permanent-deletion-e2e-2026-07-13.md)。
 
@@ -147,6 +156,7 @@ pnpm frontend:build
 - 2026-07-12 前端确认课程创建成功后由课程详情页资料区弹出可关闭的上传提示；创建课程弹窗本身不承载资料上传。
 - 2026-07-12 前端补齐资料区资源管理器式交互：页面不再同时展示旧侧栏和资料下拉视图，改为单一文件夹树列表；资料区底部空白区域右键可新建文件夹、上传资料或添加链接；资料右键可重命名、解析或删除；文件夹右键可重命名、上传到此文件夹或删除；资料可拖拽到文件夹或未分类完成移动；左键点击其他位置会关闭右键菜单。当前新建文件夹、添加链接、重命名和删除均使用 Mantine 弹窗，不使用浏览器原生 confirm / prompt；接口失败时保留现有列表并展示后端错误。
 - 2026-07-13 资料删除统一为不可恢复的物理删除：删除资料记录、SQLite chunk、RAG 向量和原始文件；问答与生成内容保留，引用退化为无资料外键的快照。SQLite、Chroma 和文件系统不共享事务，因此使用文件暂存、RAG 快照和失败补偿保证同步请求的一致性。
+- 2026-07-15 资料工作区支持点击 PDF 资料名称打开悬浮预览窗；前端使用鉴权请求获取 Blob 并在关闭或替换时释放 object URL，后端仅向当前用户返回位于存储根目录内的 PDF 原文。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
