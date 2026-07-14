@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.integrations.model_provider.mock import MockModelProvider
-from app.modules.generation.generators.handout.generator import HandoutGenerator, normalize_markdown_math
+from app.modules.generation.generators.handout.generator import HandoutGenerator
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch, MaterialContextResult
 
 
@@ -91,8 +91,9 @@ def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() 
     assert "请直接输出一份完整 Markdown 讲义" in prompt
     assert "讲义标题必须是：物理层概念与通信基础讲义" in prompt
     assert "一级标题下一段必须原样写入来源说明：本讲义基于《计算机网络.pdf》中“物理层概念与通信基础”相关内容生成。" in prompt
-    assert "块级数学公式必须使用 $$ 独立公式块" in prompt
-    assert "不要使用 \\[...\\] 或单独一行 [ / ] 包裹公式" in prompt
+    assert "块级公式只使用独立的 $$...$$" in prompt
+    assert "禁止使用 \\(...\\) 和 \\[...\\]" in prompt
+    assert "禁止用单独一行的 [ 和 ] 包裹公式" in prompt
     assert "不要输出 JSON" in prompt
     assert "不要输出 HTML" in prompt
     assert "不要写 citation marker" in prompt
@@ -106,64 +107,89 @@ def test_handout_generator_strips_markdown_code_fence_wrappers() -> None:
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
         expected_material_ids=frozenset({"mat_1"}),
-        parameters={},
+        parameters={"handout_title": "主键讲义"},
     )
 
     assert output.content == "# 主键讲义\n\n正文"
 
 
 
-def test_handout_generator_normalizes_bracket_wrapped_latex_blocks() -> None:
+def test_handout_generator_preserves_markdown_math_delimiters_verbatim() -> None:
     provider = PromptCapturingTextProvider(
-        "# 信噪比讲义\n\n"
-        "从 dB 转换为线性比值：\n\n"
-        "[\n"
-        "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
-        "]\n\n"
-        "也可以写为：\n\n"
-        "\\[\n"
-        "\\text{SNR (dB)} = 10 \\log_{10}\\left(\\frac{S}{N}\\right)\n"
-        "\\]\n\n"
-        "行内公式 \\(C = B \\log_2(1 + S/N)\\) 用来说明信道容量。"
+        "# 错误标题\n\n"
+        "## 概览\n\n"
+        "行内公式 $C = B \\log_2(1 + S/N)$ 保持原样。\n\n"
+        "$$\nC = B \\log_2(1 + S/N)\n$$"
     )
 
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
         expected_material_ids=frozenset({"mat_1"}),
-        parameters={},
+        parameters={"handout_title": "信道容量讲义", "source_note": "本讲义基于《数据库讲义.pdf》中“信道容量”相关内容生成。"},
     )
 
-    assert "[\n\\frac" not in output.content
-    assert "\\[\n" not in output.content
-    assert "\\(" not in output.content
-    assert "$$\n\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n$$" in output.content
-    assert "$$\n\\text{SNR (dB)} = 10 \\log_{10}\\left(\\frac{S}{N}\\right)\n$$" in output.content
-    assert "$C = B \\log_2(1 + S/N)$" in output.content
-
-
-def test_normalize_markdown_math_converts_single_line_latex_block() -> None:
-    markdown = "单行公式：\\[C = B \\log_2(1 + S/N)\\]"
-
-    assert normalize_markdown_math(markdown) == "单行公式：$$\nC = B \\log_2(1 + S/N)\n$$"
-
-
-def test_normalize_markdown_math_keeps_regular_markdown_brackets() -> None:
-    markdown = "\n".join(
-        [
-            "# 普通说明",
-            "",
-            "链接 [CourseNexus](https://example.com) 应保持不变。",
-            "",
-            "- 选项列表：",
-            "[",
-            "alpha, beta, gamma",
-            "]",
-            "",
-            "- [ ] 待办项也应保持不变。",
-        ]
+    assert output.content == (
+        "# 信道容量讲义\n\n"
+        "本讲义基于《数据库讲义.pdf》中“信道容量”相关内容生成。\n\n"
+        "## 概览\n\n"
+        "行内公式 $C = B \\log_2(1 + S/N)$ 保持原样。\n\n"
+        "$$\nC = B \\log_2(1 + S/N)\n$$"
     )
 
-    assert normalize_markdown_math(markdown) == markdown
+
+def test_handout_generator_does_not_rewrite_code_or_regular_brackets() -> None:
+    markdown = (
+        "# 主键讲义\n\n"
+        "普通链接 [CourseNexus](https://example.com) 保持不变。\n\n"
+        "行内代码 `\\[x\\]` 保持不变。\n\n"
+        "```text\n"
+        "[\n"
+        "\\frac{S}{N}\n"
+        "]\n"
+        "```\n\n"
+        "- [ ] 待办项保持不变。"
+    )
+    provider = PromptCapturingTextProvider(markdown)
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "主键讲义"},
+    )
+
+    assert "[CourseNexus](https://example.com)" in output.content
+    assert "`\\[x\\]`" in output.content
+    assert "```text\n[\n\\frac{S}{N}\n]\n```" in output.content
+    assert "- [ ] 待办项保持不变。" in output.content
+
+
+def test_handout_generator_replaces_model_heading_and_deduplicates_source_note() -> None:
+    provider = PromptCapturingTextProvider(
+        "# 模型乱写标题\n\n"
+        "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n"
+        "## 概览\n\n正文"
+    )
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "主键讲义", "source_note": "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。"},
+    )
+
+    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n正文"
+
+
+def test_handout_generator_adds_heading_when_model_omits_heading() -> None:
+    provider = PromptCapturingTextProvider("## 概览\n\n正文")
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "主键讲义", "source_note": "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。"},
+    )
+
+    assert output.content.startswith("# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览")
+
 def test_handout_generator_rejects_empty_markdown() -> None:
     provider = PromptCapturingTextProvider("   ")
 

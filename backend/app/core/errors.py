@@ -60,7 +60,8 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         request_id = get_request_id(request)
-        locations = [".".join(str(part) for part in error["loc"]) for error in exc.errors()]
+        validation_errors = _serializable_validation_errors(exc)
+        locations = [".".join(str(part) for part in error["loc"]) for error in validation_errors]
         logger.warning(
             "请求失败：请求参数不合法 | code=VALIDATION_ERROR method=%s path=%s fields=%s",
             request.method,
@@ -73,7 +74,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=error_response(
                 code="VALIDATION_ERROR",
                 message="请求参数不合法",
-                details={"errors": exc.errors()},
+                details={"errors": validation_errors},
                 request_id=request_id,
             ),
         )
@@ -97,6 +98,17 @@ def register_exception_handlers(app: FastAPI) -> None:
                 request_id=request_id,
             ),
         )
+
+
+def _serializable_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
+    errors: list[dict[str, Any]] = []
+    for error in exc.errors():
+        cleaned = dict(error)
+        ctx = cleaned.get("ctx")
+        if isinstance(ctx, dict):
+            cleaned["ctx"] = {key: str(value) for key, value in ctx.items()}
+        errors.append(cleaned)
+    return errors
 
 
 def _business_error_level(status_code: int) -> int:

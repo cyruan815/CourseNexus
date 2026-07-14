@@ -20,7 +20,7 @@ DEMO_USER_ID = "usr_demo_generated_content"
 DEMO_COURSE_ID = "crs_demo_generated_content"
 DEMO_MATERIAL_ID = "mat_demo_generated_content"
 DEMO_CHUNK_ID = "chk_demo_generated_content"
-DEMO_CONTENT_ID = "gen_demo_outline"
+DEMO_CONTENT_ID = "gen_demo_handout"
 
 
 @dataclass(frozen=True)
@@ -40,15 +40,15 @@ def seed_demo_generated_content(
     user = db.get(User, DEMO_USER_ID) or User(id=DEMO_USER_ID, username=username)
     user.username = username
     user.password_hash = hash_password(password)
-    user.nickname = "Generated Content Demo"
+    user.nickname = "Handout Markdown Demo"
     user.status = "active"
     user.deleted_at = None
     db.add(user)
 
-    course = db.get(Course, DEMO_COURSE_ID) or Course(id=DEMO_COURSE_ID, user_id=user.id, name="Generation Demo")
+    course = db.get(Course, DEMO_COURSE_ID) or Course(id=DEMO_COURSE_ID, user_id=user.id, name="Handout Markdown Demo")
     course.user_id = user.id
-    course.name = "Generation Demo"
-    course.description = "Local generated-content detail demo"
+    course.name = "Handout Markdown Demo"
+    course.description = "Local handout Markdown detail demo"
     course.teacher = "CourseNexus"
     course.term = "2025-2026-spring"
     course.status = "active"
@@ -84,18 +84,23 @@ def seed_demo_generated_content(
 
     content = db.get(AIGeneratedContent, DEMO_CONTENT_ID) or AIGeneratedContent(
         id=DEMO_CONTENT_ID, user_id=user.id, course_id=course.id,
-        content_type="outline", title="Generated Outline Demo",
+        content_type="handout", title="Functions and Limits讲义",
     )
     content.user_id = user.id
     content.course_id = course.id
-    content.content_type = "outline"
-    content.title = "Generated Outline Demo"
-    content.content = None
-    content.content_json = {"sections": [{
-        "id": "sec_001", "title": "1. Functions and Limits",
-        "summary": "Review limit definitions and common calculations.",
-        "review_suggestion": "Review the definition before examples.", "sort_order": 1,
-    }]}
+    content.content_type = "handout"
+    content.title = "Functions and Limits讲义"
+    content.content = (
+        "# Functions and Limits讲义\n\n"
+        "本讲义基于《demo.md》中“Functions and Limits”相关内容生成。\n\n"
+        "## Overview\n\n"
+        "Limits describe how a function changes near a point. They are the foundation for continuity and derivatives.\n\n"
+        "## Key Formula\n\n"
+        "$$\n\\lim_{x \\to a} f(x) = L\n$$\n\n"
+        "## Summary\n\n"
+        "Use the Markdown body as the canonical handout content; structured section JSON is not created for new handouts."
+    )
+    content.content_json = {"format": "markdown", "schema_version": 1}
     content.generation_status = "success"
     content.material_scope_json = {"include_all_parsed_materials": True, "material_ids": []}
     content.error_code = None
