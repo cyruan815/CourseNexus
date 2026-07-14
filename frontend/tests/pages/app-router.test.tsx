@@ -32,31 +32,50 @@ describe("AppRouter", () => {
   it("renders home for authenticated users", async () => {
     setSessionToken("token-123");
     window.history.pushState({}, "", "/");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      const response = (data: unknown, requestId: string) => Promise.resolve(
         new Response(
-          JSON.stringify({
-            data: [
-              {
-                id: "crs_network",
-                user_id: "usr_123",
-                name: "计算机网络",
-                description: "网络协议复习",
-                teacher: "王老师",
-                term: "2025-2026 春",
-                status: "active",
-                created_at: "2026-07-09T12:00:00+00:00",
-                updated_at: "2026-07-09T12:00:00+00:00",
-                deleted_at: null,
-              },
-            ],
-            meta: { request_id: "req_courses" },
-          }),
+          JSON.stringify({ data, meta: { request_id: requestId } }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      ),
-    );
+      );
+
+      if (url.endsWith("/api/v1/courses")) {
+        return response([
+          {
+            id: "crs_network",
+            user_id: "usr_123",
+            name: "计算机网络",
+            description: "网络协议复习",
+            teacher: "王老师",
+            term: "2025-2026-spring",
+            material_count: 2,
+            today_task_status: "has_task_today",
+            status: "active",
+            created_at: "2026-07-09T12:00:00+00:00",
+            updated_at: "2026-07-09T12:00:00+00:00",
+            deleted_at: null,
+          },
+        ], "req_courses");
+      }
+
+      if (url.endsWith("/api/v1/course-terms")) {
+        return response([
+          { value: "2025-2026-spring", label: "2025-2026 春季" },
+        ], "req_terms");
+      }
+
+      if (url.includes("/api/v1/todos/today")) {
+        return response({ date: "2026-07-14", tasks: [] }, "req_today");
+      }
+
+      if (url.includes("/api/v1/calendar/month")) {
+        return response({ month: "2026-07", days: [] }, "req_month");
+      }
+
+      return response({}, "req_unknown");
+    }));
 
     renderRouter();
 
