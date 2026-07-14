@@ -342,7 +342,9 @@ describe("HomePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭年月选择" }));
     const calendarTaskTitle = await screen.findByText("组合数学复习");
     expect(calendarTaskTitle).toHaveClass("home-calendar-task-title");
+    expect(calendarTaskTitle).toHaveAttribute("title", "组合数学复习");
     expect(calendarTaskTitle.closest(".home-calendar-cell-summary")).toBeInTheDocument();
+    expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-compact-grid");
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
     expect(screen.getByTestId("location-path")).toHaveTextContent("/calendar");

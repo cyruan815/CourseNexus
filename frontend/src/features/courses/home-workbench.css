@@ -272,10 +272,34 @@
 
 .home-calendar-cell-summary span {
   display: block;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.home-calendar-compact-grid .home-calendar-cell {
+  overflow: hidden;
+}
+
+.home-calendar-compact-grid .home-calendar-cell-summary {
+  inset: 27px 7px auto;
+  height: 24px;
+  gap: 0;
+}
+
+.home-calendar-compact-grid .home-calendar-task-title {
+  flex: 0 0 13px;
+  line-height: 13px;
+}
+
+.home-calendar-compact-grid .home-calendar-task-progress {
+  flex: 0 0 11px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 11px;
 }
 
 .home-term-select {

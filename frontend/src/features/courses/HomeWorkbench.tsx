@@ -561,10 +561,11 @@ function CalendarPanel() {
               ))}
             </Box>
 
-            <Box aria-label="月历" className="home-calendar-grid" role="grid">
+            <Box aria-label="月历" className="home-calendar-grid home-calendar-compact-grid" role="grid">
               {calendarDays.map((calendarDay, index) => (
                 (() => {
                   const summary = calendarDay.dateKey ? summariesByDate.get(calendarDay.dateKey) : undefined;
+                  const summaryTitle = summary ? (summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`) : "";
 
                   return (
                     <Box
@@ -579,7 +580,7 @@ function CalendarPanel() {
                       {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
                       {summary ? (
                         <span className="home-calendar-cell-summary">
-                          <span className="home-calendar-task-title">{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
+                          <span className="home-calendar-task-title" title={summaryTitle}>{summaryTitle}</span>
                           <span className="home-calendar-task-progress">{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
                         </span>
                       ) : calendarDay.day ? <span aria-hidden className="home-calendar-task-dots" /> : null}
