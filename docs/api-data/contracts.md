@@ -442,3 +442,25 @@ PDF 内容包含标题、overview、learning objectives、prerequisites、knowle
 - 执行页 QA 的 `OpenAIModelProvider.answer_question()` 在兼容服务对 `/responses` 返回 404 时回退 Chat Completions；非 404 的鉴权、网络、限流或服务端错误语义不变。
 - 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`：中文/CJK run 使用 `STSong-Light`，ASCII、数字、英文术语和公式 run 使用 `Helvetica`，避免 `Overview`、`Nyquist/Shannon` 等英文被中文 CID 字体逐字排版。
 - 物理层讲义生成后会扫描已知术语误拼，例如 `Nyquest`、`Shanon`、`bandwith`；命中时按 `GENERATION_SCHEMA_INVALID` 拒绝，不静默落库。
+
+## 2026-07-15 Handout Markdown / Callout 契约补充
+
+本节补充 S06/S07 当前权威口径，并覆盖旧文中“今日讲义 PDF 包含结构化 sections/blocks”的历史描述。新生成 `handout` 为 Markdown-first：
+
+- `GeneratedContentRead.content_type = "handout"`
+- `GeneratedContentRead.content` 保存完整 Markdown 讲义正文
+- `GeneratedContentRead.content_json = {"format":"markdown","schema_version":1}`
+- `GeneratedContentRead.source_citations = []`，来源说明写在 Markdown 顶部
+
+后端 handout prompt 约束模型输出标准 Markdown：行内公式 `$...$`，块级公式独立 `$$...$$`，禁止 `\(...\)` / `\[...\]` 和单独一行 `[` / `]` 包公式。教学提示块只能使用 GitHub alert 风格 blockquote，不输出 HTML。支持的 callout 类型固定为 `NOTE`、`EXAMPLE`、`SUMMARY`、`WARNING`、`TIP`。
+
+Callout 示例：
+
+```md
+> [!SUMMARY] 核心结论
+> 物理层负责定义接口、信号、传输介质和传输过程相关规则。
+```
+
+前端详情页和 PDF 导出都必须识别该契约。前端使用 `react-markdown + remark-gfm + remark-math + rehype-katex`；PDF 使用 `markdown-it-py` 生成 HTML 后转换受支持的 callout blockquote，并用本地 KaTeX + Playwright 输出 PDF。两端视觉都保留背景色、去掉左侧强调线、使用圆角。
+
+`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 handout 直接读取 Markdown 内容并渲染 PDF，不要求旧 `content_json` 结构合法；`task_test` 仍只支持 Markdown 导出，不支持 PDF。

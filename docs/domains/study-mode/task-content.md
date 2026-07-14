@@ -322,3 +322,53 @@ Callout Markdown 约定：
 - `task_test` 生成继续读取当前测试二级任务的 `related_material_ids_json` 和默认 `generation_parameters.task_test`；请求只提供字符串数组形式的 `types` / `question_types` 时保留计划默认总题数，只替换题型白名单并清除旧的精确题型分布；请求通过 `questions`、`items`、`question_type_counts` 或中文题量映射显式提供每种题型数量时，用请求题数和分布完整覆盖计划默认值；只覆盖 `difficulty` 时保留计划默认题数与分布。
 
 这保证了测试题生成链路仍按原有二级任务范围运行，同时让“当天测试 / 全计划综合测试”的语义在计划数据里可追溯。
+
+## 2026-07-15 任务讲义正式 Markdown 渲染契约
+
+本节更新 2026-07-15 预览切片后的当前权威口径：讲义详情页、后端生成 prompt 和 PDF 导出均使用同一套 Markdown-first / callout 契约。前文仍提到“今日讲义”、结构化 handout 或仅预览的描述时，以本节为准。
+
+代码入口：
+
+- 前端讲义 renderer：`frontend/src/features/generated-content/renderers/handout/HandoutMarkdownRenderer.tsx`
+- 前端讲义样式：`frontend/src/features/generated-content/renderers/handout/handout-markdown.css`
+- 生成内容详情分发：`frontend/src/features/generated-content/GeneratedContentRenderer.tsx`
+- 开发预览页：`frontend/src/pages/HandoutPreviewPage.tsx`，仅 DEV 路由 `/dev/handout-preview`
+- 后端 handout prompt：`backend/app/modules/generation/generators/handout/generator.py`
+- PDF renderer：`backend/app/modules/exports/renderer.py`
+
+前端正式依赖 `react-markdown + remark-gfm + remark-math + rehype-katex` 渲染 handout Markdown。`handout` 详情页不再使用通用 `ReactMarkdown` 分支，而是复用 `HandoutMarkdownRenderer({ markdown })`，因此 dev preview 和真实详情页共享公式、表格、列表和 callout 行为。KaTeX CSS 由 renderer 引入；长公式允许横向滚动，避免正文布局被撑坏。
+
+Handout prompt 必须只输出 Markdown，不输出 HTML callout。重要教学块使用 GitHub alert 风格 blockquote，支持类型固定为：
+
+| Markdown 类型 | 中文标题 | 用途 | 颜色 |
+| --- | --- | --- | --- |
+| `[!NOTE]` | 注意 / 补充说明 | 概念边界、重要提醒 | 暖米色 `#fbf7f3`，标题 `#8c725e` |
+| `[!EXAMPLE]` | 例题 / 例题 1 | 题目、应用场景、演算入口 | 鼠尾草绿 `#f6f9f5`，标题 `#667c69` |
+| `[!SUMMARY]` | 核心结论 / 总结 | 结论卡片、阶段小结 | 淡紫灰 `#f8f6fb`，标题 `#706982` |
+| `[!WARNING]` | 易错点 / 常见误区 | 错误判断、限制条件、不要混淆 | 暖米色加深 `#fbf3ee`，标题 `#9b6048` |
+| `[!TIP]` | 解题提示 / 记忆提示 | 步骤提示、记忆口诀、计算提醒 | 雾霾蓝 `#f3f7fa`，标题 `#597089` |
+
+Markdown 约束：
+
+```md
+> [!NOTE] 注意
+> 正文每一行都继续以 > 开头。
+
+> [!EXAMPLE] 例题 1
+> 已知带宽 $B = 3$ kHz，求最大传输速率。
+```
+
+普通解释仍使用段落、列表、表格和标题；不要把整篇正文都写成 callout。普通 `>` 引用如果不包含上述 `[!TYPE]` 标记，仍按普通引用展示。
+
+视觉约束：callout 保留整片柔和背景色，去掉左侧强调线，使用圆角；前端为 14px 圆角并带浅边框，PDF 为 8px 圆角以适配打印密度。颜色和标题色与上表保持一致。
+
+PDF 导出同步支持相同 callout 契约。`render_markdown_pdf_html()` 会在 Markdown-it 生成 HTML 后，把首段为 `[!NOTE]` / `[!EXAMPLE]` / `[!SUMMARY]` / `[!WARNING]` / `[!TIP]` 的 blockquote 转换为 `.pdf-callout` 容器；其他 blockquote 不转换。PDF CSS 不使用 callout 左侧强调线，并保留 KaTeX 对 `$...$` / `$$...$$` 的公式排版。
+
+验证入口：
+
+- `pnpm --dir frontend test -- --run tests/features/generated-content/handout-markdown-renderer.test.tsx`
+- `pnpm --dir frontend test -- --run tests/features/generated-content/generated-content-renderer.test.tsx`
+- `pnpm --dir frontend test -- --run tests/pages/generated-content-detail.test.tsx`
+- `pnpm frontend:build`
+- `uv run pytest tests/modules/generation/test_handout_generator.py`
+- `uv run pytest tests/modules/exports/test_exports_api.py -q`
