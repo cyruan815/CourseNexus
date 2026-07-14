@@ -20,7 +20,7 @@ from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.course_qa.models import Message, SourceCitation
 from app.modules.course_qa.schemas import CourseQuestionCreate
-from app.modules.course_qa.service import ask_course_question
+from app.modules.course_qa.service import ask_course_question, list_conversation_messages
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import ContextChunk, MaterialScope
@@ -137,6 +137,7 @@ def test_ask_course_question_creates_messages_and_citations(db: Session, tmp_pat
     assert answer.conversation_id
     assert [message.role for message in saved_messages] == ["user", "assistant"]
     assert saved_messages[1].answer_type == "grounded"
+    assert saved_messages[1].content.endswith("[[cite:1]]")
     assert saved_citations[0].message_id == saved_messages[1].id
     assert saved_citations[0].material_name == "notes.md"
     assert saved_citations[0].chunk_id is not None
@@ -176,6 +177,29 @@ def test_ask_course_question_uses_retrieved_chunks_for_model_and_citations(
 
     assert [chunk.chunk_id for chunk in model_provider.context_chunks] == [eigen_chunk.id]
     assert [citation.chunk_id for citation in answer.source_citations] == [eigen_chunk.id]
+    assert answer.answer_text == "retrieved answer [[cite:1]]"
+
+
+def test_list_conversation_messages_returns_saved_citations(db: Session, tmp_path: Path) -> None:
+    rag_index = FakeRagIndex()
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    create_parsed_material(db, tmp_path, user.id, course.id, rag_index=rag_index)
+    answer = ask_course_question(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=CourseQuestionCreate(question="What is Alpha?", material_scope=MaterialScope()),
+        model_provider=MockModelProvider(),
+        rag_index=rag_index,
+    )
+
+    history = list_conversation_messages(db, user_id=user.id, conversation_id=answer.conversation_id)
+
+    assert history[0].source_citations == []
+    assert len(history[1].source_citations) == 1
+    assert history[1].source_citations[0].chunk_id == answer.source_citations[0].chunk_id
+    assert history[1].source_citations[0].hit_text == "Alpha"
 
 
 def test_ask_course_question_without_retrieval_hits_returns_no_source_without_model(

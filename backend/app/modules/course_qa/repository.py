@@ -85,3 +85,15 @@ def list_messages_for_conversation(db: Session, *, conversation_id: str) -> list
             .order_by(Message.created_at.asc(), Message.id.asc())
         ).scalars()
     )
+
+
+def list_citations_for_messages(db: Session, *, message_ids: list[str]) -> list[SourceCitation]:
+    if not message_ids:
+        return []
+    return list(
+        db.execute(
+            select(SourceCitation)
+            .where(SourceCitation.message_id.in_(message_ids))
+            .order_by(SourceCitation.message_id.asc(), SourceCitation.sort_order.asc(), SourceCitation.id.asc())
+        ).scalars()
+    )

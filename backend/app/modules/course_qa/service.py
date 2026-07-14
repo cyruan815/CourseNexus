@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from time import perf_counter, time_ns
 from uuid import uuid4
@@ -15,18 +16,21 @@ from app.modules.course_qa.repository import (
     get_active_conversation_by_id_for_user,
     get_active_conversation_for_user,
     list_active_conversations_for_course,
+    list_citations_for_messages,
     list_messages_for_conversation,
     save_citations,
     save_conversation,
     save_message,
 )
-from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate, SourceCitationRead
+from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate, MessageRead, SourceCitationRead
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
 from app.modules.material_context.service import retrieve_relevant_context
 
 
 logger = get_logger("course_qa.answer")
+
+_INLINE_CITATION_PATTERN = re.compile(r"\[\[cite:[^\]]+\]\]")
 
 
 def _new_conversation_id() -> str:
@@ -167,6 +171,8 @@ def ask_course_question(
         )
         raise
 
+    selected_chunks = _select_citation_chunks(context.chunks, model_answer.citation_chunk_ids)
+    answer_text = _normalize_inline_citations(model_answer.answer_text, selected_chunks)
     assistant_message = save_message(
         db,
         Message(
@@ -174,14 +180,13 @@ def ask_course_question(
             conversation_id=conversation.id,
             course_id=course_id,
             role="assistant",
-            content=model_answer.answer_text,
+            content=answer_text,
             answer_type="grounded",
             generation_status="success",
             material_scope_json=material_scope_json,
             created_at=datetime.now(timezone.utc),
         ),
     )
-    selected_chunks = _select_citation_chunks(context.chunks, model_answer.citation_chunk_ids)
     citations = save_citations(db, _build_citations(assistant_message.id, selected_chunks))
     _touch_conversation(db, conversation)
 
@@ -209,11 +214,22 @@ def list_course_conversations(db: Session, *, user_id: str, course_id: str) -> l
     return list_active_conversations_for_course(db, user_id=user_id, course_id=course_id)
 
 
-def list_conversation_messages(db: Session, *, user_id: str, conversation_id: str) -> list[Message]:
+def list_conversation_messages(db: Session, *, user_id: str, conversation_id: str) -> list[MessageRead]:
     conversation = get_active_conversation_by_id_for_user(db, user_id=user_id, conversation_id=conversation_id)
     if conversation is None:
         raise CourseNexusError(code="NOT_FOUND", message="对话不存在", status_code=404)
-    return list_messages_for_conversation(db, conversation_id=conversation_id)
+    messages = list_messages_for_conversation(db, conversation_id=conversation_id)
+    citations = list_citations_for_messages(db, message_ids=[message.id for message in messages])
+    citations_by_message: dict[str, list[SourceCitationRead]] = {}
+    for citation in citations:
+        if citation.message_id is not None:
+            citations_by_message.setdefault(citation.message_id, []).append(SourceCitationRead.model_validate(citation))
+    return [
+        MessageRead.model_validate(message).model_copy(
+            update={"source_citations": citations_by_message.get(message.id, [])}
+        )
+        for message in messages
+    ]
 
 
 def _message_material_scope_json(
@@ -275,7 +291,27 @@ def _get_or_create_conversation(
 
 def _select_citation_chunks(chunks: list[ContextChunk], citation_chunk_ids: list[str]) -> list[ContextChunk]:
     chunk_by_id = {chunk.chunk_id: chunk for chunk in chunks}
-    return [chunk_by_id[chunk_id] for chunk_id in citation_chunk_ids if chunk_id in chunk_by_id]
+    return [chunk_by_id[chunk_id] for chunk_id in dict.fromkeys(citation_chunk_ids) if chunk_id in chunk_by_id]
+
+
+def _normalize_inline_citations(answer_text: str, chunks: list[ContextChunk]) -> str:
+    normalized = answer_text
+    placeholders: dict[str, str] = {}
+    for ordinal, chunk in enumerate(chunks, start=1):
+        placeholder = f"\x00course-nexus-citation-{ordinal}\x00"
+        marker = f"[[cite:{chunk.chunk_id}]]"
+        if marker in normalized:
+            normalized = normalized.replace(marker, placeholder)
+            placeholders[placeholder] = f"[[cite:{ordinal}]]"
+
+    normalized = _INLINE_CITATION_PATTERN.sub("", normalized)
+    if chunks and not placeholders:
+        suffix = " ".join(f"[[cite:{ordinal}]]" for ordinal in range(1, len(chunks) + 1))
+        normalized = f"{normalized.rstrip()} {suffix}"
+    else:
+        for placeholder, marker in placeholders.items():
+            normalized = normalized.replace(placeholder, marker)
+    return normalized
 
 
 def _build_citations(message_id: str, chunks: list[ContextChunk]) -> list[SourceCitation]:

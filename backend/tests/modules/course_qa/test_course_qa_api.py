@@ -104,6 +104,17 @@ def test_course_qa_api_answers_with_citations(client: TestClient) -> None:
     assert data["answer_text"]
     assert len(data["source_citations"]) == 1
     assert data["source_citations"][0]["material_name"] == "notes.md"
+    assert data["answer_text"].endswith("[[cite:1]]")
+
+    history_response = client.get(
+        f"/api/v1/conversations/{data['conversation_id']}/messages",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert history_response.status_code == 200
+    history = history_response.json()["data"]
+    assert history[0]["source_citations"] == []
+    assert history[1]["source_citations"][0]["material_name"] == "notes.md"
+    assert history[1]["source_citations"][0]["hit_text"] == "Alpha"
 
 
 def test_course_qa_api_rejects_folder_scope(client: TestClient) -> None:

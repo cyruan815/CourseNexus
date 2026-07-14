@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from time import perf_counter
 from typing import Any
 
@@ -14,6 +15,8 @@ from app.modules.material_context.schemas import ContextChunk
 
 
 logger = get_logger("model.generate")
+
+_MODEL_CITATION_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
 
 
 class OpenAIModelProvider:
@@ -49,10 +52,7 @@ class OpenAIModelProvider:
         else:
             answer_text = getattr(response, "output_text", None) or ""
 
-        answer = ModelAnswer(
-            answer_text=answer_text,
-            citation_chunk_ids=[chunk.chunk_id for chunk in context_chunks[:1]],
-        )
+        answer = _resolve_model_citations(answer_text, context_chunks)
         logger.info(
             "模型调用成功 | operation=answer_question model=%s chunks=%d cost_ms=%.2f",
             self.model,
@@ -220,9 +220,27 @@ class OpenAIModelProvider:
         )
         return (
             "You are CourseNexus, a course-material grounded study assistant. "
-            "Answer using only the provided context.\n\n"
+            "Answer using only the provided context. After every claim supported by a context item, "
+            "add an inline citation marker in the exact form [[cite:N]], where N is the context item number. "
+            "Use only the numbered context items below and do not create citations for unsupported claims.\n\n"
             f"Context:\n{context_text}\n\nQuestion:\n{question}"
         )
+
+
+def _resolve_model_citations(answer_text: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
+    citation_chunk_ids: list[str] = []
+
+    def replace_marker(match: re.Match[str]) -> str:
+        context_index = int(match.group(1)) - 1
+        if context_index < 0 or context_index >= len(context_chunks):
+            return ""
+        chunk_id = context_chunks[context_index].chunk_id
+        if chunk_id not in citation_chunk_ids:
+            citation_chunk_ids.append(chunk_id)
+        return f"[[cite:{chunk_id}]]"
+
+    normalized_text = _MODEL_CITATION_PATTERN.sub(replace_marker, answer_text)
+    return ModelAnswer(answer_text=normalized_text, citation_chunk_ids=citation_chunk_ids)
 
 
 def _is_not_found_error(exc: Exception) -> bool:

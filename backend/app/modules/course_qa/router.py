@@ -52,7 +52,7 @@ def list_messages_endpoint(
     current_user: User = Depends(get_required_user),
 ) -> dict[str, object]:
     messages = list_conversation_messages(db, user_id=current_user.id, conversation_id=conversation_id)
-    data = [MessageRead.model_validate(message).model_dump(mode="json") for message in messages]
+    data = [message.model_dump(mode="json") for message in messages]
     return success_response(data, request_id=get_request_id(request))
 
 

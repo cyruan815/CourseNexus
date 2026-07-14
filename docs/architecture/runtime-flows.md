@@ -73,9 +73,10 @@ sequenceDiagram
     CTX->>CTX: Chroma vector query with user/course/material filters
     CTX-->>QA: scored Top-K chunks + citation candidates
     QA->>MP: generate answer via provider
-    MP-->>QA: answer_text + used citations
+    MP-->>QA: answer_text + inline citation chunk ids
+    QA->>QA: validate retrieved ids + renumber markers
     QA->>DB: save Conversation / Message / SourceCitation
-    QA-->>FE: answer_text + answer_type + citations
+    QA-->>FE: answer_text with [[cite:N]] + ordered citations
 ```
 
 规则：
@@ -85,6 +86,7 @@ sequenceDiagram
 - `user_id`、`course_id` 和 `material_scope` 必须转换为 Chroma metadata 硬过滤条件，不能只写进 prompt。
 - 无资料命中时返回 `answer_type = no_source`，并明确提示当前课程资料中未找到直接答案。
 - 不允许生成没有真实资料关联的伪引用。
+- 新回答和历史消息都返回有序 `source_citations`；`answer_text` 中的 `[[cite:N]]` 只引用该数组第 `N-1` 项。
 
 ## 3. 独立 AI 生成链路
 

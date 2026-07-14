@@ -445,9 +445,21 @@
     "include_all_parsed_materials": true,
     "material_ids": []
   },
+  "source_citations": [
+    {
+      "material_id": "mat_123",
+      "chunk_id": "chk_123",
+      "material_name": "notes.md",
+      "page": null,
+      "page_index": 0,
+      "hit_text": "Alpha"
+    }
+  ],
   "created_at": "2026-07-09T12:00:00+00:00"
 }
 ```
+
+用户消息和无来源回答的 `source_citations` 为 `[]`。历史回答与新回答使用同一引用快照契约，前端刷新后不得丢失引用。
 
 ### 3.19 课程问答
 
@@ -476,7 +488,7 @@
   "conversation_id": "cnv_123",
   "user_message_id": "msg_user",
   "assistant_message_id": "msg_assistant",
-  "answer_text": "回答正文",
+  "answer_text": "回答正文 [[cite:1]]",
   "answer_type": "grounded",
   "source_citations": [
     {
@@ -498,6 +510,8 @@
 - `no_source`：当前资料范围没有可用 parsed chunk，或存在 parsed chunk 但本次问题没有相关检索命中；`source_citations = []`，前端不得展示伪引用。
 
 新回答的引用必须包含真实 `material_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这两个字段返回 `null`。
+
+`answer_text` 使用内部行内标记 `[[cite:N]]` 将论述绑定到 `source_citations[N-1]`。标记只允许由后端根据本次 Top-K 命中的真实 chunk 生成并重新编号；模型返回越界序号、未检索 chunk 或其他伪造标记时，后端必须删除该标记且不得保存引用。前端应将合法标记渲染为可交互角标，不直接向用户展示原始标记。
 
 追问时传入同一课程下的 `conversation_id`；跨课程或跨用户复用会返回 `NOT_FOUND`。
 

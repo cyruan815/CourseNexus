@@ -219,11 +219,12 @@ sequenceDiagram
     R-->>CTX: internal ContextChunk[]
     CTX-->>QA: relevant chunks + scores
     QA->>MP: answer_question(question, chunks)
-    MP-->>QA: answer + citation chunk ids
-    QA->>DB: save Message + SourceCitation
+    MP-->>QA: answer + validated inline citation chunk ids
+    QA->>QA: validate retrieved ids + renumber [[cite:N]] markers
+    QA->>DB: save Message with markers + SourceCitation snapshots
 ```
 
-问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。模型引用必须与本次返回的 chunk id 取交集；模型返回未检索到或伪造的 chunk id 时不保存 fallback 引用。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
+问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。prompt 使用上下文序号要求模型在相关论述后输出 `[[cite:N]]`；model-provider 将合法上下文序号映射为内部 chunk id，course-qa 再与本次检索结果取交集、去重并转换为从 1 开始的稳定引用序号。模型返回越界序号、未检索 chunk 或伪造标记时删除标记且不保存 fallback 引用。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
 
 ## 8. 指定材料生成链路：两种全材料策略
 

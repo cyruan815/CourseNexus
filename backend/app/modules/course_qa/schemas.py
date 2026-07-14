@@ -62,3 +62,4 @@ class MessageRead(BaseModel):
     error_code: str | None
     material_scope_json: dict | list | None
     created_at: datetime
+    source_citations: list[SourceCitationRead] = Field(default_factory=list)

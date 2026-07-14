@@ -15,6 +15,7 @@
 | [auth/index.md](auth/index.md) | 注册、登录、登录态和前端认证入口实现。 | 2026-07-11 |
 | [courses/index.md](courses/index.md) | 课程首页工作台和后续课程管理实现。 | 2026-07-11 |
 | [course-workspace/index.md](course-workspace/index.md) | 课程详情工作台、资料范围、问答、生成内容和学习计划入口实现。 | 2026-07-12 |
+| [course-qa/index.md](course-qa/index.md) | 课程资料问答、行内引用校验、引用快照和历史消息契约。 | 2026-07-15 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
 | [profile/index.md](profile/index.md) | 个人中心第一版：账号信息、退出登录、今日打卡和近 14 天打卡颜色。 | 2026-07-14 |
 | [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
