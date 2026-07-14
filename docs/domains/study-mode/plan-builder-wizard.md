@@ -1,4 +1,4 @@
-﻿# Study Mode 计划生成向导设计
+# Study Mode 计划生成向导设计
 
 ## 状态
 
@@ -73,7 +73,7 @@
 - Preview 服务：`backend/app/modules/study_plans/service.py::preview_study_plan` 在 reduce 得到最终 `coverage_result.value.tasks` 后，用最终二级任务分钟数重算 `capacity.estimated_total_minutes`，公式为 `sum(preview.tasks[].subtasks[].estimated_minutes)`。
 - 每日建议值：`recommended_daily_minutes` 继续使用 map 阶段材料单元规模估算，避免模型 reduce 输出的任务拆分反过来改变系统建议值；`daily_available_minutes` 仍按用户输入或系统估算解析。
 - 容量状态：`available_total_minutes = daily_available_minutes * duration_days`；当最终任务总时长超出容量时，`feasibility_status = "over_capacity"` 且 `warnings` 包含 `PLAN_OVER_CAPACITY`；接近容量时保持 `tight`。
-- Preview 校验：`backend/app/modules/study_plans/planner.py::validate_preview` 继续硬校验结构非法、日期越界、任务类型、测验排序、引用缺失和范围外资料；仅当 preview 已携带 `over_capacity` 和 `PLAN_OVER_CAPACITY` 时，允许每日任务时长超出用户每日可用时间，由 capacity warning 交给前端展示和引导调整。
+- Preview 校验：`backend/app/modules/study_plans/planner.py::validate_preview` 继续硬校验结构非法、日期越界、任务类型、测验排序、引用缺失和范围外资料；其中 `quiz/test` 必须形成当天末尾连续区段，即自测任务后不得再出现 `learn/review`，但允许“阶段练习 + 综合测试”这类多个连续 assessment。仅当 preview 已携带 `over_capacity` 和 `PLAN_OVER_CAPACITY` 时，允许每日任务时长超出用户每日可用时间，由 capacity warning 交给前端展示和引导调整。
 - 保存追溯：`backend/app/modules/study_plans/service.py::_resolve_save_payload_daily_minutes` 和 `_saved_config` 都以最终提交的 `tasks` 重新计算 capacity，`StudyPlan.parsed_config_json.capacity` 不信任旧客户端传入的过期 capacity。
 - 测试入口：`backend/tests/modules/study_plans/test_study_plan_diagnostic_api.py` 覆盖同一资料和时间约束下，`foundation_needed=true` 让最终任务分钟数增加，并使 capacity 从 `tight` 变为 `over_capacity`；同时覆盖保存后 `parsed_config_json.capacity` 追溯最终 capacity。
 
