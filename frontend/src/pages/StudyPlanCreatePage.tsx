@@ -221,7 +221,7 @@ function StudyPlanPreviewPanel({ preview }: { preview: StudyPlanPreview | null }
         <Stack gap={4}>
           <Text fw={750}>等待生成预览</Text>
           <Text c="dimmed" size="sm">
-            先填写基础配置，再调用真实 preview。自动解析配置只展示为待接入，不制造假结果。
+            先设定目标、日期和资料范围，再生成可确认的学习任务安排。
           </Text>
         </Stack>
       </Paper>
@@ -659,7 +659,7 @@ export function StudyPlanCreatePage() {
           >
             返回课程
           </Button>
-          <Badge color="teal" variant="light">自动解析已接入</Badge>
+          <Badge color="teal" variant="light">智能回填</Badge>
         </Group>
 
         <Group align="flex-start" className="study-plan-header" justify="space-between">
@@ -667,10 +667,10 @@ export function StudyPlanCreatePage() {
             <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>
             <Title order={1}>创建学习计划</Title>
             <Text c="dimmed">
-              可先用自然语言解析回填配置，再由用户确认后调用真实 preview。保存会提交已确认的预览任务树。
+              设定目标、选择资料、了解当前基础，再生成并保存一份可以执行的学习计划。
             </Text>
           </Stack>
-          <Badge color="teal" size="lg" variant="light">契约稳定版</Badge>
+          <Badge color="teal" size="lg" variant="light">计划向导</Badge>
         </Group>
 
         {error ? (
@@ -691,7 +691,7 @@ export function StudyPlanCreatePage() {
               <Stack gap={2}>
                 <Title order={2}>计划配置</Title>
                 <Text c="dimmed" size="sm">
-                  学习方式：{preferenceLabels[preference]}，保存采用 wizard_v1 契约。
+                  当前学习方式：{preferenceLabels[preference]}。保存前可先查看任务预览。
                 </Text>
               </Stack>
               <Badge color="teal" variant="outline">配置解析回填</Badge>
@@ -705,7 +705,7 @@ export function StudyPlanCreatePage() {
               value={goalText}
             />
             <Group justify="space-between" wrap="nowrap">
-              <Text c="dimmed" size="sm">保存为 goal_text，并随请求发送当前学习方式。</Text>
+              <Text c="dimmed" size="sm">可以先用一句话描述目标，再让系统帮你回填日期和节奏。</Text>
               <Button
                 data-testid="study-plan-parse-config"
                 leftSection={<IconSparkles size={16} />}

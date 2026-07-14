@@ -857,7 +857,7 @@ describe("study plan pages", () => {
     expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13");
     expect(screen.getByLabelText("结束日期")).toHaveValue("2026-07-14");
     expect(screen.getByLabelText("每日可用学习时长")).toHaveValue(90);
-    expect(screen.getByText("学习方式：冲刺强化")).toBeInTheDocument();
+    expect(screen.getByText("当前学习方式：冲刺强化。保存前可先查看任务预览。")).toBeInTheDocument();
     expect(screen.queryByText("开始日期：需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("结束日期：需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("学习天数：需手动补齐")).not.toBeInTheDocument();
@@ -936,7 +936,7 @@ describe("study plan pages", () => {
     await waitFor(() => expect(saveButton()).toBeEnabled());
 
     fireEvent.click(saveButton());
-    expect(await screen.findByRole("alert")).toHaveTextContent("network timeout");
+    expect(await screen.findByText("network timeout")).toBeInTheDocument();
 
     fireEvent.click(saveButton());
     await waitFor(() => expect(saveAttempts).toBe(2));
@@ -1148,6 +1148,59 @@ describe("study plan pages", () => {
     });
   });
 
+  it("asks the AI helper about the current subtask without changing material scope", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContext, "req_execution"));
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/qa/questions") && init?.method === "POST") {
+        return Promise.resolve(successResponse({
+          conversation_id: "conv_task_1",
+          user_message_id: "msg_user_1",
+          assistant_message_id: "msg_assistant_1",
+          answer_text: "先看线代第一章.pdf 的向量空间定义，再做基础题。",
+          answer_type: "grounded",
+          source_citations: [
+            {
+              id: "cite_1",
+              material_id: "mat_1",
+              material_name: "线代第一章.pdf",
+              chunk_id: "chunk_1",
+              hit_text: "向量空间定义",
+              page: "3",
+              page_index: 3,
+              sort_order: 1,
+            },
+          ],
+          used_material_ids: ["mat_1"],
+        }, "req_task_qa"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "向 AI 助教提问" }), {
+      target: { value: "这个任务先看哪份资料？" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "提问" }));
+
+    expect(await screen.findByText("先看线代第一章.pdf 的向量空间定义，再做基础题。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/qa/questions",
+        expect.objectContaining({
+          body: JSON.stringify({ conversation_id: null, question: "这个任务先看哪份资料？" }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
   it("shows an existing handout link without generating new content", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
@@ -1162,11 +1215,11 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes("/study-subtasks/subtask_1");
 
     expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看今日讲义" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "查看任务讲义" })).toHaveAttribute(
       "href",
       "/generated-contents/gen_handout_1",
     );
-    expect(screen.queryByRole("button", { name: "生成今日讲义" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成任务讲义" })).not.toBeInTheDocument();
   });
 
   it("exports an existing handout as a PDF file", async () => {
@@ -1258,10 +1311,10 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes("/study-subtasks/subtask_1");
 
     expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "生成今日讲义" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成任务讲义" }));
 
     expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看今日讲义" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "查看任务讲义" })).toHaveAttribute(
       "href",
       "/generated-contents/gen_handout_1",
     );

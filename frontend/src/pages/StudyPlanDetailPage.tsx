@@ -444,7 +444,6 @@ export function StudyPlanDetailPage() {
 
             <Box className="study-plan-lifecycle-form">
               <Textarea
-                autosize
                 label="调整目标"
                 minRows={2}
                 onChange={(event) => {
@@ -639,18 +638,22 @@ export function StudyPlanDetailPage() {
           </Paper>
 
           <Paper className="study-plan-panel" radius="md" withBorder>
-            <Title order={2}>后续能力</Title>
+            <Title order={2}>学习入口</Title>
             <Stack gap="xs">
               <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>日历同步</Text>
-                <Badge color="gray" variant="light">待接入</Badge>
+                <Text fw={700}>日历待办</Text>
+                <Badge color="blue" variant="light">已同步</Badge>
               </Paper>
               <Paper className="study-plan-disabled-row" radius="md" withBorder>
                 <Text fw={700}>完成打卡</Text>
-                <Badge color="teal" variant="light">执行页已接入</Badge>
+                <Badge color="teal" variant="light">执行页</Badge>
               </Paper>
               <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>资料讲义 / 小测闭环</Text>
+                <Text fw={700}>任务讲义 / 任务测试题</Text>
+                <Badge color="violet" variant="light">按需生成</Badge>
+              </Paper>
+              <Paper className="study-plan-disabled-row" radius="md" withBorder>
+                <Text fw={700}>计划导出</Text>
                 <Badge color="gray" variant="light">待接入</Badge>
               </Paper>
             </Stack>

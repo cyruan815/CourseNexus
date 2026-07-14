@@ -123,9 +123,9 @@ describe("CalendarPage", () => {
     expect(await screen.findByRole("heading", { name: "2026-07-14 任务" })).toBeInTheDocument();
     expect(screen.getByText("学习: 物理层功能")).toBeInTheDocument();
     expect(screen.getByText("测试: 物理层小测")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看计划 物理层复习" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
       "href",
-      "/courses/crs_123/study-plans/plan_1",
+      "/study-subtasks/subtask_2",
     );
 
     await waitFor(() => {
@@ -195,9 +195,9 @@ describe("CalendarPage", () => {
     expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
     expect(await screen.findByRole("heading", { name: "2026-07-14 待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "计算机网络" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看计划 物理层复习" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
       "href",
-      "/courses/crs_123/study-plans/plan_1",
+      "/study-subtasks/subtask_2",
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/calendar/month?month=2026-07",
