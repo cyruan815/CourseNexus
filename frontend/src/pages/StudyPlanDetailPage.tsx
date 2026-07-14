@@ -367,23 +367,6 @@ export function StudyPlanDetailPage() {
   return (
     <Box className="study-plan-page workbench-page">
       <WorkbenchTopbar
-        actions={(
-          <>
-            <Button
-              leftSection={<IconRotateClockwise size={16} />}
-              onClick={() => setIsLifecycleOpen((current) => !current)}
-              variant="light"
-            >
-              重新生成
-            </Button>
-            <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
-              删除计划
-            </Button>
-            <Button disabled leftSection={<IconDownload size={16} />} variant="light">
-              导出计划（待接入）
-            </Button>
-          </>
-        )}
         backFallbackTo={courseId ? `/courses/${courseId}` : "/"}
         contextName={detail.plan.title}
         meta={(
@@ -447,17 +430,51 @@ export function StudyPlanDetailPage() {
               </Group>
             </Stack>
             {firstRunnableSubtask ? (
-              <Button
-                component={Link}
-                leftSection={<IconPlayerPlay size={16} />}
-                to={`/study-subtasks/${firstRunnableSubtask.id}`}
-              >
-                开始学习
-              </Button>
+              <Stack align="flex-end" gap="sm">
+                <Group gap="xs" justify="flex-end" wrap="nowrap">
+                  <Button
+                    leftSection={<IconRotateClockwise size={16} />}
+                    onClick={() => setIsLifecycleOpen((current) => !current)}
+                    variant="light"
+                  >
+                    重新生成
+                  </Button>
+                  <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+                    删除计划
+                  </Button>
+                  <Button disabled leftSection={<IconDownload size={16} />} variant="light">
+                    导出计划（待接入）
+                  </Button>
+                </Group>
+                <Button
+                  component={Link}
+                  leftSection={<IconPlayerPlay size={16} />}
+                  to={`/study-subtasks/${firstRunnableSubtask.id}`}
+                >
+                  开始学习
+                </Button>
+              </Stack>
             ) : (
-              <Button disabled leftSection={<IconPlayerPlay size={16} />}>
-                暂无任务
-              </Button>
+              <Stack align="flex-end" gap="sm">
+                <Group gap="xs" justify="flex-end" wrap="nowrap">
+                  <Button
+                    leftSection={<IconRotateClockwise size={16} />}
+                    onClick={() => setIsLifecycleOpen((current) => !current)}
+                    variant="light"
+                  >
+                    重新生成
+                  </Button>
+                  <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+                    删除计划
+                  </Button>
+                  <Button disabled leftSection={<IconDownload size={16} />} variant="light">
+                    导出计划（待接入）
+                  </Button>
+                </Group>
+                <Button disabled leftSection={<IconPlayerPlay size={16} />}>
+                  暂无任务
+                </Button>
+              </Stack>
             )}
           </Group>
         </Paper>
@@ -672,28 +689,6 @@ export function StudyPlanDetailPage() {
                   </Stack>
                 </Paper>
               ))}
-            </Stack>
-          </Paper>
-
-          <Paper className="study-plan-panel" radius="md" withBorder>
-            <Title order={2}>学习入口</Title>
-            <Stack gap="xs">
-              <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>日历待办</Text>
-                <Badge color="blue" variant="light">已同步</Badge>
-              </Paper>
-              <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>完成打卡</Text>
-                <Badge color="teal" variant="light">执行页</Badge>
-              </Paper>
-              <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>任务讲义 / 任务测试题</Text>
-                <Badge color="violet" variant="light">按需生成</Badge>
-              </Paper>
-              <Paper className="study-plan-disabled-row" radius="md" withBorder>
-                <Text fw={700}>计划导出</Text>
-                <Badge color="gray" variant="light">待接入</Badge>
-              </Paper>
             </Stack>
           </Paper>
         </Box>

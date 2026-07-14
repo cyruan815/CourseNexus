@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -537,6 +537,8 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "创建学习计划" })).toBeInTheDocument();
@@ -563,12 +565,16 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar .workbench-actions")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "学习计划" })).toBeInTheDocument();
     expect(screen.getAllByText("高等数学学习计划").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
+    expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
   });
 
   it("renders the execution page inside the fixed workbench layout", async () => {
@@ -590,12 +596,18 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-execution-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "任务执行" })).toBeInTheDocument();
     expect(screen.getAllByText("学习: 向量空间").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("link", { name: "查看计划详情" })).toHaveAttribute(
+      "href",
+      "/courses/crs_123/study-plans/plan_1",
+    );
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
@@ -1078,6 +1090,11 @@ describe("study plan pages", () => {
 
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
     expect(screen.getByText("未开始")).toBeInTheDocument();
+    const topbar = document.querySelector(".workbench-topbar");
+    expect(topbar).not.toBeNull();
+    expect(within(topbar as HTMLElement).queryByRole("button", { name: "重新生成" })).not.toBeInTheDocument();
+    expect(within(topbar as HTMLElement).queryByRole("button", { name: "删除计划" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
     expect(screen.getByRole("link", { name: "进入学习：学习: 向量空间" })).toHaveAttribute(
       "href",

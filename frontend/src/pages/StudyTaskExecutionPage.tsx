@@ -560,7 +560,17 @@ export function StudyTaskExecutionPage() {
               <Stack gap="sm">
                 {sortedTasks.map((task) => (
                   <Stack className="study-plan-execution-taskrail" gap="xs" key={task.task_id}>
-                    <Text fw={750} size="sm">{task.title}</Text>
+                    <Group align="flex-start" justify="space-between" wrap="nowrap">
+                      <Text fw={750} size="sm">{task.title}</Text>
+                      <Button
+                        component={Link}
+                        size="xs"
+                        to={`/courses/${context.course.course_id}/study-plans/${context.plan.plan_id}`}
+                        variant="subtle"
+                      >
+                        查看计划详情
+                      </Button>
+                    </Group>
                     {task.subtasks.map((subtask) => {
                       const isCurrent = subtask.subtask_id === context.current_subtask_id;
                       const isCompleted = subtask.status === "completed";

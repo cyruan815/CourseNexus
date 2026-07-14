@@ -43,17 +43,6 @@ export function WorkbenchTopbar({
           <ActionIcon aria-label="返回首页" className="workbench-home-button" component={Link} radius="xl" size={42} to="/" variant="default">
             <IconHome2 size={20} stroke={1.8} />
           </ActionIcon>
-          {showBack ? (
-            <Button
-              className="workbench-back-button"
-              leftSection={<IconArrowLeft size={16} />}
-              onClick={goBack}
-              type="button"
-              variant="subtle"
-            >
-              返回
-            </Button>
-          ) : null}
           <Group className="workbench-heading" gap="xs" wrap="nowrap">
             <Title className="workbench-page-name" order={1}>{pageName}</Title>
             {contextName ? (
@@ -75,6 +64,17 @@ export function WorkbenchTopbar({
             <Group className="workbench-actions" gap="xs" wrap="nowrap">
               {actions}
             </Group>
+          ) : null}
+          {showBack ? (
+            <Button
+              className="workbench-back-button"
+              leftSection={<IconArrowLeft size={16} />}
+              onClick={goBack}
+              type="button"
+              variant="subtle"
+            >
+              返回
+            </Button>
           ) : null}
           <ActionIcon
             aria-label={themeLabel}
