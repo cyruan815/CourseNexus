@@ -274,15 +274,17 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
         if completion_quality_required and daily_minutes < _minimum_required_minutes(preview.daily_available_minutes):
             raise _invalid_generation("每日任务时长利用不足")
 
-        for index, subtask in enumerate(task.subtasks):
+        assessment_suffix_started = False
+        for subtask in task.subtasks:
             if subtask.subtask_type not in allowed_types:
                 raise _invalid_generation("二级任务类型无效")
             if _is_assessment_type(subtask.subtask_type):
-                if index != len(task.subtasks) - 1:
-                    raise _invalid_generation("自测任务必须排在当天最后")
+                assessment_suffix_started = True
                 if task.task_date == final_task_date:
                     final_task_has_assessment = True
             else:
+                if assessment_suffix_started:
+                    raise _invalid_generation("自测任务必须排在当天最后")
                 if "task_test" in subtask.generation_parameters:
                     raise _invalid_generation("学习或复习任务不能携带测试题生成参数")
                 if _has_assessment_quantity_text(subtask.title, subtask.description):

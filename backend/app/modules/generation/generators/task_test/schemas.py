@@ -35,13 +35,14 @@ class TaskTestGenerationParameters(BaseModel):
             return value
 
         normalized = dict(value)
+        cls._normalize_question_types_alias(normalized)
         raw_question_type_counts = normalized.get("question_type_counts")
         if isinstance(raw_question_type_counts, list) and raw_question_type_counts:
             normalized_items = cls._normalize_question_type_count_items(raw_question_type_counts)
             if normalized_items is not None:
                 return cls._merge_count_normalization(normalized=normalized, normalized_counts=normalized_items)
 
-        for key in ("items", "question_types"):
+        for key in ("items", "questions", "question_types"):
             raw_items = normalized.get(key)
             if not (
                 isinstance(raw_items, list)
@@ -85,6 +86,21 @@ class TaskTestGenerationParameters(BaseModel):
         return self
 
     @classmethod
+    def _normalize_question_types_alias(cls, normalized: dict[str, object]) -> None:
+        raw_types = normalized.pop("types", None)
+        if raw_types is None:
+            return
+        if not isinstance(raw_types, list) or not raw_types or not all(isinstance(item, str) for item in raw_types):
+            raise ValueError("types must be a non-empty question type list")
+        question_types = [cls._normalize_question_type_value(item) for item in raw_types]
+        if any(item is None for item in question_types):
+            raise ValueError("types contains unsupported question type")
+        question_types = list(dict.fromkeys(question_types))
+        raw_question_types = normalized.get("question_types")
+        if raw_question_types is not None and raw_question_types != question_types:
+            raise ValueError("types conflicts with question_types")
+        normalized["question_types"] = question_types
+    @classmethod
     def _merge_count_normalization(
         cls,
         *,
@@ -120,6 +136,7 @@ class TaskTestGenerationParameters(BaseModel):
                 "question_types",
                 "question_type_counts",
                 "items",
+                "questions",
                 "single_choice",
                 "multiple_choice",
                 "true_false",

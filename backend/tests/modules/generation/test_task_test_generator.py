@@ -103,6 +103,15 @@ def test_task_test_generation_parameters_normalizes_question_type_counts_variant
     assert params.model_dump(mode="json")["question_type_counts"] == _EXPECTED_TYPE_COUNTS
 
 
+def test_task_test_generation_parameters_accepts_types_alias_for_question_types() -> None:
+    params = TaskTestGenerationParameters.model_validate(
+        {"question_count": 7, "types": ["single_choice", "short_answer"]}
+    )
+
+    assert params.question_count == 7
+    assert params.question_types == ["single_choice", "short_answer"]
+    assert params.question_type_counts is None
+
 @pytest.mark.parametrize(
     "raw_parameters",
     [
