@@ -169,7 +169,7 @@ describe("GeneratedContentDetailPage", () => {
     expect(screen.queryByText("这段逐条引用不应在 handout 详情页展示")).not.toBeInTheDocument();
   });
 
-  it("renders task test generated content as a readonly review view and keeps citations", async () => {
+  it("renders task test generated content as a readonly review view without citation panel", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -252,8 +252,8 @@ describe("GeneratedContentDetailPage", () => {
     expect(screen.getByText("UDP 会在传输数据前建立连接。")).toBeInTheDocument();
     expect(screen.getByText("正确答案：错误")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "引用来源" })).toBeInTheDocument();
-    expect(screen.getByText("物理层.pdf · 12")).toBeInTheDocument();
-    expect(screen.getByText("测试题引用仍展示")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "引用来源" })).not.toBeInTheDocument();
+    expect(screen.queryByText("物理层.pdf · 12")).not.toBeInTheDocument();
+    expect(screen.queryByText("测试题引用仍展示")).not.toBeInTheDocument();
   });
 });
