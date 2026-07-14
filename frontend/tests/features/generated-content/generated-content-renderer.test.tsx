@@ -19,10 +19,13 @@ describe("GeneratedContentRenderer", () => {
     expect(screen.getByText("Readable fallback")).toBeInTheDocument();
   });
 
-  it("renders handout content as markdown", () => {
-    render(<MantineProvider><GeneratedContentRenderer content={{ ...base, content_type: "handout", content: "# Handout title\n\nThis is **important**." } as never} /></MantineProvider>);
+  it("renders handout content as markdown without citation entries", () => {
+    render(<MantineProvider><GeneratedContentRenderer content={{ ...base, content_type: "handout", content: "# Handout title\n\nSource note.\n\nThis is **important**.", source_citations: [{ material_name: "notes.md", hit_text: "hidden citation" }] } as never} /></MantineProvider>);
 
     expect(screen.getByRole("heading", { name: "Handout title" })).toBeInTheDocument();
+    expect(screen.getByText("Source note.")).toBeInTheDocument();
     expect(screen.getByText("important").tagName).toBe("STRONG");
+    expect(screen.queryByText("notes.md")).not.toBeInTheDocument();
+    expect(screen.queryByText("hidden citation")).not.toBeInTheDocument();
   });
 });
