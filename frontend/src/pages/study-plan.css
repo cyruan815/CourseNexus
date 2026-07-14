@@ -258,8 +258,26 @@
   padding: 16px;
 }
 
+.study-plan-execution-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.study-plan-execution-main-stack {
+  flex: 1;
+  min-height: 0;
+}
+
+.study-plan-completion-actions.is-pinned-bottom {
+  margin-top: auto;
+}
+
 .study-plan-execution-sidebar {
   position: static;
+}
+
+.study-plan-execution-sidebar-header {
+  min-width: 0;
 }
 
 .study-plan-execution-main h1 {

@@ -340,7 +340,9 @@ describe("HomePage", () => {
     expect(screen.queryByRole("dialog", { name: "选择年月" })).not.toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "选择年月" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "关闭年月选择" }));
-    expect(await screen.findByText("组合数学复习")).toBeInTheDocument();
+    const calendarTaskTitle = await screen.findByText("组合数学复习");
+    expect(calendarTaskTitle).toHaveClass("home-calendar-task-title");
+    expect(calendarTaskTitle.closest(".home-calendar-cell-summary")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
     expect(screen.getByTestId("location-path")).toHaveTextContent("/calendar");

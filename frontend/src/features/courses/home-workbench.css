@@ -272,6 +272,7 @@
 
 .home-calendar-cell-summary span {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
