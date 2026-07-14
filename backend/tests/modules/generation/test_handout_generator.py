@@ -94,6 +94,14 @@ def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() 
     assert "块级公式只使用独立的 $$...$$" in prompt
     assert "禁止使用 \\(...\\) 和 \\[...\\]" in prompt
     assert "禁止用单独一行的 [ 和 ] 包裹公式" in prompt
+    assert "支持的 callout 类型只有 NOTE、EXAMPLE、SUMMARY、WARNING、TIP" in prompt
+    assert "> [!NOTE] 注意" in prompt
+    assert "> [!EXAMPLE] 例题" in prompt
+    assert "> [!SUMMARY] 核心结论" in prompt
+    assert "> [!WARNING] 易错点" in prompt
+    assert "> [!TIP] 解题提示" in prompt
+    assert "callout 正文每一行都必须继续以 > 开头" in prompt
+    assert "不要把整篇正文都写成 callout" in prompt
     assert "自测题或填空题的空格线使用全角低线" in prompt
     assert "不要使用连续 ASCII 下划线 ______" in prompt
     assert "不要输出 JSON" in prompt
