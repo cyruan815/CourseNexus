@@ -13,7 +13,7 @@ export function GeneratedContentRenderer({ content }: { content: GeneratedConten
   const invalid = <Alert color="yellow" title="内容结构不可读取">当前记录缺少必要字段，无法使用交互视图。</Alert>;
   if (content.content_type === "quiz") { const value = quizQuestions(content.content_json); return value ? <QuizResult questions={value} /> : invalid; }
   if (content.content_type === "task_test") { const value = taskTestQuestions(content.content_json); return value ? <TaskTestResult questions={value} /> : invalid; }
-  if (content.content_type === "flashcard") { const value = flashcards(content.content_json); return value ? <FlashcardResult cards={value} /> : invalid; }
+  if (content.content_type === "flashcard") { const value = flashcards(content.content_json); return value ? <FlashcardResult cards={value} generatedContentId={content.id} /> : invalid; }
   if (content.content_type === "mindmap") { const value = mindmapContent(content.content_json); return value ? <MindmapResult content={value} /> : invalid; }
   if (content.content_type === "outline") { const value = outlineSections(content.content_json); return value ? <OutlineResult sections={value} /> : invalid; }
   if (content.content_type === "knowledge_list") { const value = knowledgeItems(content.content_json); return value ? <KnowledgeListResult items={value} /> : invalid; }

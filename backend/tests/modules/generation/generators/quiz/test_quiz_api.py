@@ -6,7 +6,7 @@ class QuizProvider:
     def generate_structured(self, *, prompt, output_schema):
         return output_schema.model_validate({"questions": [{
             "question_type": "single_choice", "question_text": "Which topic is present?",
-            "options": [{"id": key, "text": text} for key, text in zip("ABCD", ["Alpha", "Beta", "Gamma", "Delta"])],
+            "options": [{"id": key, "text": text, "explanation": f"{text} reason."} for key, text in zip("ABCD", ["Alpha", "Beta", "Gamma", "Delta"])],
             "correct_answer": "A", "explanation": "Alpha is present.", "difficulty": "easy",
         }]})
 
@@ -20,4 +20,5 @@ def test_quiz_api_persists_final_questions_without_citations(client, alice_api, 
     assert data["generation_status"] == "success"
     assert data["source_citations"] == []
     assert data["content_json"]["questions"][0]["id"] == "q_001"
+    assert data["content_json"]["questions"][0]["options"][1]["explanation"] == "Beta reason."
     assert "source_citation_ids" not in data["content_json"]["questions"][0]

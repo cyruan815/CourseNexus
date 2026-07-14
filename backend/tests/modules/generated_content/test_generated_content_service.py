@@ -18,7 +18,7 @@ import app.modules.generated_content.repository as generated_content_repository
 import app.modules.generated_content.service as generated_content_service
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.repository import save_generated_content
-from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents
+from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents, update_flashcard_cards
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -294,3 +294,40 @@ def test_soft_deleted_generated_contents_remain_excluded(db: Session) -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         get_generated_content_detail(db, user_id=user.id, generated_content_id=deleted.id)
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_update_flashcard_cards_persists_normalized_deck_for_owner(db: Session) -> None:
+    user = register_user(db, UserCreate(username="flashcard-editor", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Networks"))
+    content = create_content(db, user.id, course.id, "gen_flashcards", content_type="flashcard")
+
+    result = update_flashcard_cards(
+        db,
+        user_id=user.id,
+        generated_content_id=content.id,
+        cards=[
+            {"front": " Question one ", "back": " Answer one ", "tags": [], "explanation": None},
+            {"front": "Question two", "back": "Answer two", "tags": ["TCP"], "explanation": "Detail"},
+        ],
+    )
+
+    assert result.content_json == {"cards": [
+        {"front": "Question one", "back": "Answer one", "tags": [], "explanation": None, "id": "card_001", "mastery_status": "unknown", "sort_order": 1},
+        {"front": "Question two", "back": "Answer two", "tags": ["TCP"], "explanation": "Detail", "id": "card_002", "mastery_status": "unknown", "sort_order": 2},
+    ]}
+
+
+def test_update_flashcard_cards_rejects_wrong_owner_and_non_flashcard(db: Session) -> None:
+    owner = register_user(db, UserCreate(username="flashcard-owner", password="password123"))
+    other = register_user(db, UserCreate(username="flashcard-other", password="password123"))
+    course = create_course(db, owner.id, CourseCreate(name="Networks"))
+    flashcards = create_content(db, owner.id, course.id, "gen_private_flashcards", content_type="flashcard")
+    outline = create_content(db, owner.id, course.id, "gen_outline_edit", content_type="outline")
+    cards = [{"front": "Q", "back": "A", "tags": [], "explanation": None}]
+
+    with pytest.raises(CourseNexusError) as owner_exc:
+        update_flashcard_cards(db, user_id=other.id, generated_content_id=flashcards.id, cards=cards)
+    assert owner_exc.value.code == "NOT_FOUND"
+    with pytest.raises(CourseNexusError) as type_exc:
+        update_flashcard_cards(db, user_id=owner.id, generated_content_id=outline.id, cards=cards)
+    assert type_exc.value.code == "INVALID_GENERATED_CONTENT_TYPE"

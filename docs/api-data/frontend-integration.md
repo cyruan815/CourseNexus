@@ -635,7 +635,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 模型、最终 schema 或 Markmap 预处理失败会保存 `generation_status="failed"` 记录，`error_code` 为 `GENERATION_FAILED` 或 `GENERATION_SCHEMA_INVALID`；失败记录的 `content_json=null` 且 `source_citations=[]`。重复请求会创建不同 ID，当前没有持久化幂等键或 retry-by-id 接口。
 
-五类结果均使用稳定业务 ID 和连续 `sort_order`，业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。Quiz 当前只生成 A-D 四选一单选题；Flashcard 的 `mastery_status="unknown"` 只是初始展示值，当前没有掌握度写接口。
+五类结果均使用稳定业务 ID 和连续 `sort_order`，业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。Quiz 当前只生成 A-D 四选一单选题；新生成 Quiz 每个选项都有 `explanation`，错误选项解析只说明该选项自身错误的具体知识逻辑，不透露正确答案或正确结论；历史 Quiz 缺少逐项解析时前端不会编造错误原因。Flashcard 的 `mastery_status="unknown"` 只是初始展示值，当前没有掌握度写接口。
 
 ### 3.23.1 任务内容生成
 

@@ -12,6 +12,8 @@ from app.modules.generated_content.repository import (
     list_generated_content_citations,
 )
 from app.modules.generated_content.schemas import GeneratedContentCitationRead, GeneratedContentRead
+from app.modules.generation.generators.flashcard.schemas import FlashcardContent, FlashcardRead
+from app.modules.generated_content.repository import save_generated_content
 
 
 POC_GENERATION_TYPES = {"quiz", "flashcard", "mindmap", "outline", "knowledge_list"}
@@ -66,4 +68,25 @@ def get_generated_content_detail(
     content = get_active_generated_content_for_user(db, user_id=user_id, generated_content_id=generated_content_id)
     if content is None:
         raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    return build_generated_content_read(db, content)
+
+
+def update_flashcard_cards(
+    db: Session,
+    *,
+    user_id: str,
+    generated_content_id: str,
+    cards: list[dict[str, object]],
+) -> GeneratedContentRead:
+    content = get_active_generated_content_for_user(db, user_id=user_id, generated_content_id=generated_content_id)
+    if content is None:
+        raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    if content.content_type != "flashcard":
+        raise CourseNexusError(code="INVALID_GENERATED_CONTENT_TYPE", message="只有抽认卡内容可以编辑卡片", status_code=409)
+    normalized = FlashcardContent(cards=[
+        FlashcardRead(id=f"card_{index:03d}", sort_order=index, mastery_status="unknown", **card)
+        for index, card in enumerate(cards, start=1)
+    ])
+    content.content_json = normalized.model_dump(mode="json")
+    save_generated_content(db, content)
     return build_generated_content_read(db, content)

@@ -29,6 +29,7 @@ class QuizOption(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: Literal["A", "B", "C", "D"]
     text: str = Field(min_length=1, max_length=500)
+    explanation: str = Field(min_length=1, max_length=800)
 
     @field_validator("text")
     @classmethod
@@ -37,6 +38,11 @@ class QuizOption(BaseModel):
         if not result:
             raise ValueError("Quiz option cannot be blank")
         return result
+
+    @field_validator("explanation")
+    @classmethod
+    def trim_explanation(cls, value: str) -> str:
+        return value.strip()
 
 
 class QuizDraft(BaseModel):
