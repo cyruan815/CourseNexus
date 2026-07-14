@@ -134,12 +134,8 @@
   border-bottom: 0;
 }
 
-.handout-table td:first-child {
-  width: 28%;
-  font-family: "Times New Roman", serif;
-  font-size: 18px;
-  font-style: italic;
-}
+
+
 
 .handout-callout {
   margin: 25px 0;
@@ -157,6 +153,14 @@
 .handout-callout p {
   margin: 0;
   line-height: 1.85;
+}
+
+.handout-callout-body > *:first-child {
+  margin-top: 0;
+}
+
+.handout-callout-body > *:last-child {
+  margin-bottom: 0;
 }
 
 .handout-callout-note,
@@ -282,4 +286,14 @@
 .handout-markdown strong {
   color: #2f343c;
   font-weight: 800;
+}
+
+.handout-markdown .katex-display {
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.handout-markdown p .katex {
+  font-size: 1.02em;
 }
