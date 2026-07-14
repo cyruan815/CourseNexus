@@ -1,4 +1,5 @@
 import { Alert, Text } from "@mantine/core";
+import ReactMarkdown from "react-markdown";
 import type { GeneratedContent } from "../course-workspace/types";
 import { flashcards, knowledgeItems, mindmapContent, outlineSections, quizQuestions, taskTestQuestions } from "./guards";
 import { FlashcardResult } from "./renderers/FlashcardResult";
@@ -17,5 +18,9 @@ export function GeneratedContentRenderer({ content }: { content: GeneratedConten
   if (content.content_type === "mindmap") { const value = mindmapContent(content.content_json); return value ? <MindmapResult content={value} /> : invalid; }
   if (content.content_type === "outline") { const value = outlineSections(content.content_json); return value ? <OutlineResult sections={value} /> : invalid; }
   if (content.content_type === "knowledge_list") { const value = knowledgeItems(content.content_json); return value ? <KnowledgeListResult items={value} /> : invalid; }
+  if (content.content_type === "handout") {
+    const markdown = content.content?.trim();
+    return markdown ? <div className="gc-handout-markdown"><ReactMarkdown>{markdown}</ReactMarkdown></div> : invalid;
+  }
   return content.content ? <Text className="gc-text-fallback">{content.content}</Text> : <Alert color="gray">暂无可展示内容</Alert>;
 }

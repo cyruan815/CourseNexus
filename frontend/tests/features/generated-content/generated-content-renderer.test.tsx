@@ -18,4 +18,11 @@ describe("GeneratedContentRenderer", () => {
     rerender(<MantineProvider><GeneratedContentRenderer content={{ ...base, content_type: "future_type", content: "Readable fallback" } as never} /></MantineProvider>);
     expect(screen.getByText("Readable fallback")).toBeInTheDocument();
   });
+
+  it("renders handout content as markdown", () => {
+    render(<MantineProvider><GeneratedContentRenderer content={{ ...base, content_type: "handout", content: "# Handout title\n\nThis is **important**." } as never} /></MantineProvider>);
+
+    expect(screen.getByRole("heading", { name: "Handout title" })).toBeInTheDocument();
+    expect(screen.getByText("important").tagName).toBe("STRONG");
+  });
 });
