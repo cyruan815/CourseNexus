@@ -46,3 +46,11 @@ AIGeneratedContent.content Markdown
 - 导出层应继续清洗用户可见引用残留，不展示 `formula-not-decoded`、``、``、`` 等 parser/OCR 噪声。
 - PDF 视觉质量以后应通过渲染 PNG 或人工抽检验证；文本抽取只能作为辅助检查。
 - PDF HTML 必须等待 `window.__COURSE_NEXUS_MATH_READY__` 和字体加载完成；若出现 `.katex-error` 或 KaTeX runtime 错误，导出失败并由 service 映射为 `EXPORT_FAILED`。若后续替换为前端打印页或其他 PDF 引擎，必须更新本 ADR 和 `docs/domains/study-mode/task-content.md`。
+
+## 2026-07-15 Update: Markdown Callout Rendering
+
+Handout PDF renderer now shares the same callout contract as the frontend handout Markdown renderer. The source Markdown must use GitHub alert style blockquotes such as `> [!NOTE] 注意` and `> [!EXAMPLE] 例题 1`; the generator prompt is responsible for producing that syntax and must not output HTML callouts.
+
+The PDF pipeline remains Markdown -> markdown-it-py HTML -> local KaTeX auto-render -> Playwright PDF. After markdown-it-py renders HTML, `render_markdown_pdf_html()` decorates only blockquotes whose first paragraph starts with one supported marker: `NOTE`, `EXAMPLE`, `SUMMARY`, `WARNING`, or `TIP`. Decorated blocks become `.pdf-callout` containers with rounded backgrounds and no left accent border. Unsupported or ordinary blockquotes keep the default quote styling.
+
+This keeps PDF behavior aligned with the React renderer while preserving a small backend surface area: no database schema changes, no generated content migration, and no frontend print route dependency.
