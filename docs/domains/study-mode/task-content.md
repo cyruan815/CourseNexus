@@ -83,8 +83,8 @@ sequenceDiagram
     MC-->>LE: MaterialContextBatch list
     alt handout
         LE->>GEN: run_material_coverage(map each batch)
-        GEN->>MP: generate_structured(content schema) per batch
-        GEN-->>LE: reduced GeneratorOutput
+        GEN->>MP: generate_text(Markdown prompt)
+        GEN-->>LE: Markdown GeneratorOutput
     else task_test
         LE->>GEN: generate once with all current subtask batches
         GEN->>GEN: internally summarize candidate points from all chunks
@@ -92,7 +92,7 @@ sequenceDiagram
         GEN->>GEN: validate count/type/id/options/duplicates/citations
         GEN-->>LE: fixed-size GeneratorOutput
     end
-    LE->>DB: save AIGeneratedContent and SourceCitation
+    LE->>DB: save AIGeneratedContent; task_test also saves SourceCitation
     LE-->>FE: GeneratedContentRead
 ```
 
@@ -101,120 +101,22 @@ sequenceDiagram
 - 材料范围只能来自 `StudySubTask.related_material_ids_json`。
 - `MaterialScope.include_all_parsed_materials = false`，`material_ids` 为二级任务关联资料 ID。
 - S06 使用 `iter_material_context_batches()` 读取当前二级任务的全材料上下文，不使用 Top-K 检索，也不调用旧的 `resolve_context()`。
-- Handout 使用 `run_material_coverage()` 覆盖每个材料批次，再合并讲义章节。
+- Handout 使用当前二级任务允许的材料范围生成一整篇 Markdown 讲义；上下文可放入单次 prompt 时优先一次生成，必须分批时由 reducer 重新合成为最终整篇 Markdown，不把多个 batch 草稿硬拼成最终稿。
 - Task test 不再“每个 batch 各生成一整套题再拼接”；它把当前二级任务的所有批次一次性传给 task-test generator，由 prompt 要求先在内部汇总候选考点，再只输出最终 `question_count` 道题。
 - Task test 的 `question_count` 是最终硬约束；当参数包含 `question_type_counts` 时，每种 `question_type` 的输出数量也是硬约束。输出多题、少题、每种题型数量不匹配、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
-- 引用必须来自本次材料上下文的 chunk id，不允许伪造 fallback 引用。task_test 的所有题目引用还必须落在当前二级任务允许的材料批次内。
+- Handout 不保存逐条 `source_citations`；来源说明放在 Markdown 顶部。Task test 的题目引用必须来自本次材料上下文的 chunk id，且必须落在当前二级任务允许的材料批次内，不允许伪造 fallback 引用。
 
 ## 内容结构
 
-`handout.content_json` 包含 `overview`、`learning_objectives`、`sections` 和 `summary`。每个 section 包含 `id`、`title`、`body`、`key_points`、`source_citation_ids` 和 `sort_order`。
+`handout` 采用 Markdown-first 存储：
 
-`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`；其中 `true_false.correct_answer` 是 boolean，其他题型分别使用字符串或字符串数组。
+- `AIGeneratedContent.title` ???????????????? `{subtask.title}??`?
+- `AIGeneratedContent.content` ????????? Markdown ?????
+- `handout.content_json` ?????????`{"format":"markdown","schema_version":1}`??????? `sections/blocks` ??????????? handout ?????
+- Handout ????? `SourceCitation`?Markdown ?????????????? `??????????????????????????`??????????????
+- ???????????????????????Handout prompt ?????????? `$$...$$`??????? `$...$`??? `\[...\]`?`\(...\)` ????? `[` / `]` ?????????????????????? Markdown ???
 
-### HandoutContent v2 目标契约
-
-下一阶段讲义生成升级后，`handout.content_json` 仍是讲义的权威持久化内容。模型不得输出整篇 HTML，也不得把整篇讲义作为自由 Markdown 文档返回；模型必须输出经过后端 schema 校验的结构化 JSON。Markdown 只允许作为受控文本字段中的轻量行内表达，公式、表格、图表、思维导图、例题、自测题和引用都必须落到专门字段或 typed blocks 中。
-
-`schema_version = 2` 的目标结构如下：
-
-```json
-{
-  "schema_version": 2,
-  "title": "Nyquist 与 Shannon 公式讲义",
-  "overview": "本讲义解决什么问题、适合什么学习目标。",
-  "difficulty": "medium",
-  "estimated_minutes": 40,
-  "learning_objectives": [
-    "区分带宽、码元速率和数据率",
-    "计算 Nyquist 和 Shannon 公式题"
-  ],
-  "prerequisites": [
-    {
-      "id": "pre_1",
-      "title": "对数基础",
-      "explanation": "只补足 log2 在公式中的含义。",
-      "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
-      "source_citation_ids": [],
-      "sort_order": 1
-    }
-  ],
-  "sections": [
-    {
-      "id": "sec_1",
-      "title": "信道容量与带宽",
-      "lead": "先说结论：带宽限制信号能携带的信息变化速度。",
-      "source_citation_ids": ["chunk_2"],
-      "blocks": [
-        {
-          "type": "paragraph",
-          "role": "definition",
-          "text": "带宽是信道可通过的频率范围，单位是 Hz。"
-        },
-        {
-          "type": "formula",
-          "title": "Shannon 公式",
-          "latex": "C = W \\log_2(1 + S/N)",
-          "purpose": "估算有噪声信道的理论最大数据率。",
-          "variables": [
-            {"symbol": "C", "meaning": "最大数据率", "unit": "bps"},
-            {"symbol": "W", "meaning": "信道带宽", "unit": "Hz"},
-            {"symbol": "S/N", "meaning": "信噪比倍数，不是 dB", "unit": null}
-          ],
-          "conditions": ["有噪声信道"],
-          "limitations": ["这是理论上限，不等于实际吞吐率"]
-        }
-      ],
-      "key_points": ["Shannon 公式关注噪声，Nyquist 公式关注电平级数。"],
-      "sort_order": 1
-    }
-  ],
-  "knowledge_map": {
-    "type": "mindmap",
-    "title": "物理层知识关系",
-    "root": {
-      "label": "物理层",
-      "children": [
-        {"label": "信号与码元", "children": [{"label": "波特率", "children": []}]},
-        {"label": "信道容量", "children": [{"label": "Nyquist", "children": []}, {"label": "Shannon", "children": []}]}
-      ]
-    }
-  },
-  "formula_cards": [],
-  "exam_focus": [],
-  "self_check": [],
-  "summary": "本节的核心是区分不同通信速率概念，并能按条件选公式。"
-}
-```
-
-v2 讲义的字段语义：
-
-- `title` 使用当前二级任务标题派生，保持二级任务级讲义口径。
-- `difficulty` 表示讲义整体难度，建议取值为 `easy`、`medium`、`hard`。
-- `estimated_minutes` 来自当前二级任务或生成参数，不由模型随意扩展学习时长。
-- `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课；该区块允许 `source_citation_ids=[]`，因为它常是教学铺垫而非资料中的直接结论。
-- `sections[].blocks[]` 是正文主体；旧版 `sections[].body` 在 v2 中被 typed blocks 替代。
-- `sections[].source_citation_ids` 为强制引用字段；模型输出阶段必须引用本次 material-context 中的 chunk id，保存成功后由 learning-execution 回绑为 `SourceCitation.id`。`blocks[]` 默认继承所在 section 的来源，不独立保存引用；顶层 `prerequisites[]` 允许空引用且不伪造来源，`formula_cards[]`、`exam_focus[]`、`self_check[]` 则保留各自的独立引用，生成端校验其 chunk id 范围并在同一事务内保存、回绑。顶层公式卡片不得省略引用。
-- 新生成讲义只接受显式 `schema_version=2`；省略版本或返回 v1 时按 `GENERATION_SCHEMA_INVALID` 失败，不允许把 typed blocks 作为 v1 success 落库。多批次 reducer 在返回前必须重新用 `HandoutContent` 校验最终合并结果，拒绝 v1/v2 混合产生的畸形结构。历史已保存且版本缺失的 v1 内容仍由读取和导出兼容路径处理。
-- `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空；第一版默认继承所有 section 来源，展示时不单独显示引用。
-- `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
-- `exam_focus[]` 用于保存考试或测验常见考法、易错点和解题提醒。
-- `self_check[]` 暂停生成，新生成讲义必须输出空数组 `[]`；该字段仅保留历史结构兼容，学生可见讲义导出不展示该区块，正式练习与测试统一由 `task_test` 承担。
-
-v2 typed block 的第一阶段范围：
-
-- `paragraph`：概念解释、结论、背景、过渡说明。
-- `formula`：KaTeX 兼容 LaTeX、变量解释、适用条件、限制和示例。
-- `example`：题干、步骤、答案、解析、易错提醒。
-- `table`：结构化 `columns` 和 `rows`，不使用 Markdown 表格字符串。
-- `callout`：重点、易错点、提示、警告或学习建议。
-- `steps`：流程、推导或解题步骤。
-- `mindmap`：树形知识结构，可被前端渲染为思维导图。
-- `mermaid`：只用于流程图或关系图，必须包含标题和解释。
-- `chart`：只在资料中存在可追溯数值数据时使用。
-
-首版 v2 不接受模型输出的原始 HTML。`svg` 也不进入首版模型输出范围，除非后续明确渲染、安全和清洗策略。
-
+`task_test` 仍采用结构化 JSON 存储。`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
 任务测试题结构不变量：
 
 - `questions.length == request.parameters.question_count`。
@@ -326,11 +228,11 @@ Handout 生成参数由 learning-execution 注入当前二级任务上下文，�
 
 独立 Markdown 回归转换会清洗 `Sources` 段中的 parser/OCR 残留：命中 `formula-not-decoded`、``、``、`` 时保留资料名和页码前缀，隐藏不安全摘录或延续行，避免解析残留进入学生讲义 PDF。`source_citations` 仍保留在 API 返回和数据库中供内部追溯。
 
-当前未捆绑 KaTeX 静态资源；物理层公式先保持为可换行文本，由浏览器字体和 CSS 保证不截断。后续接入本地 KaTeX 资源时，应在同一 HTML 模板中等待公式和字体加载完成，并在打印前检查 `.katex-error`。
+当前导出层不依赖外部 KaTeX 静态资源；`type=formula` 会先输出受控 Markdown 公式块，HTML/PDF 导出再把 `$$...$$` 转为带 `.math-display` / `.katex` 类名的可打印公式 HTML，并用本地字体与 CSS 保证不显示裸分隔符、不截断。后续如接入完整本地 KaTeX 资源，应继续在同一 HTML 模板中等待公式和字体加载完成，并在打印前检查 `.katex-error`。
 
 ### task-test 默认参数
 
-计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。模型或前端给出的 `{ "single_choice": 10, "short_answer": 3 }`、数组格式、`items` / `question_types` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象，以及 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}` 这类题量文案映射，都会归一化为规范测试题参数；`task_test: "single_choice"` 搭配同级 `question_count` 这类模型 shorthand 会归一化为总题数 + 题型白名单。因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题且分布为 10/3。
+计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。模型或前端给出的 `{ "single_choice": 10, "short_answer": 3 }`、数组格式、`items` / `questions` / `types` / `question_types` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象，以及 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}` 这类题量文案映射，都会归一化为规范测试题参数；`task_test: "single_choice"` 搭配同级 `question_count` 这类模型 shorthand 会归一化为总题数 + 题型白名单。因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题且分布为 10/3。
 
 合并计划默认参数和本次请求时以计划默认值为底：本次请求显式传 per-type counts 时用本次分布覆盖 stored 分布；本次请求只传 `difficulty` 时保留 stored 分布；本次请求显式传 `question_count` 或字符串数组形式的 `question_types`、但没有传 per-type counts 时，清掉 stored `question_type_counts`，退回“总题数 + 题型白名单”旧契约，避免旧 10/3 分布污染新请求。
 
@@ -377,3 +279,29 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 ### 验证策略
 
 本轮修复实施时暂不运行单元测试、构建或局部脚本。最终验证等待用户提供整轮 study-mode prompt 后统一执行：从资料输入、解析、学前诊断、计划生成与保存，到任务讲义、任务测试题和导出文件全链路检查。验收时用户可见输出不得包含 `formula-not-decoded`、``、``；内部 JSON 的 `source_citations[].hit_text` 可以保留原始解析文本。
+
+## 2026-07-14 Handout Markdown-first 简化
+
+本节为新生成 `handout` 的当前权威口径；前文中关于 `HandoutContent` v2、section/block/formula_cards 级 `source_citation_ids`、引用侧栏和历史结构化 handout 导出的描述均视为历史方案，不再适用于新生成讲义。
+
+新生成讲义的持久化口径：
+
+- `ai_generated_contents.title` 使用当前二级任务标题派生，格式为 `{StudySubTask.title}讲义`，不再固定为“今日讲义”。
+- `ai_generated_contents.content` 保存完整 Markdown 正文，正文顶部在一级标题后保留来源说明句，格式为 `本讲义基于《资料名1》《资料名2》中“二级任务标题”相关内容生成。`。
+- 来源说明中的资料名来自本次 handout 实际使用的 material-context batch 资料名去重；知识点优先使用当前 `StudySubTask.title`。
+- `ai_generated_contents.content_json` 只保存轻量格式元信息：`{"format":"markdown","schema_version":1}`。
+- `ai_generated_contents.material_scope_json` 继续保存本次资料范围，用于说明讲义基于哪些资料生成。
+- 新生成 handout 不写 `source_citations`，不做 section / block / formula card 级引用回绑，不兼容历史结构化 handout 导出。
+
+生成流程仍只读取当前二级任务关联资料：`StudySubTask.related_material_ids_json -> MaterialScope(include_all_parsed_materials=false)`。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，handout 专用分支会用该 chunk 范围过滤 material-context batch；公共 `material_context.repository.list_parsed_context_chunks_for_scope()` 只保留当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序这些基础边界，不承载任务级 chunk 范围规则。
+
+Handout 生成优先在当前二级任务上下文可放入 token 限制时一次 prompt 产出整篇 Markdown。若资料必须分 batch，单 batch 先产出局部草稿，reducer 再调用模型把多个草稿合成为一整篇上下连贯、去重后的最终 Markdown；不得把多个 batch Markdown 用分隔线硬拼为最终稿。
+
+导出和前端展示口径：
+
+- Markdown 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 对成功 `handout` 直接返回 `content`。
+- PDF 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 `handout` 读取 `content`，复用 Markdown -> HTML -> PDF renderer。
+- 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。
+- 导出不写数据库、不修改任务状态、不写打卡记录。
+
+任务测试题 `task_test` 暂时仍保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；本轮只同步标题规则，`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`，不再固定为“任务测试题”。

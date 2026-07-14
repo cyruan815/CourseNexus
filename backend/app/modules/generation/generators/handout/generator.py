@@ -5,7 +5,7 @@ from typing import Any
 
 from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
-from app.modules.generation.generators.handout.schemas import HandoutContent, HandoutGenerationParameters
+from app.modules.generation.generators.handout.schemas import HandoutGenerationParameters
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialContextBatch, MaterialContextResult
 
@@ -33,60 +33,30 @@ class HandoutGenerator:
         context = _context_from_batches(batches)
         _assert_material_coverage(context=context, expected_material_ids=expected_material_ids)
         params = HandoutGenerationParameters.model_validate(parameters)
-        allowed_chunk_ids = {chunk.chunk_id for chunk in context.chunks}
-        prompt = _build_prompt(context=context, params=params)
-        content = self.model_provider.generate_structured(prompt=prompt, output_schema=HandoutContent)
-        if content.schema_version != 2:
-            raise CourseNexusError(
-                code="GENERATION_SCHEMA_INVALID",
-                message="新生成讲义必须使用 HandoutContent v2",
-                status_code=500,
-                details={"schema_version": content.schema_version, "expected_schema_version": 2},
-            )
-        _assert_top_level_citations(content)
-        _assert_no_known_terminology_errors(content)
-        item_citation_chunk_ids = _collect_item_citation_chunk_ids(content)
-        citation_chunk_ids = {chunk_id for chunk_ids in item_citation_chunk_ids.values() for chunk_id in chunk_ids}
-        if not citation_chunk_ids or not citation_chunk_ids.issubset(allowed_chunk_ids):
-            raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="讲义引用不属于本次材料上下文", status_code=500)
+        title = _handout_title(params)
+        prompt = _build_prompt(context=context, params=params, title=title)
+        markdown = _normalize_markdown(self.model_provider.generate_text(prompt=prompt))
+        if not markdown:
+            raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
+        markdown = ensure_handout_header(markdown=markdown, title=title, source_note=params.source_note)
+        _assert_no_known_terminology_errors(markdown)
         return GeneratorOutput(
-            title="今日讲义",
-            content_json=content.model_dump(mode="json"),
-            item_citation_chunk_ids=item_citation_chunk_ids,
+            title=title,
+            content=markdown,
+            content_json={"format": "markdown", "schema_version": 1},
+            item_citation_chunk_ids={},
         )
 
 
-def _assert_no_known_terminology_errors(content: HandoutContent) -> None:
-    for text in _handout_text_fragments(content):
-        for term, expected in _KNOWN_TERM_CORRECTIONS.items():
-            if re.search(rf"\b{re.escape(term)}\b", text, flags=re.IGNORECASE):
-                raise CourseNexusError(
-                    code="GENERATION_SCHEMA_INVALID",
-                    message="讲义包含明显术语错拼",
-                    status_code=500,
-                    details={"term": term, "expected": expected},
-                )
-
-
-def _handout_text_fragments(content: HandoutContent) -> list[str]:
-    fragments: list[str] = []
-
-    def collect(value: object) -> None:
-        if isinstance(value, str):
-            stripped = value.strip()
-            if stripped:
-                fragments.append(stripped)
-            return
-        if isinstance(value, dict):
-            for item in value.values():
-                collect(item)
-            return
-        if isinstance(value, list):
-            for item in value:
-                collect(item)
-
-    collect(content.model_dump(mode="python"))
-    return fragments
+def _assert_no_known_terminology_errors(markdown: str) -> None:
+    for term, expected in _KNOWN_TERM_CORRECTIONS.items():
+        if re.search(rf"\b{re.escape(term)}\b", markdown, flags=re.IGNORECASE):
+            raise CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="讲义包含明显术语错拼",
+                status_code=500,
+                details={"term": term, "expected": expected},
+            )
 
 
 def build_generator(model_provider: ModelProvider) -> HandoutGenerator:
@@ -112,7 +82,7 @@ def _assert_material_coverage(*, context: MaterialContextResult, expected_materi
         )
 
 
-def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationParameters) -> str:
+def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationParameters, title: str) -> str:
     chunks = "\n\n".join(
         f"[chunk_id={chunk.chunk_id}; material={chunk.material_name}; page={_page_label(chunk)}]\n{chunk.content_text}"
         for chunk in context.chunks
@@ -121,17 +91,18 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
     role_and_task = "\n".join(
         [
             "你是一名擅长大学数学、物理、计算机和工程类课程的教学设计专家，也是 CourseNexus 的计划学习讲义生成器。",
-            "你的任务不是简单总结资料，而是根据课程资料、学习目标、二级任务类型、学习时间和学生诊断，生成可在网页中稳定渲染的结构化个性化讲义。",
-            "不要输出完整 Markdown 文档。",
+            "请直接输出一份完整 Markdown 讲义，面向学生阅读和导出。",
+            f"讲义标题必须是：{title}",
+            "不要输出 JSON。",
             "不要输出 HTML。",
-            "只输出符合 HandoutContent schema 的 JSON 对象。",
+            "不要写 citation marker、source_citation_ids 或逐条资料来源注释。",
         ]
     )
     mode_rules = "\n".join(
         [
             "模式规则：",
             "- subtask_type=learn：优先讲清新知识，顺序为先说结论 -> 精确定义 -> 直觉理解 -> 为什么需要 -> 公式/步骤 -> 例子 -> 易错点。",
-            "- subtask_type=review：优先帮助回顾和查漏，增加对比表、公式卡片、易错点、知识关系图和自测。",
+            "- subtask_type=review：优先帮助回顾和查漏，增加对比表、公式卡片、易错点和自测。",
             "- content_depth=concise：减少背景扩展，每个核心知识点保留定义、核心原理和至多 1 个基础例子。",
             "- content_depth=standard：完整解释定义、原理、例子、易错点，对核心公式给出必要推导。",
             "- content_depth=detailed：增加边界条件、反例、综合应用和容易被教材省略的中间步骤。",
@@ -141,45 +112,26 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- weak_area=memorization：加强核心结论卡片、易错判断和快速自测。",
         ]
     )
-    planning_rules = "\n".join(
+    source_note_rule = (
+        f"- 一级标题下一段必须原样写入来源说明：{params.source_note}"
+        if params.source_note
+        else "- 一级标题下一段可以省略来源说明。"
+    )
+    markdown_rules = "\n".join(
         [
-            "生成前的内部处理：",
-            "- 先在内部提取核心知识点、依赖关系、前置知识缺口、易混点、需要公式/图示/表格的位置；不要展示分析过程。",
-            "- 区分必须掌握、理解即可和拓展内容，根据预计学习时间控制讲义长度。",
+            "Markdown 输出要求：",
+            "- 只输出 Markdown 正文，不要包裹 ```markdown 代码块。",
+            "- 使用一个一级标题作为讲义标题。",
+            source_note_rule,
+            "- 使用二级/三级标题组织：概览、学习目标、正文、例题或公式、易错点、总结。",
+            "- 块级数学公式必须使用 $$ 独立公式块，例如：$$\\nC = B \\log_2(1 + S/N)\\n$$。",
+            "- 行内数学公式必须使用 $...$，例如：$C = B \\log_2(1 + S/N)$。",
+            "- 不要使用 \\[...\\] 或单独一行 [ / ] 包裹公式。",
+            "- 公式不要放进代码块。",
+            "- 变量解释用普通 Markdown 列表，不要混进公式块。",
+            "- 对比内容使用 Markdown 表格。",
             "- 如果课程材料不足以支持某个结论，明确说明课程材料未提供足够信息，不要自行编造。",
             "- 只服务当前 subtask 的学习目标，不生成整章摘要或泛泛课程总结。",
-        ]
-    )
-    schema_rules = "\n".join(
-        [
-            "输出 schema 要求：",
-            "- schema_version 必须为 2。",
-            "- sections[].blocks 是正文主体；不要把整节正文塞进一个 Markdown 字符串。",
-            "- 每个 section 都围绕当前 subtask 展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。",
-            "- learning_objectives 使用可观察动词，例如解释、区分、计算、推导、判断、比较、应用。",
-            "- prerequisites 只补足理解当前任务所需的最小前置知识，不扩展成另一整章。",
-        ]
-    )
-    block_rules = "\n".join(
-        [
-            "排版与块规则：",
-            "- 数学公式必须放入 type=formula block，latex 必须是 KaTeX 兼容字符串，并写清适用条件和变量含义。",
-            "- 对比内容必须放入 type=table block，最多 6 列、12 行。",
-            "- 知识关系优先使用 knowledge_map 的 mindmap tree，不要把思维导图写成普通段落。",
-            "- Mermaid 只用于流程、顺序或关系图；必须提供 title、code、explanation。",
-            "- Chart 只在资料提供真实数值时生成，不得编造数据。",
-            "- 不生成 SVG，除非输入资料明确要求且系统 schema 支持。",
-            "- 每个 section 必须填写 source_citation_ids；block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids。",
-            "- prerequisites 可不填写 source_citation_ids；formula_cards、exam_focus 中的每个顶层条目必须独立填写 source_citation_ids，并使用下方 chunk_id；self_check 必须输出空数组 []，仅保留历史兼容，不要生成讲义内自测题。",
-        ]
-    )
-    citation_rules = "\n".join(
-        [
-            "引用规则：",
-            "- 每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个，且必须直接相关。",
-            "- source_citation_ids 仅用于后端追溯和质量校验；学生导出讲义不会逐节展示 citation。",
-            "- top-level knowledge_map 默认继承所有 section 来源；第一版展示时不单独显示引用。",
-            "- 正文不要写“来源如下”“引用如下”，也不要堆叠资料摘录。",
         ]
     )
     return "\n\n".join(
@@ -188,10 +140,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             f"语言与强度：{params.language}；内容深度：{params.content_depth}；例题强度：{params.example_intensity}；测试强度：{params.assessment_intensity}；复习强度：{params.review_intensity}。",
             task_context,
             mode_rules,
-            planning_rules,
-            schema_rules,
-            block_rules,
-            citation_rules,
+            markdown_rules,
             f"资料片段：\n{chunks}",
         ]
     )
@@ -223,7 +172,19 @@ def _task_context_lines(params: HandoutGenerationParameters) -> list[str]:
         lines.append(f"- 诊断补充说明：{params.diagnostic_note}")
     if params.teaching_strategy_hint:
         lines.append(f"- 教学策略提示：{params.teaching_strategy_hint}")
+    if params.source_note:
+        lines.append(f"- 来源说明：{params.source_note}")
     return lines
+
+
+def _handout_title(params: HandoutGenerationParameters) -> str:
+    explicit_title = _context_value(params.handout_title)
+    if explicit_title != "未提供":
+        return explicit_title
+    subtask_title = _context_value(params.subtask_title)
+    if subtask_title != "未提供":
+        return f"{subtask_title}讲义"
+    return "讲义"
 
 
 def _context_value(value: str | None) -> str:
@@ -231,41 +192,86 @@ def _context_value(value: str | None) -> str:
     return stripped or "未提供"
 
 
-def _collect_item_citation_chunk_ids(content: HandoutContent) -> dict[str, list[str]]:
-    bindings = {
-        section.id: list(dict.fromkeys(section.source_citation_ids))
-        for section in sorted(content.sections, key=lambda item: item.sort_order)
-        if section.source_citation_ids
-    }
-    top_level_items = [
-        *content.prerequisites,
-        *content.formula_cards,
-        *content.exam_focus,
-        *content.self_check,
-    ]
-    if content.knowledge_map is not None:
-        top_level_items.append(content.knowledge_map)
-    top_level_chunk_ids = list(
-        dict.fromkeys(
-            chunk_id
-            for item in top_level_items
-            for chunk_id in item.source_citation_ids
-        )
-    )
-    if top_level_chunk_ids:
-        bindings["__handout__"] = top_level_chunk_ids
-    return bindings
+def _normalize_markdown(value: str) -> str:
+    markdown = value.strip()
+    fence_match = re.fullmatch(r"```(?:markdown|md)?\s*\n(?P<body>.*?)\n```", markdown, flags=re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        markdown = fence_match.group("body").strip()
+    return markdown
 
 
-def _assert_top_level_citations(content: HandoutContent) -> None:
-    missing_formula_titles = [formula.title for formula in content.formula_cards if not formula.source_citation_ids]
-    if missing_formula_titles:
-        raise CourseNexusError(
-            code="GENERATION_SCHEMA_INVALID",
-            message="顶层公式卡片必须包含独立来源引用",
-            status_code=500,
-            details={"formula_cards_without_citations": missing_formula_titles},
-        )
+def ensure_handout_header(*, markdown: str, title: str, source_note: str | None) -> str:
+    markdown = _normalize_markdown(markdown)
+    if not markdown:
+        return markdown
+    note = source_note.strip() if isinstance(source_note, str) else ""
+    if not note:
+        return normalize_markdown_math(markdown)
+    lines = markdown.splitlines()
+    if lines and lines[0].startswith("# "):
+        body = "\n".join(lines[1:]).strip()
+        if body.startswith(note):
+            return normalize_markdown_math(markdown)
+        return normalize_markdown_math("\n\n".join(part for part in [f"# {title}", note, body] if part))
+    if markdown.startswith(note):
+        return normalize_markdown_math(markdown)
+    return normalize_markdown_math("\n\n".join([f"# {title}", note, markdown]))
+
+
+def normalize_markdown_math(markdown: str) -> str:
+    markdown = _normalize_markdown(markdown)
+    markdown = re.sub(r"\\\[\s*([^\n]+?)\s*\\\]", _single_line_block_math_replacement, markdown)
+    markdown = _normalize_latex_block_delimiters(markdown, opener=r"\[", closer=r"\]")
+    markdown = _normalize_latex_block_delimiters(markdown, opener="[", closer="]")
+    return re.sub(r"\\\((.+?)\\\)", _inline_math_replacement, markdown, flags=re.DOTALL)
+
+
+def _single_line_block_math_replacement(match: re.Match[str]) -> str:
+    body = match.group(1).strip()
+    if not body or not _looks_like_latex(body):
+        return match.group(0)
+    return f"$$\n{body}\n$$"
+
+
+def _normalize_latex_block_delimiters(markdown: str, *, opener: str, closer: str) -> str:
+    lines = markdown.splitlines()
+    normalized: list[str] = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip() != opener:
+            normalized.append(lines[index])
+            index += 1
+            continue
+        end_index = index + 1
+        body_lines: list[str] = []
+        while end_index < len(lines) and lines[end_index].strip() != closer:
+            body_lines.append(lines[end_index])
+            end_index += 1
+        if end_index >= len(lines):
+            normalized.append(lines[index])
+            normalized.extend(body_lines)
+            index = end_index
+            continue
+        body = "\n".join(body_lines).strip()
+        if body and _looks_like_latex(body):
+            normalized.extend(["$$", body, "$$"])
+        else:
+            normalized.append(lines[index])
+            normalized.extend(body_lines)
+            normalized.append(lines[end_index])
+        index = end_index + 1
+    return "\n".join(normalized)
+
+
+def _inline_math_replacement(match: re.Match[str]) -> str:
+    body = match.group(1).strip()
+    if not body or not _looks_like_latex(body):
+        return match.group(0)
+    return f"${body}$"
+
+
+def _looks_like_latex(value: str) -> bool:
+    return bool(re.search(r"\\[A-Za-z]+|[_^]\{?|=", value))
 
 
 def _page_label(chunk: object) -> str | int | None:

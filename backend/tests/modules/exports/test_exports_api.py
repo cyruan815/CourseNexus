@@ -16,11 +16,9 @@ from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
-from app.modules.exports.renderer import _render_handout_pdf_lines, _render_handout_pdf_markdown, render_markdown_pdf, render_markdown_pdf_html
+from app.modules.exports.renderer import render_markdown_pdf, render_markdown_pdf_html
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.generated_content.schemas import GeneratedContentCitationRead
-from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.materials.models import CourseMaterial
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -275,6 +273,7 @@ def _seed_generated_content(
     generation_status: str = "success",
     content_json: dict[str, object] | None = None,
     with_citation: bool = True,
+    content_markdown: str | None = None,
 ) -> str:
     subtask = api.db.get(StudySubTask, subtask_id)
     assert subtask is not None
@@ -285,7 +284,7 @@ def _seed_generated_content(
         study_subtask_id=subtask_id,
         content_type=content_type,
         title="今日讲义" if content_type == "handout" else "任务测试题",
-        content=None,
+        content=content_markdown,
         content_json=_default_content_json(content_type) if content_json is None else content_json,
         generation_status=generation_status,
         material_scope_json={"include_all_parsed_materials": False, "material_ids": subtask.related_material_ids_json},
@@ -344,16 +343,24 @@ def test_export_task_test_markdown_returns_not_found_for_cross_user_content(api:
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
-def test_export_markdown_rejects_non_task_test_content(api: ApiHarness) -> None:
+def test_export_handout_markdown_success(api: ApiHarness) -> None:
     user_id, headers = _register_user_and_headers(api)
-    subtask_id = _seed_task_content_plan(api, user_id=user_id)
-    content_id = _seed_generated_content(api, user_id=user_id, subtask_id=subtask_id, content_type="handout")
+    subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
+    content_id = _seed_generated_content(
+        api,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        content_type="handout",
+        content_markdown="# 今日讲义\n\n主键用于唯一标识表中的一行。",
+        with_citation=False,
+    )
 
     response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/markdown", headers=headers)
 
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "EXPORT_UNSUPPORTED_CONTENT_TYPE"
-
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert response.headers["content-disposition"] == f'attachment; filename="handout-{content_id}.md"'
+    assert response.text == "# 今日讲义\n\n主键用于唯一标识表中的一行。"
 
 def test_export_markdown_rejects_non_success_content(api: ApiHarness) -> None:
     user_id, headers = _register_user_and_headers(api)
@@ -413,6 +420,7 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
         subtask_id=subtask_id,
         content_id="gen_handout",
         content_type="handout",
+        content_markdown="# 今日讲义\\n\\n主键用于唯一标识表中的一行。",
     )
 
     response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
@@ -425,82 +433,15 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
     assert len(response.content) > 8_000
 
 
-def test_render_handout_pdf_lines_uses_source_notice_without_section_sources() -> None:
-    handout = HandoutContent.model_validate(_handout_json())
-    citations = {
-        "cit_task_test": GeneratedContentCitationRead(
-            id="cit_task_test",
-            material_id="mat_1",
-            chunk_id="chunk_1",
-            material_name="Chap7 物理层.pdf",
-            page="1",
-            page_index=0,
-            hit_text="<!-- formula-not-decoded -->  ",
-            sort_order=2,
-        ),
-        "cit_extra": GeneratedContentCitationRead(
-            id="cit_extra",
-            material_id="mat_2",
-            chunk_id="chunk_2",
-            material_name="补充资料.pdf",
-            page="2",
-            page_index=1,
-            hit_text="不应展示的详细摘录。",
-            sort_order=1,
-        ),
-    }
+def test_render_markdown_pdf_html_renders_latex_math() -> None:
+    html = render_markdown_pdf_html(
+        "# 今日讲义\n\n$$\nC = W \\log_2(1 + S/N)\n$$\n",
+        title="今日讲义",
+    )
 
-    rendered = "\n".join(text for text, _ in _render_handout_pdf_lines("今日讲义", handout, citations))
-
-    assert "来源说明" in rendered
-    assert "《Chap7 物理层.pdf》" in rendered
-    assert "《补充资料.pdf》" in rendered
-    assert "Overview 与 Nyquist/Shannon" in rendered
-    assert "Sources:" not in rendered
-    assert "Sources: unavailable" not in rendered
-    assert "Source Details" not in rendered
-    assert "<!-- formula-not-decoded -->" not in rendered
-    assert "" not in rendered
-    assert "" not in rendered
-    assert "不应展示的详细摘录" not in rendered
-
-
-def test_render_handout_v2_markdown_uses_block_fallbacks_and_safe_notice() -> None:
-    handout = HandoutContent.model_validate(_handout_v2_json())
-    citations = {
-        "cit_task_test": GeneratedContentCitationRead(
-            id="cit_task_test",
-            material_id="mat_1",
-            chunk_id="chunk_1",
-            material_name="Chap7 物理层.pdf",
-            page="9",
-            page_index=8,
-            hit_text="<!-- formula-not-decoded --> ",
-            sort_order=1,
-        )
-    }
-
-    rendered = _render_handout_pdf_markdown("今日讲义", handout, citations)
-
-    assert "来源说明" in rendered
-    assert "$$\nC = W \\log_2(1 + S/N)\n$$" in rendered
-    assert "| 公式 | 用途 |" in rendered
-    assert "| Shannon | 有噪声信道 |" in rendered
-    assert "- 信道容量" in rendered
-    assert "  - Shannon" in rendered
-    assert "## Prerequisites" in rendered
-    assert "理解二进制对数的含义" in rendered
-    assert "Example: log2(8) = 3" in rendered
-    assert "## Formula Cards" in rendered
-    assert "### Nyquist 公式" in rendered
-    assert "C = 2W \\log_2 M" in rendered
-    assert "## Exam Focus" in rendered
-    assert "先判断题目是否考虑噪声" in rendered
-    assert "## Self Check" in rendered
-    assert "Answer: Shannon 公式" in rendered
-    assert "Explanation: Shannon 公式显式考虑信噪比" in rendered
-    assert "formula-not-decoded" not in rendered
-    assert "" not in rendered
+    assert "$$" not in html
+    assert "\\log_2" not in html
+    assert "katex" in html
 
 def test_render_real_handout_markdown_pdf() -> None:
     markdown_path = Path(__file__).resolve().parents[2] / "fixtures" / "exports" / "physical-layer-handout.md"
@@ -532,6 +473,7 @@ def test_export_handout_pdf_returns_not_found_for_cross_user_content(api: ApiHar
         subtask_id=subtask_id,
         content_id="gen_handout",
         content_type="handout",
+        content_markdown="# 今日讲义\\n\\n主键用于唯一标识表中的一行。",
     )
 
     response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=bob_headers)
@@ -561,6 +503,7 @@ def test_export_pdf_rejects_non_success_handout_content(api: ApiHarness, generat
         subtask_id=subtask_id,
         content_id="gen_handout",
         content_type="handout",
+        content_markdown="# 今日讲义\\n\\n主键用于唯一标识表中的一行。",
         generation_status=generation_status,
     )
 
@@ -570,7 +513,7 @@ def test_export_pdf_rejects_non_success_handout_content(api: ApiHarness, generat
     assert response.json()["error"]["code"] == "EXPORT_CONTENT_NOT_READY"
 
 
-def test_export_pdf_rejects_invalid_handout_content(api: ApiHarness) -> None:
+def test_export_pdf_rejects_empty_handout_markdown(api: ApiHarness) -> None:
     user_id, headers = _register_user_and_headers(api)
     subtask_id = _seed_task_content_plan(api, user_id=user_id, subtask_type="learn")
     content_id = _seed_generated_content(
@@ -579,7 +522,8 @@ def test_export_pdf_rejects_invalid_handout_content(api: ApiHarness) -> None:
         subtask_id=subtask_id,
         content_id="gen_handout",
         content_type="handout",
-        content_json={"overview": "学习关系模型。", "sections": []},
+        content_markdown="   ",
+        with_citation=False,
     )
 
     response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
@@ -597,14 +541,15 @@ def test_export_pdf_returns_export_failed_when_renderer_fails(api: ApiHarness, m
         subtask_id=subtask_id,
         content_id="gen_handout",
         content_type="handout",
+        content_markdown="# 今日讲义\\n\\n主键用于唯一标识表中的一行。",
     )
 
     from app.modules.exports import service as export_service
 
-    def broken_renderer(content: object) -> bytes:
+    def broken_renderer(markdown: str, *, title: str = "CourseNexus") -> bytes:
         raise RuntimeError("pdf unavailable")
 
-    monkeypatch.setattr(export_service, "render_handout_pdf", broken_renderer)
+    monkeypatch.setattr(export_service, "render_markdown_pdf", broken_renderer)
 
     response = api.client.get(f"/api/v1/generated-contents/{content_id}/exports/pdf", headers=headers)
 

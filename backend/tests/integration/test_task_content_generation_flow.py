@@ -220,11 +220,11 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     task_test = task_test_response.json()["data"]
     assert handout["study_subtask_id"] == learn_subtask_id
     assert task_test["study_subtask_id"] == quiz_subtask_id
-    assert handout["source_citations"]
+    assert handout["source_citations"] == []
+    assert handout["content_json"] == {"format": "markdown", "schema_version": 1}
+    assert "本讲义基于" in handout["content"]
     assert task_test["source_citations"]
-    handout_citation_ids = {citation["id"] for citation in handout["source_citations"]}
     task_test_citation_ids = {citation["id"] for citation in task_test["source_citations"]}
-    assert set(handout["content_json"]["sections"][0]["source_citation_ids"]).issubset(handout_citation_ids)
     assert set(task_test["content_json"]["questions"][0]["source_citation_ids"]).issubset(task_test_citation_ids)
 
     learn_context = api.client.get(f"/api/v1/study-subtasks/{learn_subtask_id}/execution-context", headers=headers).json()["data"]
@@ -234,7 +234,7 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
 
     handout_citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == handout["id"])).scalars().all()
     task_test_citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == task_test["id"])).scalars().all()
-    assert {citation.chunk_id for citation in handout_citations} == {"chunk_flow_1", "chunk_flow_2"}
+    assert handout_citations == []
     assert {citation.chunk_id for citation in task_test_citations} == {"chunk_flow_1", "chunk_flow_2"}
 
     markdown_response = api.client.get(f"/api/v1/generated-contents/{task_test['id']}/exports/markdown", headers=headers)

@@ -8,8 +8,9 @@ from app.modules.material_context.schemas import ContextChunk
 
 
 class MockModelProvider:
-    def __init__(self, structured_outputs: dict[type[BaseModel], BaseModel | dict] | None = None) -> None:
+    def __init__(self, structured_outputs: dict[type[BaseModel], BaseModel | dict] | None = None, text_outputs: list[str] | None = None) -> None:
         self.structured_outputs = structured_outputs or {}
+        self.text_outputs = list(text_outputs or [])
 
     def answer_question(self, *, question: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
         first_chunk = context_chunks[0]
@@ -17,6 +18,11 @@ class MockModelProvider:
             answer_text=f"Mock answer based on: {first_chunk.content_text}",
             citation_chunk_ids=[first_chunk.chunk_id],
         )
+
+    def generate_text(self, *, prompt: str) -> str:
+        if self.text_outputs:
+            return self.text_outputs.pop(0)
+        return "# Mock Markdown\n\nMock generated content."
 
     def generate_structured(
         self,

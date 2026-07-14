@@ -21,6 +21,9 @@ class ModelProvider(Protocol):
     def answer_question(self, *, question: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
         """Answer a course question based on resolved material context."""
 
+    def generate_text(self, *, prompt: str) -> str:
+        """Generate plain text for caller-owned formats such as Markdown."""
+
     def generate_structured(
         self,
         *,

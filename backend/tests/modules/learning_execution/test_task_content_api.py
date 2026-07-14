@@ -20,7 +20,6 @@ from app.main import app
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.learning_execution import router as learning_router
@@ -57,27 +56,7 @@ def api() -> Generator[ApiHarness, None, None]:
         yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "schema_version": 2,
-                "title": "主键讲义",
-                "overview": "学习关系模型。",
-                "learning_objectives": ["解释主键和关系"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "主键",
-                        "blocks": [{"type": "paragraph", "text": "主键用于唯一标识表中的一行。"}],
-                        "key_points": ["唯一标识"],
-                        "source_citation_ids": ["chunk_api_content"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "完成主键概念学习。",
-            }
-        }
-    )
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(text_outputs=["# 主键讲义\n\n主键用于唯一标识表中的一行。"])
     app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             TaskTestContent: {
@@ -265,35 +244,19 @@ def _set_plan_subtask_citation_scope(db: Session, *, citation_chunk_ids: object)
 
 
 class CountingHandoutModelProvider:
-    def __init__(self, *, citation_chunk_id: str = "chunk_api_content") -> None:
+    def __init__(self, *, markdown: str = "# 任务知识点讲义\n\n根据任务范围生成讲义。") -> None:
         self.prompts: list[str] = []
-        self.citation_chunk_id = citation_chunk_id
+        self.markdown = markdown
 
     def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
         raise AssertionError("answer_question should not be called")
 
-    def generate_structured(self, *, prompt, output_schema):
+    def generate_text(self, *, prompt):
         self.prompts.append(prompt)
-        assert output_schema is HandoutContent
-        return HandoutContent.model_validate(
-            {
-                "schema_version": 2,
-                "title": "任务知识点讲义",
-                "overview": "学习任务范围内的知识点。",
-                "learning_objectives": ["解释当前任务知识点"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "任务知识点",
-                        "blocks": [{"type": "paragraph", "text": "根据任务范围生成讲义。"}],
-                        "key_points": ["只使用任务范围内的引用"],
-                        "source_citation_ids": [self.citation_chunk_id],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "完成任务范围学习。",
-            }
-        )
+        return self.markdown
+
+    def generate_structured(self, *, prompt, output_schema):  # pragma: no cover - handout no longer uses structured output
+        raise AssertionError("generate_structured should not be called for handout")
 
 
 class CountingTaskTestModelProvider:
@@ -376,320 +339,50 @@ def _handout_output(
     )
 
 
-def test_reduce_handout_outputs_preserves_section_citation_bindings_after_reindex() -> None:
-    first_output = _handout_output(
-        overview="学习数据库约束。",
-        summary="完成主键和外键学习。",
-        sections=[
-            {
-                "id": "sec_primary_key",
-                "title": "主键",
-                "body": "主键用于唯一标识表中的一行。",
-                "key_points": ["唯一标识"],
-                "source_citation_ids": ["chunk_primary"],
-                "sort_order": 1,
-            },
-            {
-                "id": "sec_foreign_key",
-                "title": "外键",
-                "body": "外键用于表达两个表之间的关系。",
-                "key_points": ["表间关系"],
-                "source_citation_ids": ["chunk_foreign"],
-                "sort_order": 2,
-            },
-        ],
-        item_citation_chunk_ids={
-            "sec_primary_key": ["chunk_primary"],
-            "sec_foreign_key": ["chunk_foreign"],
-        },
-    )
-    second_output = _handout_output(
-        overview="学习索引。",
-        summary="完成索引学习。",
-        sections=[
-            {
-                "id": "sec_index",
-                "title": "索引",
-                "body": "索引用于提高查询效率。",
-                "key_points": ["提高查询效率"],
-                "source_citation_ids": ["chunk_index", "chunk_index"],
-                "sort_order": 1,
-            }
-        ],
-        item_citation_chunk_ids={},
-    )
+def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
+    provider = CountingHandoutModelProvider(markdown="# 任务内容讲义\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。")
 
-    reduced = _reduce_task_content_outputs(content_type="handout", outputs=[first_output, second_output])
-
-    assert [section["id"] for section in reduced.content_json["sections"]] == ["sec_1", "sec_2", "sec_3"]
-    assert reduced.item_citation_chunk_ids == {
-        "sec_1": ["chunk_primary"],
-        "sec_2": ["chunk_foreign"],
-        "sec_3": ["chunk_index"],
-    }
-
-
-def _v2_handout_output(*, section_id: str, section_title: str, chunk_id: str, latex: str) -> GeneratorOutput:
-    return GeneratorOutput(
-        title="结构化讲义",
-        content_json={
-            "schema_version": 2,
-            "title": "结构化讲义",
-            "overview": "围绕信道容量建立公式和直觉。",
-            "difficulty": "medium",
-            "estimated_minutes": 40,
-            "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
-            "prerequisites": [],
-            "sections": [
-                {
-                    "id": section_id,
-                    "title": section_title,
-                    "lead": "先说结论。",
-                    "source_citation_ids": [chunk_id],
-                    "blocks": [
-                        {
-                            "type": "formula",
-                            "title": "Shannon 公式",
-                            "latex": latex,
-                            "purpose": "计算理论最大数据率。",
-                            "variables": [{"symbol": "C", "meaning": "最大数据率", "unit": "bps"}],
-                            "conditions": ["有噪声信道"],
-                            "limitations": ["理论上限"],
-                            "source_citation_ids": [chunk_id],
-                        }
-                    ],
-                    "key_points": ["按条件选公式。"],
-                    "sort_order": 1,
-                }
-            ],
-            "knowledge_map": None,
-            "formula_cards": [],
-            "exam_focus": [],
-            "self_check": [],
-            "summary": "按条件选公式。",
-        },
-        item_citation_chunk_ids={section_id: [chunk_id]},
-    )
-
-
-def test_reduce_handout_outputs_preserves_v2_blocks_and_schema() -> None:
     reduced = _reduce_task_content_outputs(
         content_type="handout",
         outputs=[
-            _v2_handout_output(section_id="sec_a", section_title="Shannon", chunk_id="chunk_primary", latex="C = W"),
-            _v2_handout_output(section_id="sec_b", section_title="Nyquist", chunk_id="chunk_secondary", latex="C = 2B"),
+            GeneratorOutput(
+                title="任务内容讲义",
+                content="# 第一部分\n\n主键用于唯一标识一行。",
+                content_json={"format": "markdown", "schema_version": 1},
+            ),
+            GeneratorOutput(
+                title="任务内容讲义",
+                content="# 第二部分\n\n索引用于提高查询效率。",
+                content_json={"format": "markdown", "schema_version": 1},
+            ),
         ],
+        model_provider=provider,
+        parameters={
+            "handout_title": "任务内容讲义",
+            "source_note": "本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。",
+        },
     )
 
-    assert reduced.content_json["schema_version"] == 2
-    assert [section["id"] for section in reduced.content_json["sections"]] == ["sec_1", "sec_2"]
-    assert reduced.content_json["sections"][0]["blocks"][0]["type"] == "formula"
-    assert reduced.item_citation_chunk_ids == {"sec_1": ["chunk_primary"], "sec_2": ["chunk_secondary"]}
+    assert len(provider.prompts) == 1
+    assert "不要简单拼接" in provider.prompts[0]
+    assert "批次草稿 1" in provider.prompts[0]
+    assert "批次草稿 2" in provider.prompts[0]
+    assert reduced.title == "任务内容讲义"
+    assert reduced.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。"
+    assert reduced.content_json == {"format": "markdown", "schema_version": 1}
+    assert reduced.item_citation_chunk_ids == {}
 
 
-def test_reduce_handout_outputs_rejects_mixed_schema_result() -> None:
-    legacy_output = _handout_output(
-        overview="旧版概览",
-        summary="旧版总结",
-        sections=[
-            {
-                "id": "legacy_section",
-                "title": "旧版章节",
-                "body": "旧版正文",
-                "key_points": ["旧版重点"],
-                "source_citation_ids": ["chunk_legacy"],
-                "sort_order": 1,
-            }
-        ],
-        item_citation_chunk_ids={"legacy_section": ["chunk_legacy"]},
-    )
-
+def test_reduce_handout_outputs_rejects_empty_markdown_batches() -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         _reduce_task_content_outputs(
             content_type="handout",
-            outputs=[
-                legacy_output,
-                _v2_handout_output(
-                    section_id="sec_v2",
-                    section_title="新版章节",
-                    chunk_id="chunk_v2",
-                    latex="C = W",
-                ),
-            ],
+            outputs=[GeneratorOutput(title="今日讲义", content="   ", content_json={"format": "markdown", "schema_version": 1})],
         )
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
-
-def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: ApiHarness) -> None:
-    class StructuredHandoutModelProvider:
-        def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
-            raise AssertionError("answer_question should not be called")
-
-        def generate_structured(self, *, prompt, output_schema):
-            assert output_schema is HandoutContent
-            return HandoutContent.model_validate(
-                {
-                    "schema_version": 2,
-                    "title": "结构化讲义",
-                    "overview": "围绕信道容量建立公式和直觉。",
-                    "difficulty": "medium",
-                    "estimated_minutes": 40,
-                    "learning_objectives": ["区分 Nyquist 和 Shannon 公式"],
-                    "prerequisites": [
-                        {
-                            "id": "pre_1",
-                            "title": "对数基础",
-                            "explanation": "理解二进制对数。",
-                            "sort_order": 1,
-                            "source_citation_ids": ["chunk_api_content_second"],
-                        }
-                    ],
-                    "sections": [
-                        {
-                            "id": "sec_1",
-                            "title": "Shannon 公式",
-                            "lead": "先说结论。",
-                            "source_citation_ids": ["chunk_api_content"],
-                            "blocks": [
-                                {
-                                    "type": "formula",
-                                    "title": "Shannon 公式",
-                                    "latex": "C = W \\\\log_2(1 + S/N)",
-                                    "purpose": "计算理论最大数据率。",
-                                    "variables": [{"symbol": "C", "meaning": "最大数据率", "unit": "bps"}],
-                                    "conditions": ["有噪声信道"],
-                                    "limitations": ["理论上限"],
-                                    "source_citation_ids": ["chunk_api_content_second"],
-                                }
-                            ],
-                            "key_points": ["按条件选公式。"],
-                            "sort_order": 1,
-                        }
-                    ],
-                    "knowledge_map": None,
-                    "formula_cards": [
-                        {
-                            "type": "formula",
-                            "title": "Nyquist 公式",
-                            "latex": "C = 2W \\log_2 M",
-                            "purpose": "计算无噪声信道上限。",
-                            "variables": [{"symbol": "W", "meaning": "带宽", "unit": "Hz"}],
-                            "conditions": ["理想无噪声信道"],
-                            "limitations": ["不考虑噪声"],
-                            "source_citation_ids": ["chunk_api_content_second"],
-                        }
-                    ],
-                    "exam_focus": [
-                        {
-                            "id": "exam_1",
-                            "title": "公式选择",
-                            "description": "先判断是否考虑噪声。",
-                            "sort_order": 1,
-                            "source_citation_ids": ["chunk_api_content_second"],
-                        }
-                    ],
-                    "self_check": [
-                        {
-                            "id": "check_1",
-                            "question": "有噪声信道使用哪个公式？",
-                            "answer": "Shannon 公式。",
-                            "sort_order": 1,
-                            "source_citation_ids": ["chunk_api_content_second"],
-                        }
-                    ],
-                    "summary": "按条件选公式。",
-                }
-            )
-
-    user_id, _ = _register_and_headers(api)
-    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
-    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
-
-    result = generate_handout_for_subtask(
-        api.db,
-        user_id=user_id,
-        subtask_id=subtask_id,
-        parameters={"language": "zh-CN"},
-        force_regenerate=True,
-        model_provider=StructuredHandoutModelProvider(),
-        max_tokens=10_000,
-    )
-
-    section = result.content_json["sections"][0]
-    block = section["blocks"][0]
-    assert len(section["source_citation_ids"]) == 1
-    assert len(block["source_citation_ids"]) == 1
-    assert block["source_citation_ids"] == section["source_citation_ids"]
-    assert all(citation_id.startswith("cit_") for citation_id in section["source_citation_ids"])
-    assert all(citation_id.startswith("cit_") for citation_id in block["source_citation_ids"])
-    top_level_source_ids = {
-        result.content_json["prerequisites"][0]["source_citation_ids"][0],
-        result.content_json["formula_cards"][0]["source_citation_ids"][0],
-        result.content_json["exam_focus"][0]["source_citation_ids"][0],
-        result.content_json["self_check"][0]["source_citation_ids"][0],
-    }
-    assert len(top_level_source_ids) == 1
-    assert next(iter(top_level_source_ids)).startswith("cit_")
-    assert top_level_source_ids.isdisjoint(section["source_citation_ids"])
-    assert "chunk_api_content" not in str(result.content_json)
-    assert "chunk_api_content_second" not in str(result.content_json)
-    citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
-    assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
-
-
-def test_handout_citation_binding_does_not_rewrite_table_row_fields() -> None:
-    content_json = {
-        "schema_version": 2,
-        "title": "表格讲义",
-        "overview": "用表格对比字段。",
-        "difficulty": "medium",
-        "learning_objectives": ["比较字段含义"],
-        "prerequisites": [],
-        "sections": [
-            {
-                "id": "sec_1",
-                "title": "字段对比",
-                "source_citation_ids": ["chunk_1"],
-                "blocks": [
-                    {
-                        "type": "table",
-                        "title": "字段表",
-                        "columns": [
-                            {"key": "name", "label": "字段"},
-                            {"key": "source_citation_ids", "label": "来源字段"},
-                        ],
-                        "rows": [
-                            {"name": "发送时延", "source_citation_ids": "教材第 2 页"},
-                        ],
-                    }
-                ],
-                "key_points": ["表格行字段不能被引用回绑改写。"],
-                "sort_order": 1,
-            }
-        ],
-        "knowledge_map": None,
-        "formula_cards": [],
-        "exam_focus": [],
-        "self_check": [],
-        "summary": "表格字段保持原样。",
-    }
-
-    bound = _bind_source_citation_ids(
-        content_json,
-        {
-            "__chunk__:chunk_1": ["cit_1"],
-            "sec_1": ["cit_1"],
-        },
-        is_handout_root=True,
-    )
-
-    validated = HandoutContent.model_validate(bound)
-    row = validated.sections[0].blocks[0].rows[0]  # type: ignore[union-attr]
-    assert row["source_citation_ids"] == "教材第 2 页"
-
-
-def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:
+def test_generate_handout_for_learn_subtask_saves_markdown_content_without_citations(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
 
@@ -704,12 +397,18 @@ def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: Api
     assert data["content_type"] == "handout"
     assert data["study_subtask_id"] == subtask_id
     assert data["generation_status"] == "success"
-    assert data["content_json"]["overview"] == "学习关系模型。"
+    assert data["title"] == "任务内容讲义"
+    assert data["content"] == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    assert data["content_json"] == {"format": "markdown", "schema_version": 1}
+    assert data["source_citations"] == []
     content = api.db.get(AIGeneratedContent, data["id"])
     assert content is not None
     assert content.study_subtask_id == subtask_id
+    assert content.title == "任务内容讲义"
+    assert content.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    assert content.content_json == {"format": "markdown", "schema_version": 1}
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == data["id"])).scalars().all()
-    assert [citation.chunk_id for citation in citations] == ["chunk_api_content"]
+    assert citations == []
 
 
 def test_generate_task_test_for_quiz_subtask_saves_content(api: ApiHarness) -> None:
@@ -777,8 +476,45 @@ def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) ->
     assert "chunk_id=chunk_api_content;" in provider.prompts[0]
     assert "chunk_api_content_second" not in provider.prompts[0]
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
-    assert [citation.chunk_id for citation in citations] == ["chunk_api_content"]
+    assert citations == []
 
+
+def test_generate_handout_saves_normalized_markdown_math(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    provider = CountingHandoutModelProvider(
+        markdown=(
+            "# 信噪比讲义\n\n"
+            "从 dB 转换为线性比值：\n\n"
+            "[\n"
+            "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
+            "]\n\n"
+            "另一种写法：\\[C = B \\log_2(1 + S/N)\\]\n\n"
+            "行内公式 \\(C = B \\log_2(1 + S/N)\\) 用来说明信道容量。"
+        )
+    )
+
+    result = generate_handout_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"language": "zh-CN", "detail_level": "standard"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert "[\n\\frac" not in result.content
+    assert "\\[" not in result.content
+    assert "\\]" not in result.content
+    assert "\\(" not in result.content
+    assert "\\)" not in result.content
+    assert "$$\n\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n$$" in result.content
+    assert "$$\nC = B \\log_2(1 + S/N)\n$$" in result.content
+    assert "$C = B \\log_2(1 + S/N)$" in result.content
+    stored = api.db.get(AIGeneratedContent, result.id)
+    assert stored is not None
+    assert stored.content == result.content
 
 def test_generate_handout_passes_planner_and_diagnostic_context_to_prompt(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
@@ -1124,30 +860,10 @@ def test_generate_task_test_with_stale_invalid_saved_parameters_saves_failed_rec
     assert content.study_subtask_id == subtask_id
     assert content.generation_status == "failed"
     assert content.error_code == "GENERATION_SCHEMA_INVALID"
-def test_generate_handout_schema_invalid_saves_failed_record(api: ApiHarness) -> None:
+def test_generate_handout_empty_markdown_saves_failed_record(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
-    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "schema_version": 2,
-                "title": "主键讲义",
-                "overview": "学习关系模型。",
-                "learning_objectives": ["解释主键"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "主键",
-                        "blocks": [{"type": "paragraph", "text": "主键用于唯一标识表中的一行。"}],
-                        "key_points": ["唯一标识"],
-                        "source_citation_ids": ["chunk_not_in_context"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "完成主键概念学习。",
-            }
-        }
-    )
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(text_outputs=["   "])
 
     response = api.client.post(f"/api/v1/study-subtasks/{subtask_id}/handouts", headers=headers, json={"parameters": {}})
 
