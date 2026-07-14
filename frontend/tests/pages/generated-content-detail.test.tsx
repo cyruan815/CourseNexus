@@ -123,7 +123,53 @@ describe("GeneratedContentDetailPage", () => {
     expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });
 
-  it("renders task test generated content as a readonly review view", async () => {
+  it("renders handout markdown without citation panel or citation entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        successResponse({
+          id: "gen_handout",
+          user_id: "usr_123",
+          course_id: "crs_123",
+          study_subtask_id: "sub_123",
+          source_message_id: null,
+          content_type: "handout",
+          title: "Nyquist ????",
+          content: "# Nyquist ????\n\n?????????.pdf???Nyquist ??????????\n\n?? **??** ???",
+          content_json: { format: "markdown", schema_version: 1 },
+          generation_status: "success",
+          material_scope_json: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+          error_code: null,
+          source_citations: [
+            {
+              id: "cit_1",
+              material_id: "mat_1",
+              chunk_id: "chk_1",
+              material_name: "???.pdf",
+              page: "12",
+              page_index: 11,
+              hit_text: "????????? handout ?????",
+              sort_order: 1,
+            },
+          ],
+          created_at: "2026-07-09T12:00:00+00:00",
+          updated_at: "2026-07-09T12:00:00+00:00",
+          deleted_at: null,
+        }),
+      ),
+    );
+
+    renderDetailPage("/generated-contents/gen_handout");
+
+    expect(await screen.findAllByRole("heading", { name: "Nyquist ????" })).toHaveLength(2);
+    expect(screen.getByText("?????????.pdf???Nyquist ??????????")).toBeInTheDocument();
+    expect(screen.getByText("??").tagName).toBe("STRONG");
+    expect(screen.queryByRole("heading", { name: "????" })).not.toBeInTheDocument();
+    expect(screen.queryByText("???.pdf ? 12")).not.toBeInTheDocument();
+    expect(screen.queryByText("????????? handout ?????")).not.toBeInTheDocument();
+  });
+
+  it("renders task test generated content as a readonly review view and keeps citations", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -134,39 +180,42 @@ describe("GeneratedContentDetailPage", () => {
           study_subtask_id: "subtask_2",
           source_message_id: null,
           content_type: "task_test",
-          title: "基础题任务测试题",
+          title: "????????",
           content: null,
           content_json: {
-            instructions: "只读查看，不保存作答。",
+            instructions: "???????????",
             questions: [
               {
                 id: "q_001",
                 question_type: "single_choice",
-                question_text: "向量空间必须满足哪类结构？",
+                question_text: "?????????????",
                 options: [
-                  { id: "A", text: "加法和数乘封闭" },
-                  { id: "B", text: "只包含零向量" },
+                  { id: "A", text: "???????" },
+                  { id: "B", text: "??????" },
                 ],
                 correct_answer: "A",
-                explanation: "向量空间需要对加法和数乘封闭。",
+                explanation: "???????????????",
+                source_citation_ids: ["cit_1"],
                 sort_order: 1,
               },
               {
                 id: "q_002",
                 question_type: "true_false",
-                question_text: "TCP 是面向连接的协议。",
+                question_text: "TCP ?????????",
                 options: [],
                 correct_answer: true,
-                explanation: "TCP 会在传输数据前建立连接。",
+                explanation: "TCP ????????????",
+                source_citation_ids: ["cit_1"],
                 sort_order: 2,
               },
               {
                 id: "q_003",
                 question_type: "true_false",
-                question_text: "UDP 会在传输数据前建立连接。",
+                question_text: "UDP ????????????",
                 options: [],
                 correct_answer: false,
-                explanation: "UDP 是无连接协议。",
+                explanation: "UDP ???????",
+                source_citation_ids: ["cit_1"],
                 sort_order: 3,
               },
             ],
@@ -174,7 +223,18 @@ describe("GeneratedContentDetailPage", () => {
           generation_status: "success",
           material_scope_json: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
           error_code: null,
-          source_citations: [],
+          source_citations: [
+            {
+              id: "cit_1",
+              material_id: "mat_1",
+              chunk_id: "chk_1",
+              material_name: "???.pdf",
+              page: "12",
+              page_index: 11,
+              hit_text: "????????",
+              sort_order: 1,
+            },
+          ],
           created_at: "2026-07-09T12:00:00+00:00",
           updated_at: "2026-07-09T12:00:00+00:00",
           deleted_at: null,
@@ -184,13 +244,16 @@ describe("GeneratedContentDetailPage", () => {
 
     renderDetailPage("/generated-contents/gen_task_test");
 
-    expect(await screen.findByRole("heading", { name: "基础题任务测试题" })).toBeInTheDocument();
-    expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
-    expect(screen.getByText("TCP 是面向连接的协议。")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：正确")).toBeInTheDocument();
-    expect(screen.getByText("UDP 会在传输数据前建立连接。")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：错误")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "????????" })).toBeInTheDocument();
+    expect(screen.getByText("?????????????")).toBeInTheDocument();
+    expect(screen.getByText("?????A")).toBeInTheDocument();
+    expect(screen.getByText("TCP ?????????")).toBeInTheDocument();
+    expect(screen.getByText("???????")).toBeInTheDocument();
+    expect(screen.getByText("UDP ????????????")).toBeInTheDocument();
+    expect(screen.getByText("???????")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "????" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "????" })).toBeInTheDocument();
+    expect(screen.getByText("???.pdf ? 12")).toBeInTheDocument();
+    expect(screen.getByText("????????")).toBeInTheDocument();
   });
 });

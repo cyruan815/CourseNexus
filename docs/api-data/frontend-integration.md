@@ -586,7 +586,7 @@
 
 G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 parsed 资料、检查总上下文上限，并对对应类型调用一次结构化模型。
 
-`source_citations` 在生成 POST、历史和详情中始终存在。Quiz、Flashcard、Mindmap、Outline、Knowledge List 固定返回 `[]`；Course QA、handout 和 task_test 等保留引用的能力继续保存并通过 API 返回真实引用。生成内容详情页不展示引用面板，handout / task_test 的引用用于内部追溯和导出。
+`source_citations` 在生成 POST、历史和详情中始终存在。Quiz、Flashcard、Mindmap、Outline、Knowledge List 固定返回 `[]`；Course QA 和 task_test 等保留引用能力的内容继续通过 API 返回真实引用，新生成 handout 固定返回空数组并把来源说明写在 Markdown 正文顶部。生成内容详情页不展示引用面板；task_test 引用用于内部追溯和导出。
 
 ### 3.21 生成内容列表
 
@@ -1196,13 +1196,13 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 - Course QA 和执行页任务级 QA 的前端接口、请求体和响应体不变；后端在 `/responses` 404 时会自动回退 Chat Completions，前端不需要区分模型接口形态。
 - 学习计划保存后的 `parsed_config_json.task_snapshot` 会保留 quiz/test 子任务的 `generation_parameters.task_test` 默认参数。前端后续调用 task-test 生成时可省略 `parameters`，后端会使用计划默认值；若前端显式传入字段，则以请求值覆盖默认值。
-- `GeneratedContentRead.source_citations` 始终是导出引用的事实来源。`handout.content_json.sections[].source_citation_ids` 和 `task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id；前端展示引用时按 `source_citations[].id` 建映射。
+- `GeneratedContentRead.source_citations` 是保留逐条引用能力的事实来源。新生成 handout 不再提供逐条引用，前端不要展示引用侧栏；`task_test.content_json.questions[].source_citation_ids` 保存的是 `SourceCitation.id`，不是 chunk id，前端展示 task_test 引用时按 `source_citations[].id` 建映射。
 - 任务测试题 Markdown 导出在有效引用存在时不应出现 `Sources: unavailable`；若出现该文本，应视为引用链断裂或历史坏数据。
 - 今日讲义 PDF 混排由后端 renderer 处理：中文使用 `STSong-Light`，英文、数字、公式和 `Overview`、`Nyquist/Shannon` 等术语使用 `Helvetica`。前端只按文件流下载或预览，不需要自行修复字体。
 
 ### 3.23.4 任务讲义详情前端展示契约
 
-`handout` 是二级任务级讲义。前端应通过执行上下文和生成内容详情接口读取，不应自行从资料或引用拼装讲义正文。
+`handout` 是二级任务级讲义。前端应通过执行上下文和生成内容详情接口读取，不应自行从资料、chunk 或逐条引用拼装讲义正文。
 
 推荐调用链：
 
@@ -1210,84 +1210,28 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 2. `GET /api/v1/study-subtasks/{subtask_id}/execution-context`：读取当前二级任务上下文，其中 `handout_content_id` 指向最近一次成功生成的当前二级任务讲义。
 3. `GET /api/v1/generated-contents/{generated_content_id}`：读取完整 `GeneratedContentRead` 供详情页展示。
 
-`GeneratedContentRead` 中 handout 的前端字段口径：
+`GeneratedContentRead` 中新生成 handout 的前端字段口径：
 
 ```json
 {
   "content_type": "handout",
-  "title": "Nyquist与Shannon公式（补基础）讲义",
+  "title": "Nyquist与Shannon公式讲义",
   "study_subtask_id": "sub_123",
+  "content": "# Nyquist与Shannon公式讲义\n\n本讲义基于《Chap7 物理层.pdf》中“Nyquist与Shannon公式”相关内容生成。\n\n...",
   "content_json": {
-    "overview": "本讲义聚焦...",
-    "learning_objectives": ["掌握 Nyquist 公式"],
-    "sections": [
-      {
-        "id": "sec_1",
-        "title": "Nyquist 公式",
-        "body": "...",
-        "key_points": ["C = 2B log2 L"],
-        "source_citation_ids": ["cit_123"],
-        "sort_order": 1
-      }
-    ],
-    "summary": "..."
+    "format": "markdown",
+    "schema_version": 1
   },
-  "source_citations": [
-    {
-      "id": "cit_123",
-      "material_name": "Chap7 物理层.pdf",
-      "page": "15",
-      "page_index": 14,
-      "hit_text": "原始 chunk 命中文本"
-    }
-  ]
+  "source_citations": []
 }
 ```
 
 前端展示规则：
 
-- 讲义正文使用 `content_json` 结构化渲染，不使用 Markdown renderer，不使用 `dangerouslySetInnerHTML`。
+- 讲义正文使用 `GeneratedContentRead.content` Markdown 渲染；不使用旧 `content_json.sections/blocks` 拼装，不使用 `dangerouslySetInnerHTML`。
 - 标题直接使用 `GeneratedContentRead.title`；新生成内容应为 `{二级任务标题}讲义`。
-- `source_citations[].hit_text` 是内部追溯文本，不是无条件展示给学生的引用摘录。
-- 引用面板默认展示 `material_name + page/page_index`；当 `hit_text` 包含 `formula-not-decoded`、``、`` 等解析残留时，必须隐藏摘录，只保留资料名和页码。
-- 若 `sections[].source_citation_ids` 找不到对应 `source_citations[].id`，前端不得补造来源；应展示引用缺失兜底或仅隐藏该条绑定。
+- Markdown 正文顶部已包含来源说明句，例如 `本讲义基于《资料名1》《资料名2》中“二级任务标题”相关内容生成。`。
+- 新生成 handout 不提供逐条 `source_citations`，详情页不要展示引用侧栏、引用列表、逐节来源入口，也不要显示“当前没有可展示的引用来源”空引用面板。
+- 旧 `content_json.sections/blocks` 结构化 handout 不再作为新数据兼容目标；前端可以按通用畸形内容兜底处理。
 
-任务测试题 Markdown 导出也遵循同一引用展示规则：有效 citation 存在但 `hit_text` 不适合展示时，只输出资料名和页码，不输出 `Sources: unavailable`。
-
-### 3.23.5 HandoutContent v2 结构化渲染契约
-
-下一阶段 `handout.content_json.schema_version = 2` 时，前端仍以 `GeneratedContentRead.content_json` 为权威数据源。模型输出不得作为 HTML 注入页面，也不把整篇自由 Markdown 当作讲义正文渲染；前端必须按 typed blocks 渲染讲义，并由组件负责间距、溢出、响应式和导出兼容。
-
-v2 讲义详情页的顶层渲染顺序建议为：
-
-1. `title`：优先使用 `GeneratedContentRead.title`，缺失时使用 `content_json.title`。
-2. `overview`：讲义导读。
-3. `learning_objectives[]`：学习目标列表。
-4. `prerequisites[]`：必要前置知识，只展示与当前二级任务直接相关的补基础内容。
-5. `knowledge_map`：讲义级知识关系图；没有该字段时不展示占位图。
-6. `sections[]`：按 `sort_order` 渲染每节的 `lead`、`blocks[]` 和 `key_points[]`。
-7. `formula_cards[]`、`exam_focus[]`、`self_check[]`：分别作为公式速查、考试重点和自测区块。
-8. `summary`：讲义总结。
-
-typed block 展示规则：
-
-| block type | 前端展示规则 |
-| --- | --- |
-| `paragraph` | 渲染为普通正文，可按 `role` 使用定义、解释、结论等弱样式；不得执行 HTML。 |
-| `formula` | 使用 KaTeX 兼容 LaTeX 渲染；公式容器必须支持横向滚动或自动换行，变量、适用条件和限制分组展示。 |
-| `example` | 使用题干、步骤、答案、解析和易错提醒组成例题块；步骤按有序列表渲染。 |
-| `table` | 使用结构化 `columns` 和 `rows` 生成表格，不解析 Markdown 表格文本；小屏幕允许横向滚动。 |
-| `callout` | 用于重点、提示、警告和易错点；样式由前端根据 `tone` 控制。 |
-| `steps` | 用于推导、流程或解题步骤，必须保持稳定编号和缩进。 |
-| `mindmap` | 使用树形 `root.children[]` 渲染为 Markmap 或自定义树组件；节点文本不得当作 HTML。 |
-| `mermaid` | 只允许流程图或关系图，必须同时展示标题和解释；渲染失败时回退为文本代码块。 |
-| `chart` | 只展示资料中可追溯的数值数据；缺少数值或单位时前端应回退为表格或隐藏图表。第一版不要求 chart block 自带引用字段。 |
-
-排版和安全约束：
-
-- 数学公式只从 `latex` 字段读取，模型不得在正文里混入需要前端猜测的公式图片或 HTML。
-- 表格列宽、公式溢出、图表高度、思维导图节点间距和移动端滚动都由前端组件控制，不能依赖模型输出空格、换行或 HTML 标签来排版。
-- `mermaid` 只接受受控图类型；首版不接受模型输出的 `svg` 字符串。
-- `chart` 必须有明确数值和单位，不得根据模型推测的趋势画图；其资料来源第一版继承所在 section。
-- `sections[].source_citation_ids` 是强制引用字段，保存后为 `source_citations[].id`；`blocks[]` 默认继承所在 section 来源，前端不要要求或展示逐 block 引用。顶层 `prerequisites[]`、`formula_cards[]`、`exam_focus[]`、`self_check[]` 可保存各自独立的 `source_citation_ids`，同样只包含 `source_citations[].id`。`knowledge_map` 默认继承所有 section 来源，第一版不单独显示引用。
-- 历史 `schema_version` 缺失或为 1 的 handout 继续按旧版 `overview`、`learning_objectives`、`sections[].body`、`summary` 渲染。
+`task_test` 暂时保持结构化 JSON 展示和逐题引用逻辑，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`，引用侧栏仍按 `source_citations` 展示。

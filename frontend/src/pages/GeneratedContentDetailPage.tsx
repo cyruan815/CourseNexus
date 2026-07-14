@@ -9,7 +9,7 @@ import { GeneratedContentRenderer } from "../features/generated-content/Generate
 import "../features/generated-content/generated-content.css";
 import "./generated-content-detail.css";
 
-const labels: Record<string, string> = { quiz: "Quiz", flashcard: "Flashcards", mindmap: "Mind Map", outline: "复习提纲", knowledge_list: "知识点清单", handout: "今日讲义", task_test: "任务测试题" };
+const labels: Record<string, string> = { quiz: "Quiz", flashcard: "Flashcards", mindmap: "Mind Map", outline: "复习提纲", knowledge_list: "知识点清单", handout: "讲义", task_test: "测试题" };
 const statusColor = (status: string) => status === "success" ? "teal" : status === "failed" ? "red" : "yellow";
 const errorMessage = (error: unknown) => error instanceof ApiError || error instanceof Error ? error.message : "生成内容加载失败";
 
