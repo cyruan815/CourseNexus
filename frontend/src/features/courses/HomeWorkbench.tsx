@@ -13,6 +13,7 @@ import {
   Menu,
   Modal,
   Paper,
+  Popover,
   Select,
   Skeleton,
   Stack,
@@ -521,26 +522,41 @@ function CalendarPanel() {
               <ActionIcon aria-label="上个月" onClick={() => moveMonth(-1)} variant="subtle">
                 <IconChevronLeft size={22} />
               </ActionIcon>
-              <Button className="home-calendar-title-button" onClick={openMonthPicker} size="compact-sm" variant="subtle">
-                {calendarTitle}
-              </Button>
+              <Popover
+                onChange={(opened) => {
+                  if (opened) {
+                    openMonthPicker();
+                  } else {
+                    setIsMonthPickerOpen(false);
+                  }
+                }}
+                opened={isMonthPickerOpen}
+                position="bottom"
+                shadow="md"
+                trapFocus
+                withArrow
+                withinPortal
+              >
+                <Popover.Target>
+                  <Button className="home-calendar-title-button" onClick={openMonthPicker} size="compact-sm" variant="subtle">
+                    {calendarTitle}
+                  </Button>
+                </Popover.Target>
+                <Popover.Dropdown aria-label="选择年月" className="home-month-picker" role="region">
+                  <Box className="home-month-picker-controls">
+                    <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
+                    <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
+                    <Button aria-label="关闭年月选择" className="home-month-picker-action" onClick={() => setIsMonthPickerOpen(false)} variant="default">
+                      取消
+                    </Button>
+                    <Button className="home-month-picker-action" onClick={applyMonthPicker}>应用</Button>
+                  </Box>
+                </Popover.Dropdown>
+              </Popover>
               <ActionIcon aria-label="下个月" onClick={() => moveMonth(1)} variant="subtle">
                 <IconChevronRight size={22} />
               </ActionIcon>
             </Group>
-
-            {isMonthPickerOpen ? (
-              <Paper aria-label="选择年月" className="home-month-picker" component="section" radius="md" withBorder>
-                <Box className="home-month-picker-controls">
-                  <Select aria-label="选择年份" data={yearOptions} onChange={(value) => setDraftYear(value ?? draftYear)} value={draftYear} />
-                  <Select aria-label="选择月份" data={monthOptions} onChange={(value) => setDraftMonth(value ?? draftMonth)} value={draftMonth} />
-                  <Button aria-label="关闭年月选择" className="home-month-picker-action" onClick={() => setIsMonthPickerOpen(false)} variant="default">
-                    取消
-                  </Button>
-                  <Button className="home-month-picker-action" onClick={applyMonthPicker}>应用</Button>
-                </Box>
-              </Paper>
-            ) : null}
 
             <Divider />
 
@@ -561,7 +577,7 @@ function CalendarPanel() {
               ))}
             </Box>
 
-            <Box aria-label="月历" className="home-calendar-grid home-calendar-compact-grid" role="grid">
+            <Box aria-label="月历" className="home-calendar-grid home-calendar-compact-grid home-calendar-roomy-grid" role="grid">
               {calendarDays.map((calendarDay, index) => (
                 (() => {
                   const summary = calendarDay.dateKey ? summariesByDate.get(calendarDay.dateKey) : undefined;

@@ -25,6 +25,7 @@ from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.learning_execution import router as learning_router
 from app.modules.learning_execution.service import (
+    _bind_source_citation_ids,
     _merge_task_test_parameters,
     _reduce_task_content_outputs,
     generate_handout_for_subtask,
@@ -635,6 +636,57 @@ def test_generate_handout_binds_v2_section_citations_and_blocks_inherit(api: Api
     assert "chunk_api_content_second" not in str(result.content_json)
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
     assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
+
+
+def test_handout_citation_binding_does_not_rewrite_table_row_fields() -> None:
+    content_json = {
+        "schema_version": 2,
+        "title": "表格讲义",
+        "overview": "用表格对比字段。",
+        "difficulty": "medium",
+        "learning_objectives": ["比较字段含义"],
+        "prerequisites": [],
+        "sections": [
+            {
+                "id": "sec_1",
+                "title": "字段对比",
+                "source_citation_ids": ["chunk_1"],
+                "blocks": [
+                    {
+                        "type": "table",
+                        "title": "字段表",
+                        "columns": [
+                            {"key": "name", "label": "字段"},
+                            {"key": "source_citation_ids", "label": "来源字段"},
+                        ],
+                        "rows": [
+                            {"name": "发送时延", "source_citation_ids": "教材第 2 页"},
+                        ],
+                    }
+                ],
+                "key_points": ["表格行字段不能被引用回绑改写。"],
+                "sort_order": 1,
+            }
+        ],
+        "knowledge_map": None,
+        "formula_cards": [],
+        "exam_focus": [],
+        "self_check": [],
+        "summary": "表格字段保持原样。",
+    }
+
+    bound = _bind_source_citation_ids(
+        content_json,
+        {
+            "__chunk__:chunk_1": ["cit_1"],
+            "sec_1": ["cit_1"],
+        },
+        is_handout_root=True,
+    )
+
+    validated = HandoutContent.model_validate(bound)
+    row = validated.sections[0].blocks[0].rows[0]  # type: ignore[union-attr]
+    assert row["source_citation_ids"] == "教材第 2 页"
 
 
 def test_generate_handout_for_learn_subtask_saves_content_and_citations(api: ApiHarness) -> None:

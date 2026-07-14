@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActionIcon, Alert, Badge, Box, Button, Group, Paper, Skeleton, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Alert, Badge, Box, Button, Group, Paper, Select, Skeleton, Stack, Text, Title } from "@mantine/core";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
+import { listCourses } from "../features/courses/api";
 import "../features/courses/home-workbench.css";
 import {
   fetchCourseStudyCalendar,
@@ -19,6 +20,7 @@ import type {
   StudyCalendarDaySummary,
   StudyCalendarTaskTodo,
 } from "../features/study-plans/types";
+import type { Course } from "../types/course";
 
 interface CalendarCell {
   dateKey: string | null;
@@ -131,6 +133,20 @@ function subtaskTypeLabel(type: string): string {
   };
 
   return labels[type] ?? type;
+}
+
+function courseDayToGlobalTodos(dayTodos: CourseStudyCalendarDay): GlobalDayTodos {
+  return {
+    date: dayTodos.date,
+    courses: [
+      {
+        course_id: dayTodos.course_id,
+        course_name: dayTodos.course_name,
+        plan_ids: Array.from(new Set(dayTodos.tasks.map((task) => task.plan_id))),
+        tasks: dayTodos.tasks,
+      },
+    ],
+  };
 }
 
 function CourseCalendarDayPanel({
@@ -416,11 +432,13 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
 function GlobalCalendarDayPanel({
   dayTodos,
   error,
+  filteredCourseName,
   isLoading,
   selectedDate,
 }: {
   dayTodos: GlobalDayTodos | null;
   error: string | null;
+  filteredCourseName: string | null;
   isLoading: boolean;
   selectedDate: string | null;
 }) {
@@ -439,7 +457,7 @@ function GlobalCalendarDayPanel({
     <Paper className="calendar-day-panel" radius="md" withBorder>
       <Stack gap="md">
         <Group justify="space-between" wrap="nowrap">
-          <Title order={2}>{selectedDate} 待办</Title>
+          <Title order={2}>{selectedDate} {filteredCourseName ? "任务" : "待办"}</Title>
           {dayTodos ? <Badge color="blue" variant="light">{dayTodos.courses.length} 门课程</Badge> : null}
         </Group>
         {isLoading ? (
@@ -457,7 +475,9 @@ function GlobalCalendarDayPanel({
         {!isLoading && !error && dayTodos && dayTodos.courses.length === 0 ? (
           <Stack className="calendar-empty-state" gap="xs">
             <Text fw={700}>当天没有学习任务</Text>
-            <Text c="dimmed" size="sm">所有课程在这一天都没有一级任务。</Text>
+            <Text c="dimmed" size="sm">
+              {filteredCourseName ? `${filteredCourseName} 在这一天没有一级任务。` : "所有课程在这一天都没有一级任务。"}
+            </Text>
           </Stack>
         ) : null}
         {!isLoading && !error && dayTodos && dayTodos.courses.length > 0 ? (
@@ -480,7 +500,11 @@ function GlobalCalendarDayPanel({
 function GlobalCalendarPage() {
   const [searchParams] = useSearchParams();
   const initialDate = searchParams.get("date");
+  const initialCourseId = searchParams.get("courseId");
   const [referenceDate, setReferenceDate] = useState(() => monthFromDateQuery(initialDate));
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseError, setCourseError] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(initialCourseId);
   const [monthDays, setMonthDays] = useState<StudyCalendarDaySummary[]>([]);
   const [monthError, setMonthError] = useState<string | null>(null);
   const [isMonthLoading, setIsMonthLoading] = useState(true);
@@ -491,6 +515,18 @@ function GlobalCalendarPage() {
   const [dayError, setDayError] = useState<string | null>(null);
   const [isDayLoading, setIsDayLoading] = useState(false);
   const month = formatMonth(referenceDate);
+  const selectedCourse = useMemo(
+    () => courses.find((course) => course.id === selectedCourseId) ?? null,
+    [courses, selectedCourseId],
+  );
+  const selectedCourseName = selectedCourse?.name ?? null;
+  const courseOptions = useMemo(
+    () => [
+      { value: "__all__", label: "全部课程" },
+      ...courses.map((course) => ({ value: course.id, label: course.name })),
+    ],
+    [courses],
+  );
   const calendarCells = useMemo(() => buildCalendarCells(referenceDate), [referenceDate]);
   const summariesByDate = useMemo(() => {
     const summaries = new Map<string, StudyCalendarDaySummary>();
@@ -501,13 +537,39 @@ function GlobalCalendarPage() {
   useEffect(() => {
     let ignore = false;
 
+    setCourseError(null);
+    listCourses()
+      .then((nextCourses) => {
+        if (!ignore) {
+          setCourses(nextCourses);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setCourseError(errorMessage(nextError));
+          setCourses([]);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
     setIsMonthLoading(true);
     setMonthError(null);
 
-    fetchGlobalCalendarMonth(month)
-      .then((monthData) => {
+    const monthRequest = selectedCourseId
+      ? fetchCourseStudyCalendar(selectedCourseId, month).then((monthData) => monthData.days)
+      : fetchGlobalCalendarMonth(month).then((monthData) => monthData.days);
+
+    monthRequest
+      .then((days) => {
         if (!ignore) {
-          setMonthDays(monthData.days);
+          setMonthDays(days);
         }
       })
       .catch((nextError: unknown) => {
@@ -525,7 +587,7 @@ function GlobalCalendarPage() {
     return () => {
       ignore = true;
     };
-  }, [month]);
+  }, [month, selectedCourseId]);
 
   useEffect(() => {
     if (!selectedDate) {
@@ -537,7 +599,11 @@ function GlobalCalendarPage() {
     setDayError(null);
     setDayTodos(null);
 
-    fetchGlobalCalendarDayTodos(selectedDate)
+    const dayRequest = selectedCourseId
+      ? fetchCourseStudyCalendarDay(selectedCourseId, selectedDate).then(courseDayToGlobalTodos)
+      : fetchGlobalCalendarDayTodos(selectedDate);
+
+    dayRequest
       .then((todos) => {
         if (!ignore) {
           setDayTodos(todos);
@@ -557,7 +623,7 @@ function GlobalCalendarPage() {
     return () => {
       ignore = true;
     };
-  }, [selectedDate]);
+  }, [selectedCourseId, selectedDate]);
 
   function moveMonth(offset: number) {
     setReferenceDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
@@ -566,10 +632,16 @@ function GlobalCalendarPage() {
     setDayError(null);
   }
 
+  function handleCourseFilterChange(value: string | null) {
+    setSelectedCourseId(value && value !== "__all__" ? value : null);
+    setDayTodos(null);
+    setDayError(null);
+  }
+
   return (
     <Box className="home-workbench calendar-placeholder-page workbench-page">
       <WorkbenchTopbar
-        contextName="全局"
+        contextName={selectedCourseName ?? "全局"}
         meta={<Badge color="blue" variant="light">{month}</Badge>}
         pageName="学习日历"
       />
@@ -585,6 +657,29 @@ function GlobalCalendarPage() {
                 <IconChevronRight size={22} />
               </ActionIcon>
             </Group>
+            <Group align="flex-end" className="calendar-filter-row" justify="space-between" wrap="nowrap">
+              <Select
+                aria-label="课程筛选"
+                className="calendar-course-filter"
+                data={courseOptions}
+                label="课程筛选"
+                onChange={handleCourseFilterChange}
+                value={selectedCourseId ?? "__all__"}
+              />
+              <Button
+                aria-label="清除课程筛选"
+                disabled={!selectedCourseId}
+                onClick={() => handleCourseFilterChange("__all__")}
+                variant="subtle"
+              >
+                清除筛选
+              </Button>
+            </Group>
+            {courseError ? (
+              <Alert color="yellow" role="status" title="课程筛选加载失败" variant="light">
+                {courseError}
+              </Alert>
+            ) : null}
 
             {isMonthLoading ? (
               <Stack gap="sm" role="status">
@@ -611,7 +706,7 @@ function GlobalCalendarPage() {
                     const summary = cell.dateKey ? summariesByDate.get(cell.dateKey) : undefined;
                     return (
                       <Box
-                        aria-label={cell.dateKey ? `查看 ${cell.dateKey} 的全局待办` : "空白日期"}
+                        aria-label={cell.dateKey ? `查看 ${cell.dateKey} 的${selectedCourseId ? "课程任务" : "全局待办"}` : "空白日期"}
                         className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${summary ? " has-tasks" : ""}`}
                         component={cell.dateKey ? "button" : "div"}
                         key={`${cell.dateKey ?? "empty"}-${index}`}
@@ -643,6 +738,7 @@ function GlobalCalendarPage() {
         <GlobalCalendarDayPanel
           dayTodos={dayTodos}
           error={dayError}
+          filteredCourseName={selectedCourseName}
           isLoading={isDayLoading}
           selectedDate={selectedDate}
         />
@@ -652,12 +748,5 @@ function GlobalCalendarPage() {
 }
 
 export function CalendarPage() {
-  const [searchParams] = useSearchParams();
-  const courseId = searchParams.get("courseId");
-
-  if (courseId) {
-    return <CourseCalendarPage courseId={courseId} />;
-  }
-
   return <GlobalCalendarPage />;
 }

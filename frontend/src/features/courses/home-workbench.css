@@ -302,6 +302,30 @@
   line-height: 11px;
 }
 
+.home-calendar-roomy-grid {
+  min-height: 315px;
+}
+
+.home-calendar-roomy-grid .home-calendar-cell {
+  min-height: 63px;
+}
+
+.home-calendar-roomy-grid .home-calendar-cell-summary {
+  inset: 31px 8px 8px;
+  height: auto;
+}
+
+.calendar-filter-row {
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 10px 12px;
+}
+
+.calendar-course-filter {
+  min-width: 220px;
+}
+
 .home-term-select {
   width: 214px;
 }

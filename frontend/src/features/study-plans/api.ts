@@ -263,6 +263,12 @@ export function generateSubtaskTaskTest(
   });
 }
 
+export function getGeneratedContentDetail(generatedContentId: string): Promise<GeneratedContentRead> {
+  return apiRequest<GeneratedContentRead>(`/api/v1/generated-contents/${generatedContentId}`, {
+    method: "GET",
+  });
+}
+
 export interface DownloadedFile {
   blob: Blob;
   filename: string;

@@ -269,11 +269,33 @@
 }
 
 .study-plan-completion-actions.is-pinned-bottom {
-  margin-top: auto;
+  margin-top: 18px;
+  padding: 10px 10px 4px 0;
+  flex: 0 0 auto;
 }
 
 .study-plan-execution-sidebar {
   position: static;
+}
+
+.study-plan-execution-aside {
+  display: flex;
+  flex-direction: column;
+}
+
+.study-plan-execution-aside-layout {
+  min-height: 100%;
+  flex: 1;
+}
+
+.study-plan-execution-ai {
+  flex: 1;
+  min-height: 0;
+}
+
+.study-plan-execution-summary {
+  margin-top: auto;
+  flex: 0 0 auto;
 }
 
 .study-plan-execution-sidebar-header {
@@ -293,9 +315,25 @@
 }
 
 .study-plan-execution-step {
+  width: 100%;
   border-color: #e5edf5;
   background: #fbfdff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
   padding: 10px;
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.study-plan-execution-step:hover {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.study-plan-execution-step:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .study-plan-execution-step.is-current {
@@ -331,16 +369,38 @@
   padding: 12px;
 }
 
+.study-plan-generated-sources {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5edf5;
+}
+
 .study-plan-task-qa {
   border-color: #dbeafe;
   background: #f8fbff;
   padding: 12px;
 }
 
+.study-plan-execution-ai .study-plan-task-qa {
+  flex: 1;
+}
+
 .study-plan-task-qa-answer {
   background: #ffffff;
   border: 1px solid #d6e0eb;
   padding: 10px;
+}
+
+.study-plan-summary-header {
+  border-top: 1px solid rgba(31, 48, 79, 0.08);
+  padding-top: 4px;
+}
+
+.study-plan-summary-header h3 {
+  font-size: 18px;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .study-plan-task-test-preview {
@@ -357,13 +417,32 @@
 .study-plan-checkin-card {
   border-color: #bde7df;
   background: #f8fffd;
-  padding: 12px;
+  padding: 10px 12px;
+}
+
+.study-plan-material-summary-list {
+  max-height: 150px;
+  overflow: auto;
 }
 
 .study-plan-material-row {
   border-color: #e5edf5;
   background: #fbfdff;
-  padding: 12px;
+  padding: 8px 10px;
+}
+
+.study-plan-material-name {
+  min-width: 0;
+}
+
+.study-plan-material-badge {
+  flex: 0 0 auto;
+}
+
+.study-plan-material-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
