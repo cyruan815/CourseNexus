@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.modules.generation.generators.flashcard.schemas import FlashcardDraft
 
 
@@ -41,4 +41,11 @@ class GeneratedContentRead(BaseModel):
 
 
 class FlashcardCardsUpdate(BaseModel):
-    cards: list[FlashcardDraft] = Field(min_length=1)
+    cards: list[FlashcardDraft] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_unique_fronts(self) -> "FlashcardCardsUpdate":
+        normalized = [" ".join(card.front.split()).casefold() for card in self.cards]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Flashcard fronts must be unique")
+        return self

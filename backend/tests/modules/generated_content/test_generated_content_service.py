@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime, timezone
+import logging
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -18,6 +20,7 @@ import app.modules.generated_content.repository as generated_content_repository
 import app.modules.generated_content.service as generated_content_service
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.repository import save_generated_content
+from app.modules.generated_content.schemas import FlashcardCardsUpdate
 from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents, update_flashcard_cards
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
@@ -296,25 +299,43 @@ def test_soft_deleted_generated_contents_remain_excluded(db: Session) -> None:
     assert exc_info.value.code == "NOT_FOUND"
 
 
-def test_update_flashcard_cards_persists_normalized_deck_for_owner(db: Session) -> None:
+def test_flashcard_cards_update_rejects_duplicate_fronts_and_oversized_decks() -> None:
+    card = {"front": "Question", "back": "Answer", "tags": [], "explanation": None}
+
+    with pytest.raises(ValidationError):
+        FlashcardCardsUpdate(cards=[card, {**card, "front": "  question  "}])
+    with pytest.raises(ValidationError):
+        FlashcardCardsUpdate(cards=[{**card, "front": f"Question {index}"} for index in range(101)])
+
+
+def test_update_flashcard_cards_persists_normalized_deck_for_owner(
+    db: Session,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     user = register_user(db, UserCreate(username="flashcard-editor", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Networks"))
     content = create_content(db, user.id, course.id, "gen_flashcards", content_type="flashcard")
 
-    result = update_flashcard_cards(
-        db,
-        user_id=user.id,
-        generated_content_id=content.id,
-        cards=[
-            {"front": " Question one ", "back": " Answer one ", "tags": [], "explanation": None},
-            {"front": "Question two", "back": "Answer two", "tags": ["TCP"], "explanation": "Detail"},
-        ],
-    )
+    original_updated_at = content.updated_at
+    with caplog.at_level(logging.INFO, logger="course_nexus.generated_content.flashcards"):
+        result = update_flashcard_cards(
+            db,
+            user_id=user.id,
+            generated_content_id=content.id,
+            cards=[
+                {"front": " Question one ", "back": " Answer one ", "tags": [], "explanation": None},
+                {"front": "Question two", "back": "Answer two", "tags": ["TCP"], "explanation": "Detail"},
+            ],
+        )
 
     assert result.content_json == {"cards": [
         {"front": "Question one", "back": "Answer one", "tags": [], "explanation": None, "id": "card_001", "mastery_status": "unknown", "sort_order": 1},
         {"front": "Question two", "back": "Answer two", "tags": ["TCP"], "explanation": "Detail", "id": "card_002", "mastery_status": "unknown", "sort_order": 2},
     ]}
+    assert result.updated_at > original_updated_at
+    assert "Flashcard deck updated" in caplog.text
+    assert f"content={content.id}" in caplog.text
+    assert "before=0 after=2" in caplog.text
 
 
 def test_update_flashcard_cards_rejects_wrong_owner_and_non_flashcard(db: Session) -> None:
