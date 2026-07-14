@@ -135,7 +135,7 @@ sequenceDiagram
       "title": "对数基础",
       "explanation": "只补足 log2 在公式中的含义。",
       "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
-      "source_citation_ids": ["chunk_1"],
+      "source_citation_ids": [],
       "sort_order": 1
     }
   ],
@@ -192,9 +192,9 @@ v2 讲义的字段语义：
 - `title` 使用当前二级任务标题派生，保持二级任务级讲义口径。
 - `difficulty` 表示讲义整体难度，建议取值为 `easy`、`medium`、`hard`。
 - `estimated_minutes` 来自当前二级任务或生成参数，不由模型随意扩展学习时长。
-- `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课。
+- `prerequisites[]` 只补足理解当前任务所需的最小前置知识，不生成完整先修课；该区块允许 `source_citation_ids=[]`，因为它常是教学铺垫而非资料中的直接结论。
 - `sections[].blocks[]` 是正文主体；旧版 `sections[].body` 在 v2 中被 typed blocks 替代。
-- `sections[].source_citation_ids` 为强制引用字段；模型输出阶段必须引用本次 material-context 中的 chunk id，保存成功后由 learning-execution 回绑为 `SourceCitation.id`。`blocks[]` 默认继承所在 section 的来源，不独立保存引用；顶层 `prerequisites[]`、`formula_cards[]`、`exam_focus[]`、`self_check[]` 则保留各自的独立引用，生成端校验其 chunk id 范围并在同一事务内保存、回绑。顶层公式卡片不得省略引用。
+- `sections[].source_citation_ids` 为强制引用字段；模型输出阶段必须引用本次 material-context 中的 chunk id，保存成功后由 learning-execution 回绑为 `SourceCitation.id`。`blocks[]` 默认继承所在 section 的来源，不独立保存引用；顶层 `prerequisites[]` 允许空引用且不伪造来源，`formula_cards[]`、`exam_focus[]`、`self_check[]` 则保留各自的独立引用，生成端校验其 chunk id 范围并在同一事务内保存、回绑。顶层公式卡片不得省略引用。
 - 新生成讲义只接受显式 `schema_version=2`；省略版本或返回 v1 时按 `GENERATION_SCHEMA_INVALID` 失败，不允许把 typed blocks 作为 v1 success 落库。多批次 reducer 在返回前必须重新用 `HandoutContent` 校验最终合并结果，拒绝 v1/v2 混合产生的畸形结构。历史已保存且版本缺失的 v1 内容仍由读取和导出兼容路径处理。
 - `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空；第一版默认继承所有 section 来源，展示时不单独显示引用。
 - `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
@@ -306,7 +306,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 ### 引用链契约
 
-Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 handout 的 section、顶层 prerequisites / formula_cards / exam_focus / self_check 以及 task-test questions 的 `source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。v2 handout 的 section block 默认继承 section 来源，不做逐 block 引用校验或独立回绑；顶层 typed block 的独立引用必须保留。回绑后再次通过 `HandoutContent` 校验才允许提交成功。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
+Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 handout 的 section、顶层 formula_cards / exam_focus / self_check 以及带引用的 prerequisites、task-test questions 的 `source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。v2 handout 的 section block 默认继承 section 来源，不做逐 block 引用校验或独立回绑；除 prerequisites 可为空引用外，顶层 typed block 的独立引用必须保留。回绑后再次通过 `HandoutContent` 校验才允许提交成功。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
 
 Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引用绑定：section id 重写为 `sec_N` 后，`GeneratorOutput.item_citation_chunk_ids` 要把旧 section id 对应的 chunk id 迁移到新 id；若 generator 未提供该映射，则回退使用该 section 自身的 `source_citation_ids` 并去重。Handout reducer 不再把所有 section 的引用合成总集合后绑定给每个 section，避免 PDF 每节显示整章引用。
 
@@ -314,7 +314,7 @@ Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引
 
 ### Handout prompt 契约
 
-Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯；block 默认继承 section 来源，第一版不要在 block 内单独填写 `source_citation_ids`。正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
+Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯；prerequisites 可为空引用；block 默认继承 section 来源，第一版不要在 block 内单独填写 `source_citation_ids`。正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
 
 ### PDF renderer 契约
 

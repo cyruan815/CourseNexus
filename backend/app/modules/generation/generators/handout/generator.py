@@ -170,7 +170,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- Chart 只在资料提供真实数值时生成，不得编造数据。",
             "- 不生成 SVG，除非输入资料明确要求且系统 schema 支持。",
             "- 每个 section 必须填写 source_citation_ids；block 默认继承 section 来源，第一版不要在 block 内单独填写 source_citation_ids。",
-            "- prerequisites、formula_cards、exam_focus、self_check 中的每个顶层条目必须独立填写 source_citation_ids，并使用下方 chunk_id。",
+            "- prerequisites 可不填写 source_citation_ids；formula_cards、exam_focus、self_check 中的每个顶层条目必须独立填写 source_citation_ids，并使用下方 chunk_id。",
         ]
     )
     citation_rules = "\n".join(

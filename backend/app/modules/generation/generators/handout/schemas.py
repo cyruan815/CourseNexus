@@ -227,7 +227,7 @@ HandoutBlock = Annotated[
 ]
 
 
-class PrerequisiteItem(CitationBoundModel):
+class PrerequisiteItem(OptionalCitationBoundModel):
     id: str = Field(min_length=1)
     title: str = Field(min_length=1)
     explanation: str = Field(min_length=1)
