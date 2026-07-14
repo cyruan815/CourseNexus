@@ -631,6 +631,7 @@ export function StudyPlanDetailPage() {
                     setRegenerationPreview(null);
                   }}
                   rightSection={<Text c="dimmed" size="xs">分钟</Text>}
+                  rightSectionWidth={48}
                   value={regenerationDailyMinutes}
                 />
                 <NativeSelect
@@ -721,7 +722,7 @@ export function StudyPlanDetailPage() {
         ) : null}
 
         <Box className="study-plan-detail-layout">
-          <Paper className="study-plan-panel" radius="md" withBorder>
+          <Paper className="study-plan-panel study-plan-task-structure-panel" radius="md" withBorder>
             <Group justify="space-between" wrap="nowrap">
               <Stack gap={2}>
                 <Title order={2}>任务结构</Title>
