@@ -260,3 +260,26 @@
     font-size: 22px;
   }
 }
+.handout-markdown h4 {
+  margin: 22px 0 10px;
+  color: #4e6378;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.handout-markdown ol {
+  margin: 14px 0 18px;
+  padding-left: 26px;
+}
+
+.handout-markdown hr {
+  height: 1px;
+  margin: 30px 0;
+  border: 0;
+  background: var(--handout-line);
+}
+
+.handout-markdown strong {
+  color: #2f343c;
+  font-weight: 800;
+}
