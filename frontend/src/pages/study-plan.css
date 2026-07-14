@@ -56,6 +56,15 @@
   overflow: hidden;
 }
 
+.study-plan-create-flow {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 860px);
+  justify-content: center;
+  overflow: auto;
+}
+
 .study-plan-panel,
 .study-plan-detail-hero {
   border-color: #d6e0eb;
@@ -147,6 +156,25 @@
     radial-gradient(circle at 0 0, var(--course-glow), transparent 320px),
     radial-gradient(circle at 11% 7%, var(--course-core), transparent 250px),
     #ffffff;
+}
+
+.study-plan-required-config,
+.study-plan-config-summary {
+  display: grid;
+  gap: 12px;
+  border-color: #fde68a;
+  background: #fffdf2;
+  padding: 12px;
+}
+
+.study-plan-config-summary {
+  border-color: #bde7df;
+  background: #f8fffd;
+}
+
+.study-plan-preview-modal .mantine-Modal-body {
+  max-height: min(78vh, 780px);
+  overflow: auto;
 }
 
 .study-plan-detail-hero > * {
@@ -531,6 +559,7 @@
   }
 
   .study-plan-grid,
+  .study-plan-create-flow,
   .study-plan-detail-layout,
   .study-plan-execution-grid {
     overflow: auto;

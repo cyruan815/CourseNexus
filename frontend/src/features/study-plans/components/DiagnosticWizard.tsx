@@ -9,7 +9,9 @@ import {
 } from "../api";
 import type { MaterialScope } from "../../materials/types";
 import type {
+  DailyMinutesSource,
   MasteryLevel,
+  PlanPreference,
   StudyPlanDiagnosticProfile,
   StudyPlanDiagnosticQuestion,
   StudyPlanTopicMasteryAnswer,
@@ -20,6 +22,13 @@ interface DiagnosticWizardProps {
   courseId: string | undefined;
   goalText: string;
   materialScope: MaterialScope;
+  confirmedConfig: {
+    start_date?: string | null;
+    duration_days?: number | null;
+    preference?: PlanPreference | null;
+    daily_available_minutes?: number | null;
+    daily_minutes_source?: DailyMinutesSource | null;
+  };
   profile: StudyPlanDiagnosticProfile | null;
   onProfileReady: (profile: StudyPlanDiagnosticProfile) => void;
   onProfileCleared: () => void;
@@ -59,11 +68,12 @@ export function DiagnosticWizard({
   courseId,
   goalText,
   materialScope,
+  confirmedConfig,
   profile,
   onProfileReady,
   onProfileCleared,
 }: DiagnosticWizardProps) {
-  const [questionVersion, setQuestionVersion] = useState<"study_plan_diagnostic_v1" | null>(null);
+  const [questionVersion, setQuestionVersion] = useState<"study_plan_diagnostic_v2" | null>(null);
   const [questions, setQuestions] = useState<StudyPlanDiagnosticQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [diagnosticNote, setDiagnosticNote] = useState("");
@@ -100,6 +110,7 @@ export function DiagnosticWizard({
       const response = await fetchDiagnosticQuestions(courseId, {
         goal_text: goalText.trim(),
         material_scope: materialScope,
+        confirmed_config: confirmedConfig,
       });
       setQuestionVersion(response.question_version);
       setQuestions(response.questions);
@@ -165,10 +176,10 @@ export function DiagnosticWizard({
       <Group justify="space-between" wrap="nowrap">
         <Stack gap={2}>
           <Text fw={750}>学情诊断</Text>
-          <Text c="dimmed" size="sm">学情诊断可跳过，生成预览时会按基础配置直接生成计划。</Text>
+          <Text c="dimmed" size="sm">完成诊断后才能生成计划预览。</Text>
         </Stack>
-        <Badge color={profile ? "teal" : "blue"} variant="light">
-          {profile ? "画像已生成" : "可选"}
+        <Badge color={profile ? "teal" : "red"} variant="light">
+          {profile ? "已完成" : "必填"}
         </Badge>
       </Group>
 
@@ -220,6 +231,7 @@ export function DiagnosticWizard({
 
       <Group justify="space-between">
         <Button
+          data-testid="study-plan-diagnostic-start"
           leftSection={hasQuestions ? <IconRefresh size={16} /> : <IconClipboardText size={16} />}
           loading={isLoadingQuestions}
           onClick={loadQuestions}
@@ -228,7 +240,7 @@ export function DiagnosticWizard({
           {hasQuestions ? "重新获取诊断题" : "开始学情诊断"}
         </Button>
         {hasQuestions ? (
-          <Button disabled={!canSubmit} loading={isSubmitting} onClick={submitProfile}>
+          <Button data-testid="study-plan-diagnostic-submit" disabled={!canSubmit} loading={isSubmitting} onClick={submitProfile}>
             提交诊断
           </Button>
         ) : null}

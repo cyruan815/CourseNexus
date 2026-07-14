@@ -388,7 +388,7 @@ const generatedTaskTest = {
 };
 
 const diagnosticQuestions = {
-  question_version: "study_plan_diagnostic_v1",
+  question_version: "study_plan_diagnostic_v2",
   questions: [
     {
       question_id: "topic_mastery_vector_space",
@@ -438,7 +438,7 @@ const diagnosticQuestions = {
 };
 
 const diagnosticProfile = {
-  question_version: "study_plan_diagnostic_v1",
+  question_version: "study_plan_diagnostic_v2",
   prior_knowledge_level: "little",
   foundation_needed: true,
   weak_topics: ["topic_vector_space"],
@@ -520,6 +520,17 @@ function installDownloadMocks() {
   });
 }
 
+function seedCompletedDiagnosticDraft(overrides: Record<string, unknown> = {}) {
+  window.localStorage.setItem(
+    "course-nexus:study-plan-create:crs_123",
+    JSON.stringify({ diagnosticProfile, ...overrides }),
+  );
+}
+
+async function waitForMaterialsLoaded() {
+  await screen.findByText(materials[0].name);
+}
+
 describe("study plan pages", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -544,7 +555,7 @@ describe("study plan pages", () => {
 
     const { container } = renderStudyPlanRoutes();
 
-    await waitFor(() => expect(container.querySelector(".study-plan-grid")).toBeInTheDocument());
+    await waitFor(() => expect(container.querySelector(".study-plan-create-flow")).toBeInTheDocument());
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
@@ -648,10 +659,18 @@ describe("study plan pages", () => {
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: "三天完成线性代数第一章复习",
+      startDate: "2026-07-13",
+      endDate: "2026-07-15",
+    });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
         return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
       }
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
@@ -670,24 +689,21 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("学习目标"), {
-      target: { value: "三天完成线性代数第一章复习" },
-    });
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+    await waitForMaterialsLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存计划" })).toBeEnabled();
+    expect(screen.getByTestId("study-plan-save")).toBeEnabled();
 
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "75" } });
-    expect(screen.getByText("配置已修改，请重新生成预览后保存。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存计划" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "调整日期" }));
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-16" } });
+    expect(screen.getAllByText("配置已修改，请重新生成预览后保存。").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    fireEvent.click(screen.getByTestId("study-plan-regenerate-preview"));
     expect(await screen.findByText("预览已生成")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
+    fireEvent.click(screen.getByTestId("study-plan-save"));
 
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
     expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
@@ -700,13 +716,13 @@ describe("study plan pages", () => {
           body: JSON.stringify({
             goal_text: "三天完成线性代数第一章复习",
             start_date: "2026-07-13",
-            end_date: "2026-07-15",
-            daily_available_minutes: 75,
+            end_date: "2026-07-16",
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: true,
               material_ids: [],
             },
+            diagnostic_profile: diagnosticProfile,
             title: preview.title,
             client_flow: "wizard_v1",
             tasks: preview.tasks,
@@ -726,6 +742,9 @@ describe("study plan pages", () => {
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
         return Promise.resolve(successResponse(course, "req_course"));
       }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
       if (url.endsWith("/study-plan-diagnostic-questions")) {
         return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
       }
@@ -743,15 +762,37 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    await waitForMaterialsLoaded();
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
     fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
     fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
 
     fireEvent.click(screen.getByRole("button", { name: "开始学情诊断" }));
     expect(await screen.findByText("你对「向量空间」了解多少？")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plan-diagnostic-questions",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: "三天完成线性代数第一章复习",
+            material_scope: {
+              include_all_parsed_materials: true,
+              material_ids: [],
+            },
+            confirmed_config: {
+              start_date: "2026-07-13",
+              duration_days: 3,
+              preference: "balanced",
+              daily_available_minutes: null,
+              daily_minutes_source: null,
+            },
+          }),
+          method: "POST",
+        }),
+      );
+    });
 
     fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
     fireEvent.click(screen.getByLabelText("概念理解"));
@@ -761,7 +802,7 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "提交诊断" }));
 
     expect(await screen.findByText("诊断已完成")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -771,7 +812,6 @@ describe("study plan pages", () => {
             goal_text: "三天完成线性代数第一章复习",
             start_date: "2026-07-13",
             end_date: "2026-07-15",
-            daily_available_minutes: 60,
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: true,
@@ -805,26 +845,23 @@ describe("study plan pages", () => {
     });
     fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
     fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
 
     unmount();
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
     expect(screen.getByLabelText("学习目标")).toHaveValue("三天完成线性代数第一章复习");
-    expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13");
-    expect(screen.getByLabelText("结束日期")).toHaveValue("2026-07-15");
-    expect(screen.getByLabelText("每日可用学习时长")).toHaveValue(60);
+    expect(screen.getByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
   });
 
-  it("previews without a diagnostic profile because diagnosis is optional", async () => {
+  it("requires a completed diagnostic profile before previewing", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
         return Promise.resolve(successResponse(course, "req_course"));
       }
-      if (url.endsWith("/study-plans/preview")) {
-        return Promise.resolve(successResponse(preview, "req_preview"));
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
       }
 
       return Promise.resolve(successResponse({}));
@@ -834,38 +871,33 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
-    expect(screen.getByText("学情诊断可跳过，生成预览时会按基础配置直接生成计划。")).toBeInTheDocument();
+    await waitForMaterialsLoaded();
+    expect(screen.getByText("完成诊断后才能生成计划预览。")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
     fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
     fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
 
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/v1/courses/crs_123/study-plans/preview",
-        expect.objectContaining({
-          body: JSON.stringify({
-            goal_text: "三天完成线性代数第一章复习",
-            start_date: "2026-07-13",
-            end_date: "2026-07-15",
-            daily_available_minutes: 60,
-            preference: "balanced",
-            material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
-            },
-          }),
-          method: "POST",
-        }),
-      );
-    });
+    expect(await screen.findByText("请先完成学情诊断。")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/v1/courses/crs_123/study-plans/preview",
+      expect.anything(),
+    );
   });
 
   it("uses the selected parsed material scope for parse and preview requests", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: preview.goal_text,
+      startDate: "2026-07-13",
+      endDate: "2026-07-15",
+      materialScope: {
+        include_all_parsed_materials: false,
+        material_ids: ["mat_1"],
+      },
+    });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
@@ -885,26 +917,13 @@ describe("study plan pages", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container } = renderStudyPlanRoutes();
+    renderStudyPlanRoutes();
 
     await screen.findByRole("heading", { level: 1 });
     await screen.findByText("线代第一章.pdf");
 
-    fireEvent.click(screen.getByTestId("scope-mode-specific"));
     expect(screen.getByLabelText("线代第一章.pdf")).toBeChecked();
     expect(screen.getByLabelText("未解析习题.pdf")).toBeDisabled();
-
-    const goalInput = container.querySelector("textarea");
-    const dateInputs = container.querySelectorAll('input[type="date"]');
-    const minutesInput = container.querySelector('input[type="number"]');
-    expect(goalInput).not.toBeNull();
-    expect(dateInputs).toHaveLength(2);
-    expect(minutesInput).not.toBeNull();
-
-    fireEvent.change(goalInput!, { target: { value: preview.goal_text } });
-    fireEvent.change(dateInputs[0], { target: { value: "2026-07-13" } });
-    fireEvent.change(dateInputs[1], { target: { value: "2026-07-15" } });
-    fireEvent.change(minutesInput!, { target: { value: "60" } });
 
     fireEvent.click(screen.getByTestId("study-plan-preview"));
 
@@ -916,22 +935,18 @@ describe("study plan pages", () => {
             goal_text: preview.goal_text,
             start_date: "2026-07-13",
             end_date: "2026-07-15",
-            daily_available_minutes: 60,
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: false,
               material_ids: ["mat_1"],
             },
+            diagnostic_profile: diagnosticProfile,
           }),
           method: "POST",
         }),
       );
     });
     await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());
-
-    fireEvent.click(screen.getByTestId("scope-mode-all"));
-    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
-    fireEvent.click(screen.getByTestId("scope-mode-specific"));
 
     fireEvent.click(screen.getByTestId("study-plan-parse-config"));
 
@@ -955,10 +970,18 @@ describe("study plan pages", () => {
   });
 
   it("parses natural language config into editable fields and expires the existing preview", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: "今天是2026年7月13日，两天复习线性代数第一章，每天90分钟，冲刺强化",
+      startDate: "2026-07-13",
+      endDate: "2026-07-15",
+    });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
         return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
       }
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
@@ -974,16 +997,11 @@ describe("study plan pages", () => {
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("学习目标"), {
-      target: { value: "今天是2026年7月13日，两天复习线性代数第一章，每天90分钟，冲刺强化" },
-    });
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
-    fireEvent.change(screen.getByLabelText("每日可用学习时长"), { target: { value: "60" } });
+    await waitForMaterialsLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "生成预览" }));
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存计划" })).toBeEnabled();
+    expect(screen.getByTestId("study-plan-save")).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "自动解析配置" }));
 
@@ -1004,10 +1022,9 @@ describe("study plan pages", () => {
     });
 
     expect(screen.getByLabelText("学习目标")).toHaveValue("两天复习线性代数第一章");
-    expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13");
-    expect(screen.getByLabelText("结束日期")).toHaveValue("2026-07-14");
-    expect(screen.getByLabelText("每日可用学习时长")).toHaveValue(90);
-    expect(screen.getByText("当前学习方式：冲刺强化。保存前可先查看任务预览。")).toBeInTheDocument();
+    expect(screen.getByText(/2026-07-13 - 2026-07-14/)).toBeInTheDocument();
+    expect(screen.getByText(/学习方式：冲刺强化/)).toBeInTheDocument();
+    expect(screen.getByText(/每日 90 分钟/)).toBeInTheDocument();
     expect(screen.queryByText("开始日期：需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("结束日期：需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("学习天数：需手动补齐")).not.toBeInTheDocument();
@@ -1019,16 +1036,24 @@ describe("study plan pages", () => {
     expect(screen.queryByText("coverage: 需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("capacity: 需手动补齐")).not.toBeInTheDocument();
     expect(screen.queryByText("generation_metadata: 需手动补齐")).not.toBeInTheDocument();
-    expect(screen.getByText("配置已修改，请重新生成预览后保存。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存计划" })).toBeDisabled();
+    expect(screen.getAllByText("配置已修改，请重新生成预览后保存。").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
   });
 
   it("reuses the same idempotency key for unchanged preview retries and resets it after a new preview", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: preview.goal_text,
+      startDate: "2026-07-13",
+      endDate: "2026-07-15",
+    });
     let saveAttempts = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
         return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
       }
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
@@ -1063,40 +1088,27 @@ describe("study plan pages", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container } = renderStudyPlanRoutes();
+    renderStudyPlanRoutes();
     await screen.findByRole("heading", { level: 1 });
+    await waitForMaterialsLoaded();
 
-    const goalInput = container.querySelector("textarea");
-    const dateInputs = container.querySelectorAll('input[type="date"]');
-    const minutesInput = container.querySelector('input[type="number"]');
-    expect(goalInput).not.toBeNull();
-    expect(dateInputs).toHaveLength(2);
-    expect(minutesInput).not.toBeNull();
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());
 
-    fireEvent.change(goalInput!, { target: { value: preview.goal_text } });
-    fireEvent.change(dateInputs[0], { target: { value: "2026-07-13" } });
-    fireEvent.change(dateInputs[1], { target: { value: "2026-07-15" } });
-    fireEvent.change(minutesInput!, { target: { value: "60" } });
-
-    const actionButtons = () => Array.from(container.querySelectorAll("button")).slice(-2);
-    const previewButton = () => actionButtons()[0] as HTMLButtonElement;
-    const saveButton = () => actionButtons()[1] as HTMLButtonElement;
-
-    fireEvent.click(previewButton());
-    await waitFor(() => expect(saveButton()).toBeEnabled());
-
-    fireEvent.click(saveButton());
+    fireEvent.click(screen.getByTestId("study-plan-save"));
     expect(await screen.findByText("network timeout")).toBeInTheDocument();
 
-    fireEvent.click(saveButton());
+    fireEvent.click(screen.getByTestId("study-plan-save"));
     await waitFor(() => expect(saveAttempts).toBe(2));
 
-    fireEvent.change(minutesInput!, { target: { value: "75" } });
-    expect(saveButton()).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "调整日期" }));
+    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-16" } });
+    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
 
-    fireEvent.click(previewButton());
-    await waitFor(() => expect(saveButton()).toBeEnabled());
-    fireEvent.click(saveButton());
+    fireEvent.click(screen.getByTestId("study-plan-regenerate-preview"));
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("study-plan-save"));
     await waitFor(() => expect(saveAttempts).toBe(3));
 
     const saveCalls = fetchMock.mock.calls.filter(([input, init]) => (

@@ -60,7 +60,7 @@ const diagnosticQuestionPayload: StudyPlanDiagnosticQuestionRequest = {
 };
 
 const diagnosticProfilePayload: StudyPlanDiagnosticProfileRequest = {
-  question_version: "study_plan_diagnostic_v1",
+  question_version: "study_plan_diagnostic_v2",
   topic_mastery: [
     {
       topic_id: "topic_vector_space",

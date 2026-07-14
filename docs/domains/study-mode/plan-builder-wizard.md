@@ -6,6 +6,16 @@
 - 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。
 - 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
+## 2026-07-14 前端 C13 落地说明
+
+当前前端创建页已按“目标输入 + 资料范围 + 必选学情诊断 + 预览确认”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示。
+
+- 自然语言解析出的 `start_date`、`duration_days` / `end_date`、`daily_available_minutes` 和 `preference` 会作为确认配置进入诊断题请求。
+- 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，前端保留一个轻量日期兜底区，仅在日期未解析出时出现。
+- 学情诊断在创建页为必填；没有 `diagnostic_profile` 时不生成 preview。
+- `daily_available_minutes` 不必填；只有自然语言明确解析出有效分钟数时才提交，否则由后端估算。
+- 计划 preview 使用大 Modal 展示，Modal 内完成重新生成和保存；保存仍提交 `client_flow = "wizard_v1"` 与用户看到的 exact preview tasks。
+
 ## 已实施入口：每日学习时间规则
 
 2026-07-12 已落地后端 daily minutes 规则，范围仅包含 `recommended_daily_minutes` / `daily_available_minutes` / `daily_minutes_source`、capacity 和保存追溯，不包含每日测试任务、诊断向导前端、讲义或测试题幂等。

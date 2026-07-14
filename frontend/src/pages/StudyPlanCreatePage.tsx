@@ -6,8 +6,8 @@ import {
   Button,
   Divider,
   Group,
+  Modal,
   Paper,
-  Select,
   Skeleton,
   Stack,
   Text,
@@ -19,6 +19,7 @@ import {
   IconCalendarStats,
   IconClipboardCheck,
   IconRefresh,
+  IconRotateClockwise,
   IconSparkles,
 } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -118,8 +119,6 @@ const unresolvedFieldLabels: Record<string, string> = {
   goal_text: "学习目标",
   start_date: "开始日期",
   end_date: "结束日期",
-  daily_available_minutes: "每日可用学习时长",
-  preference: "学习方式",
 };
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
@@ -136,6 +135,20 @@ function resolveEndDate(startDate: string | null | undefined, durationDays: numb
 
   parsedStartDate.setDate(parsedStartDate.getDate() + durationDays - 1);
   return parsedStartDate.toISOString().slice(0, 10);
+}
+
+function resolveDurationDays(startDate: string, endDate: string): number | null {
+  if (!startDate || !endDate) {
+    return null;
+  }
+
+  const parsedStartDate = new Date(`${startDate}T00:00:00`);
+  const parsedEndDate = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+    return null;
+  }
+
+  return Math.floor((parsedEndDate.getTime() - parsedStartDate.getTime()) / 86_400_000) + 1;
 }
 
 function hasResolvedEditableValue(fieldName: string, values: {
@@ -221,7 +234,7 @@ function StudyPlanPreviewPanel({ preview }: { preview: StudyPlanPreview | null }
         <Stack gap={4}>
           <Text fw={750}>等待生成预览</Text>
           <Text c="dimmed" size="sm">
-            先设定目标、日期和资料范围，再生成可确认的学习任务安排。
+            输入目标、选择资料并完成诊断后，再生成可确认的学习任务安排。
           </Text>
         </Stack>
       </Paper>
@@ -234,7 +247,7 @@ function StudyPlanPreviewPanel({ preview }: { preview: StudyPlanPreview | null }
         <Stack gap={2}>
           <Text fw={750}>{preview.title}</Text>
           <Text c="dimmed" size="sm">
-            {preview.start_date} - {preview.end_date} / 每日 {preview.daily_available_minutes} 分钟
+            {preview.start_date} - {preview.end_date} / 每日建议 {preview.daily_available_minutes} 分钟
           </Text>
         </Stack>
         <Badge color="teal" variant="light">预览已生成</Badge>
@@ -285,6 +298,7 @@ export function StudyPlanCreatePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [hasLoadedMaterials, setHasLoadedMaterials] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
@@ -436,7 +450,7 @@ export function StudyPlanCreatePage() {
 
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
-    if (!goalText.trim() || !startDate || !endDate || Number.isNaN(minutes)) {
+    if (!goalText.trim() || !startDate || !endDate) {
       return null;
     }
 
@@ -444,10 +458,14 @@ export function StudyPlanCreatePage() {
       goal_text: goalText.trim(),
       start_date: startDate,
       end_date: endDate,
-      daily_available_minutes: minutes,
       preference,
       material_scope: materialScope,
     };
+
+    if (!Number.isNaN(minutes) && minutes >= minimumDailyMinutes) {
+      baseDraft.daily_available_minutes = minutes;
+      baseDraft.daily_minutes_source = "user_text";
+    }
 
     if (diagnosticProfile) {
       return {
@@ -459,19 +477,39 @@ export function StudyPlanCreatePage() {
     return baseDraft;
   }, [dailyMinutes, diagnosticProfile, endDate, goalText, materialScope, preference, startDate]);
 
+  const confirmedConfig = useMemo(() => {
+    const durationDays = resolveDurationDays(startDate, endDate);
+    const minutes = Number.parseInt(dailyMinutes, 10);
+
+    return {
+      start_date: startDate || null,
+      duration_days: durationDays && durationDays > 0 ? durationDays : null,
+      preference,
+      daily_available_minutes: !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? minutes : null,
+      daily_minutes_source: !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? "user_text" as const : null,
+    };
+  }, [dailyMinutes, endDate, preference, startDate]);
+
+  const parsedMaterialCount = materials.filter((material) => material.parse_status === "parsed").length;
+  const hasUsableMaterialScope = materialScope.include_all_parsed_materials
+    ? parsedMaterialCount > 0
+    : materialScope.material_ids.length > 0;
+
   function validationMessage(): string | null {
     if (!goalText.trim()) {
       return "请先填写学习目标。";
     }
     if (!startDate || !endDate) {
-      return "请填写开始日期和结束日期。";
+      return "后端当前仍需要日期范围。请在必要信息补齐中填写开始日期和结束日期。";
     }
     if (startDate > endDate) {
       return "结束日期不能早于开始日期。";
     }
-    const minutes = Number.parseInt(dailyMinutes, 10);
-    if (Number.isNaN(minutes) || minutes < minimumDailyMinutes) {
-      return `每日时长至少需要 ${minimumDailyMinutes} 分钟。`;
+    if (!diagnosticProfile) {
+      return "请先完成学情诊断。";
+    }
+    if (!hasUsableMaterialScope) {
+      return "资料范围内没有可解析资料，请先选择或解析至少一份资料。";
     }
     return null;
   }
@@ -601,6 +639,7 @@ export function StudyPlanCreatePage() {
       setPreviewSnapshot(draft);
       setPreviewSaveIdempotencyKey(createStudyPlanIdempotencyKey(courseId));
       setIsPreviewStale(false);
+      setIsPreviewModalOpen(true);
     } catch (nextError) {
       setError(errorMessage(nextError, "生成预览失败"));
     } finally {
@@ -681,16 +720,16 @@ export function StudyPlanCreatePage() {
           </Alert>
         ) : null}
 
-        <Box className="study-plan-grid">
+        <Box className="study-plan-create-flow">
           <Paper className="study-plan-panel" radius="md" withBorder>
             <Group justify="space-between" wrap="nowrap">
               <Stack gap={2}>
-                <Title order={2}>计划配置</Title>
+                <Title order={2}>目标与资料</Title>
                 <Text c="dimmed" size="sm">
-                  当前学习方式：{preferenceLabels[preference]}。保存前可先查看任务预览。
+                  自然语言里能解析出的日期、节奏和方式会直接交给后端；未解析出的必需日期会在下方轻量补齐。
                 </Text>
               </Stack>
-              <Badge color="teal" variant="outline">配置解析回填</Badge>
+              <Badge color="teal" variant="outline">目标输入</Badge>
             </Group>
 
             <Textarea
@@ -701,7 +740,7 @@ export function StudyPlanCreatePage() {
               value={goalText}
             />
             <Group justify="space-between" wrap="nowrap">
-              <Text c="dimmed" size="sm">可以先用一句话描述目标，再让系统帮你回填日期和节奏。</Text>
+              <Text c="dimmed" size="sm">先写清楚目标和时间线；每日时长未说明时由后端按资料量估算。</Text>
               <Button
                 data-testid="study-plan-parse-config"
                 leftSection={<IconSparkles size={16} />}
@@ -713,42 +752,55 @@ export function StudyPlanCreatePage() {
               </Button>
             </Group>
 
-            <Group align="flex-start" grow>
-              <TextInput
-                label="开始日期"
-                onChange={(event) => updateField(() => setStartDate(event.currentTarget.value), "start_date")}
-                type="date"
-                value={startDate}
-              />
-              <TextInput
-                label="结束日期"
-                onChange={(event) => updateField(() => setEndDate(event.currentTarget.value), "end_date")}
-                type="date"
-                value={endDate}
-              />
-            </Group>
-
-            <TextInput
-              label="每日可用学习时长"
-              min={minimumDailyMinutes}
-              onChange={(event) => updateField(() => setDailyMinutes(event.currentTarget.value), "daily_available_minutes")}
-              placeholder="60"
-              rightSection={<Text c="dimmed" size="xs">分钟</Text>}
-              type="number"
-              value={dailyMinutes}
-            />
-
-            <Select
-              allowDeselect={false}
-              data={preferenceOptions}
-              label="学习方式"
-              onChange={(value) => {
-                if (value) {
-                  updateField(() => setPreference(value as PlanPreference), "preference");
-                }
-              }}
-              value={preference}
-            />
+            {(!startDate || !endDate) ? (
+              <Paper className="study-plan-required-config" radius="md" withBorder>
+                <Group justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Text fw={750}>必要信息补齐</Text>
+                    <Text c="dimmed" size="sm">
+                      后端当前仍要求日期范围；若自然语言没有解析出日期，请在这里补齐。
+                    </Text>
+                  </Stack>
+                  <Badge color="yellow" variant="light">兜底</Badge>
+                </Group>
+                <Group align="flex-start" grow>
+                  <TextInput
+                    label="开始日期"
+                    onChange={(event) => updateField(() => setStartDate(event.currentTarget.value), "start_date")}
+                    type="date"
+                    value={startDate}
+                  />
+                  <TextInput
+                    label="结束日期"
+                    onChange={(event) => updateField(() => setEndDate(event.currentTarget.value), "end_date")}
+                    type="date"
+                    value={endDate}
+                  />
+                </Group>
+              </Paper>
+            ) : (
+              <Paper className="study-plan-config-summary" radius="md" withBorder>
+                <Group justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Text fw={750}>已解析配置</Text>
+                    <Text c="dimmed" size="sm">
+                      {startDate} - {endDate} / 学习方式：{preferenceLabels[preference]}
+                      {dailyMinutes ? ` / 每日 ${dailyMinutes} 分钟` : " / 每日时长由后端估算"}
+                    </Text>
+                  </Stack>
+                  <Button
+                    onClick={() => updateField(() => {
+                      setStartDate("");
+                      setEndDate("");
+                    })}
+                    size="xs"
+                    variant="subtle"
+                  >
+                    调整日期
+                  </Button>
+                </Group>
+              </Paper>
+            )}
 
             {unresolvedFields.length > 0 ? (
               <Alert color="yellow" role="status" title="仍需手动补齐" variant="light">
@@ -771,6 +823,7 @@ export function StudyPlanCreatePage() {
             />
 
             <DiagnosticWizard
+              confirmedConfig={confirmedConfig}
               courseId={courseId}
               goalText={goalText}
               materialScope={materialScope}
@@ -789,7 +842,37 @@ export function StudyPlanCreatePage() {
                 onClick={handlePreview}
                 variant="light"
               >
-                生成预览
+                生成计划预览
+              </Button>
+            </Group>
+          </Paper>
+        </Box>
+
+        <Modal
+          centered
+          className="study-plan-preview-modal"
+          opened={isPreviewModalOpen}
+          onClose={() => setIsPreviewModalOpen(false)}
+          size="min(1080px, 94vw)"
+          title="计划预览"
+        >
+          <Stack gap="md">
+            {isPreviewStale ? (
+              <Alert color="yellow" role="status" title="预览已过期" variant="light">
+                配置已修改，请重新生成预览后保存。
+              </Alert>
+            ) : null}
+            <StudyPlanPreviewPanel preview={preview} />
+            <Divider />
+            <Group justify="space-between">
+              <Button
+                data-testid="study-plan-regenerate-preview"
+                leftSection={<IconRotateClockwise size={16} />}
+                loading={isPreviewing}
+                onClick={handlePreview}
+                variant="light"
+              >
+                重新生成
               </Button>
               <Button
                 data-testid="study-plan-save"
@@ -801,18 +884,8 @@ export function StudyPlanCreatePage() {
                 保存计划
               </Button>
             </Group>
-          </Paper>
-
-          <Paper className="study-plan-panel" radius="md" withBorder>
-            <Group justify="space-between" wrap="nowrap">
-              <Stack gap={2}>
-                <Title order={2}>计划预览</Title>
-                <Text c="dimmed" size="sm">保存成功后进入计划详情页。</Text>
-              </Stack>
-            </Group>
-            <StudyPlanPreviewPanel preview={preview} />
-          </Paper>
-        </Box>
+          </Stack>
+        </Modal>
       </Box>
     </Box>
   );
