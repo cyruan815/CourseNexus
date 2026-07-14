@@ -25,6 +25,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
+import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
 import {
   deleteStudyPlan,
@@ -238,9 +239,7 @@ export function StudyPlanDetailPage() {
   if (isLoading) {
     return (
       <Box className="study-plan-page workbench-page">
-        <Paper className="workbench-topbar" component="header" radius={0}>
-          <Skeleton height={34} width={280} />
-        </Paper>
+        <WorkbenchTopbar backFallbackTo={courseId ? `/courses/${courseId}` : "/"} pageName="学习计划" />
         <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Skeleton height={36} width={280} />
           <Skeleton height={520} radius="md" />
@@ -252,17 +251,7 @@ export function StudyPlanDetailPage() {
   if (error || !detail) {
     return (
       <Box className="study-plan-page workbench-page">
-        <Paper className="workbench-topbar" component="header" radius={0}>
-          <Button
-            className="workbench-back-button"
-            component={Link}
-            leftSection={<IconArrowLeft size={16} />}
-            to={courseId ? `/courses/${courseId}` : "/"}
-            variant="subtle"
-          >
-            返回课程
-          </Button>
-        </Paper>
+        <WorkbenchTopbar backFallbackTo={courseId ? `/courses/${courseId}` : "/"} pageName="学习计划" />
         <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Alert color="red" role="alert" title="学习计划加载失败" variant="light">
             {error ?? "学习计划不存在"}
@@ -377,19 +366,9 @@ export function StudyPlanDetailPage() {
 
   return (
     <Box className="study-plan-page workbench-page">
-      <Paper className="workbench-topbar" component="header" radius={0}>
-        <Group justify="space-between" wrap="nowrap">
-          <Button
-            className="workbench-back-button"
-            component={Link}
-            leftSection={<IconArrowLeft size={16} />}
-            to={courseId ? `/courses/${courseId}` : "/"}
-            variant="subtle"
-          >
-            返回课程
-          </Button>
-          <Group gap="xs" wrap="nowrap">
-            <Text className="workbench-title" component="span">{detail.plan.title}</Text>
+      <WorkbenchTopbar
+        actions={(
+          <>
             <Button
               leftSection={<IconRotateClockwise size={16} />}
               onClick={() => setIsLifecycleOpen((current) => !current)}
@@ -403,9 +382,25 @@ export function StudyPlanDetailPage() {
             <Button disabled leftSection={<IconDownload size={16} />} variant="light">
               导出计划（待接入）
             </Button>
-          </Group>
-        </Group>
-      </Paper>
+          </>
+        )}
+        backFallbackTo={courseId ? `/courses/${courseId}` : "/"}
+        contextName={detail.plan.title}
+        meta={(
+          <>
+            <Badge color={statusColor(detail.plan.status)} variant="light">
+              {statusLabel(detail.plan.status)}
+            </Badge>
+            <Badge color="gray" variant="light">
+              {detail.plan.start_date} - {detail.plan.end_date}
+            </Badge>
+            <Badge color="gray" variant="light">
+              每日 {detail.plan.daily_available_minutes} 分钟
+            </Badge>
+          </>
+        )}
+        pageName="学习计划"
+      />
       <Box className="study-plan-shell" component="main" data-workbench-scroll="locked">
         <Group className="study-plan-nav" hidden aria-hidden="true" justify="space-between" wrap="nowrap">
           <Button

@@ -119,7 +119,12 @@ describe("CalendarPage", () => {
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
 
-    expect(await screen.findByRole("heading", { name: "计算机网络学习日历" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "学习日历" })).toBeInTheDocument();
+    expect(screen.getByText("计算机网络")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
     expect(screen.getByText("物理层复习")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("gridcell", { name: "查看 2026-07-14 的课程任务" }));
@@ -199,7 +204,12 @@ describe("CalendarPage", () => {
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
 
-    expect(await screen.findByRole("heading", { name: "全局学习日历" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "学习日历" })).toBeInTheDocument();
+    expect(screen.getByText("全局")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
     expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
     expect(await screen.findByRole("heading", { name: "2026-07-14 待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "计算机网络" })).toBeInTheDocument();

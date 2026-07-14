@@ -16,15 +16,15 @@ import {
   Title,
 } from "@mantine/core";
 import {
-  IconArrowLeft,
   IconCalendarStats,
   IconClipboardCheck,
   IconRefresh,
   IconSparkles,
 } from "@tabler/icons-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
+import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
 import type { Material, MaterialScope } from "../features/materials/types";
@@ -639,9 +639,7 @@ export function StudyPlanCreatePage() {
   if (isLoadingCourse) {
     return (
       <Box className="study-plan-page workbench-page">
-        <Paper className="workbench-topbar" component="header" radius={0}>
-          <Skeleton height={34} width={280} />
-        </Paper>
+        <WorkbenchTopbar backFallbackTo={courseId ? `/courses/${courseId}` : "/"} pageName="创建学习计划" />
         <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Skeleton height={36} width={280} />
           <Skeleton height={520} radius="md" />
@@ -652,29 +650,18 @@ export function StudyPlanCreatePage() {
 
   return (
     <Box className="study-plan-page workbench-page">
-      <Paper className="workbench-topbar" component="header" radius={0}>
-        <Group justify="space-between" wrap="nowrap">
-          <Button
-            className="workbench-back-button"
-            component={Link}
-            leftSection={<IconArrowLeft size={16} />}
-            to={courseId ? `/courses/${courseId}` : "/"}
-            variant="subtle"
-          >
-            返回课程
-          </Button>
-          <Group gap="sm" wrap="nowrap">
-            <Text className="workbench-title" component="span">创建学习计划</Text>
-            <Badge color="teal" variant="light">智能回填</Badge>
-          </Group>
-        </Group>
-      </Paper>
+      <WorkbenchTopbar
+        backFallbackTo={courseId ? `/courses/${courseId}` : "/"}
+        contextName={course?.name ?? "课程"}
+        meta={<Badge color="teal" variant="light">智能回填</Badge>}
+        pageName="创建学习计划"
+      />
 
       <Box className="study-plan-shell" component="main" data-workbench-scroll="locked">
         <Group align="flex-start" className="study-plan-header" justify="space-between">
           <Stack gap={4}>
             <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>
-            <Title order={1}>创建学习计划</Title>
+            <Title order={2}>创建学习计划</Title>
             <Text c="dimmed">
               设定目标、选择资料、了解当前基础，再生成并保存一份可以执行的学习计划。
             </Text>

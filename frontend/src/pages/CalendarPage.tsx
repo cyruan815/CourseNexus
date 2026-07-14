@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { ActionIcon, Alert, Badge, Box, Button, Group, Paper, Skeleton, Stack, Text, Title } from "@mantine/core";
-import { IconChevronLeft, IconChevronRight, IconHome2 } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
+import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import "../features/courses/home-workbench.css";
 import {
   fetchCourseStudyCalendar,
@@ -314,21 +315,16 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
       });
   }
 
-  const title = monthData?.course_name ? `${monthData.course_name}学习日历` : "课程学习日历";
+  const courseName = monthData?.course_name ?? "课程";
 
   return (
     <Box className="home-workbench calendar-placeholder-page workbench-page">
-      <Paper className="home-header workbench-topbar" component="header" radius={0}>
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap="md" wrap="nowrap">
-            <ActionIcon aria-label="返回首页" component={Link} radius="xl" size={42} to="/" variant="default">
-              <IconHome2 size={20} stroke={1.8} />
-            </ActionIcon>
-            <Title className="home-brand-title" order={1}>{title}</Title>
-          </Group>
-          <Badge color="blue" variant="light">{month}</Badge>
-        </Group>
-      </Paper>
+      <WorkbenchTopbar
+        backFallbackTo={`/courses/${courseId}`}
+        contextName={courseName}
+        meta={<Badge color="blue" variant="light">{month}</Badge>}
+        pageName="学习日历"
+      />
       <Box className="calendar-course-shell" component="main" data-workbench-scroll="locked">
         <Paper className="calendar-month-panel" radius="md" withBorder>
           <Stack gap="md">
@@ -563,17 +559,11 @@ function GlobalCalendarPage() {
 
   return (
     <Box className="home-workbench calendar-placeholder-page workbench-page">
-      <Paper className="home-header workbench-topbar" component="header" radius={0}>
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap="md" wrap="nowrap">
-            <ActionIcon aria-label="返回首页" component={Link} radius="xl" size={42} to="/" variant="default">
-              <IconHome2 size={20} stroke={1.8} />
-            </ActionIcon>
-            <Title className="home-brand-title" order={1}>全局学习日历</Title>
-          </Group>
-          <Badge color="blue" variant="light">{month}</Badge>
-        </Group>
-      </Paper>
+      <WorkbenchTopbar
+        contextName="全局"
+        meta={<Badge color="blue" variant="light">{month}</Badge>}
+        pageName="学习日历"
+      />
       <Box className="calendar-course-shell" component="main" data-workbench-scroll="locked">
         <Paper className="calendar-month-panel" radius="md" withBorder>
           <Stack gap="md">

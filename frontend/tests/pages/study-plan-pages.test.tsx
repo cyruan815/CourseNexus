@@ -537,6 +537,12 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "创建学习计划" })).toBeInTheDocument();
+    expect(screen.getAllByText("高等数学").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
   });
 
   it("renders the detail page inside the fixed workbench layout", async () => {
@@ -557,6 +563,12 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "学习计划" })).toBeInTheDocument();
+    expect(screen.getAllByText("高等数学学习计划").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
   });
 
   it("renders the execution page inside the fixed workbench layout", async () => {
@@ -578,6 +590,12 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-execution-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "任务执行" })).toBeInTheDocument();
+    expect(screen.getAllByText("学习: 向量空间").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
