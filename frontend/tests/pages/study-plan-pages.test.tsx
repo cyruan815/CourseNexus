@@ -675,6 +675,16 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: 75,
+          preference: "balanced",
+          unresolved_fields: [],
+        }, "req_config_parse"));
+      }
       if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
         return Promise.resolve(successResponse(savedDetail, "req_save"));
       }
@@ -695,11 +705,9 @@ describe("study plan pages", () => {
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
     expect(screen.getByTestId("study-plan-save")).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "调整日期" }));
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-16" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送目标" }));
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeDisabled());
     expect(screen.getAllByText("配置已修改，请重新生成预览后保存。").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
 
     fireEvent.click(screen.getByTestId("study-plan-regenerate-preview"));
     expect(await screen.findByText("预览已生成")).toBeInTheDocument();
@@ -715,13 +723,15 @@ describe("study plan pages", () => {
         expect.objectContaining({
           body: JSON.stringify({
             goal_text: "三天完成线性代数第一章复习",
-            start_date: "2026-07-13",
-            end_date: "2026-07-16",
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: true,
               material_ids: [],
             },
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
+            daily_available_minutes: 75,
+            daily_minutes_source: "user_text",
             diagnostic_profile: diagnosticProfile,
             title: preview.title,
             client_flow: "wizard_v1",
@@ -766,8 +776,6 @@ describe("study plan pages", () => {
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
 
     fireEvent.click(screen.getByRole("button", { name: "开始学情诊断" }));
     expect(await screen.findByText("你对「向量空间」了解多少？")).toBeInTheDocument();
@@ -782,8 +790,8 @@ describe("study plan pages", () => {
               material_ids: [],
             },
             confirmed_config: {
-              start_date: "2026-07-13",
-              duration_days: 3,
+              start_date: null,
+              duration_days: null,
               preference: "balanced",
               daily_available_minutes: null,
               daily_minutes_source: null,
@@ -810,8 +818,6 @@ describe("study plan pages", () => {
         expect.objectContaining({
           body: JSON.stringify({
             goal_text: "三天完成线性代数第一章复习",
-            start_date: "2026-07-13",
-            end_date: "2026-07-15",
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: true,
@@ -843,15 +849,13 @@ describe("study plan pages", () => {
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
 
     unmount();
     renderStudyPlanRoutes();
 
     expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
     expect(screen.getByLabelText("学习目标")).toHaveValue("三天完成线性代数第一章复习");
-    expect(screen.getByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
+    expect(screen.queryByText(/2026-07-13 - 2026-07-15/)).not.toBeInTheDocument();
   });
 
   it("requires a completed diagnostic profile before previewing", async () => {
@@ -876,8 +880,6 @@ describe("study plan pages", () => {
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-15" } });
 
     fireEvent.click(screen.getByTestId("study-plan-preview"));
 
@@ -933,13 +935,13 @@ describe("study plan pages", () => {
         expect.objectContaining({
           body: JSON.stringify({
             goal_text: preview.goal_text,
-            start_date: "2026-07-13",
-            end_date: "2026-07-15",
             preference: "balanced",
             material_scope: {
               include_all_parsed_materials: false,
               material_ids: ["mat_1"],
             },
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
             diagnostic_profile: diagnosticProfile,
           }),
           method: "POST",
@@ -1003,7 +1005,7 @@ describe("study plan pages", () => {
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
     expect(screen.getByTestId("study-plan-save")).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "自动解析配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送目标" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1058,6 +1060,16 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: 75,
+          preference: "balanced",
+          unresolved_fields: [],
+        }, "req_config_parse"));
+      }
       if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
         saveAttempts += 1;
         if (saveAttempts <= 2) {
@@ -1101,10 +1113,8 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByTestId("study-plan-save"));
     await waitFor(() => expect(saveAttempts).toBe(2));
 
-    fireEvent.click(screen.getByRole("button", { name: "调整日期" }));
-    fireEvent.change(screen.getByLabelText("开始日期"), { target: { value: "2026-07-13" } });
-    fireEvent.change(screen.getByLabelText("结束日期"), { target: { value: "2026-07-16" } });
-    expect(screen.getByTestId("study-plan-save")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "发送目标" }));
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeDisabled());
 
     fireEvent.click(screen.getByTestId("study-plan-regenerate-preview"));
     await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());

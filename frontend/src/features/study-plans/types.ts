@@ -11,19 +11,11 @@ export type WeakArea = "concept" | "calculation" | "application" | "memorization
 export type PriorKnowledgeLevel = "none" | "little" | "some" | "solid";
 export type ExplanationStyle = "plain_language" | "step_by_step" | "example_first" | "exam_focused";
 
-export type StudyPlanDateRange =
-  | {
-      end_date: string;
-      duration_days?: number | null;
-    }
-  | {
-      duration_days: number;
-      end_date?: string | null;
-    };
-
 export interface StudyPlanBuildRequestBase {
   goal_text: string;
-  start_date: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_days?: number | null;
   daily_available_minutes?: number | null;
   recommended_daily_minutes?: number | null;
   daily_minutes_source?: DailyMinutesSource | null;
@@ -36,7 +28,7 @@ export interface StudyPlanBuildRequestBase {
   material_scope: MaterialScope;
 }
 
-export type StudyPlanPreviewRequest = StudyPlanBuildRequestBase & StudyPlanDateRange;
+export type StudyPlanPreviewRequest = StudyPlanBuildRequestBase;
 
 export interface StudyPlanConfigParseRequest {
   goal_text: string;

@@ -11,7 +11,6 @@ import {
   Skeleton,
   Stack,
   Text,
-  TextInput,
   Textarea,
   Title,
 } from "@mantine/core";
@@ -20,7 +19,7 @@ import {
   IconClipboardCheck,
   IconRefresh,
   IconRotateClockwise,
-  IconSparkles,
+  IconSend,
 } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -29,6 +28,7 @@ import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
 import type { Material, MaterialScope } from "../features/materials/types";
+import { StudyPlanTaskDescription } from "../features/study-plans/components/StudyPlanTaskDescription";
 import {
   parseStudyPlanConfig,
   previewStudyPlan,
@@ -117,8 +117,6 @@ const preferenceLabels: Record<PlanPreference, string> = {
 
 const unresolvedFieldLabels: Record<string, string> = {
   goal_text: "学习目标",
-  start_date: "开始日期",
-  end_date: "结束日期",
 };
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
@@ -211,17 +209,15 @@ function subtaskTone(type: string): string {
 function StudyPlanPreviewSubtaskItem({ subtask }: { subtask: StudyPlanPreviewSubtask }) {
   return (
     <Paper className="study-plan-subtask" radius="md" withBorder>
-      <Group align="flex-start" justify="space-between" wrap="nowrap">
-        <Stack gap={4}>
+      <Stack gap={8}>
+        <Group align="flex-start" className="study-plan-subtask-header" justify="space-between" wrap="nowrap">
           <Text fw={700}>{subtask.title}</Text>
-          {subtask.description ? (
-            <Text c="dimmed" size="sm">{subtask.description}</Text>
-          ) : null}
-        </Stack>
-        <Badge color={subtaskTone(subtask.subtask_type)} variant="light">
-          {subtaskTypeLabel(subtask.subtask_type)}
-        </Badge>
-      </Group>
+          <Badge className="study-plan-type-badge" color={subtaskTone(subtask.subtask_type)} variant="light">
+            {subtaskTypeLabel(subtask.subtask_type)}
+          </Badge>
+        </Group>
+        <StudyPlanTaskDescription description={subtask.description} />
+      </Stack>
     </Paper>
   );
 }
@@ -450,18 +446,22 @@ export function StudyPlanCreatePage() {
 
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
-    if (!goalText.trim() || !startDate || !endDate) {
+    if (!goalText.trim()) {
       return null;
     }
 
     const baseDraft: StudyPlanPreviewRequest = {
       goal_text: goalText.trim(),
-      start_date: startDate,
-      end_date: endDate,
       preference,
       material_scope: materialScope,
     };
 
+    if (startDate) {
+      baseDraft.start_date = startDate;
+    }
+    if (endDate) {
+      baseDraft.end_date = endDate;
+    }
     if (!Number.isNaN(minutes) && minutes >= minimumDailyMinutes) {
       baseDraft.daily_available_minutes = minutes;
       baseDraft.daily_minutes_source = "user_text";
@@ -499,17 +499,16 @@ export function StudyPlanCreatePage() {
     if (!goalText.trim()) {
       return "请先填写学习目标。";
     }
-    if (!startDate || !endDate) {
-      return "后端当前仍需要日期范围。请在必要信息补齐中填写开始日期和结束日期。";
-    }
-    if (startDate > endDate) {
+    if (startDate && endDate && startDate > endDate) {
       return "结束日期不能早于开始日期。";
     }
     if (!diagnosticProfile) {
       return "请先完成学情诊断。";
     }
     if (!hasUsableMaterialScope) {
-      return "资料范围内没有可解析资料，请先选择或解析至少一份资料。";
+      return materialScope.include_all_parsed_materials
+        ? "资料范围内没有可解析资料，请先上传或解析至少一份资料。"
+        : "请选择至少一份已解析资料。";
     }
     return null;
   }
@@ -696,18 +695,7 @@ export function StudyPlanCreatePage() {
         pageName="创建学习计划"
       />
 
-      <Box className="study-plan-shell" component="main" data-workbench-scroll="locked">
-        <Group align="flex-start" className="study-plan-header" justify="space-between">
-          <Stack gap={4}>
-            <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>
-            <Title order={2}>创建学习计划</Title>
-            <Text c="dimmed">
-              设定目标、选择资料、了解当前基础，再生成并保存一份可以执行的学习计划。
-            </Text>
-          </Stack>
-          <Badge color="teal" size="lg" variant="light">计划向导</Badge>
-        </Group>
-
+      <Box className="study-plan-shell study-plan-create-shell" component="main" data-workbench-scroll="locked">
         {error ? (
           <Alert color="red" role="alert" title="学习计划处理失败" variant="light">
             {error}
@@ -726,7 +714,7 @@ export function StudyPlanCreatePage() {
               <Stack gap={2}>
                 <Title order={2}>目标与资料</Title>
                 <Text c="dimmed" size="sm">
-                  自然语言里能解析出的日期、节奏和方式会直接交给后端；未解析出的必需日期会在下方轻量补齐。
+                  写下你想完成的学习目标，再选择本次计划要参考的资料。
                 </Text>
               </Stack>
               <Badge color="teal" variant="outline">目标输入</Badge>
@@ -740,67 +728,33 @@ export function StudyPlanCreatePage() {
               value={goalText}
             />
             <Group justify="space-between" wrap="nowrap">
-              <Text c="dimmed" size="sm">先写清楚目标和时间线；每日时长未说明时由后端按资料量估算。</Text>
+              <Text c="dimmed" size="sm">发送后会先识别目标信息，接着完成学情诊断。</Text>
               <Button
                 data-testid="study-plan-parse-config"
-                leftSection={<IconSparkles size={16} />}
+                leftSection={<IconSend size={16} />}
                 loading={isParsingConfig}
                 onClick={handleParseConfig}
                 variant="light"
               >
-                自动解析配置
+                发送目标
               </Button>
             </Group>
 
-            {(!startDate || !endDate) ? (
-              <Paper className="study-plan-required-config" radius="md" withBorder>
-                <Group justify="space-between" wrap="nowrap">
-                  <Stack gap={2}>
-                    <Text fw={750}>必要信息补齐</Text>
-                    <Text c="dimmed" size="sm">
-                      后端当前仍要求日期范围；若自然语言没有解析出日期，请在这里补齐。
-                    </Text>
-                  </Stack>
-                  <Badge color="yellow" variant="light">兜底</Badge>
-                </Group>
-                <Group align="flex-start" grow>
-                  <TextInput
-                    label="开始日期"
-                    onChange={(event) => updateField(() => setStartDate(event.currentTarget.value), "start_date")}
-                    type="date"
-                    value={startDate}
-                  />
-                  <TextInput
-                    label="结束日期"
-                    onChange={(event) => updateField(() => setEndDate(event.currentTarget.value), "end_date")}
-                    type="date"
-                    value={endDate}
-                  />
-                </Group>
-              </Paper>
-            ) : (
+            {startDate || endDate || dailyMinutes || preference !== defaultPreference ? (
               <Paper className="study-plan-config-summary" radius="md" withBorder>
                 <Group justify="space-between" wrap="nowrap">
                   <Stack gap={2}>
-                    <Text fw={750}>已解析配置</Text>
+                    <Text fw={750}>已识别目标信息</Text>
                     <Text c="dimmed" size="sm">
-                      {startDate} - {endDate} / 学习方式：{preferenceLabels[preference]}
+                      {startDate && endDate ? `${startDate} - ${endDate}` : "时间将通过诊断继续确认"}
+                      {" / "}
+                      学习方式：{preferenceLabels[preference]}
                       {dailyMinutes ? ` / 每日 ${dailyMinutes} 分钟` : " / 每日时长由后端估算"}
                     </Text>
                   </Stack>
-                  <Button
-                    onClick={() => updateField(() => {
-                      setStartDate("");
-                      setEndDate("");
-                    })}
-                    size="xs"
-                    variant="subtle"
-                  >
-                    调整日期
-                  </Button>
                 </Group>
               </Paper>
-            )}
+            ) : null}
 
             {unresolvedFields.length > 0 ? (
               <Alert color="yellow" role="status" title="仍需手动补齐" variant="light">

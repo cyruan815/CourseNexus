@@ -17,14 +17,6 @@ const statusLabels: Record<string, string> = {
   parse_failed: "解析失败",
 };
 
-function scopeForSelectedIds(selectedIds: string[], parsedIds: string[]): MaterialScope {
-  if (selectedIds.length === 0 || selectedIds.length === parsedIds.length) {
-    return { include_all_parsed_materials: true, material_ids: [] };
-  }
-
-  return { include_all_parsed_materials: false, material_ids: selectedIds };
-}
-
 export function StudyPlanMaterialScopeSelector({
   error,
   isLoading,
@@ -47,7 +39,7 @@ export function StudyPlanMaterialScopeSelector({
 
     onMaterialScopeChange({
       include_all_parsed_materials: false,
-      material_ids: selectedIds.length > 0 ? selectedIds : parsedIds.slice(0, 1),
+      material_ids: [],
     });
   }
 
@@ -55,7 +47,10 @@ export function StudyPlanMaterialScopeSelector({
     const nextSelectedIds = selectedIds.includes(materialId)
       ? selectedIds.filter((id) => id !== materialId)
       : [...selectedIds, materialId];
-    onMaterialScopeChange(scopeForSelectedIds(nextSelectedIds, parsedIds));
+    onMaterialScopeChange({
+      include_all_parsed_materials: false,
+      material_ids: nextSelectedIds,
+    });
   }
 
   return (
@@ -88,6 +83,12 @@ export function StudyPlanMaterialScopeSelector({
       {error ? (
         <Alert color="red" role="alert" variant="light">
           {error}
+        </Alert>
+      ) : null}
+
+      {!isLoading && mode === "specific" && selectedIds.length === 0 ? (
+        <Alert color="yellow" role="status" variant="light">
+          请选择至少一份已解析资料。
         </Alert>
       ) : null}
 
