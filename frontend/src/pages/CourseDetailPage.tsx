@@ -158,7 +158,15 @@ function CourseTopBar({ course }: { course: Course }) {
           <ActionIcon aria-label={themeLabel} className="course-detail-theme-single-button" onClick={toggleTheme} radius="md" size={44} variant="default">
             <ThemeIcon size={22} stroke={1.8} />
           </ActionIcon>
-          <ActionIcon aria-label="打开个人中心（待接入）" className="course-detail-user-button" disabled radius="xl" size={48} variant="default">
+          <ActionIcon
+            aria-label="打开个人中心"
+            className="course-detail-user-button"
+            component={Link}
+            radius="xl"
+            size={48}
+            to="/profile"
+            variant="default"
+          >
             <IconUser size={24} stroke={1.8} />
           </ActionIcon>
         </Group>

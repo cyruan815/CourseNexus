@@ -20,6 +20,16 @@ export interface KnowledgeItem {
   importance: "low" | "medium" | "high"; related_section: string;
 }
 
+export interface TaskTestQuestion {
+  id: string;
+  sort_order: number;
+  question_text: string;
+  question_type: string;
+  options: Array<{ id: string; text: string }>;
+  correct_answer: string | string[];
+  explanation?: string | null;
+}
+
 export interface SerializedMarkmapAssets {
   styles?: unknown[];
   scripts?: unknown[];

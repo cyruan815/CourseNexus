@@ -7,6 +7,8 @@
 - `backend/app/modules/checkins/repository.py`：按用户和日期聚合 `study_subtasks`，排除已删除课程和已删除计划。
 - `backend/app/modules/checkins/service.py`：完成比例、颜色等级、连续天数和 `recalculate_checkin()`。
 - `backend/app/modules/checkins/router.py`：单日和日期范围只读查询 API。
+- 前端个人中心：`frontend/src/pages/ProfilePage.tsx`，展示当前用户、今日完成比例、近 14 天打卡颜色和 streak summary。
+- 前端 API 适配：`frontend/src/features/profile/api.ts`。
 - 测试入口：`backend/tests/modules/checkins/`、`backend/tests/integration/test_checkin_lifecycle_sync.py`、`backend/tests/integration/test_subtask_completion_transaction.py`。
 
 ## 数据流
@@ -14,6 +16,8 @@
 写入路径只来自计划生命周期和二级任务完成事务。服务先统计当前用户指定日期下未删除课程、未删除计划中的二级任务数量，再计算完成数量、比例和颜色等级，最后对 `checkin_records` 做同日唯一记录的插入或更新。
 
 查询路径保持只读：`GET /api/v1/checkins/{date}` 如果没有持久化记录，会临时按当前任务事实计算 DTO 并返回，但不插入数据库。范围查询只返回已经形成的持久化记录。
+
+2026-07-14 前端个人中心第一版接入上述只读查询：页面不提供手动打卡，不自行重算 streak，不把缺失日期补写到后端；缺失日期仅在近 14 天颜色条中按 0 级空白展示。
 
 ## 派生算法
 

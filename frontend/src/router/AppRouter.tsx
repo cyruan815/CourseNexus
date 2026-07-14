@@ -8,6 +8,7 @@ import { CalendarPage } from "../pages/CalendarPage";
 import { GeneratedContentDetailPage } from "../pages/GeneratedContentDetailPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
+import { ProfilePage } from "../pages/ProfilePage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { StudyPlanCreatePage } from "../pages/StudyPlanCreatePage";
 import { StudyPlanDetailPage } from "../pages/StudyPlanDetailPage";
@@ -38,6 +39,7 @@ export function AppRouter() {
         <Route element={<RegisterPage />} path="/register" />
         <Route element={<RequireAuth />}>
           <Route element={<HomePage />} path="/" />
+          <Route element={<ProfilePage />} path="/profile" />
           <Route element={<CalendarPage />} path="/calendar" />
           <Route element={<CourseDetailPage />} path="/courses/:courseId" />
           <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />

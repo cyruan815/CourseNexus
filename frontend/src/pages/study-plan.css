@@ -279,6 +279,17 @@
   padding: 10px;
 }
 
+.study-plan-task-test-preview {
+  border-top: 1px solid rgba(31, 48, 79, 0.1);
+  padding-top: 12px;
+}
+
+.study-plan-task-test-question {
+  background: #fbfdff;
+  border-color: rgba(42, 57, 82, 0.12);
+  padding: 14px;
+}
+
 .study-plan-checkin-card {
   border-color: #bde7df;
   background: #f8fffd;

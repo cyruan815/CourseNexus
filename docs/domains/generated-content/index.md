@@ -35,6 +35,7 @@
 - 当前没有队列、取消、进度查询或持久化幂等键；重复请求生成独立记录。
 - 前端已接入生成内容详情基础闭环：课程详情页生成内容列表中的记录可跳转到 `/generated-contents/:generatedContentId`，详情页调用 `GET /api/v1/generated-contents/{generated_content_id}`，展示标题、类型、状态和结构化结果基础视图。
 - 前端详情页只渲染后端返回内容，不补造引用、统计或最终学习产品交互；五类 POC 生成内容不提供逐条引用。
+- 2026-07-14 前端详情页增加 `task_test` 只读 renderer，用于计划学习执行页生成的任务测试题。它展示题目、选项、正确答案和解析，不提供作答、判分、保存记录或 attempt 历史；任务测试题仍不属于五类公共课程生成器。
 - 生成失败记录展示 `error_code` 和失败态，不伪装成成功内容；引用为空时展示真实空态。
 - 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json` 是生成时选择范围快照，不是引用契约。
 - 为了在资料解析 / 索引未配置时手动查看前端详情页，后端提供仅限本地开发使用的 seed 命令。该命令创建或更新固定 demo 用户、课程、已解析占位资料、MaterialChunk 和五类示例生成内容，不新增正式 API，也不代表生产数据生成路径。
@@ -50,6 +51,8 @@
 - empty citation：`source_citations = []` 时展示“当前没有可展示的引用来源”。
 
 Quiz 提供单题即时判题和本地正确率；Flashcard 提供翻卡、掌握/未掌握与错卡重练；Mindmap 直接使用 `markmap-view` 渲染后端预处理树；Outline 提供章节导航；Knowledge List 提供搜索和重要程度筛选。上述状态仅存在页面内存，不写后端。
+
+`task_test` 使用 `TaskTestResult` 只读展示 `content_json.questions`，与课程自测 Quiz 的本地判题交互分开。它只服务计划学习执行页的任务测试题查看和 Markdown 导出，不保存学生答案。
 
 ## 5. 本地手动验收 seed
 

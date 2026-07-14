@@ -45,9 +45,9 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
-- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到同学 B 的现有生成内容详情页；前端不修改 generated-content 目录。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-14 前端为 `task_test` 增加只读题目展示：执行页在本次按需生成返回 `GeneratedContentRead.content_json.questions` 后展示题干、选项、正确答案和解析；生成内容详情页也按同一结构渲染只读视图。该视图不提供作答、提交、判分或 attempt 历史。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
-- C9 不接入导出、测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
+- C9 不接入测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
@@ -301,6 +301,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 - `frontend/tests/features/study-plans/api.test.ts` 覆盖 PDF / Markdown 导出 adapter 路径。
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖执行页已有内容时的导出按钮和文件流请求。
+- `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页只读展示，不出现提交答案入口。
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
 ### 引用链契约
