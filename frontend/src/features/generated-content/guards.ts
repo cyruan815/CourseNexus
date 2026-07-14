@@ -1,4 +1,4 @@
-import type { Flashcard, KnowledgeItem, MindmapContent, OutlineSection, QuizQuestion } from "./types";
+import type { Flashcard, KnowledgeItem, MindmapContent, OutlineSection, QuizQuestion, TaskTestQuestion } from "./types";
 
 export function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
@@ -9,6 +9,11 @@ export function quizQuestions(value: unknown): QuizQuestion[] | null {
   const list = arrayAt(value, "questions"); if (!list) return null;
   const valid = list.filter((item): item is Record<string, unknown> => isRecord(item) && text(item.id) && number(item.sort_order) && text(item.question_text) && Array.isArray(item.options) && item.options.length === 4 && text(item.correct_answer) && text(item.explanation));
   return valid.length === list.length && valid.length ? valid as unknown as QuizQuestion[] : null;
+}
+export function taskTestQuestions(value: unknown): TaskTestQuestion[] | null {
+  const list = arrayAt(value, "questions"); if (!list) return null;
+  const valid = list.filter((item) => isRecord(item) && text(item.id) && number(item.sort_order) && text(item.question_text) && text(item.question_type) && (text(item.correct_answer) || Array.isArray(item.correct_answer)));
+  return valid.length === list.length && valid.length ? valid as unknown as TaskTestQuestion[] : null;
 }
 export function flashcards(value: unknown): Flashcard[] | null { const list = arrayAt(value, "cards"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.front) && text(i.back)); return valid.length === list.length && valid.length ? valid as Flashcard[] : null; }
 export function outlineSections(value: unknown): OutlineSection[] | null { const list = arrayAt(value, "sections"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.title) && text(i.summary) && text(i.review_suggestion)); return valid.length === list.length && valid.length ? valid as OutlineSection[] : null; }

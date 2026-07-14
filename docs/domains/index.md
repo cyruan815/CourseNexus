@@ -16,6 +16,7 @@
 | [courses/index.md](courses/index.md) | 课程首页工作台和后续课程管理实现。 | 2026-07-11 |
 | [course-workspace/index.md](course-workspace/index.md) | 课程详情工作台、资料范围、问答、生成内容和学习计划入口实现。 | 2026-07-12 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
+| [profile/index.md](profile/index.md) | 个人中心第一版：账号信息、退出登录、今日打卡和近 14 天打卡颜色。 | 2026-07-14 |
 | [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
 | [study-mode/plan-lifecycle.md](study-mode/plan-lifecycle.md) | S02 学习计划生命周期：配置回填、全材料预览、保存幂等、替换、重生成和软删除。 | 2026-07-11 |
 | [study-mode/plan-builder-wizard.md](study-mode/plan-builder-wizard.md) | Study Mode 计划生成向导：目标输入、配置确认、学前诊断、preview 页面和字段契约设计。 | 2026-07-13 |
@@ -73,6 +74,7 @@
 | `materials/` | 资料上传、一级文件夹归类、解析、索引、逐文件范围选择和前端资料工作区。 |
 | `course-qa/` | 课程资料问答、会话、消息和引用。 |
 | `generated-content/` | 公共生成编排及 Quiz、Flashcard、Mindmap、Outline、Knowledge List。 |
+| `profile/` | 个人中心、账号资料入口和学习打卡颜色展示。 |
 | `study-mode/` | 计划生成、日历聚合、任务执行、打卡、任务内容和 PDF 导出。 |
 
 具体文件所有权以第一阶段任务书的“领域文档交付映射”为准。

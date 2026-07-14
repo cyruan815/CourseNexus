@@ -356,6 +356,24 @@ const generatedTaskTest = {
   study_subtask_id: "subtask_2",
   content_type: "task_test",
   title: "基础题任务测试题",
+  content_json: {
+    instructions: "只读查看题目与解析，作答记录暂不保存。",
+    questions: [
+      {
+        id: "q_001",
+        question_type: "single_choice",
+        question_text: "向量空间必须满足哪类结构？",
+        options: [
+          { id: "A", text: "加法和数乘封闭" },
+          { id: "B", text: "只能包含零向量" },
+        ],
+        correct_answer: "A",
+        explanation: "向量空间需要对加法和数乘封闭，并满足对应公理。",
+        source_citation_ids: [],
+        sort_order: 1,
+      },
+    ],
+  },
 };
 
 const diagnosticQuestions = {
@@ -1354,6 +1372,9 @@ describe("study plan pages", () => {
       "href",
       "/generated-contents/gen_task_test_1",
     );
+    expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
+    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

@@ -310,11 +310,12 @@ function Header() {
             <ThemeIcon size={22} stroke={1.8} />
           </ActionIcon>
           <ActionIcon
-            aria-label="打开个人中心（待接入）"
+            aria-label="打开个人中心"
             className="home-user-button"
-            disabled
+            component={Link}
             radius="xl"
             size={48}
+            to="/profile"
             variant="default"
           >
             <IconUser size={24} stroke={1.8} />

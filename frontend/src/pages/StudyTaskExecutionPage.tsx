@@ -52,6 +52,16 @@ import type {
 } from "../features/study-plans/types";
 import "./study-plan.css";
 
+interface ReadonlyTaskTestQuestion {
+  id: string;
+  question_text: string;
+  question_type: string;
+  options: Array<{ id: string; text: string }>;
+  correct_answer: string | string[] | null;
+  explanation: string | null;
+  sort_order: number;
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError || error instanceof Error) {
     return error.message;
@@ -166,6 +176,73 @@ function taskContentType(type: string): TaskContentType | null {
 
 function taskContentLabel(contentType: TaskContentType): string {
   return contentType === "handout" ? "任务讲义" : "任务测试题";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function parseTaskTestQuestions(content: GeneratedContentRead | null): ReadonlyTaskTestQuestion[] {
+  if (!content || content.content_type !== "task_test" || !isRecord(content.content_json)) {
+    return [];
+  }
+
+  const questions = content.content_json.questions;
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+
+  return questions
+    .map((question, index): ReadonlyTaskTestQuestion | null => {
+      if (!isRecord(question)) {
+        return null;
+      }
+
+      const questionText = toText(question.question_text) ?? toText(question.prompt) ?? toText(question.stem);
+      if (!questionText) {
+        return null;
+      }
+
+      const rawOptions = Array.isArray(question.options) ? question.options : [];
+      const options = rawOptions.flatMap((option, optionIndex) => {
+        if (!isRecord(option)) {
+          return [];
+        }
+
+        const id = toText(option.id) ?? toText(option.label) ?? String.fromCharCode(65 + optionIndex);
+        const text = toText(option.text) ?? toText(option.content);
+        return text ? [{ id, text }] : [];
+      });
+
+      const correctAnswer = question.correct_answer;
+      const normalizedAnswer = typeof correctAnswer === "string" || Array.isArray(correctAnswer)
+        ? correctAnswer
+        : null;
+
+      return {
+        id: toText(question.id) ?? `q_${index + 1}`,
+        question_text: questionText,
+        question_type: toText(question.question_type) ?? "question",
+        options,
+        correct_answer: normalizedAnswer,
+        explanation: toText(question.explanation) ?? toText(question.analysis),
+        sort_order: typeof question.sort_order === "number" ? question.sort_order : index + 1,
+      };
+    })
+    .filter((question): question is ReadonlyTaskTestQuestion => Boolean(question))
+    .sort((left, right) => left.sort_order - right.sort_order);
+}
+
+function answerLabel(answer: string | string[] | null): string {
+  if (!answer) {
+    return "未提供";
+  }
+
+  return Array.isArray(answer) ? answer.join("、") : answer;
 }
 
 function materialAvailabilityLabel(material: ExecutionMaterialRead): string {
@@ -312,6 +389,7 @@ export function StudyTaskExecutionPage() {
   const existingContentId = contentType === "handout" ? context?.handout_content_id : context?.task_test_content_id;
   const activeContentId = generatedContent?.id ?? existingContentId ?? null;
   const activeContentTitle = generatedContent?.title ?? null;
+  const readonlyTaskTestQuestions = useMemo(() => parseTaskTestQuestions(generatedContent), [generatedContent]);
   const completedCount = sortedTasks.reduce(
     (total, task) => total + task.subtasks.filter((subtask) => subtask.status === "completed").length,
     0,
@@ -548,43 +626,77 @@ export function StudyTaskExecutionPage() {
                         </Alert>
                       ) : null}
                       {activeContentId ? (
-                        <Paper className="study-plan-generated-content" radius="md" withBorder>
-                          <Group align="center" justify="space-between" wrap="nowrap">
-                            <Stack gap={2}>
-                              <Badge color="teal" variant="light">已生成</Badge>
-                              <Text fw={750}>{activeContentTitle ?? `${contentLabel}已可查看`}</Text>
-                            </Stack>
-                            <Group gap="xs" wrap="nowrap">
-                              <Button
-                                component={Link}
-                                leftSection={<IconExternalLink size={15} />}
-                                size="xs"
-                                to={`/generated-contents/${activeContentId}`}
-                                variant="light"
-                              >
-                                查看{contentLabel}
-                              </Button>
-                              <Button
-                                leftSection={<IconDownload size={15} />}
-                                loading={isExporting}
-                                onClick={() => void handleExportContent()}
-                                size="xs"
-                                variant="light"
-                              >
-                                {contentType === "handout" ? "导出PDF" : "导出Markdown"}
-                              </Button>
-                              <Button
-                                leftSection={<IconRefresh size={15} />}
-                                loading={isGenerating}
-                                onClick={() => void handleGenerateContent(true)}
-                                size="xs"
-                                variant="subtle"
-                              >
-                                重新生成
-                              </Button>
+                        <>
+                          <Paper className="study-plan-generated-content" radius="md" withBorder>
+                            <Group align="center" justify="space-between" wrap="nowrap">
+                              <Stack gap={2}>
+                                <Badge color="teal" variant="light">已生成</Badge>
+                                <Text fw={750}>{activeContentTitle ?? `${contentLabel}已可查看`}</Text>
+                              </Stack>
+                              <Group gap="xs" wrap="nowrap">
+                                <Button
+                                  component={Link}
+                                  leftSection={<IconExternalLink size={15} />}
+                                  size="xs"
+                                  to={`/generated-contents/${activeContentId}`}
+                                  variant="light"
+                                >
+                                  查看{contentLabel}
+                                </Button>
+                                <Button
+                                  leftSection={<IconDownload size={15} />}
+                                  loading={isExporting}
+                                  onClick={() => void handleExportContent()}
+                                  size="xs"
+                                  variant="light"
+                                >
+                                  {contentType === "handout" ? "导出PDF" : "导出Markdown"}
+                                </Button>
+                                <Button
+                                  leftSection={<IconRefresh size={15} />}
+                                  loading={isGenerating}
+                                  onClick={() => void handleGenerateContent(true)}
+                                  size="xs"
+                                  variant="subtle"
+                                >
+                                  重新生成
+                                </Button>
+                              </Group>
                             </Group>
-                          </Group>
-                        </Paper>
+                          </Paper>
+                          {contentType === "task_test" && readonlyTaskTestQuestions.length > 0 ? (
+                            <Stack className="study-plan-task-test-preview" gap="sm">
+                              <Group gap="xs">
+                                <Badge color="blue" variant="light">只读预览</Badge>
+                                <Text c="dimmed" size="sm">当前只展示题目、答案和解析，不保存作答。</Text>
+                              </Group>
+                              {readonlyTaskTestQuestions.map((question, index) => (
+                                <Paper className="study-plan-task-test-question" key={question.id} radius="md" withBorder>
+                                  <Stack gap="xs">
+                                    <Group gap="xs">
+                                      <Badge variant="light">第 {index + 1} 题</Badge>
+                                      <Badge color="gray" variant="light">{question.question_type}</Badge>
+                                    </Group>
+                                    <Text fw={750}>{question.question_text}</Text>
+                                    {question.options.length > 0 ? (
+                                      <Stack gap={4}>
+                                        {question.options.map((option) => (
+                                          <Text key={option.id} size="sm">
+                                            {option.id}. {option.text}
+                                          </Text>
+                                        ))}
+                                      </Stack>
+                                    ) : null}
+                                    <Text fw={700} size="sm">正确答案：{answerLabel(question.correct_answer)}</Text>
+                                    {question.explanation ? (
+                                      <Text c="dimmed" size="sm">解析：{question.explanation}</Text>
+                                    ) : null}
+                                  </Stack>
+                                </Paper>
+                              ))}
+                            </Stack>
+                          ) : null}
+                        </>
                       ) : (
                         <Group justify="space-between" wrap="nowrap">
                           <Badge color="gray" variant="light">{contentLabel}待生成</Badge>

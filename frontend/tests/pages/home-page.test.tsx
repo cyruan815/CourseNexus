@@ -182,6 +182,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" })).toBeInTheDocument();
     expect(screen.queryByText("暂无计划")).not.toBeInTheDocument();
     expect(screen.getByText("添加课程")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
   });
 
   it("loads today's todos from the backend and links tasks to execution pages", async () => {
