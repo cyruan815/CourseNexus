@@ -515,6 +515,71 @@ describe("study plan pages", () => {
     window.localStorage.clear();
   });
 
+  it("renders the create page inside the fixed workbench layout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/courses/crs_123")) {
+          return Promise.resolve(successResponse(course, "req_course"));
+        }
+        if (url.endsWith("/courses/crs_123/materials")) {
+          return Promise.resolve(successResponse(materials, "req_materials"));
+        }
+
+        return Promise.resolve(successResponse({}));
+      }),
+    );
+
+    const { container } = renderStudyPlanRoutes();
+
+    await waitFor(() => expect(container.querySelector(".study-plan-grid")).toBeInTheDocument());
+    expect(container.querySelector(".workbench-page")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+  });
+
+  it("renders the detail page inside the fixed workbench layout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/courses/crs_123")) {
+          return Promise.resolve(successResponse(course, "req_course"));
+        }
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }),
+    );
+
+    const { container } = renderStudyPlanRoutes("/courses/crs_123/study-plans/plan_1");
+
+    await waitFor(() => expect(container.querySelector(".study-plan-detail-layout")).toBeInTheDocument());
+    expect(container.querySelector(".workbench-page")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+  });
+
+  it("renders the execution page inside the fixed workbench layout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+          return Promise.resolve(successResponse(executionContext, "req_execution"));
+        }
+
+        return Promise.resolve(successResponse({}));
+      }),
+    );
+
+    const { container } = renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    await waitFor(() => expect(container.querySelector(".study-plan-execution-grid")).toBeInTheDocument());
+    expect(container.querySelector(".workbench-page")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".study-plan-execution-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+  });
+
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

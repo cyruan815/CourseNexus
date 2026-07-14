@@ -485,8 +485,11 @@ export function StudyTaskExecutionPage() {
 
   if (isLoading) {
     return (
-      <Box className="study-plan-page">
-        <Box className="study-plan-shell">
+      <Box className="study-plan-page workbench-page">
+        <Paper className="workbench-topbar" component="header" radius={0}>
+          <Skeleton height={34} width={280} />
+        </Paper>
+        <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Skeleton height={36} width={280} />
           <Skeleton height={620} radius="md" />
         </Box>
@@ -496,8 +499,11 @@ export function StudyTaskExecutionPage() {
 
   if (error || !context || !currentSubtask) {
     return (
-      <Box className="study-plan-page">
-        <Box className="study-plan-shell">
+      <Box className="study-plan-page workbench-page">
+        <Paper className="workbench-topbar" component="header" radius={0}>
+          <Skeleton height={34} width={280} />
+        </Paper>
+        <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Alert color="red" role="alert" title="执行页加载失败" variant="light">
             {error ?? "未找到当前二级任务"}
           </Alert>
@@ -507,9 +513,29 @@ export function StudyTaskExecutionPage() {
   }
 
   return (
-    <Box className="study-plan-page">
-      <Box className="study-plan-execution-shell" component="main">
-        <Group className="study-plan-nav" justify="space-between" wrap="nowrap">
+    <Box className="study-plan-page workbench-page">
+      <Paper className="workbench-topbar" component="header" radius={0}>
+        <Group justify="space-between" wrap="nowrap">
+          <Button
+            className="workbench-back-button"
+            component={Link}
+            leftSection={<IconArrowLeft size={16} />}
+            to={`/courses/${context.course.course_id}/study-plans/${context.plan.plan_id}`}
+            variant="subtle"
+          >
+            返回计划
+          </Button>
+          <Group gap="xs" wrap="nowrap">
+            <Text className="workbench-title" component="span">{currentSubtask.title}</Text>
+            <Badge color="blue" variant="light">{context.execution_date}</Badge>
+            <Badge color={statusColor(context.plan.status)} variant="light">
+              {statusLabel(context.plan.status)}
+            </Badge>
+          </Group>
+        </Group>
+      </Paper>
+      <Box className="study-plan-execution-shell" component="main" data-workbench-scroll="locked">
+        <Group className="study-plan-nav" hidden aria-hidden="true" justify="space-between" wrap="nowrap">
           <Button
             component={Link}
             leftSection={<IconArrowLeft size={16} />}
