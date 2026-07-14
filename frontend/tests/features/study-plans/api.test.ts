@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createDiagnosticProfile,
+  askStudySubtaskQuestion,
   deleteStudyPlan,
   fetchCourseStudyCalendar,
   fetchCourseStudyCalendarDay,
@@ -134,6 +135,7 @@ describe("study plans api", () => {
     await fetchGlobalCalendarMonth("2026-07");
     await fetchGlobalCalendarDayTodos("2026-07-14");
     await fetchSubtaskExecutionContext("subtask_1");
+    await askStudySubtaskQuestion("subtask_1", { conversation_id: null, question: "这个任务先看哪份资料？" });
     await updateSubtaskCompletion("subtask_1", true);
     await generateSubtaskHandout("subtask_1", { force_regenerate: false });
     await generateSubtaskTaskTest("subtask_2", { force_regenerate: true, parameters: {} });
@@ -246,6 +248,14 @@ describe("study plans api", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       17,
+      "/api/v1/study-subtasks/subtask_1/qa/questions",
+      expect.objectContaining({
+        body: JSON.stringify({ conversation_id: null, question: "这个任务先看哪份资料？" }),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      18,
       "/api/v1/study-subtasks/subtask_1/completion",
       expect.objectContaining({
         body: JSON.stringify({ completed: true }),
@@ -253,7 +263,7 @@ describe("study plans api", () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      18,
+      19,
       "/api/v1/study-subtasks/subtask_1/handouts",
       expect.objectContaining({
         body: JSON.stringify({ force_regenerate: false }),
@@ -261,7 +271,7 @@ describe("study plans api", () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      19,
+      20,
       "/api/v1/study-subtasks/subtask_2/task-tests",
       expect.objectContaining({
         body: JSON.stringify({ force_regenerate: true, parameters: {} }),
@@ -269,12 +279,12 @@ describe("study plans api", () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      20,
+      21,
       "/api/v1/generated-contents/gen_task_test_1/exports/markdown",
       expect.objectContaining({ method: "GET" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      21,
+      22,
       "/api/v1/generated-contents/gen_handout_1/exports/pdf",
       expect.objectContaining({ method: "GET" }),
     );

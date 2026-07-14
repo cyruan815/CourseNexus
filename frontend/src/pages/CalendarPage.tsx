@@ -100,6 +100,27 @@ function statusColor(status: string): string {
   return "gray";
 }
 
+function getTaskExecutionHref(task: StudyCalendarTaskTodo): string | null {
+  const matchedSubtask = task.first_incomplete_subtask_id
+    ? task.subtasks.find((subtask) => subtask.subtask_id === task.first_incomplete_subtask_id)
+    : null;
+  const executionUrl = matchedSubtask?.execution_url ?? task.subtasks.find((subtask) => subtask.execution_url)?.execution_url;
+
+  if (executionUrl) {
+    return executionUrl;
+  }
+
+  return task.first_incomplete_subtask_id ? `/study-subtasks/${task.first_incomplete_subtask_id}` : null;
+}
+
+function getTaskPrimaryHref(task: StudyCalendarTaskTodo, fallbackCourseId: string): string {
+  return getTaskExecutionHref(task) ?? `/courses/${fallbackCourseId}/study-plans/${task.plan_id}`;
+}
+
+function getTaskPrimaryActionLabel(task: StudyCalendarTaskTodo): string {
+  return getTaskExecutionHref(task) ? "继续学习" : "查看计划";
+}
+
 function subtaskTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     learn: "学习",
@@ -173,6 +194,8 @@ function CourseCalendarDayPanel({
 }
 
 function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: StudyCalendarTaskTodo }) {
+  const actionLabel = getTaskPrimaryActionLabel(task);
+
   return (
     <Paper className="calendar-task-card" radius="md" withBorder>
       <Stack gap="sm">
@@ -207,13 +230,13 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
         </Stack>
         <Group justify="flex-end">
           <Button
-            aria-label={`查看计划 ${task.title}`}
+            aria-label={`${actionLabel} ${task.title}`}
             component={Link}
             size="xs"
-            to={`/courses/${courseId}/study-plans/${task.plan_id}`}
+            to={getTaskPrimaryHref(task, courseId)}
             variant="light"
           >
-            查看计划
+            {actionLabel}
           </Button>
         </Group>
       </Stack>

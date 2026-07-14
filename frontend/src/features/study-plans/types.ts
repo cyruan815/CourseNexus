@@ -362,6 +362,32 @@ export interface ExecutionContextRead {
   task_test_content_id: string | null;
 }
 
+export interface StudySubtaskQuestionRequest {
+  conversation_id: string | null;
+  question: string;
+}
+
+export interface StudySubtaskQaSourceCitation {
+  id?: string;
+  material_id: string | null;
+  chunk_id: string | null;
+  material_name: string;
+  page: string | number | null;
+  page_index: number | null;
+  hit_text: string;
+  sort_order?: number | null;
+}
+
+export interface StudySubtaskQuestionAnswer {
+  conversation_id: string;
+  user_message_id: string;
+  assistant_message_id: string;
+  answer_text: string;
+  answer_type: string;
+  source_citations: StudySubtaskQaSourceCitation[];
+  used_material_ids?: string[];
+}
+
 export interface CompletionSubtaskRead {
   subtask_id: string;
   status: StudyTaskStatus;

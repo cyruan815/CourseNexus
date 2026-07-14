@@ -146,6 +146,27 @@ function statusColor(status: string): string {
   return "gray";
 }
 
+function getTaskExecutionHref(task: StudyCalendarTaskTodo): string | null {
+  const matchedSubtask = task.first_incomplete_subtask_id
+    ? task.subtasks.find((subtask) => subtask.subtask_id === task.first_incomplete_subtask_id)
+    : null;
+  const executionUrl = matchedSubtask?.execution_url ?? task.subtasks.find((subtask) => subtask.execution_url)?.execution_url;
+
+  if (executionUrl) {
+    return executionUrl;
+  }
+
+  return task.first_incomplete_subtask_id ? `/study-subtasks/${task.first_incomplete_subtask_id}` : null;
+}
+
+function getTodayTodoHref(task: StudyCalendarTaskTodo): string {
+  return getTaskExecutionHref(task) ?? `/courses/${task.course_id}/study-plans/${task.plan_id}`;
+}
+
+function getTodayTodoActionLabel(task: StudyCalendarTaskTodo): string {
+  return getTaskExecutionHref(task) ? "继续学习" : "查看计划";
+}
+
 function createEmptyCourseForm(): CourseFormValues {
   return {
     name: "",
@@ -320,7 +341,7 @@ function TodayTodoPanel() {
     fetchTodayTodos(todayKey)
       .then((todos) => {
         if (!ignore) {
-          setTasks(todos.tasks);
+          setTasks(Array.isArray(todos.tasks) ? todos.tasks : []);
         }
       })
       .catch((nextError: unknown) => {
@@ -385,12 +406,12 @@ function TodayTodoPanel() {
           <Stack className="home-todo-list" gap="sm">
             {tasks.map((task) => (
               <Paper
-                aria-label={`查看今日任务 ${task.title}`}
+                aria-label={`${getTodayTodoActionLabel(task)} ${task.title}`}
                 className="home-todo-item"
                 component={Link}
                 key={task.task_id}
                 radius="md"
-                to={`/courses/${task.course_id}/study-plans/${task.plan_id}`}
+                to={getTodayTodoHref(task)}
                 withBorder
               >
                 <Group justify="space-between" wrap="nowrap">
@@ -448,7 +469,7 @@ function CalendarPanel() {
     fetchGlobalCalendarMonth(monthKey)
       .then((monthData) => {
         if (!ignore) {
-          setMonthSummaries(monthData.days);
+          setMonthSummaries(Array.isArray(monthData.days) ? monthData.days : []);
         }
       })
       .catch((nextError: unknown) => {

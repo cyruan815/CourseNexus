@@ -4,7 +4,7 @@
 
 S06 为计划学习模式的二级任务提供按需生成内容：
 
-- `learn` / `review` 二级任务只能生成 `handout` 今日讲义。
+- `learn` / `review` 二级任务只能生成 `handout` 任务讲义。
 - `quiz` / `test` 二级任务只能生成 `task_test` 任务测试题。
 - `learn` 表示学习讲义和新内容；`review` 表示复习讲义，只回顾计划中此前已经安排学习过的内容；只有 `quiz` / `test` 可以携带 `generation_parameters.task_test` 和明确题量要求。
 - `learn` 讲义使用计划阶段清理后的正文 chunk 引用；目录页、版权页、感谢页和章节小结页不得与正文 chunk 混合作为普通 `learn` 范围，避免提前混入后续主题。
@@ -41,18 +41,18 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 
 前端 C9 只接入执行页中的按需生成入口：
 
-- `learn` / `review` 二级任务显示“今日讲义”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/handouts`，请求 `{ "force_regenerate": false }`。
+- `learn` / `review` 二级任务显示“任务讲义”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/handouts`，请求 `{ "force_regenerate": false }`。
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
 - 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到同学 B 的现有生成内容详情页；前端不修改 generated-content 目录。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
 - C9 不接入导出、测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
-- 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。
+- 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 
-今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，并通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
+任务讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，并通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
 
 ## 幂等与重新生成
 
@@ -267,7 +267,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 因此任务内容生成、Markdown/PDF 导出和执行页问答之间的边界是：生成与导出围绕 `ai_generated_contents`；任务级问答围绕对话消息。两者都不得修改二级任务完成状态，也不得写 `checkin_records`。
 
 - 不保存学生作答，作答记录已拆到后续任务。
-- 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，今日讲义支持 PDF 导出。
+- 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，任务讲义支持 PDF 导出。
 - 不新增 chunk 级任务范围持久化字段；当前只保证生成时引用来自当前二级任务相关资料的当次 material-context 批次。
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
 
@@ -290,7 +290,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 手测清单：
 
-1. 打开 learn/review 二级任务执行页，若已有 `handout_content_id`，应看到“查看今日讲义”“导出PDF”“重新生成”。
+1. 打开 learn/review 二级任务执行页，若已有 `handout_content_id`，应看到“查看任务讲义”“导出PDF”“重新生成”。
 2. 点击“导出PDF”，浏览器下载 `handout-{generated_content_id}.pdf`；失败时页面显示导出错误 alert，任务完成状态不变。
 3. 打开 quiz/test 二级任务执行页，若已有 `task_test_content_id`，应看到“查看任务测试题”“导出Markdown”“重新生成”。
 4. 点击“导出Markdown”，浏览器下载 `task-test-{generated_content_id}.md`；失败时页面显示导出错误 alert，任务完成状态不变。
@@ -317,7 +317,7 @@ Handout 生成参数由 learning-execution 注入当前二级任务上下文，�
 
 ### PDF renderer 契约
 
-今日讲义 PDF renderer 采用 `content_json -> Markdown -> HTML -> Playwright Chromium -> PDF` 链路。`backend/app/modules/exports/renderer.py` 使用 `markdown-it-py` 渲染标题、列表、表格和代码块，用内置 Jinja2 模板和 print CSS 控制 A4 边距、中文字体、表格宽度、代码换行和标题分页；模板只对代码内可信 `_PDF_CSS` 使用 `safe`，避免字体声明中的引号被转义，正文 HTML 仍建立在 Markdown renderer 禁用原始 HTML 的前提下；`render_handout_pdf()` 保持同步接口并由 `exports.service` 将未知异常包装为 `EXPORT_FAILED`。
+任务讲义 PDF renderer 采用 `content_json -> Markdown -> HTML -> Playwright Chromium -> PDF` 链路。`backend/app/modules/exports/renderer.py` 使用 `markdown-it-py` 渲染标题、列表、表格和代码块，用内置 Jinja2 模板和 print CSS 控制 A4 边距、中文字体、表格宽度、代码换行和标题分页；模板只对代码内可信 `_PDF_CSS` 使用 `safe`，避免字体声明中的引号被转义，正文 HTML 仍建立在 Markdown renderer 禁用原始 HTML 的前提下；`render_handout_pdf()` 保持同步接口并由 `exports.service` 将未知异常包装为 `EXPORT_FAILED`。
 
 `schema_version=2` 的 PDF 必须按结构化字段完整输出非空内容区块：overview、learning objectives、prerequisites、knowledge map、sections、formula cards、exam focus、self check 和 summary。prerequisite 的 explanation / example、公式卡片的变量与适用条件、考试重点描述、自测答案与解释都不得只停留在 JSON 而从导出结果中丢失；空的可选区块不输出标题或占位内容。
 

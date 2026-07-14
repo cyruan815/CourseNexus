@@ -24,6 +24,8 @@ import type {
   StudyPlanRegenerationPreviewRequest,
   StudyPlanReplaceRequest,
   StudyPlanSaveRequest,
+  StudySubtaskQuestionAnswer,
+  StudySubtaskQuestionRequest,
   TaskTestGenerationRequest,
   TodayTodos,
 } from "./types";
@@ -218,6 +220,16 @@ export function fetchGlobalCalendarDayTodos(date: string): Promise<GlobalDayTodo
 export function fetchSubtaskExecutionContext(subtaskId: string): Promise<ExecutionContextRead> {
   return apiRequest<ExecutionContextRead>(`/api/v1/study-subtasks/${subtaskId}/execution-context`, {
     method: "GET",
+  });
+}
+
+export function askStudySubtaskQuestion(
+  subtaskId: string,
+  payload: StudySubtaskQuestionRequest,
+): Promise<StudySubtaskQuestionAnswer> {
+  return apiRequest<StudySubtaskQuestionAnswer>(`/api/v1/study-subtasks/${subtaskId}/qa/questions`, {
+    method: "POST",
+    body: payload,
   });
 }
 

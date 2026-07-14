@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import {
   Alert,
   Badge,
@@ -10,6 +11,7 @@ import {
   Skeleton,
   Stack,
   Text,
+  Textarea,
   Title,
 } from "@mantine/core";
 import {
@@ -20,14 +22,17 @@ import {
   IconDownload,
   IconExternalLink,
   IconFileText,
+  IconMessageCircle,
   IconPlayerPlay,
   IconRefresh,
+  IconSend,
   IconX,
 } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import {
+  askStudySubtaskQuestion,
   exportGeneratedContentMarkdown,
   exportGeneratedContentPdf,
   fetchSubtaskExecutionContext,
@@ -41,6 +46,7 @@ import type {
   ExecutionSubtaskRead,
   ExecutionTaskRead,
   GeneratedContentRead,
+  StudySubtaskQuestionAnswer,
   SubtaskCompletionResult,
   TaskContentType,
 } from "../features/study-plans/types";
@@ -102,6 +108,22 @@ function exportErrorMessage(error: unknown): string {
   return errorMessage(error, "文件导出失败");
 }
 
+function qaErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const messages: Record<string, string> = {
+      MATERIAL_COVERAGE_INCOMPLETE: "当前任务资料覆盖不足，暂时无法回答。",
+      NO_PARSED_MATERIAL: "当前任务没有可用于问答的已解析资料。",
+      NOT_FOUND: "任务不存在，或你没有访问权限。",
+      STATE_CONFLICT: "任务资料状态已变化，请刷新后再试。",
+      UNAUTHORIZED: "登录已过期，请重新登录。",
+      VALIDATION_ERROR: "问题内容不合法，请换一种问法。",
+    };
+    return messages[error.code] ?? error.message;
+  }
+
+  return errorMessage(error, "AI 助教暂时无法回答");
+}
+
 function statusLabel(status: string): string {
   const labels: Record<string, string> = {
     active: "已启用",
@@ -143,7 +165,7 @@ function taskContentType(type: string): TaskContentType | null {
 }
 
 function taskContentLabel(contentType: TaskContentType): string {
-  return contentType === "handout" ? "今日讲义" : "任务测试题";
+  return contentType === "handout" ? "任务讲义" : "任务测试题";
 }
 
 function materialAvailabilityLabel(material: ExecutionMaterialRead): string {
@@ -229,11 +251,16 @@ export function StudyTaskExecutionPage() {
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [qaError, setQaError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContentRead | null>(null);
+  const [qaAnswer, setQaAnswer] = useState<StudySubtaskQuestionAnswer | null>(null);
+  const [qaConversationId, setQaConversationId] = useState<string | null>(null);
+  const [qaQuestion, setQaQuestion] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isAsking, setIsAsking] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -249,8 +276,12 @@ export function StudyTaskExecutionPage() {
     setCompletionError(null);
     setGenerationError(null);
     setExportError(null);
+    setQaError(null);
     setCompletionResult(null);
     setGeneratedContent(null);
+    setQaAnswer(null);
+    setQaConversationId(null);
+    setQaQuestion("");
 
     fetchSubtaskExecutionContext(subtaskId)
       .then((nextContext) => {
@@ -345,6 +376,32 @@ export function StudyTaskExecutionPage() {
       setExportError(exportErrorMessage(nextError));
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleAskQuestion = async (event: FormEvent) => {
+    event.preventDefault();
+    const question = qaQuestion.trim();
+
+    if (!subtaskId || !question) {
+      return;
+    }
+
+    setIsAsking(true);
+    setQaError(null);
+
+    try {
+      const answer = await askStudySubtaskQuestion(subtaskId, {
+        conversation_id: qaConversationId,
+        question,
+      });
+      setQaAnswer(answer);
+      setQaConversationId(answer.conversation_id);
+      setQaQuestion("");
+    } catch (nextError) {
+      setQaError(qaErrorMessage(nextError));
+    } finally {
+      setIsAsking(false);
     }
   };
 
@@ -577,9 +634,72 @@ export function StudyTaskExecutionPage() {
           <Paper className="study-plan-execution-aside" radius="md" withBorder>
             <Stack gap="md">
               <Stack gap={4}>
-                <Title order={2}>资料与打卡</Title>
+                <Title order={2}>AI 助教</Title>
                 <Text c="dimmed" size="sm">
-                  资料范围来自当前二级任务，前端不自行改写。
+                  只围绕当前任务的关联资料回答，资料范围由后端按任务锁定。
+                </Text>
+              </Stack>
+
+              <Paper className="study-plan-task-qa" radius="md" withBorder>
+                <Stack component="form" gap="sm" onSubmit={(event) => void handleAskQuestion(event)}>
+                  {qaAnswer ? (
+                    <Paper className="study-plan-task-qa-answer" radius="md">
+                      <Stack gap={6}>
+                        <Group gap="xs">
+                          <IconMessageCircle size={16} />
+                          <Text fw={750} size="sm">助教回答</Text>
+                          <Badge color={qaAnswer.answer_type === "no_source" ? "gray" : "teal"} size="xs" variant="light">
+                            {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
+                          </Badge>
+                        </Group>
+                        <Text size="sm">{qaAnswer.answer_text}</Text>
+                        {qaAnswer.source_citations.length > 0 ? (
+                          <Stack gap={4}>
+                            {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
+                              <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
+                                {citation.material_name}
+                                {citation.page ? ` · p.${citation.page}` : ""}
+                              </Text>
+                            ))}
+                          </Stack>
+                        ) : null}
+                      </Stack>
+                    </Paper>
+                  ) : (
+                    <Text c="dimmed" size="sm">
+                      可以问“这一步先看哪份资料？”或“这个概念怎么理解？”。
+                    </Text>
+                  )}
+
+                  {qaError ? (
+                    <Alert color="red" role="alert" title="提问失败" variant="light">
+                      {qaError}
+                    </Alert>
+                  ) : null}
+
+                  <Textarea
+                    aria-label="向 AI 助教提问"
+                    minRows={3}
+                    onChange={(event) => setQaQuestion(event.currentTarget.value)}
+                    placeholder="围绕当前任务提问"
+                    value={qaQuestion}
+                  />
+                  <Button
+                    disabled={!qaQuestion.trim()}
+                    leftSection={<IconSend size={15} />}
+                    loading={isAsking}
+                    type="submit"
+                    variant="light"
+                  >
+                    提问
+                  </Button>
+                </Stack>
+              </Paper>
+
+              <Stack gap={4}>
+                <Title order={2}>任务摘要</Title>
+                <Text c="dimmed" size="sm">
+                  完成状态和资料范围都以当前二级任务为准。
                 </Text>
               </Stack>
 

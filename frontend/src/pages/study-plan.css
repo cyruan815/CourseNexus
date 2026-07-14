@@ -267,6 +267,18 @@
   padding: 12px;
 }
 
+.study-plan-task-qa {
+  border-color: #dbeafe;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.study-plan-task-qa-answer {
+  background: #ffffff;
+  border: 1px solid #d6e0eb;
+  padding: 10px;
+}
+
 .study-plan-checkin-card {
   border-color: #bde7df;
   background: #f8fffd;

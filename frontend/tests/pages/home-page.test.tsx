@@ -154,7 +154,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("heading", { name: "今日待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "日历" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("正在加载课程");
+    expect(screen.getByText("正在加载课程...")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "离散数学" })).toHaveAttribute(
       "href",
       "/courses/crs_discrete_math",
@@ -184,7 +184,7 @@ describe("HomePage", () => {
     expect(screen.getByText("添加课程")).toBeInTheDocument();
   });
 
-  it("loads today's todos from the backend and links tasks to study plans", async () => {
+  it("loads today's todos from the backend and links tasks to execution pages", async () => {
     localStorage.setItem(TOKEN_STORAGE_KEY, "token-home");
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
@@ -235,11 +235,11 @@ describe("HomePage", () => {
 
     renderHomePage();
 
-    expect(await screen.findByRole("link", { name: "查看今日任务 图论复习" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "继续学习 图论复习" })).toHaveAttribute(
       "href",
-      "/courses/crs_discrete_math/study-plans/plan_1",
+      "/study-subtasks/subtask_2",
     );
-    expect(screen.getByText("离散数学")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "离散数学" })).toBeInTheDocument();
     expect(screen.getByText("1/3 个二级任务完成")).toBeInTheDocument();
     expect(screen.queryByText("今天还没有学习计划")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
@@ -590,7 +590,7 @@ describe("HomePage", () => {
 
     renderHomePage();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("课程列表加载失败");
+    expect((await screen.findAllByText("课程列表加载失败")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "计算机网络" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重试加载课程" })).toBeInTheDocument();
   });

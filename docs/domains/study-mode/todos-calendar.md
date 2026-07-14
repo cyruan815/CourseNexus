@@ -36,13 +36,13 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 
 - 月视图加载 `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`，展示日期摘要、首条一级任务标题和完成进度。
 - 点击日期后加载 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`，在右侧展示当天一级任务、二级任务、状态和完成数。
-- 任务操作只提供“查看计划”链接到 `/courses/{course_id}/study-plans/{plan_id}`；执行页、完成/取消完成、讲义和任务测试题仍留给 C8/C9。
+- 任务操作在后端返回 `first_incomplete_subtask_id` 或二级任务 `execution_url` 时优先显示“继续学习”，跳转 `/study-subtasks/{subtask_id}`；没有可执行二级任务时才退回“查看计划”到 `/courses/{course_id}/study-plans/{plan_id}`。
 - 页面覆盖 loading、empty、error、month view 和 day selected 状态；不创建前端日历写模型，也不从计划详情接口自行拼月历。
 
 2026-07-14 C6 已将首页今日待办接到真实聚合接口。
 
 - `HomeWorkbench` 的 `TodayTodoPanel` 调用 `GET /api/v1/todos/today?date=YYYY-MM-DD`，日期使用当前浏览器自然日字符串。
-- 面板展示一级任务标题、课程名、二级任务完成数和 `derived_status`；任务卡只链接到 `/courses/{course_id}/study-plans/{plan_id}`。
+- 面板展示一级任务标题、课程名、二级任务完成数和 `derived_status`；任务卡优先链接到第一个未完成二级任务执行页，没有可执行二级任务时才链接到计划详情。
 - 空列表继续展示“今天还没有学习计划”；接口失败只影响今日待办面板，不阻断课程列表、课程创建或首页日历。
 - 首页课程卡片仍只读取 `GET /api/v1/courses` 的 `material_count` 与 `today_task_status`，不逐课程请求学习计划。
 
@@ -51,7 +51,7 @@ S03 提供计划学习模式的只读聚合层：学生保存一个或多个单�
 - 首页小日历调用 `GET /api/v1/calendar/month?month=YYYY-MM`，日期格展示后端摘要中的首条任务标题和二级任务完成数。
 - 点击首页日期进入 `/calendar?date=YYYY-MM-DD`；全局大日历按 query date 推导当前月份并自动加载该日待办。
 - 无 `courseId` 的 `CalendarPage` 调用全局月历和 `GET /api/v1/calendar/days/{date}/todos`，按课程分组展示一级任务与二级任务。
-- 全局日历仍是只读视图，只链接到既有计划详情页，不完成任务、不生成内容、不创建日历写模型。
+- 全局日历仍是只读视图；任务主动作优先进入执行页，没有可执行二级任务时退回计划详情。日历页本身不完成任务、不生成内容、不创建日历写模型。
 
 ## 数据流
 

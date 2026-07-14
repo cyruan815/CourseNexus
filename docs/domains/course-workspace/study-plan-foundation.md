@@ -54,7 +54,7 @@
 - `PUT /api/v1/study-plans/{plan_id}`
 - `DELETE /api/v1/study-plans/{plan_id}`
 
-`types.ts` 对齐后端 S02/S03 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview、替换请求、today todos、全局 calendar 和单课程 study calendar 均有独立类型。learning execution、handout/task-test 和 export 接口暂不放入 `features/study-plans`，后续按对应上下文建立边界。
+`types.ts` 对齐后端 S02/S03/S04/S06 schema：`StudyPlanPreviewRequest` 支持 `end_date` 或 `duration_days` 描述日期范围，`daily_available_minutes` 可省略以使用后端推荐值；诊断题、诊断答案、诊断 profile、配置解析、重生成 preview、替换请求、today todos、全局 calendar、单课程 study calendar、learning execution、任务级问答、handout/task-test 和 export 均有独立类型。
 
 ## 2026-07-14 C5 本课程计划日历前端接入
 
@@ -63,7 +63,7 @@
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendar(courseId, month)` 调用 `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`。
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendarDay(courseId, date)` 调用 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`。
 - 月视图只展示后端日期摘要；点击日期后才读取当天任务树。
-- 任务卡只链接到既有计划详情 `/courses/{course_id}/study-plans/{plan_id}`，不提前接入 C8 执行页或任务完成写操作。
+- 任务卡在有可执行二级任务时优先跳转 `/study-subtasks/{subtask_id}`，没有可执行子任务时退回计划详情；日历页本身仍不写完成状态。
 
 测试入口：
 

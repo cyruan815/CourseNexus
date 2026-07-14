@@ -6,10 +6,10 @@
 - `backend/app/modules/learning_execution/repository.py`：二级任务、父任务、计划、课程、同日任务和关联资料查询。
 - `backend/app/modules/learning_execution/service.py`：执行上下文组装、任务级问答资料范围派生、父任务/计划状态汇总和 completion 事务。
 - `backend/app/modules/learning_execution/router.py`：执行上下文、任务级问答和二级任务完成 API。
-- `frontend/src/features/study-plans/api.ts`：执行上下文和二级任务完成 API adapter。
-- `frontend/src/features/study-plans/types.ts`：执行上下文、执行任务树、关联资料和 completion 返回类型。
+- `frontend/src/features/study-plans/api.ts`：执行上下文、任务级问答和二级任务完成 API adapter。
+- `frontend/src/features/study-plans/types.ts`：执行上下文、任务级问答、执行任务树、关联资料和 completion 返回类型。
 - `frontend/src/pages/StudyPlanDetailPage.tsx`：从学习计划详情页进入具体二级任务执行页。
-- `frontend/src/pages/StudyTaskExecutionPage.tsx`：计划执行页基础，读取当天执行上下文并完成 / 取消完成当前二级任务。
+- `frontend/src/pages/StudyTaskExecutionPage.tsx`：计划执行页基础，读取当天执行上下文，支持任务级 AI 问答，并完成 / 取消完成当前二级任务。
 - `frontend/src/router/AppRouter.tsx`：受保护路由 `/study-subtasks/:subtaskId`。
 - 测试入口：`backend/tests/modules/learning_execution/test_task_qa_api.py`、`backend/tests/modules/learning_execution/`、`backend/tests/integration/test_subtask_completion_transaction.py`。
 - 前端测试入口：`frontend/tests/features/study-plans/api.test.ts`、`frontend/tests/pages/study-plan-pages.test.tsx`。
@@ -20,13 +20,13 @@
 
 响应只返回当前二级任务父任务的 `task_date` 当天、同一计划内的一级任务和二级任务，不返回完整计划树。`execution_date` 使用父任务业务日期，允许用户从日历进入历史或未来任务。
 
-关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；拿到 `handout_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 下载今日讲义 PDF。导出不改变二级任务完成状态，也不写打卡记录。
+关联资料读取 `related_material_ids_json`。字段必须是字符串数组；跨课程或跨用户资料触发 `STATE_CONFLICT`；缺失资料按 `availability=deleted` 返回占位。S06 已接入后，`handout_content_id` 和 `task_test_content_id` 来自当前二级任务最近一次未删除且 `generation_status=success` 的 `handout` / `task_test` 内容；没有成功内容时返回 `null`，最新 failed 记录不会覆盖既有成功内容 ID。执行页拿到 `task_test_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 下载只读测试题 Markdown；拿到 `handout_content_id` 后，可以调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 下载任务讲义 PDF。导出不改变二级任务完成状态，也不写打卡记录。
 
 前端执行页只以 execution context 为事实来源：
 
 - 左侧展示当天同一计划内的一级任务和二级任务，按 `sort_order` 排序，高亮 `current_subtask_id`。
 - 中间展示当前二级任务标题、类型、描述、状态和完成 / 取消完成按钮。
-- 右侧展示当前二级任务关联资料、最近成功生成内容 ID 的只读状态和打卡进度。
+- 右侧展示 AI 助教、当前二级任务关联资料、最近成功生成内容 ID 的只读状态和打卡进度。AI 助教只提交 `conversation_id` 和 `question`，不允许前端改写资料范围。
 - 页面不接受用户修改资料范围，不在前端拼接完整计划树，不在 C8 中生成讲义或任务测试题正文。
 - `/study-subtasks/:subtaskId` 是轻量执行页入口；计划详情页只通过二级任务 ID 跳转到该路由。
 
@@ -43,7 +43,7 @@
 
 返回结构复用课程问答响应，包含 `conversation_id`、`user_message_id`、`assistant_message_id`、`answer_text`、`answer_type`、`source_citations` 和 `used_material_ids`。当前二级任务没有 parsed chunk 或没有相关命中时返回 `answer_type="no_source"`，引用和实际使用资料均为空数组，不调用伪引用兜底。
 
-任务级问答只写 `conversations`、`messages` 和有真实命中的 `source_citations`。它不修改二级任务状态，不汇总一级任务或计划状态，也不写 `checkin_records`。
+任务级问答只写 `conversations`、`messages` 和有真实命中的 `source_citations`。它不修改二级任务状态，不汇总一级任务或计划状态，也不写 `checkin_records`。前端执行页在右侧 AI 助教区维护本页 `conversation_id`，下一次追问复用该 ID；提问失败只影响助教区，不影响完成打卡、讲义生成或任务测试题生成。
 
 `PUT /api/v1/study-subtasks/{subtask_id}/completion` 接收期望状态：
 
