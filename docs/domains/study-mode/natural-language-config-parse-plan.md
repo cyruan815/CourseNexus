@@ -2,8 +2,8 @@
 
 ## 状态
 
-- 日期：2026-07-13
-- 状态：后端自然语言回填契约已收紧，待最小测试和真实模型验证。
+- 日期：2026-07-14
+- 状态：后端自然语言回填契约已收紧；配置补问字段已明确由“开始前设置”页展示，不再要求独立配置确认页；待最小测试和真实模型验证。
 - 范围：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 的自然语言字段回填、模型 prompt、字段规则、后处理兜底和验证口径。
 - 非范围：学前诊断题的大模型生成、preview 任务生成、保存 exact tasks、讲义和任务测试题生成。学前诊断题应单独设计，本计划只借鉴其“模型主路径 + 后端校验 + 可追踪兜底”方法。
 
@@ -97,7 +97,7 @@ API 始终使用英文枚举：`fast_track`、`balanced`、`mastery`、`sprint`�
 - 用户同时说“快速”和“详细掌握”时，优先保留用户显式时间约束，再按句子主目标判断。如果无法判断，`preference=null` 并加入 `unresolved_fields`。
 - 用户只是要求“最后安排测试题”，不等于 `sprint`；只有出现冲刺、考前、查漏补缺、强化等复习语义时才输出 `sprint`。
 - 用户说“深度学习”即使没有说“掌握”，也可倾向 `mastery`；但“讲义详细一点、多给例题、多讲公式适用条件”只表示局部覆盖，不应单独把整体 `preference` 提升为 `mastery`。
-- 用户没有学习方式表达时，不在配置回填阶段默认 `balanced`；由配置确认页展示默认建议并让用户确认。
+- 用户没有学习方式表达时，不在配置回填阶段默认 `balanced`；由开始前设置页展示默认建议并让用户确认。
 
 ## Prompt 设计要求
 
@@ -151,21 +151,23 @@ prompt 示例至少覆盖：
 
 ## 前端与 preview 衔接
 
-配置确认页必须展示 5 个字段：学习目标、学习日期/天数、每日学习时间、学习方式、资料范围。
+新向导不再设置独立配置确认页。前端应在“开始前设置”页顶部展示配置补问与确认区，并在同一页下方展示学前诊断。配置补问区围绕 5 个字段：学习目标、学习日期/天数、每日学习时间、学习方式、资料范围。
 
 新向导流程中：
 
+- 学习目标和资料范围来自第一步，开始前设置页只读展示；如果用户要修改，应返回第一步并重新调用 `study-plan-config-parses`，随后重新生成诊断题。
 - 如果 `preference` 非空，学习方式控件按该值预选，用户可修改。
 - 如果 `preference=null`，学习方式控件展示默认建议，但应标记为需要确认；进入 preview 前必须提交用户确认后的值。
-- 如果用户没有每日学习时间，配置确认页展示“将根据资料量估算”，进入 preview 后由后端返回 `recommended_daily_minutes` 和最终 `daily_available_minutes`。
+- 如果用户没有每日学习时间，开始前设置页展示“将根据资料量估算”，进入 preview 后由后端返回 `recommended_daily_minutes` 和最终 `daily_available_minutes`。
 - preview 请求不得因为配置回填缺失 `preference` 而静默省略该字段；wizard 应显式传用户确认值。
+- 传给 `study-plan-diagnostic-questions` 的 `confirmed_config` 是自然语言解析结果经开始前设置页补齐/确认后的有效配置，不代表独立配置确认页产物。
 
 旧客户端可继续使用 `StudyPlanBuildRequest.preference="balanced"` 的兼容默认，但新向导和 E2E 脚本必须显式传值，避免回归。
 
 ## 错误与重试
 
 - 模型结构化输出不符合 schema：按现有 `ModelProvider.generate_structured()` 策略失败或重试。
-- 日期字段冲突，例如 `start_date + duration_days` 与 `end_date` 不一致：返回 `VALIDATION_ERROR`，前端停留在配置确认页。
+- 日期字段冲突，例如 `start_date + duration_days` 与 `end_date` 不一致：返回 `VALIDATION_ERROR`，前端停留在开始前设置的配置补问区。
 - 每日时间低于 30 分钟：返回 `DAILY_MINUTES_TOO_LOW` 或现有等价校验错误。
 - 模型返回非法 `preference`：重试一次；仍非法则返回 `VALIDATION_ERROR`，不得静默变成 `balanced`。
 - 大模型调用失败：配置回填接口返回生成失败错误；只有产品确认后才允许降级到纯规则解析。
@@ -210,10 +212,10 @@ prompt 示例至少覆盖：
 1. 更新配置解析 prompt，并添加 prompt 单元测试。
 2. 调整配置回填后处理，清理系统字段和追踪 `preference_resolution`。
 3. 添加 preference 极窄兜底及测试，确保正常模型识别路径不依赖兜底。
-4. 调整 E2E 脚本或前端新向导请求组装：preview 前必须显式传确认后的 `preference`。
+4. 调整 E2E 脚本或前端新向导请求组装：开始前设置页提交后，preview 前必须显式传确认后的 `preference`。
 5. 更新 API / 前端集成文档中的字段说明。
 6. 用真实物理层输入跑一次配置回填验证，保存响应摘要到 `docs/domains/study-mode/validation/`。
 
 ## 与学前诊断的边界
 
-学前诊断题已由 [diagnostic-questions.md](diagnostic-questions.md) 单独承接。当前边界是：配置回填仍只解析学习设置和缺失字段；学前诊断题使用独立 `study_plan_diagnostic` purpose，根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择资料内 topic，后端固定输出 3 道 `topic_mastery` 并用 fallback 补足。配置解析不得补问或生成诊断题，诊断模型也不得补问 `start_date`、`duration_days`、`preference` 或每日时间。
+学前诊断题已由 [diagnostic-questions.md](diagnostic-questions.md) 单独承接。当前边界是：配置回填仍只解析学习设置和缺失字段；前端在开始前设置页补齐/确认后，把有效配置作为 `confirmed_config` 传给诊断题接口；学前诊断题使用独立 `study_plan_diagnostic` purpose，根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择资料内 topic，后端固定输出 3 道 `topic_mastery` 并用 fallback 补足。配置解析不得补问或生成诊断题，诊断模型也不得补问 `start_date`、`duration_days`、`preference` 或每日时间。

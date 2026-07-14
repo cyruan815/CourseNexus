@@ -4,37 +4,40 @@
 
 - 日期：2026-07-12
 - 状态：已实现并通过自动化验证。
-- 范围：单课程学习计划生成、配置解析、诊断后 capacity 统计、确认保存、幂等、重生成预览、原子替换和软删除。
+- 范围：单课程学习计划生成、自然语言配置解析、开始前设置配置补问、学前诊断、诊断后 capacity 统计、确认保存、幂等、重生成预览、原子替换和软删除。
 
 ## 代码入口
 
 | 层 | 文件 | 责任 |
 | --- | --- | --- |
-| Router | `backend/app/modules/study_plans/router.py` | 注册学习计划 API，按用途注入配置解析 / 计划生成 `ModelProvider`，读取 `Idempotency-Key`。 |
-| Service | `backend/app/modules/study_plans/service.py` | 权限、全材料预览、保存事务、幂等、替换、重生成和软删除。 |
+| Router | `backend/app/modules/study_plans/router.py` | 注册学习计划 API，按用途注入配置解析 / 诊断题 / 计划生成 `ModelProvider`，读取 `Idempotency-Key`。 |
+| Service | `backend/app/modules/study_plans/service.py` | 权限、配置解析补问字段、诊断题生成、诊断 profile 归纳、全材料预览、保存事务、幂等、替换、重生成和软删除。 |
 | Planner | `backend/app/modules/study_plans/planner.py` | map/reduce prompt、结构化生成调用、coverage 和预览校验。 |
 | Task tree rules | `backend/app/modules/study_plans/task_tree_rules.py` | Study Plan 层任务树不变量校验，包括每日唯一测试和测试覆盖范围。 |
 | Repository | `backend/app/modules/study_plans/repository.py` | active 查询、幂等查询、任务树查询、flush-only 写入和替换辅助。 |
-| Schemas | `backend/app/modules/study_plans/schemas.py` | 配置解析、预览、保存、替换和重生成请求/响应结构。 |
+| Schemas | `backend/app/modules/study_plans/schemas.py` | 配置解析、诊断题、诊断 profile、预览、保存、替换和重生成请求/响应结构。 |
 
 ## 数据流
 
-1. 自然语言配置回填：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。
-2. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference`、可选 `preference_overrides` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。P5a 同步通过 `material_context.summarize_material_quality_for_scope()` 读取同一 `material_scope` 内 parsed 资料的 `parse_quality` / `parse_diagnostics_json`，并写入 `generation_metadata.material_quality.warnings`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
-3. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.preference_overrides` 保存原始局部覆盖值，`parsed_config_json.planner_strategy` 由当前 `preference + preference_overrides + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
-4. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
-5. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
-6. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
-7. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+1. 自然语言配置回填：`POST /api/v1/courses/{course_id}/study-plan-config-parses` 使用 `study_plan_parser` 模型配置调用 `ModelProvider.generate_structured()` 输出可编辑字段，不写数据库。响应中的 `unresolved_fields` / `unresolved_field_prompts` 表示必须让用户补齐的字段，`needs_confirmation_fields` / `needs_confirmation_field_prompts` 表示建议确认的字段，`field_options` 提供学习方式等中文选项。
+2. 开始前设置：前端在同一页面顶部展示配置补问与确认控件，并在下方展示学前诊断。学习目标和资料范围来自第一步，开始前设置页只读展示；如需修改，应返回第一步并重新解析配置、重新生成诊断题。后端 API 字段 `confirmed_config` 表示自然语言解析结果经用户补齐/确认后的有效配置，不代表独立配置确认页。
+3. 学前诊断题：`POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` 使用 `study_plan_diagnostic` 模型配置，根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 3 个资料内 topic 候选；后端映射回当前 chunk、去重并补齐为 3 道 topic mastery 题，同时固定补 weak_area 和 diagnostic_note。
+4. 诊断 profile：`POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 不调用模型，只校验 question version、topic_id 与当前资料范围匹配关系，并把 3 个 topic mastery 答案、weak_area 和 diagnostic_note 归纳为 `diagnostic_profile`。
+5. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference`、可选 `preference_overrides` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。P5a 同步通过 `material_context.summarize_material_quality_for_scope()` 读取同一 `material_scope` 内 parsed 资料的 `parse_quality` / `parse_diagnostics_json`，并写入 `generation_metadata.material_quality.warnings`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
+6. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.preference_overrides` 保存原始局部覆盖值，`parsed_config_json.planner_strategy` 由当前 `preference + preference_overrides + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
+7. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
+8. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
+9. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
+10. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
 
 ## 计划质量约束
 
-- 配置解析 prompt 会说明相对日期规则：用户写明“今天是 YYYY年M月D日”且使用“两天学完 / N 天学完”时，可推导 `start_date` 与 `end_date`。`parse_study_plan_config()` 在模型返回后还会用 `_resolve_config_dates()` 做确定性补全，避免明确日期语义被模型漏填。
+- 配置解析 prompt 会说明相对日期规则：用户写明“今天是 YYYY年M月D日”且使用“两天学完 / N 天学完”时，可推导 `start_date` 与 `end_date`。`parse_study_plan_config()` 在模型返回后还会用 `_resolve_config_dates()` 做确定性补全，避免明确日期语义被模型漏填；无法解析或存在歧义的 `start_date`、`duration_days`、`preference` 会进入补问字段，由前端在开始前设置页让用户补齐或确认。
 - planner map prompt 负责把资料 chunk 按章节/页码顺序抽成细粒度知识单元，要求保留公式、例子、接口、设备、调制/编码/复用、安全隐患等可学习细节，并要求每个知识单元携带 `citation_chunk_ids`。
 - planner reduce prompt 负责把知识单元排成可执行计划。生成标题时必须使用课程名称原文；完成型目标需要尽量利用每日可用时间，并通过复习、练习、输出任务和最终 quiz/test 补足学习闭环。
 - planner reduce prompt 明确目录页、主要内容页、版权页、感谢页和章节小结页不能作为普通 `learn` 任务引用；小结页只允许进入 `review` 或 `quiz/test` 的辅助引用。`preview_study_plan()` 在校验前会做确定性后处理：仅当 chunk 的结构化 heading 或正文首个非空行完整匹配受控元信息标题时，才把它识别为元信息；不再用 `summary` / `总结` 子串扫描正文，因此 `Summary Statistics`、`数据总结方法` 等正常知识内容不会被误删。若 `learn` 同时引用正文 chunk 和元信息 chunk，只保留正文引用；保存确认任务树时也会复用该清理规则。
 - planner reduce prompt 现在会读取 `StudyPlanBuildRequest.preference` 派生出的 `planner_strategy`，并显式使用 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity` 控制讲解深度、例题、测评和 review 强度。映射为：`fast_track=concise/low/low/low`、`balanced=standard/standard/standard/standard`、`mastery=detailed/high/high/high`、`sprint=focused/standard/high/high`；`advanced` 兼容为 `sprint`，未知或缺省回落 `balanced`。
-- planner reduce prompt 同时读取 `StudyPlanBuildRequest.diagnostic_profile` 并按固定优先级合并：用户时间约束 > 诊断得出的必要补基础 > 学习方式 preference 派生配置 > 额外例题、测试、review。`foundation_needed=true` 会进入 `planner_strategy.foundation_required`，即使 `fast_track` 也必须保留前置补基础任务；`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt、preview metadata 和保存追溯，不新增表、不改前端和结构化输出 schema。
+- planner reduce prompt 同时读取 `StudyPlanBuildRequest.diagnostic_profile` 并按固定优先级合并：用户时间约束 > 诊断得出的必要补基础 > 学习方式 preference 派生配置 > 额外例题、测试、review。`diagnostic_profile` 来自开始前设置页的学前诊断答案归纳。`foundation_needed=true` 会进入 `planner_strategy.foundation_required`，即使 `fast_track` 也必须保留前置补基础任务；`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt、preview metadata 和保存追溯，不新增表、不改前端和结构化输出 schema。
 - `validate_preview()` 除结构校验外，还会校验生成质量底线：每个一级任务必须且只能包含一个 `quiz` / `test`，并且该测试必须是当天最后一个二级任务；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间。非最后一天的测试覆盖当天前置 `learn` / `review` 的资料和 chunk；最后一天的测试是全计划综合测试，覆盖全计划所有非测试任务的资料和 chunk，不再额外安排当天测试。每日任务时长超过 `daily_available_minutes` 时，只有 preview capacity 已明确 `feasibility_status = over_capacity` 且 `warnings` 包含 `PLAN_OVER_CAPACITY` 才允许返回，由前端展示容量 warning；结构非法、日期越界、引用缺失和范围外资料仍返回 `GENERATION_SCHEMA_INVALID`。
 - Study Mode 只消费 materials 已持久化的解析质量摘要，不直接调用 parser，也不解释 Docling 内部类型。`parse_quality = partial` 或 `unknown` 会转成 `MATERIAL_PARSE_PARTIAL` / `MATERIAL_PARSE_QUALITY_UNKNOWN`；`parse_diagnostics_json.warnings[]` 中 `severity = "warning"` 的条目会转成 `MATERIAL_PARSE_DIAGNOSTIC_WARNING`，原始 parser code/message 保存在 `details.diagnostic_code` 和 `details.diagnostic_message`；`severity = "info"` 不升级为 preview warning。
 - 资料解析质量 warning 只写入 `generation_metadata.material_quality.warnings`，不得写入 `capacity.warnings`。P5a 不新增 block 策略，`NO_PARSED_MATERIAL` 和 `MATERIAL_COVERAGE_INCOMPLETE` 保持原有阻断语义。
