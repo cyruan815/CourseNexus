@@ -297,7 +297,7 @@
 }
 
 .study-plan-lifecycle-panel {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   max-height: none;
   overflow: visible;
   border-color: #bfdbfe;

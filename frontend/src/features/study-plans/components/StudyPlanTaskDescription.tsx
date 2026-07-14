@@ -5,7 +5,11 @@ interface DescriptionPart {
   content: string;
 }
 
-const sectionPattern = /(含义|条件|步骤|练习检查)：/g;
+const sectionPattern = /(^|[\n。；;]\s*)([\p{Script=Han}A-Za-z0-9]{2,8})[：:]/gu;
+
+function markerStart(match: RegExpMatchArray): number {
+  return (match.index ?? 0) + (match[1]?.length ?? 0);
+}
 
 function splitTaskDescription(description: string): DescriptionPart[] {
   const matches = [...description.matchAll(sectionPattern)];
@@ -13,17 +17,17 @@ function splitTaskDescription(description: string): DescriptionPart[] {
     return [];
   }
 
-  const firstMarkerIndex = matches[0]?.index ?? -1;
+  const firstMarkerIndex = markerStart(matches[0] as RegExpMatchArray);
   if (firstMarkerIndex < 0 || firstMarkerIndex > 8) {
     return [];
   }
 
   return matches
     .map((match, index) => {
-      const label = match[1] ?? "";
-      const contentStart = (match.index ?? 0) + match[0].length;
+      const label = match[2] ?? "";
+      const contentStart = markerStart(match) + label.length + 1;
       const nextMatch = matches[index + 1];
-      const contentEnd = nextMatch?.index ?? description.length;
+      const contentEnd = nextMatch ? markerStart(nextMatch) : description.length;
 
       return {
         label,

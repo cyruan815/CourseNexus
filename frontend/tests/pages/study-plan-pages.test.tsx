@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudyPlanCreatePage } from "../../src/pages/StudyPlanCreatePage";
 import { StudyPlanDetailPage } from "../../src/pages/StudyPlanDetailPage";
 import { StudyTaskExecutionPage } from "../../src/pages/StudyTaskExecutionPage";
+import { StudyPlanTaskDescription } from "../../src/features/study-plans/components/StudyPlanTaskDescription";
 
 const course = {
   id: "crs_123",
@@ -1649,5 +1650,29 @@ describe("study plan pages", () => {
       "/api/v1/generated-contents/gen_task_test_1",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("keeps plain task descriptions intact and splits generic labeled descriptions", () => {
+    const { rerender } = render(
+      <MantineProvider>
+        <StudyPlanTaskDescription description="阅读材料后完成两道练习，条件：如果时间不够就先做基础题。" />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByText("阅读材料后完成两道练习，条件：如果时间不够就先做基础题。")).toBeInTheDocument();
+    expect(screen.queryByText("条件")).not.toBeInTheDocument();
+
+    rerender(
+      <MantineProvider>
+        <StudyPlanTaskDescription description="目标：理解局域网核心概念。方法：画出流程图。检查：完成口头复述。" />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByText("目标")).toBeInTheDocument();
+    expect(screen.getByText("理解局域网核心概念。")).toBeInTheDocument();
+    expect(screen.getByText("方法")).toBeInTheDocument();
+    expect(screen.getByText("画出流程图。")).toBeInTheDocument();
+    expect(screen.getByText("检查")).toBeInTheDocument();
+    expect(screen.getByText("完成口头复述。")).toBeInTheDocument();
   });
 });
