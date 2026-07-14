@@ -199,7 +199,7 @@ v2 讲义的字段语义：
 - `knowledge_map` 是讲义级知识关系图，优先使用树形 `mindmap`。没有足够关系信息时可以为空；第一版默认继承所有 section 来源，展示时不单独显示引用。
 - `formula_cards[]` 用于集中保存高频公式、变量、适用条件和易错限制。
 - `exam_focus[]` 用于保存考试或测验常见考法、易错点和解题提醒。
-- `self_check[]` 用于保存讲义后的短自测，服务学习闭环，不替代 `task_test`。
+- `self_check[]` 暂停生成，新生成讲义必须输出空数组 `[]`；该字段仅保留历史结构兼容，学生可见讲义导出不展示该区块，正式练习与测试统一由 `task_test` 承担。
 
 v2 typed block 的第一阶段范围：
 
@@ -306,7 +306,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 ### 引用链契约
 
-Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 handout 的 section、顶层 formula_cards / exam_focus / self_check 以及带引用的 prerequisites、task-test questions 的 `source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`。v2 handout 的 section block 默认继承 section 来源，不做逐 block 引用校验或独立回绑；除 prerequisites 可为空引用外，顶层 typed block 的独立引用必须保留。回绑后再次通过 `HandoutContent` 校验才允许提交成功。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
+Handout 和 task-test generator 内部仍输出 chunk id，用于校验引用必须来自当前二级任务允许的 material-context batch。保存成功时，learning-execution 在同一事务中创建 `SourceCitation` 行，并将 handout 的 section、顶层 formula_cards / exam_focus 以及带引用的 prerequisites、task-test questions 的 `source_citation_ids` 从 chunk id 回绑为 `SourceCitation.id`；`self_check` 在新生成讲义中必须为空数组，仅作为历史内容兼容字段保留。v2 handout 的 section block 默认继承 section 来源，不做逐 block 引用校验或独立回绑；除 prerequisites 可为空引用外，顶层 typed block 的独立引用必须保留。回绑后再次通过 `HandoutContent` 校验才允许提交成功。`GeneratedContentRead.source_citations` 必须非空且与内容 JSON 中的 citation id 可互相匹配；Markdown 导出在存在有效引用时不得出现 `Sources: unavailable`。
 
 Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引用绑定：section id 重写为 `sec_N` 后，`GeneratorOutput.item_citation_chunk_ids` 要把旧 section id 对应的 chunk id 迁移到新 id；若 generator 未提供该映射，则回退使用该 section 自身的 `source_citation_ids` 并去重。Handout reducer 不再把所有 section 的引用合成总集合后绑定给每个 section，避免 PDF 每节显示整章引用。
 
@@ -314,13 +314,13 @@ Handout map/reduce 合并多个 `GeneratorOutput` 时必须保留 section 级引
 
 ### Handout prompt 契约
 
-Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯；prerequisites 可为空引用；block 默认继承 section 来源，第一版不要在 block 内单独填写 `source_citation_ids`。正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
+Handout 生成参数由 learning-execution 注入当前二级任务上下文，包含 subtask title、subtask description、plan goal，并在计划保存有 `diagnostic_profile` 时附带 `weak_area` 和 `explanation_style`。Prompt 明确要求讲义只服务当前 subtask，不生成整章摘要；每个 section 围绕当前学习目标展开，建议包含概念解释、为什么重要、易错点、公式 / 步骤 / 小例子。物理层公式类内容必须写清适用条件和变量含义。每个 section 仍需输出 1-4 个直接相关 `source_citation_ids` 供后端校验和追溯；prerequisites 可为空引用；`self_check` 必须输出空数组 `[]`，不生成讲义内自测题；block 默认继承 section 来源，第一版不要在 block 内单独填写 `source_citation_ids`。正文不得写“来源如下”“引用如下”或堆叠资料摘录，学生导出讲义也不逐节展示 citation。
 
 ### PDF renderer 契约
 
 任务讲义 PDF renderer 采用 `content_json -> Markdown -> HTML -> Playwright Chromium -> PDF` 链路。`backend/app/modules/exports/renderer.py` 使用 `markdown-it-py` 渲染标题、列表、表格和代码块，用内置 Jinja2 模板和 print CSS 控制 A4 边距、中文字体、表格宽度、代码换行和标题分页；模板只对代码内可信 `_PDF_CSS` 使用 `safe`，避免字体声明中的引号被转义，正文 HTML 仍建立在 Markdown renderer 禁用原始 HTML 的前提下；`render_handout_pdf()` 保持同步接口并由 `exports.service` 将未知异常包装为 `EXPORT_FAILED`。
 
-`schema_version=2` 的 PDF 必须按结构化字段完整输出非空内容区块：overview、learning objectives、prerequisites、knowledge map、sections、formula cards、exam focus、self check 和 summary。prerequisite 的 explanation / example、公式卡片的变量与适用条件、考试重点描述、自测答案与解释都不得只停留在 JSON 而从导出结果中丢失；空的可选区块不输出标题或占位内容。
+`schema_version=2` 的 PDF 必须按结构化字段完整输出学生讲义需要的非空内容区块：overview、learning objectives、prerequisites、knowledge map、sections、formula cards、exam focus 和 summary。`self_check` 不进入学生可见讲义导出，避免和独立 `task_test` 重复；prerequisite 的 explanation / example、公式卡片的变量与适用条件、考试重点描述都不得只停留在 JSON 而从导出结果中丢失；空的可选区块不输出标题或占位内容。
 
 结构化 `handout` 导出只在标题后展示一行来源说明，格式为 `来源说明：本讲义根据《资料名.pdf》《补充资料.pdf》中“知识点”相关内容生成。`。资料名来自 `GeneratedContentRead.source_citations[].material_name` 去重；知识点短期从 handout section 标题合并推导，后续若导出层可取得 subtask title 应优先使用 subtask title。PDF 不在每个 section 下展示 `Sources`，不生成文末 `Source Details`，也不展示 `hit_text`。
 
