@@ -512,7 +512,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - `ai_generated_contents.title` 使用 `{StudySubTask.title}讲义`。
 - Markdown 正文第一段为来源说明，例如 `本讲义基于《资料名》中“二级任务标题”相关内容生成。`。
 - 新生成 `handout` 不创建逐条 `SourceCitation`，不在 `content_json` 保存 `sections` / `blocks` / `source_citation_ids`。
-- 历史结构化 handout 不提供迁移或导出兼容；本地 POC 通过重置 SQLite 数据库处理旧数据。
+- 历史结构化 handout 不提供迁移或导出兼容；本地 POC 通过一次性重置 SQLite 数据库处理旧数据。PR 合并后开发者需确认没有要保留的本地资料、学习计划和生成内容，删除 `backend/course_nexus.db`，在 `backend/` 下运行 `uv run alembic upgrade head`；需要演示数据时再运行更新后的 Markdown-first seed。该口径只适用于当前只有本地 POC 数据、没有共享测试库/演示库/部署环境、且所有开发者都能统一重置的阶段。
 - 后端不使用正则改写数学公式，公式分隔符由 handout prompt 约束；前端和 PDF 的数学排版属于各自渲染模块职责。
 
 ### task_test

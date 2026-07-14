@@ -222,7 +222,9 @@ Handout PDF 导出读取 `ai_generated_contents.content` Markdown，经 Markdown
 
 ### 本地 POC 数据重置
 
-本 PR 不提供旧结构化 handout 迁移或兼容导出。合并后开发者需要确认没有要保留的本地资料、计划和生成内容，然后删除本地 SQLite 数据库，重新运行数据库初始化；需要演示数据时使用更新后的 Markdown-first seed。这个口径只成立于当前没有共享测试库、演示库或部署环境，且所有开发者都能统一重置本地 POC 数据。
+本 PR 不修改运行时幂等复用逻辑，也不提供旧结构化 handout 迁移或兼容导出；旧 `content_json.sections/blocks` handout 通过一次性本地 POC 数据重置处理。合并后所有开发者必须先确认没有需要保留的本地资料、学习计划和生成内容，再删除本地 SQLite 数据库 `backend/course_nexus.db`，并在 `backend/` 下重新运行数据库初始化：`uv run alembic upgrade head`。需要演示数据时，再运行更新后的 Markdown-first seed，例如 `uv run python -m app.commands.seed_generated_content_demo`。
+
+这个口径只成立于当前阶段同时满足以下条件：只有本地 POC 数据；没有共享测试库、演示库或部署环境；所有开发者都能统一重置本地 SQLite。满足这些条件后，旧讲义被幂等命中并复用不再作为本 PR 的阻塞代码问题。
 
 ### task-test 默认参数
 
