@@ -270,7 +270,17 @@
   overflow: hidden;
 }
 
-.home-calendar-cell-summary span {
+.home-calendar-task-list {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.home-calendar-task-title,
+.home-calendar-task-more,
+.home-calendar-task-progress {
   display: block;
   max-width: 100%;
   min-width: 0;
@@ -279,19 +289,29 @@
   white-space: nowrap;
 }
 
+.home-calendar-task-more {
+  color: #64748b;
+}
+
+.home-calendar-task-progress {
+  flex: 0 0 auto;
+  color: #64748b;
+}
+
 .home-calendar-compact-grid .home-calendar-cell {
   overflow: hidden;
 }
 
 .home-calendar-compact-grid .home-calendar-cell-summary {
-  inset: 27px 7px auto;
-  height: 24px;
+  inset: 25px 7px 5px;
+  height: auto;
   gap: 0;
 }
 
-.home-calendar-compact-grid .home-calendar-task-title {
-  flex: 0 0 13px;
-  line-height: 13px;
+.home-calendar-compact-grid .home-calendar-task-title,
+.home-calendar-compact-grid .home-calendar-task-more {
+  flex: 0 0 10px;
+  line-height: 10px;
 }
 
 .home-calendar-compact-grid .home-calendar-task-progress {
@@ -564,11 +584,37 @@
   overflow: hidden;
 }
 
-.calendar-cell-summary span {
+.calendar-cell-task-list {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.calendar-cell-task-title,
+.calendar-cell-task-more,
+.calendar-cell-task-progress {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.calendar-cell-task-title,
+.calendar-cell-task-more {
+  flex: 0 0 auto;
+  line-height: 1.24;
+}
+
+.calendar-cell-task-more {
+  color: #64748b;
+}
+
+.calendar-cell-task-progress {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 11px;
 }
 
 .calendar-task-card {

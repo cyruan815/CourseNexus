@@ -32,7 +32,7 @@ const monthResponse = {
     {
       date: "2026-07-14",
       course_count: 1,
-      task_count: 1,
+      task_count: 4,
       subtask_count: 2,
       completed_subtask_count: 1,
       status: "in_progress",
@@ -47,8 +47,28 @@ const monthResponse = {
           derived_status: "in_progress",
           sort_order: 1,
         },
+        {
+          task_id: "task_2",
+          plan_id: "plan_1",
+          course_id: "crs_123",
+          course_name: "计算机网络",
+          title: "信道与有线介质",
+          status: "not_started",
+          derived_status: "not_started",
+          sort_order: 2,
+        },
+        {
+          task_id: "task_3",
+          plan_id: "plan_1",
+          course_id: "crs_123",
+          course_name: "计算机网络",
+          title: "物理层安全隐患",
+          status: "not_started",
+          derived_status: "not_started",
+          sort_order: 3,
+        },
       ],
-      hidden_task_count: 0,
+      hidden_task_count: 1,
     },
   ],
 };
@@ -162,6 +182,9 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
     expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("信道与有线介质").length).toBeGreaterThan(0);
+    expect(container.querySelector(".calendar-cell-task-progress")).toHaveTextContent("1/2 完成");
+    expect(container.querySelector(".calendar-cell-task-more")).toHaveTextContent("...");
 
     fireEvent.click(screen.getByRole("gridcell", { name: "查看 2026-07-14 的课程任务" }));
 

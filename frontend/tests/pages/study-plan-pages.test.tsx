@@ -559,12 +559,24 @@ describe("study plan pages", () => {
   });
 
   it("renders the detail page inside the fixed workbench layout", async () => {
+    const otherPlan = {
+      ...savedDetail.plan,
+      id: "plan_2",
+      title: "期末冲刺计划",
+      goal_text: "集中复习错题",
+      start_date: "2026-07-16",
+      end_date: "2026-07-18",
+      updated_at: "2026-07-14T12:00:00+00:00",
+    };
     vi.stubGlobal(
       "fetch",
       vi.fn((input: RequestInfo | URL) => {
         const url = String(input);
         if (url.endsWith("/courses/crs_123")) {
           return Promise.resolve(successResponse(course, "req_course"));
+        }
+        if (url.endsWith("/courses/crs_123/study-plans")) {
+          return Promise.resolve(successResponse([savedDetail.plan, otherPlan], "req_plan_list"));
         }
         return Promise.resolve(successResponse(savedDetail, "req_detail"));
       }),
@@ -586,6 +598,13 @@ describe("study plan pages", () => {
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
     expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
+    expect(container.querySelector(".study-plan-course-layout")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "本课程计划" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /期末冲刺计划/ })).toHaveAttribute(
+      "href",
+      "/courses/crs_123/study-plans/plan_2",
+    );
+    expect(screen.getByRole("link", { name: /高等数学学习计划/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("renders the execution page inside the fixed workbench layout", async () => {
@@ -624,6 +643,8 @@ describe("study plan pages", () => {
     expect(container.querySelector(".study-plan-execution-taskrail .study-plan-plan-detail-link")).not.toBeInTheDocument();
     expect(container.querySelector(".study-plan-execution-main")).toHaveClass("has-pinned-completion");
     expect(container.querySelector(".study-plan-completion-actions")).toHaveClass("is-pinned-bottom");
+    expect(container.querySelector(".study-plan-task-qa-response")).toBeInTheDocument();
+    expect(container.querySelector(".study-plan-task-qa-composer")).toBeInTheDocument();
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {

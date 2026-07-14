@@ -100,8 +100,18 @@ function createHomeFetchMock(courses = backendCourses) {
                 derived_status: "not_started",
                 sort_order: 1,
               },
+              {
+                task_id: "task_calendar_extra",
+                plan_id: "plan_calendar",
+                course_id: "crs_discrete_math",
+                course_name: "离散数学",
+                title: "图论复习",
+                status: "not_started",
+                derived_status: "not_started",
+                sort_order: 2,
+              },
             ],
-            hidden_task_count: 0,
+            hidden_task_count: 1,
           },
         ],
       }, "req_month_calendar");
@@ -346,6 +356,9 @@ describe("HomePage", () => {
     expect(calendarTaskTitle.closest(".home-calendar-cell-summary")).toBeInTheDocument();
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-compact-grid");
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-roomy-grid");
+    const compactSummary = calendarTaskTitle.closest(".home-calendar-cell-summary") as HTMLElement;
+    expect(compactSummary.querySelector(".home-calendar-task-more")).toHaveTextContent("...");
+    expect(compactSummary.querySelector(".home-calendar-task-progress")).toHaveTextContent("0/2 完成");
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
     expect(screen.getByTestId("location-path")).toHaveTextContent("/calendar");

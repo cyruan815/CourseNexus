@@ -30,6 +30,8 @@
 - 页面不接受用户修改资料范围，不在前端拼接完整计划树，不在 C8 中生成讲义或任务测试题正文。
 - `/study-subtasks/:subtaskId` 是轻量执行页入口；计划详情页只通过二级任务 ID 跳转到该路由。
 
+2026-07-14 前端执行页布局约束：右侧 `AI 助教` 卡片内部把回答/提示区域放在上方可滚动区域，提问输入框和提交按钮固定在助教卡片底部；右侧 `任务摘要` 模块贴近右栏底部并保持精简资料列表。中间列的“完成任务 / 取消完成”按钮保持在当前任务内容流末端，内容短时落在中间面板底部，内容长时需要滚到底部才能看到，避免悬浮遮挡预览内容。切换二级任务时，前一个任务的内容生成可以在后台继续；蓝色提示会自动消退，黄色“后台生成中”只在真实生成状态存在时展示。生成失败状态不加载旧内容，成功内容只按当前二级任务 ID 显示。
+
 ## 执行页任务级问答
 
 `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 支持执行页围绕当前二级任务提问。请求体只包含 `conversation_id` 和 `question`，不允许前端覆盖资料范围。服务层先通过 `repository.get_execution_target()` 校验当前用户拥有该二级任务、父任务、计划和课程，再把 `StudySubTask.related_material_ids_json` 转成 `MaterialScope(include_all_parsed_materials=False, material_ids=...)`。

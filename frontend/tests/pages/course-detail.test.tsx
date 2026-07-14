@@ -178,6 +178,8 @@ describe("CourseDetailPage", () => {
     expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByText("生成入口")).not.toBeInTheDocument();
     expect(screen.queryByText("保存入口")).not.toBeInTheDocument();
+    expect(screen.queryByText("学习笔记")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成 知识点清单" })).toHaveClass("is-wide");
   });
 
   it("shows readable course terms in the detail header without rendering the description", async () => {

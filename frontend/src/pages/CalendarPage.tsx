@@ -73,6 +73,41 @@ function buildCalendarCells(referenceDate: Date, today = new Date()): CalendarCe
   });
 }
 
+function calendarSummaryTaskLines(summary: StudyCalendarDaySummary, maxLines: number): string[] {
+  const taskTitles = summary.task_summaries
+    .map((task) => task.title)
+    .filter((title) => title.trim().length > 0);
+  const fallback = taskTitles.length > 0 ? taskTitles : [`${summary.task_count} 个任务`];
+  const hasMore = summary.hidden_task_count > 0 || fallback.length > maxLines;
+  const visibleCount = hasMore ? Math.max(maxLines - 1, 1) : maxLines;
+  const visibleLines = fallback.slice(0, visibleCount);
+
+  return hasMore ? [...visibleLines, "..."] : visibleLines;
+}
+
+function CalendarCellSummary({ maxTaskLines = 3, summary }: { maxTaskLines?: number; summary: StudyCalendarDaySummary }) {
+  const taskLines = calendarSummaryTaskLines(summary, maxTaskLines);
+
+  return (
+    <span className="calendar-cell-summary">
+      <span className="calendar-cell-task-list" aria-label={`${summary.task_count} 个一级任务`}>
+        {taskLines.map((line, index) => (
+          <span
+            className={line === "..." ? "calendar-cell-task-more" : "calendar-cell-task-title"}
+            key={`${line}-${index}`}
+            title={line === "..." ? undefined : line}
+          >
+            {line}
+          </span>
+        ))}
+      </span>
+      <span className="calendar-cell-task-progress">
+        {summary.completed_subtask_count}/{summary.subtask_count} 完成
+      </span>
+    </span>
+  );
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) {
     return error.message;
@@ -397,12 +432,7 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
                         type={cell.dateKey ? "button" : undefined}
                       >
                         {cell.day ? <span className="home-calendar-day">{cell.day}</span> : null}
-                        {summary ? (
-                          <span className="calendar-cell-summary">
-                            <span>{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
-                            <span>{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
-                          </span>
-                        ) : null}
+                        {summary ? <CalendarCellSummary summary={summary} /> : null}
                       </Box>
                     );
                   })}
@@ -715,12 +745,7 @@ function GlobalCalendarPage() {
                         type={cell.dateKey ? "button" : undefined}
                       >
                         {cell.day ? <span className="home-calendar-day">{cell.day}</span> : null}
-                        {summary ? (
-                          <span className="calendar-cell-summary">
-                            <span>{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
-                            <span>{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
-                          </span>
-                        ) : null}
+                        {summary ? <CalendarCellSummary summary={summary} /> : null}
                       </Box>
                     );
                   })}
