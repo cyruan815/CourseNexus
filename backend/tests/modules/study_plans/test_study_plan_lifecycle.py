@@ -319,10 +319,19 @@ def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
                             "subtask_type": "learn",
                             "description": "按用户确认内容保存",
                             "related_material_ids": material_ids,
-                            "estimated_minutes": 60,
+                            "estimated_minutes": 45,
                             "citation_chunk_ids": ["chk_save"],
                             "sort_order": 1,
-                        }
+                        },
+                        {
+                            "title": "saved test",
+                            "subtask_type": "test",
+                            "description": "daily check",
+                            "related_material_ids": material_ids,
+                            "estimated_minutes": 15,
+                            "citation_chunk_ids": ["chk_save"],
+                            "sort_order": 2,
+                        },
                     ],
                 }
             ],
@@ -615,6 +624,9 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert first.tasks[0].title == "用户调整后的任务"
     assert first.subtasks[0].title == "用户调整后的学习项"
     assert first.subtasks[0].related_material_ids_json == [material_id]
+    assert first.subtasks[1].title == "saved test"
+    task_snapshot = first.plan.parsed_config_json["task_snapshot"]
+    assert task_snapshot[0]["subtasks"][1]["generation_parameters"]["task_test"]["question_count"] == 5
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1
     assert provider.batch_prompts == []
 
@@ -778,7 +790,7 @@ def test_save_study_plan_recovers_existing_plan_when_idempotent_insert_races(
         )
 
         assert second.plan.id == first.plan.id
-        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 1, "checkins": 1}
+        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 2, "checkins": 1}
     finally:
         first_db.close()
         second_db.close()
@@ -847,7 +859,7 @@ def test_save_study_plan_returns_conflict_when_raced_idempotency_body_differs(
             )
 
         assert exc_info.value.code == "IDEMPOTENCY_CONFLICT"
-        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 1, "checkins": 1}
+        assert _study_plan_counts(verify_db) == {"plans": 1, "tasks": 1, "subtasks": 2, "checkins": 1}
     finally:
         first_db.close()
         second_db.close()
@@ -1269,7 +1281,9 @@ def test_replace_study_plan_rejects_stale_expected_updated_at_from_concurrent_se
         assert exc_info.value.code == "STATE_CONFLICT"
         current = get_study_plan_detail(verify_db, user_id=user_id, plan_id=plan_id)
         assert [task.title for task in current.tasks] == ["第一轮替换任务"]
-        assert [subtask.title for subtask in current.subtasks] == ["用户调整后的学习项"]
+        current_subtask_titles = [subtask.title for subtask in current.subtasks]
+        assert len(current_subtask_titles) == 2
+        assert current_subtask_titles[1] == "saved test"
     finally:
         first_db.close()
         second_db.close()

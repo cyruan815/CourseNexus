@@ -13,6 +13,7 @@
 | Router | `backend/app/modules/study_plans/router.py` | 注册学习计划 API，按用途注入配置解析 / 计划生成 `ModelProvider`，读取 `Idempotency-Key`。 |
 | Service | `backend/app/modules/study_plans/service.py` | 权限、全材料预览、保存事务、幂等、替换、重生成和软删除。 |
 | Planner | `backend/app/modules/study_plans/planner.py` | map/reduce prompt、结构化生成调用、coverage 和预览校验。 |
+| Task tree rules | `backend/app/modules/study_plans/task_tree_rules.py` | Study Plan 层任务树不变量校验，包括每日唯一测试和测试覆盖范围。 |
 | Repository | `backend/app/modules/study_plans/repository.py` | active 查询、幂等查询、任务树查询、flush-only 写入和替换辅助。 |
 | Schemas | `backend/app/modules/study_plans/schemas.py` | 配置解析、预览、保存、替换和重生成请求/响应结构。 |
 
@@ -34,7 +35,7 @@
 - planner reduce prompt 明确目录页、主要内容页、版权页、感谢页和章节小结页不能作为普通 `learn` 任务引用；小结页只允许进入 `review` 或 `quiz/test` 的辅助引用。`preview_study_plan()` 在校验前会做确定性后处理：仅当 chunk 的结构化 heading 或正文首个非空行完整匹配受控元信息标题时，才把它识别为元信息；不再用 `summary` / `总结` 子串扫描正文，因此 `Summary Statistics`、`数据总结方法` 等正常知识内容不会被误删。若 `learn` 同时引用正文 chunk 和元信息 chunk，只保留正文引用；保存确认任务树时也会复用该清理规则。
 - planner reduce prompt 现在会读取 `StudyPlanBuildRequest.preference` 派生出的 `planner_strategy`，并显式使用 `content_depth`、`example_intensity`、`assessment_intensity`、`review_intensity` 控制讲解深度、例题、测评和 review 强度。映射为：`fast_track=concise/low/low/low`、`balanced=standard/standard/standard/standard`、`mastery=detailed/high/high/high`、`sprint=focused/standard/high/high`；`advanced` 兼容为 `sprint`，未知或缺省回落 `balanced`。
 - planner reduce prompt 同时读取 `StudyPlanBuildRequest.diagnostic_profile` 并按固定优先级合并：用户时间约束 > 诊断得出的必要补基础 > 学习方式 preference 派生配置 > 额外例题、测试、review。`foundation_needed=true` 会进入 `planner_strategy.foundation_required`，即使 `fast_track` 也必须保留前置补基础任务；`weak_topics` 要更靠前更细，`weak_area` 决定概念、计算、应用或记忆的加强方向，`explanation_style` 决定任务 description 风格。该能力仅改变 prompt、preview metadata 和保存追溯，不新增表、不改前端和结构化输出 schema。
-- `validate_preview()` 除结构校验外，还会校验生成质量底线：`quiz` 和 `test` 都必须位于当天最后；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间，最后一天必须包含综合自测。每日任务时长超过 `daily_available_minutes` 时，只有 preview capacity 已明确 `feasibility_status = over_capacity` 且 `warnings` 包含 `PLAN_OVER_CAPACITY` 才允许返回，由前端展示容量 warning；结构非法、日期越界、引用缺失和范围外资料仍返回 `GENERATION_SCHEMA_INVALID`。
+- `validate_preview()` 除结构校验外，还会校验生成质量底线：每个一级任务必须且只能包含一个 `quiz` / `test`，并且该测试必须是当天最后一个二级任务；每个二级任务必须引用资料 chunk；完成型目标每日时长不得明显低于可用时间。非最后一天的测试覆盖当天前置 `learn` / `review` 的资料和 chunk；最后一天的测试是全计划综合测试，覆盖全计划所有非测试任务的资料和 chunk，不再额外安排当天测试。每日任务时长超过 `daily_available_minutes` 时，只有 preview capacity 已明确 `feasibility_status = over_capacity` 且 `warnings` 包含 `PLAN_OVER_CAPACITY` 才允许返回，由前端展示容量 warning；结构非法、日期越界、引用缺失和范围外资料仍返回 `GENERATION_SCHEMA_INVALID`。
 - Study Mode 只消费 materials 已持久化的解析质量摘要，不直接调用 parser，也不解释 Docling 内部类型。`parse_quality = partial` 或 `unknown` 会转成 `MATERIAL_PARSE_PARTIAL` / `MATERIAL_PARSE_QUALITY_UNKNOWN`；`parse_diagnostics_json.warnings[]` 中 `severity = "warning"` 的条目会转成 `MATERIAL_PARSE_DIAGNOSTIC_WARNING`，原始 parser code/message 保存在 `details.diagnostic_code` 和 `details.diagnostic_message`；`severity = "info"` 不升级为 preview warning。
 - 资料解析质量 warning 只写入 `generation_metadata.material_quality.warnings`，不得写入 `capacity.warnings`。P5a 不新增 block 策略，`NO_PARSED_MATERIAL` 和 `MATERIAL_COVERAGE_INCOMPLETE` 保持原有阻断语义。
 - 资料解析层的公式 OCR、图表理解、图片页补全，以及模型 provider 的 `responses.parse` 兼容配置，不属于 study-mode 生命周期模块职责，后续应分别在 materials/parser 和 model provider 任务中处理。
@@ -47,7 +48,7 @@
 
 ## 不变量
 
-- S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。`client_flow = "wizard_v1"` 的保存请求必须额外在 preview 生成前校验 `tasks` 非空，失败返回 `PREVIEW_TASKS_REQUIRED`。
+- S02 确认任务树保存和替换都必须在任何计划、任务、打卡写入前完成完整性校验；失败返回 `VALIDATION_ERROR` 或资料 scope 的 `NOT_FOUND`，不得留下部分写入。该校验复用 Study Plan 层的每日唯一测试规则，防止前端绕过 preview 提交缺少测试、多测试、测试不在最后或覆盖范围不完整的任务树。`client_flow = "wizard_v1"` 的保存请求必须额外在 preview 生成前校验 `tasks` 非空，失败返回 `PREVIEW_TASKS_REQUIRED`。
 - S02 不新增业务表；幂等修复新增 `study_plans.idempotency_key_hash` 和唯一索引迁移，baseline migration 不回改。
 - 计划保存只写 `study_plans`、`study_tasks`、`study_subtasks`。
 - 未携带 `Idempotency-Key` 的保存请求允许创建多份计划；携带 key 的保存请求必须在数据库唯一约束竞争后恢复为原计划或返回 `IDEMPOTENCY_CONFLICT`，不得暴露 500。
@@ -98,18 +99,19 @@
 - 非法 `generation_parameters.task_test` 在保存/替换时返回 `VALIDATION_ERROR`；旧计划中若存在脏默认参数，运行 task-test 生成时返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 生成记录。
 - task-test 按需生成合并计划默认参数和本次请求时，显式 per-type counts 会覆盖快照分布；仅覆盖 `difficulty` 会保留快照分布；显式传 `question_count` 或字符串数组 `question_types` 但未传 per-type counts 时，会清掉快照里的 `question_type_counts`，退回旧的总题数 + 题型白名单契约。
 
-## 2026-07-13 一级任务收尾测试约束
+## 2026-07-14 每日唯一测试约束
 
-新生成和新保存的 study-mode 计划必须保持学习闭环：每个一级任务 `StudyTask` 的最后一个二级任务必须是测评型 subtask，`subtask_type` 为 `quiz` 或 `test`。`learn` / `review` 子任务用于讲义学习、回顾和练习，必须排在该一级任务的测评型子任务之前。
+新生成和新保存的 study-mode 计划必须保持学习闭环：每个一级任务 `StudyTask` 必须且只能包含一个测评型 subtask，`subtask_type` 为 `quiz` 或 `test`，并且它必须是该一级任务的最后一个二级任务。`learn` / `review` 子任务用于讲义学习、回顾和练习，必须排在测评型子任务之前。
 
 该约束的含义：
 
 - 任务类型边界必须稳定：`learn` 是学习讲义任务，用于学习新内容；`review` 是复习讲义任务，只能回顾此前已经安排学习过的内容；`quiz` / `test` 是测试题任务。
 - `learn` / `review` 不得携带 `generation_parameters.task_test`，也不得在标题或描述中写“几道选择题、几道计算题”等明确测试题量；题量要求必须放入当天最后的 `quiz` / `test`。
-- planner preview 阶段应把 `quiz` / `test` 归一化到每个一级任务的最后，并重排 `sort_order`。
-- 保存 exact tasks 时仍要校验最终任务树；如果某个一级任务没有以 `quiz` 或 `test` 收尾，应返回稳定校验错误，而不是保存半闭环计划。
+- planner preview 阶段会提示模型按每日唯一测试规则输出，并在 `validate_preview()` 中拒绝非法任务树。
+- 保存 exact tasks 和替换计划时仍要校验最终任务树；如果某个一级任务没有测试、存在多个测试、测试不在最后或覆盖范围不完整，应返回稳定校验错误，而不是保存半闭环计划。
+- 非最后一天测试是“当日测试”，其 `related_material_ids` 和 `citation_chunk_ids` 必须覆盖当天前置 `learn` / `review` 的资料并集和 chunk 并集。
+- 最后一天测试是“全计划综合测试”，其 `related_material_ids` 和 `citation_chunk_ids` 必须覆盖全计划所有非测试任务的资料并集和 chunk 并集；最后一天不再额外安排当天测试。
 - quiz/test 子任务继续通过 `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 按需生成 `task_test`；learn/review 子任务通过 `POST /api/v1/study-subtasks/{subtask_id}/handouts` 按需生成 `handout`。
 - 前端可把新计划的一级任务最后一个子任务视为测试入口，但读取历史计划时仍应容忍异常顺序：按后端返回的 `subtask_type` 决定展示“生成讲义”或“生成任务测试题”，不要只靠位置判断能力。
-- 该约束不代表每天只有一份讲义；每个 learn/review 二级任务都可以有自己的任务讲义，讲义通过 `study_subtask_id + content_type=handout` 幂等绑定。
 
-本约束的真实验证等待用户提供整轮 study-mode 测试 prompt 后执行，不在实施阶段运行局部测试。
+测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖 preview 规则；`test_study_plan_lifecycle.py` 覆盖保存/替换与 `task_snapshot.generation_parameters.task_test`；`test_study_plan_api.py` 覆盖 API 保存非法任务树返回 `VALIDATION_ERROR`。

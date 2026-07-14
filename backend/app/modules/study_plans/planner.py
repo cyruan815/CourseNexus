@@ -13,6 +13,7 @@ from app.modules.study_plans.schemas import (
     StudyPlanPreview,
     StudyPlanReduction,
 )
+from app.modules.study_plans.task_tree_rules import is_assessment_subtask, validate_daily_assessment_contract
 
 
 _WEAK_AREA_STRATEGY_RULES = {
@@ -259,9 +260,6 @@ def make_coverage(*, expected_material_ids: set[str], processed_material_ids: se
 def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]) -> None:
     allowed_types = {"learn", "review", "quiz", "test"}
     completion_quality_required = _requires_completion_quality(preview.goal_text)
-    final_task_date = max((task.task_date for task in preview.tasks), default=preview.end_date)
-    final_task_has_assessment = False
-
     for task in preview.tasks:
         if task.task_date < preview.start_date or task.task_date > preview.end_date:
             raise _invalid_generation("计划任务日期超出请求范围")
@@ -274,17 +272,10 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
         if completion_quality_required and daily_minutes < _minimum_required_minutes(preview.daily_available_minutes):
             raise _invalid_generation("每日任务时长利用不足")
 
-        assessment_suffix_started = False
         for subtask in task.subtasks:
             if subtask.subtask_type not in allowed_types:
                 raise _invalid_generation("二级任务类型无效")
-            if _is_assessment_type(subtask.subtask_type):
-                assessment_suffix_started = True
-                if task.task_date == final_task_date:
-                    final_task_has_assessment = True
-            else:
-                if assessment_suffix_started:
-                    raise _invalid_generation("自测任务必须排在当天最后")
+            if not is_assessment_subtask(subtask):
                 if "task_test" in subtask.generation_parameters:
                     raise _invalid_generation("学习或复习任务不能携带测试题生成参数")
                 if _has_assessment_quantity_text(subtask.title, subtask.description):
@@ -297,8 +288,7 @@ def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]
             if not related_material_ids.issubset(scoped_material_ids):
                 raise _invalid_generation("二级任务关联了范围外资料")
 
-    if completion_quality_required and not final_task_has_assessment:
-        raise _invalid_generation("最后一天必须包含综合自测")
+    validate_daily_assessment_contract(preview.tasks)
 
 
 def _build_map_prompt(*, batch: MaterialContextBatch, payload: StudyPlanBuildRequest) -> str:
@@ -378,9 +368,6 @@ def _has_over_capacity_warning(preview: StudyPlanPreview) -> bool:
         and "PLAN_OVER_CAPACITY" in warnings
     )
 
-
-def _is_assessment_type(subtask_type: str) -> bool:
-    return subtask_type in {"quiz", "test"}
 
 
 def _has_assessment_quantity_text(title: str, description: str | None) -> bool:

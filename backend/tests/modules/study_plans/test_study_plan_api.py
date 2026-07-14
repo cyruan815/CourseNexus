@@ -55,9 +55,18 @@ class StudyPlanApiProvider:
                                     "subtask_type": "learn",
                                     "description": "Alpha",
                                     "related_material_ids": material_ids,
-                                    "estimated_minutes": 30,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_api"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "daily quiz",
+                                    "subtask_type": "quiz",
+                                    "description": "check day scope",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_api"],
+                                    "sort_order": 2,
                                 }
                             ],
                         },
@@ -71,9 +80,18 @@ class StudyPlanApiProvider:
                                     "subtask_type": "review",
                                     "description": "Alpha",
                                     "related_material_ids": material_ids,
-                                    "estimated_minutes": 30,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_api"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "final test",
+                                    "subtask_type": "test",
+                                    "description": "cover full plan",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_api"],
+                                    "sort_order": 2,
                                 }
                             ],
                         },
@@ -131,7 +149,7 @@ def create_course(client: TestClient, token: str) -> str:
     return response.json()["data"]["id"]
 
 
-def upload_and_parse_material(client: TestClient, token: str, course_id: str) -> None:
+def upload_and_parse_material(client: TestClient, token: str, course_id: str) -> str:
     headers = {"Authorization": f"Bearer {token}"}
     upload = client.post(
         f"/api/v1/courses/{course_id}/materials",
@@ -142,6 +160,7 @@ def upload_and_parse_material(client: TestClient, token: str, course_id: str) ->
     material_id = upload.json()["data"]["id"]
     parse = client.post(f"/api/v1/materials/{material_id}/parse-retries", headers=headers)
     assert parse.status_code == 200
+    return material_id
 
 
 def build_payload() -> dict[str, object]:
@@ -184,3 +203,52 @@ def test_study_plan_api_preview_save_list_and_detail(client: TestClient) -> None
     detail = client.get(f"/api/v1/study-plans/{plan_id}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["data"]["plan"]["id"] == plan_id
+
+def test_study_plan_api_rejects_confirmed_tasks_without_daily_test(client: TestClient) -> None:
+    token = register_and_token(client, "bob")
+    course_id = create_course(client, token)
+    material_id = upload_and_parse_material(client, token, course_id)
+    headers = {"Authorization": f"Bearer {token}", "Idempotency-Key": "invalid-tree-key"}
+    payload = build_payload() | {
+        "client_flow": "wizard_v1",
+        "tasks": [
+            {
+                "title": "? 1 ?????",
+                "task_date": "2026-07-10",
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "title": "??: Intro",
+                        "subtask_type": "learn",
+                        "description": "Alpha",
+                        "related_material_ids": [material_id],
+                        "estimated_minutes": 60,
+                        "citation_chunk_ids": ["chk_api"],
+                        "sort_order": 1,
+                    }
+                ],
+            },
+            {
+                "title": "? 2 ?????",
+                "task_date": "2026-07-11",
+                "sort_order": 2,
+                "subtasks": [
+                    {
+                        "title": "????",
+                        "subtask_type": "test",
+                        "description": "????????",
+                        "related_material_ids": [material_id],
+                        "estimated_minutes": 60,
+                        "citation_chunk_ids": ["chk_api"],
+                        "sort_order": 1,
+                    }
+                ],
+            },
+        ],
+    }
+
+    response = client.post(f"/api/v1/courses/{course_id}/study-plans", headers=headers, json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["message"] == "每天必须包含且只包含一个测试任务"

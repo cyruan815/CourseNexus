@@ -93,9 +93,18 @@ class FoundationPlanProvider:
                                     "subtask_type": "learn",
                                     "description": "Alpha",
                                     "related_material_ids": [self.material_id],
-                                    "estimated_minutes": 30,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_foundation"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "foundation day test",
+                                    "subtask_type": "test",
+                                    "description": "cover scheduled learning",
+                                    "related_material_ids": [self.material_id],
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_foundation"],
+                                    "sort_order": 2,
                                 }
                             ],
                         }
