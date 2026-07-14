@@ -696,12 +696,6 @@ export function StudyPlanCreatePage() {
       />
 
       <Box className="study-plan-shell study-plan-create-shell" component="main" data-workbench-scroll="locked">
-        {error ? (
-          <Alert color="red" role="alert" title="学习计划处理失败" variant="light">
-            {error}
-          </Alert>
-        ) : null}
-
         {isPreviewStale ? (
           <Alert color="yellow" role="status" title="预览已过期" variant="light">
             配置已修改，请重新生成预览后保存。
@@ -799,6 +793,12 @@ export function StudyPlanCreatePage() {
                 生成计划预览
               </Button>
             </Group>
+
+            {error ? (
+              <Alert color="red" role="alert" title="学习计划处理失败" variant="light">
+                {error}
+              </Alert>
+            ) : null}
           </Paper>
         </Box>
 

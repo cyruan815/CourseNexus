@@ -881,9 +881,12 @@ describe("study plan pages", () => {
       target: { value: "三天完成线性代数第一章复习" },
     });
 
-    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    const previewButton = screen.getByTestId("study-plan-preview");
+    fireEvent.click(previewButton);
 
-    expect(await screen.findByText("请先完成学情诊断。")).toBeInTheDocument();
+    const previewError = await screen.findByText("请先完成学情诊断。");
+    expect(previewError).toBeInTheDocument();
+    expect(previewButton.compareDocumentPosition(previewError) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/v1/courses/crs_123/study-plans/preview",
       expect.anything(),
@@ -1155,6 +1158,9 @@ describe("study plan pages", () => {
     expect(within(topbar as HTMLElement).queryByRole("button", { name: "删除计划" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
+    expect(screen.getByText("阅读并整理概念")).toBeInTheDocument();
+    expect(screen.queryByText("含义")).not.toBeInTheDocument();
+    expect(document.querySelector(".study-plan-task-structure-panel")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "进入学习：学习: 向量空间" })).toHaveAttribute(
       "href",
       "/study-subtasks/subtask_1",

@@ -13,6 +13,11 @@ function splitTaskDescription(description: string): DescriptionPart[] {
     return [];
   }
 
+  const firstMarkerIndex = matches[0]?.index ?? -1;
+  if (firstMarkerIndex < 0 || firstMarkerIndex > 8) {
+    return [];
+  }
+
   return matches
     .map((match, index) => {
       const label = match[1] ?? "";

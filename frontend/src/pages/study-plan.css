@@ -181,13 +181,12 @@
 }
 
 .study-plan-description-part {
-  display: grid;
-  grid-template-columns: 4.8em minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
+  display: block;
 }
 
 .study-plan-description-label {
+  display: block;
+  margin-bottom: 2px;
   color: #334155;
 }
 
@@ -278,13 +277,13 @@
 }
 
 .study-plan-detail-layout {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-  align-items: stretch;
-  overflow: hidden;
+  align-items: start;
+  overflow: visible;
 }
 
 .study-plan-disabled-row {
@@ -299,12 +298,16 @@
 
 .study-plan-lifecycle-panel {
   flex: 0 1 auto;
-  max-height: min(48vh, 520px);
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   border-color: #bfdbfe;
   background:
     linear-gradient(135deg, rgba(239, 246, 255, 0.86), rgba(248, 255, 253, 0.9)),
     #ffffff;
+}
+
+.study-plan-task-structure-panel {
+  overflow: visible;
 }
 
 .study-plan-lifecycle-form {
