@@ -43,7 +43,7 @@
 - `material_scope_metadata` 写入 `subtask_id` 和 `task_id`；Course QA 保存用户消息后再补写实际 `used_material_ids`。
 - 模型问题会附加课程、计划、一级任务、二级任务标题、类型和描述作为任务上下文；数据库中的用户消息仍保存原始问题。
 
-返回结构复用课程问答响应，包含 `conversation_id`、`user_message_id`、`assistant_message_id`、`answer_text`、`answer_type`、`source_citations` 和 `used_material_ids`。当前二级任务没有 parsed chunk 或没有相关命中时返回 `answer_type="no_source"`，引用和实际使用资料均为空数组，不调用伪引用兜底。
+返回结构复用课程问答响应，包含 `conversation_id`、`user_message_id`、`assistant_message_id`、`answer_text`、`answer_type`、`source_citations` 和 `used_material_ids`。`answer_text` 中的 `[[cite:N]]` 与 `source_citations[N-1]` 对应；执行页和课程详情页复用 `features/course-qa/InlineCitationAnswer`，将标记显示为行内序号角标，悬停后展示资料名、页码和 `hit_text` 引用片段，不直接暴露原始标记。当前二级任务没有 parsed chunk 或没有相关命中时返回 `answer_type="no_source"`，引用和实际使用资料均为空数组，不调用伪引用兜底。
 
 任务级问答只写 `conversations`、`messages` 和有真实命中的 `source_citations`。它不修改二级任务状态，不汇总一级任务或计划状态，也不写 `checkin_records`。前端执行页在右侧 AI 助教区维护本页 `conversation_id`，下一次追问复用该 ID；提问失败只影响助教区，不影响完成打卡、讲义生成或任务测试题生成。
 

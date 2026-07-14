@@ -31,6 +31,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
+import { InlineCitationAnswer } from "../features/course-qa/InlineCitationAnswer";
 import {
   askStudySubtaskQuestion,
   exportGeneratedContentMarkdown,
@@ -1011,17 +1012,7 @@ export function StudyTaskExecutionPage() {
                                 {qaAnswer.answer_type === "no_source" ? "无引用" : "已引用资料"}
                               </Badge>
                             </Group>
-                            <Text size="sm">{qaAnswer.answer_text}</Text>
-                            {qaAnswer.source_citations.length > 0 ? (
-                              <Stack gap={4}>
-                                {qaAnswer.source_citations.slice(0, 2).map((citation, index) => (
-                                  <Text c="dimmed" key={citation.id ?? `${citation.material_id}-${index}`} size="xs">
-                                    {citation.material_name}
-                                    {citation.page ? ` · p.${citation.page}` : ""}
-                                  </Text>
-                                ))}
-                              </Stack>
-                            ) : null}
+                            <InlineCitationAnswer citations={qaAnswer.source_citations} content={qaAnswer.answer_text} />
                           </Stack>
                         </Paper>
                       ) : (

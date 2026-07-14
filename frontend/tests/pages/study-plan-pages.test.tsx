@@ -1344,7 +1344,7 @@ describe("study plan pages", () => {
           conversation_id: "conv_task_1",
           user_message_id: "msg_user_1",
           assistant_message_id: "msg_assistant_1",
-          answer_text: "先看线代第一章.pdf 的向量空间定义，再做基础题。",
+          answer_text: "先看线代第一章.pdf 的向量空间定义，再做基础题。 [[cite:1]]",
           answer_type: "grounded",
           source_citations: [
             {
@@ -1374,7 +1374,14 @@ describe("study plan pages", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "提问" }));
 
-    expect(await screen.findByText("先看线代第一章.pdf 的向量空间定义，再做基础题。")).toBeInTheDocument();
+    expect(await screen.findByText("先看线代第一章.pdf 的向量空间定义，再做基础题。", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText(/\[\[cite:1\]\]/)).not.toBeInTheDocument();
+    const citationMarker = screen.getByRole("button", { name: "查看引用 1：线代第一章.pdf" });
+    fireEvent.mouseEnter(citationMarker);
+    await waitFor(() => expect(screen.getByLabelText("引用 1 详情")).toHaveStyle({ opacity: "1" }));
+    const citationTooltip = screen.getByLabelText("引用 1 详情");
+    expect(citationTooltip).toHaveTextContent("第 3 页");
+    expect(citationTooltip).toHaveTextContent("向量空间定义");
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/v1/study-subtasks/subtask_1/qa/questions",

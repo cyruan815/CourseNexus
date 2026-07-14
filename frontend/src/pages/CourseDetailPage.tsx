@@ -8,7 +8,6 @@ import {
   Card,
   Divider,
   Group,
-  HoverCard,
   Paper,
   Skeleton,
   Stack,
@@ -32,11 +31,11 @@ import {
   IconSun,
   IconUser,
 } from "@tabler/icons-react";
-import ReactMarkdown from "react-markdown";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { useCourseNexusTheme } from "../app/theme";
+import { InlineCitationAnswer } from "../features/course-qa/InlineCitationAnswer";
 import {
   askCourseQuestion,
   generateCourseContent,
@@ -201,77 +200,6 @@ function TodayTodoCard({ courseId, plans }: { courseId: string; plans: StudyPlan
   );
 }
 
-function citationLocation(citation: SourceCitation): string {
-  if (citation.page !== null) {
-    return `第 ${citation.page} 页`;
-  }
-  return citation.page_index !== null ? `第 ${citation.page_index + 1} 页` : "位置待定位";
-}
-
-function answerWithCitationLinks(content: string, citations: SourceCitation[]): string {
-  let validMarkerCount = 0;
-  const normalized = content.replace(/\[\[cite:(\d+)\]\]/g, (_marker, rawOrdinal: string) => {
-    const ordinal = Number(rawOrdinal);
-    if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > citations.length) {
-      return "";
-    }
-    validMarkerCount += 1;
-    return `[${ordinal}](#course-citation-${ordinal})`;
-  });
-
-  if (citations.length === 0 || validMarkerCount > 0) {
-    return normalized;
-  }
-  const legacyMarkers = citations.map((_citation, index) => `[${index + 1}](#course-citation-${index + 1})`).join(" ");
-  return `${normalized.trimEnd()} ${legacyMarkers}`;
-}
-
-function CitationMarker({ citation, ordinal }: { citation: SourceCitation; ordinal: number }) {
-  return (
-    <HoverCard closeDelay={100} openDelay={120} position="bottom" shadow="md" width={360} withArrow withinPortal>
-      <HoverCard.Target>
-        <button
-          aria-label={`查看引用 ${ordinal}：${citation.material_name}`}
-          className="course-detail-citation-marker"
-          type="button"
-        >
-          {ordinal}
-        </button>
-      </HoverCard.Target>
-      <HoverCard.Dropdown aria-label={`引用 ${ordinal} 详情`} className="course-detail-citation-popover" role="tooltip">
-        <Stack gap="xs">
-          <Box>
-            <Text fw={700} lineClamp={2}>{citation.material_name}</Text>
-            <Text c="dimmed" size="xs">{citationLocation(citation)}</Text>
-          </Box>
-          <Divider />
-          <Text className="course-detail-citation-snippet" size="sm">{citation.hit_text}</Text>
-        </Stack>
-      </HoverCard.Dropdown>
-    </HoverCard>
-  );
-}
-
-function AnswerMarkdown({ citations, content }: { citations: SourceCitation[]; content: string }) {
-  return (
-    <ReactMarkdown
-      components={{
-        a: ({ children, href }) => {
-          const match = href?.match(/^#course-citation-(\d+)$/);
-          if (match) {
-            const ordinal = Number(match[1]);
-            const citation = citations[ordinal - 1];
-            return citation ? <CitationMarker citation={citation} ordinal={ordinal} /> : <>{children}</>;
-          }
-          return <a href={href}>{children}</a>;
-        },
-      }}
-    >
-      {answerWithCitationLinks(content, citations)}
-    </ReactMarkdown>
-  );
-}
-
 interface QaMessage {
   answerType?: string | null;
   citations?: SourceCitation[];
@@ -344,7 +272,7 @@ function QaWorkspace({
               <Group gap="xs">
                 {message.role === "assistant" ? <Badge color={message.status === "error" ? "red" : message.answerType === "grounded" ? "teal" : "gray"} variant="light">{message.status === "error" ? "回答失败" : message.answerType === "grounded" ? "基于资料" : "AI 助教"}</Badge> : <Badge color="blue" variant="light">{"你的问题"}</Badge>}
               </Group>
-              <Box className="course-detail-answer-text">{message.role === "assistant" ? <AnswerMarkdown citations={message.citations ?? []} content={message.content} /> : <p>{message.content}</p>}</Box>
+              <Box className="course-detail-answer-text">{message.role === "assistant" ? <InlineCitationAnswer citations={message.citations ?? []} content={message.content} /> : <p>{message.content}</p>}</Box>
             </Stack>
           </Box>
         )) : <Box className="course-detail-qa-empty"><IconMessageCircle2 size={42} stroke={1.6} /><Stack gap={4}><Text fw={700}>{"选择资料后开始提问"}</Text><Text c="dimmed" size="sm">{"上传并解析资料后，可围绕选定资料提问。"}</Text></Stack></Box>}
