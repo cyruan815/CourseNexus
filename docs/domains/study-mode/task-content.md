@@ -374,7 +374,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
-，块级公式只用独立的 `$$...$$`，禁止 `\(...\)`、`\[...\]` 和单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。前端 Markdown 渲染和 PDF renderer 负责数学排版；后端生成阶段不做公式分隔符自动转换。
+Handout prompt 要求行内公式只使用 `$...$`，块级公式只使用独立的 `$$...$$`，禁止 `\(...\)`、`\[...\]` 和单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。后端生成阶段不做公式分隔符自动转换，PDF renderer 负责数学排版；前端 Markdown 详情页尚未接入数学渲染，后续由前端单独实现。
 
 Handout 仍只读取当前二级任务关联资料。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，仅 handout 专用分支过滤 material-context batch；公共 material-context 查询保持当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序等基础边界。
 
@@ -392,7 +392,7 @@ Handout PDF 导出读取 `ai_generated_contents.content` Markdown，经 Markdown
 
 计划保存时会在 `parsed_config_json.task_snapshot[].subtasks[].generation_parameters.task_test` 保存 quiz/test 默认生成参数。模型或前端给出的 `{ "single_choice": 10, "short_answer": 3 }`、数组格式、`items` / `questions` / `types` / `question_types` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象，以及 `{"10道选择题": "single_choice", "3道计算题": "short_answer"}` 这类题量文案映射，都会归一化为规范测试题参数；`task_test: "single_choice"` 搭配同级 `question_count` 这类模型 shorthand 会归一化为总题数 + 题型白名单。因此真实 E2E 可以传 `{ "force_regenerate": true, "parameters": {} }` 来验证计划中“10 道选择题和 3 道计算题”最终生成 13 题且分布为 10/3。
 
-合并计划默认参数和本次请求时以计划默认值为底：本次请求显式传 per-type counts 时用本次分布覆盖 stored 分布；本次请求只传 `difficulty` 时保留 stored 分布；本次请求显式传 `question_count` 或字符串数组形式的 `question_types`、但没有传 per-type counts 时，清掉 stored `question_type_counts`，退回“总题数 + 题型白名单”旧契约，避免旧 10/3 分布污染新请求。
+合并计划默认参数和本次请求时以计划默认值为底：本次请求显式传 per-type counts 时，用本次题数和分布完整覆盖 stored 题数与分布；本次请求只传 `difficulty` 时保留 stored 题数和分布；本次请求只传字符串数组形式的 `types` / `question_types`、没有传 per-type counts 时，保留 stored `question_count`，用请求题型替换 stored `question_types`，并清掉 stored `question_type_counts`，退回“原总题数 + 新题型白名单”契约。若计划没有 stored `question_count`，才使用 schema 默认的 5 道题；本次请求显式传 `question_count` 时，以请求题数覆盖 stored 总题数。
 
 Task-test prompt 在 `question_type_counts` 存在时必须明确写出每种题型数量，例如 `single_choice 10 道，short_answer 3 道`；没有 `question_type_counts` 时只写总题数和题型白名单，不凭空平均分配。真正非法默认参数在保存/替换阶段返回 `VALIDATION_ERROR`；旧计划中若存在脏默认参数，运行 task-test 生成时返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
 
@@ -444,6 +444,6 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 - `quiz` / `test` 仍然只能生成 `task_test`。
 - 非最后一天测试的 `related_material_ids_json` / `citation_chunk_ids` 在计划阶段已覆盖当天前置学习任务。
 - 最后一天综合测试的 `related_material_ids_json` / `citation_chunk_ids` 在计划阶段已覆盖全计划所有非测试任务。
-- `task_test` 生成继续读取当前测试二级任务的 `related_material_ids_json` 和默认 `generation_parameters.task_test`；请求显式提供 `types`、`questions`、`items`、`question_type_counts` 或中文题量映射时覆盖计划默认题量分布，只覆盖 `difficulty` 时保留计划默认分布。
+- `task_test` 生成继续读取当前测试二级任务的 `related_material_ids_json` 和默认 `generation_parameters.task_test`；请求只提供字符串数组形式的 `types` / `question_types` 时保留计划默认总题数，只替换题型白名单并清除旧的精确题型分布；请求通过 `questions`、`items`、`question_type_counts` 或中文题量映射显式提供每种题型数量时，用请求题数和分布完整覆盖计划默认值；只覆盖 `difficulty` 时保留计划默认题数与分布。
 
 这保证了测试题生成链路仍按原有二级任务范围运行，同时让“当天测试 / 全计划综合测试”的语义在计划数据里可追溯。

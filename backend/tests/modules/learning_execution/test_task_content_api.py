@@ -963,7 +963,7 @@ def test_generate_handout_material_coverage_incomplete_saves_failed_record(api: 
     assert content.error_code == "MATERIAL_COVERAGE_INCOMPLETE"
 
 
-def test_generate_task_test_types_alias_overrides_stored_distribution(api: ApiHarness) -> None:
+def test_generate_task_test_types_alias_keeps_stored_question_count(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
     _set_stored_task_test_generation_parameters(
@@ -987,9 +987,39 @@ def test_generate_task_test_types_alias_overrides_stored_distribution(api: ApiHa
         max_tokens=10_000,
     )
 
-    assert "题数：5；题型：short_answer" in provider.prompts[0]
-    assert len(result.content_json["questions"]) == 5
+    assert "题数：3；题型：short_answer" in provider.prompts[0]
+    assert "每种题型数量：" not in provider.prompts[0]
+    assert len(result.content_json["questions"]) == 3
     assert {question["question_type"] for question in result.content_json["questions"]} == {"short_answer"}
+
+
+def test_generate_task_test_types_alias_keeps_stored_question_count_via_api(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _set_stored_task_test_generation_parameters(
+        api.db,
+        parameters={
+            "question_count": 3,
+            "question_types": ["single_choice"],
+            "question_type_counts": [{"question_type": "single_choice", "question_count": 3}],
+            "difficulty": "medium",
+        },
+    )
+    provider = FlexibleTaskTestModelProvider()
+    app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: provider
+
+    response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"force_regenerate": True, "parameters": {"types": ["short_answer"]}},
+    )
+
+    assert response.status_code == 200
+    assert "题数：3；题型：short_answer" in provider.prompts[0]
+    assert "每种题型数量：" not in provider.prompts[0]
+    questions = response.json()["data"]["content_json"]["questions"]
+    assert len(questions) == 3
+    assert {question["question_type"] for question in questions} == {"short_answer"}
 
 
 def test_generate_task_test_questions_alias_overrides_stored_distribution(api: ApiHarness) -> None:
@@ -1102,6 +1132,19 @@ def test_merge_task_test_parameters_clears_stored_question_type_counts_for_legac
     assert "question_type_counts" not in merged
     assert merged["question_count"] == 1
     assert merged["question_types"] == ["single_choice"]
+
+
+def test_merge_task_test_parameters_types_alias_keeps_stored_question_count() -> None:
+    merged = _merge_task_test_parameters(
+        stored_parameters=_stored_task_test_parameters_with_counts(),
+        request_parameters={"types": ["short_answer"]},
+    )
+
+    assert merged == {
+        "question_count": 13,
+        "types": ["short_answer"],
+        "difficulty": "medium",
+    }
 
 
 def test_merge_task_test_parameters_replaces_stored_question_type_counts_for_per_type_override() -> None:
