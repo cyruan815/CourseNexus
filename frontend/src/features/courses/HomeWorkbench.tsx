@@ -90,33 +90,20 @@ function getDateKey(year: number, month: number, day: number): string {
   return `${year}-${padDatePart(month + 1)}-${padDatePart(day)}`;
 }
 
-function homeCalendarTaskLines(summary: StudyCalendarDaySummary, maxLines: number): string[] {
+function homeCalendarTaskTitle(summary: StudyCalendarDaySummary): string {
   const taskTitles = summary.task_summaries
     .map((task) => task.title)
     .filter((title) => title.trim().length > 0);
-  const fallback = taskTitles.length > 0 ? taskTitles : [`${summary.task_count} 个任务`];
-  const hasMore = summary.hidden_task_count > 0 || fallback.length > maxLines;
-  const visibleCount = hasMore ? Math.max(maxLines - 1, 1) : maxLines;
-  const visibleLines = fallback.slice(0, visibleCount);
-
-  return hasMore ? [...visibleLines, "..."] : visibleLines;
+  return taskTitles[0] ?? `${summary.task_count} 个任务`;
 }
 
 function HomeCalendarCellSummary({ summary }: { summary: StudyCalendarDaySummary }) {
-  const taskLines = homeCalendarTaskLines(summary, 2);
+  const taskTitle = homeCalendarTaskTitle(summary);
 
   return (
     <span className="home-calendar-cell-summary">
-      <span className="home-calendar-task-list" aria-label={`${summary.task_count} 个一级任务`}>
-        {taskLines.map((line, index) => (
-          <span
-            className={line === "..." ? "home-calendar-task-more" : "home-calendar-task-title"}
-            key={`${line}-${index}`}
-            title={line === "..." ? undefined : line}
-          >
-            {line}
-          </span>
-        ))}
+      <span className="home-calendar-task-title" title={taskTitle}>
+        {taskTitle}
       </span>
       <span className="home-calendar-task-progress">
         {summary.completed_subtask_count}/{summary.subtask_count} 完成

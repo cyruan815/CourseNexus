@@ -357,7 +357,7 @@ describe("HomePage", () => {
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-compact-grid");
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-roomy-grid");
     const compactSummary = calendarTaskTitle.closest(".home-calendar-cell-summary") as HTMLElement;
-    expect(compactSummary.querySelector(".home-calendar-task-more")).toHaveTextContent("...");
+    expect(compactSummary.querySelector(".home-calendar-task-more")).not.toBeInTheDocument();
     expect(compactSummary.querySelector(".home-calendar-task-progress")).toHaveTextContent("0/2 完成");
 
     fireEvent.click(screen.getByRole("gridcell", { name: "打开 2026-07-15 的日历" }));
