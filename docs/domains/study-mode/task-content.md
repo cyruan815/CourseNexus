@@ -274,6 +274,43 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 
 任务测试题 `task_test` 暂时仍保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；本轮只同步标题规则，`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`，不再固定为“任务测试题”。
 
+## 2026-07-15 任务讲义前端预览渲染切片
+
+前端新增隔离的讲义 Markdown 预览组件入口，先用于验证视觉方向和 Markdown callout 契约，不替换生产详情页渲染，也不改变 PDF 导出链路。
+
+代码入口：
+
+- 组件：`frontend/src/features/generated-content/renderers/handout/HandoutMarkdownRenderer.tsx`
+- 样式：`frontend/src/features/generated-content/renderers/handout/handout-markdown.css`
+- Mock 内容：`frontend/src/features/generated-content/renderers/handout/handoutMock.ts`
+- 开发预览页：`frontend/src/pages/HandoutPreviewPage.tsx`
+- 开发路由：`/dev/handout-preview`，仅 `import.meta.env.DEV` 下挂载。
+- 测试：`frontend/tests/features/generated-content/handout-markdown-renderer.test.tsx`
+
+第一版预览组件支持标题、段落、列表、Markdown 表格、`$$...$$` 块级公式展示，以及 GitHub alert 风格的 blockquote callout。当前没有新增前端依赖；公式先以讲义公式区文本形式预览，后续若接入 `remark-math` / `rehype-katex`，外部组件 API 仍保持 `HandoutMarkdownRenderer({ markdown })`。
+
+Callout Markdown 约定：
+
+```md
+> [!NOTE] 注意
+> 概念边界、重要提醒或补充说明。
+
+> [!EXAMPLE] 例题 1
+> 题目、应用场景或演算入口。
+
+> [!SUMMARY] 核心结论
+> 结论卡片或阶段小结。
+
+> [!WARNING] 易错点
+> 错误判断、限制条件或不要混淆的内容。
+
+> [!TIP] 解题提示
+> 步骤提示、记忆提示或计算提醒。
+```
+
+视觉约定沿用“雾霾蓝 × 鼠尾草绿”讲义方向：保留整片柔和背景色，不使用左侧强调线；callout 使用 14px 圆角和浅边框。普通 `>` 引用若不包含受支持的 `[!TYPE]` 标记，仍按普通引用块展示，不强行转为 callout。
+
+本切片不要求后端 handout prompt 立即输出上述 callout 语法，也不要求后端 PDF renderer 立即适配；若后续将该契约用于真实生成内容，必须同步更新 handout prompt、PDF renderer 和相关测试。
 ## 2026-07-14 测试任务范围来自计划阶段
 
 每日唯一测试规则属于 Study Plan 层。任务内容生成层不重新计算“今天学了什么”或“全计划学了什么”，只消费当前二级任务已经保存的范围。
