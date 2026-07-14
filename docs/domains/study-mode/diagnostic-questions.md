@@ -3,7 +3,7 @@
 ## 状态
 
 - 日期：2026-07-13
-- 状态：后端接口、模型 purpose 和文档契约已更新；真实模型与端到端验证留到密钥配置后的任务七。
+- 状态：后端接口、模型 purpose 和文档契约已更新；`confirmed_config` 已明确为自然语言解析后经开始前设置补齐/确认的有效配置；真实模型与端到端验证留到密钥配置后的任务七。
 - 范围：`study-plan-diagnostic-questions` 题目生成、`study-plan-diagnostic-profiles` 诊断归纳、模型配置、前端接入边界和失败补偿。
 - 非范围：开始前设置页 UI、配置补问 UI、计划 preview 生成、讲义/测试题正文生成、诊断 session 持久化。
 
@@ -12,9 +12,10 @@
 前端可以把配置补问、学前诊断、薄弱方向和可选补充放在同一个“开始前设置”页面里，但后端职责保持拆分：
 
 - `study-plan-config-parses` 只负责自然语言配置回填和缺失字段提示，不生成诊断题。
-- `study-plan-diagnostic-questions` 只根据已确认配置和资料内容生成诊断题，不补问学习设置。
+- 前端在“开始前设置”页顶部用 `unresolved_field_prompts`、`needs_confirmation_field_prompts` 和 `field_options` 让用户补齐或确认关键配置字段。
+- `study-plan-diagnostic-questions` 只根据补齐后的有效配置和资料内容生成诊断题，不补问学习设置。
 - `study-plan-diagnostic-profiles` 只把诊断答案归纳为 preview 可使用的 profile，不调用模型。
-- `study-plans/preview` 接收确认后的配置和 `diagnostic_profile`，再生成计划任务。
+- `study-plans/preview` 接收补齐后的有效配置和 `diagnostic_profile`，再生成计划任务。
 
 v2 不再提供“讲课风格”用户选择项。用户只回答“你最担心哪类内容？”即 `weak_area`。后端仍可为了兼容现有 planner 从 `weak_area` 派生内部 `explanation_style`，但前端不需要把它展示成讲课风格控件。
 
@@ -24,7 +25,7 @@ v2 不再提供“讲课风格”用户选择项。用户只回答“你最担�
 
 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions`
 
-请求体：
+请求体。`confirmed_config` 是后端 API 字段名，表示“自然语言配置解析结果 + 用户在开始前设置页补齐/确认后的有效配置”，不是独立配置确认页产物：
 
 ```json
 {
@@ -95,7 +96,7 @@ STUDY_PLAN_DIAGNOSTIC_MODEL=gpt-5.4-mini
 输入包含：
 
 - `goal_text`
-- `confirmed_config`
+- `confirmed_config`：自然语言解析后经开始前设置补齐/确认的有效配置
 - `material_scope`
 - 当前资料范围内的 chunk excerpts、heading、material name、page 信息
 
@@ -129,6 +130,7 @@ STUDY_PLAN_DIAGNOSTIC_MODEL=gpt-5.4-mini
 
 ```text
 validate course/user/material_scope
+  -> receive goal_text + confirmed_config(effective config from setup)
   -> iter_material_context_batches()
   -> call study_plan_diagnostic model for topic candidates
   -> normalize titles and map each topic back to current chunks

@@ -2,9 +2,9 @@
 
 ## 状态
 
-- 日期：2026-07-13
-- 状态：设计已确认；后端每日学习时间自动估算、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。
-- 范围：从用户点进学习计划生成开始，到配置确认、学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
+- 日期：2026-07-14
+- 状态：设计已确认；后端每日学习时间自动估算、配置补问字段、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。前端完整自然语言向导尚未接入，当前主页面仍是手动配置 + preview 的契约稳定版。
+- 范围：从用户点进学习计划生成开始，到自然语言配置解析、开始前设置中的配置补问与学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 2026-07-14 前端 C13 落地说明
 
@@ -81,7 +81,7 @@
 
 计划生成向导要把“用户想怎么学”和“用户现在会多少”分开处理。
 
-- 配置确认回答“用户想怎么学”。
+- 自然语言解析和配置补问回答“用户想怎么学”。
 - 学前诊断回答“用户现在会多少”。
 - 计划 preview 基于配置和诊断共同生成。
 - 确认保存时，保存用户实际看到并确认的 preview 任务，不重新生成另一份计划。
@@ -98,7 +98,7 @@
 第一版采用方案 A：
 
 - preview 不单独入库，也不返回长期有效的 `preview_id`。
-- 前端在保存时提交“用户刚刚看到的任务列表 + 确认后的配置 + 诊断 profile + 资料快照标识”。
+- 前端在保存时提交“用户刚刚看到的任务列表 + 补齐后的有效配置 + 诊断 profile + 资料快照标识”。
 - 后端保存新流程提交的 exact preview tasks，不在保存接口里重新调用大模型生成计划。
 - 旧客户端如果没有提交 tasks，可以保留原有保存时生成的兼容路径；新向导必须提交 tasks。
 - 保存接口需要幂等保护，避免用户连续点击导致重复计划。
@@ -111,8 +111,7 @@
 /courses/:courseId/study-plans/new
 
 goal_input
-  -> config_review
-  -> diagnostic
+  -> setup(config_supplement + diagnostic)
   -> preview
   -> saved plan detail
 ```
@@ -120,7 +119,7 @@ goal_input
 前端可展示轻量步骤条：
 
 ```text
-输入目标 / 确认配置 / 学前诊断 / 计划预览
+输入目标 / 开始前设置 / 计划预览
 ```
 
 这里的 stepper 是页面内的进度提示和状态机，不是独立路由。用户能看到当前处在哪一步，但页面主体仍是同一个计划生成工作流。
@@ -160,9 +159,18 @@ POST /api/v1/courses/{course_id}/study-plan-config-parses
 - `include_all_parsed_materials=true` 表示使用当前课程下“此刻已解析完成”的资料集合，后续新上传资料不会自动改变已生成计划的范围。
 - 资料处于 parsing、failed 或不属于当前课程时，不能进入下一步，需要给出明确提示。
 
-## Step 2：配置确认
+## Step 2：开始前设置
 
-配置确认页展示 5 个字段：
+开始前设置页合并展示两类内容：
+
+```text
+配置补问与确认
+学前诊断
+```
+
+本流程不再设置独立的“配置确认页”。自然语言解析缺失或不确定的关键字段由 `study-plan-config-parses` 响应中的 `unresolved_field_prompts`、`needs_confirmation_field_prompts` 和 `field_options` 驱动，前端在开始前设置页顶部用对应控件让用户补齐或确认。
+
+配置补问区围绕 5 个字段：
 
 ```text
 学习目标
@@ -172,19 +180,19 @@ POST /api/v1/courses/{course_id}/study-plan-config-parses
 资料范围
 ```
 
-资料范围可以修改，但它不是普通本地字段。资料范围变化后必须重新解析配置并重新估算学习时间，因为资料范围影响知识点数量、预计总学习时长、学前诊断题目和最终计划内容。
+学习目标和资料范围在第一步确定；开始前设置页不直接修改学习目标。若用户要改学习目标或资料范围，应返回第一步重新输入或重新选择，并重新调用配置解析、重新生成诊断题。资料范围不是普通本地字段，变化后必须重新解析配置并重新估算学习时间，因为资料范围影响知识点数量、预计总学习时长、学前诊断题目和最终计划内容。
 
 ### 前端展示字段
 
-配置确认页所有用户可见文案必须使用中文。API 内部字段名和枚举值继续保留英文契约，但前端不得直接展示 `start_date`、`duration_days`、`daily_available_minutes`、`preference`、`material_scope`、`balanced`、`include_all_parsed_materials` 等内部值。配置解析响应会额外返回中文展示辅助字段：`field_labels`、`unresolved_field_prompts`、`needs_confirmation_field_prompts` 和 `field_options`，前端应优先使用这些中文 label、message 和 option label。
+开始前设置页所有用户可见文案必须使用中文。API 内部字段名和枚举值继续保留英文契约，但前端不得直接展示 `start_date`、`duration_days`、`daily_available_minutes`、`preference`、`material_scope`、`balanced`、`include_all_parsed_materials` 等内部值。配置解析响应会额外返回中文展示辅助字段：`field_labels`、`unresolved_field_prompts`、`needs_confirmation_field_prompts` 和 `field_options`，前端应优先使用这些中文 label、message 和 option label。
 
-| 字段 | 是否可编辑 | 说明 |
+| 字段 | 开始前设置页处理 | 说明 |
 | --- | --- | --- |
-| `goal_text` | 是 | 用户学习目标，可保留自然语言解析后的目标。 |
-| `start_date` / `duration_days` | 是 | 用户可改开始日期或学习天数。后端按本地日期计算 `end_date`。 |
-| `daily_available_minutes` | 是 | 每日学习时间永远展示且可改。 |
-| `preference` | 是 | 学习方式：快速、均衡、深入、冲刺。 |
-| `material_scope` | 是 | 可重新选择资料；修改后触发重新解析和重新估算。 |
+| `goal_text` | 只读展示；如需修改返回第一步 | 用户学习目标，来自第一步自然语言输入。 |
+| `start_date` / `duration_days` | 缺失或不确定时补问/确认 | 后端按本地日期计算 `end_date`。 |
+| `daily_available_minutes` | 明确填写时保留；缺失时可不阻断，后续由资料 map 后估算 | 每日学习时间低于 30 分钟时前端阻止提交，后端也校验。 |
+| `preference` | 始终建议确认，缺失时必选 | 学习方式：快速、均衡、深入、冲刺。 |
+| `material_scope` | 只读展示；如需修改返回第一步 | 修改后触发重新解析、重新生成诊断题和 preview。 |
 
 日期来源规则：
 
@@ -234,7 +242,7 @@ daily_available_minutes = recommended_daily_minutes
 daily_minutes_source = system_estimated
 ```
 
-用户在前端手动修改后：
+用户在开始前设置页补齐或确认后：
 
 ```text
 daily_available_minutes = 用户修改值
@@ -274,7 +282,7 @@ daily_minutes_source = user_modified
 
 ### 学习方式说明文案
 
-配置确认页和 preview 页都要展示一段自然语言说明。
+开始前设置页和 preview 页都要展示一段自然语言说明。
 
 快速：
 
@@ -324,13 +332,13 @@ daily_minutes_source = user_modified
 
 如果容量不足，后端应返回 warning 或 over-capacity 状态，不能静默突破用户每日时间。
 
-## Step 3：学前诊断
+### 学前诊断
 
 学前诊断每次新建计划都要做，不需要 `diagnostic_required` 字段。
 
 学前诊断只问用户当前掌握程度和薄弱方向，不问学习偏好、资料范围、是否全量讲解，也不出资料知识测验题。
 
-在产品页面上，前端可以把配置补问、学前诊断、薄弱方向和可选补充合并为“开始前设置”。但接口职责仍然拆开：学习设置缺失项由配置确认页和 `study-plan-config-parses` 处理；诊断题由 `study-plan-diagnostic-questions` 处理。
+在产品页面上，前端把配置补问、学前诊断、薄弱方向和可选补充合并为“开始前设置”。但接口职责仍然拆开：学习设置缺失项由 `study-plan-config-parses` 的补问字段处理；诊断题由 `study-plan-diagnostic-questions` 处理。
 
 页面标题建议：
 
@@ -350,7 +358,7 @@ v2 固定使用：
 1 个可选补充输入
 ```
 
-知识点掌握问题由 LLM 根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 topic 候选，后端负责校验、映射和 fallback。最终前端永远接收 3 道 `topic_mastery`；即使资料较少，也允许后端从同一 chunk 拆出 3 个偏泛但资料内的主题。
+知识点掌握问题由 LLM 根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 topic 候选。这里的 `confirmed_config` 是 API 字段名，表示“自然语言解析结果 + 用户在开始前设置页补齐/确认后的有效配置”，不是独立配置确认页产物。后端负责校验、映射和 fallback。最终前端永远接收 3 道 `topic_mastery`；即使资料较少，也允许后端从同一 chunk 拆出 3 个偏泛但资料内的主题。
 
 示例：
 
@@ -468,7 +476,7 @@ E. 其他
 - 后端检测到诊断答案里的 `topic_id` 不属于当前资料快照。
 
 日期、学习天数、每日学习时间和学习方式变化时，诊断答案默认保留，但 preview 需要重新生成。
-## Step 4：计划预览
+## Step 3：计划预览
 
 Preview 页展示同一组核心配置：
 
@@ -664,11 +672,11 @@ Preview 响应返回：
 
 | 用户动作 | 配置估算 | 诊断问题 / 答案 | preview |
 | --- | --- | --- | --- |
-| 修改资料范围 | 重新解析并重新估算 | 失效 | 失效 |
-| 修改学习目标或目标知识点 | 重新解析并重新估算 | 可能失效；目标 topic 变化时失效 | 失效 |
-| 修改开始日期或学习天数 | 重新估算 | 保留 | 失效 |
-| 修改每日学习时间 | 保留配置，重算容量 | 保留 | 失效 |
-| 修改学习方式 | 重算派生配置和容量 | 保留 | 失效 |
+| 返回第一步修改资料范围 | 重新解析并重新估算 | 失效 | 失效 |
+| 返回第一步修改学习目标或目标知识点 | 重新解析并重新估算 | 可能失效；目标 topic 变化时失效 | 失效 |
+| 在开始前设置补齐/修改开始日期或学习天数 | 重新估算 | 保留 | 失效 |
+| 在开始前设置补齐/修改每日学习时间 | 保留配置，重算容量 | 保留 | 失效 |
+| 在开始前设置确认/修改学习方式 | 重算派生配置和容量 | 保留 | 失效 |
 | 修改诊断答案 | 保留 | 更新 profile | 失效 |
 | 点击重新生成 preview | 保留 | 保留 | 重新生成 |
 
@@ -744,7 +752,7 @@ else:
 
 | 场景 | 建议错误码 | 前端处理 |
 | --- | --- | --- |
-| 日期或学习天数非法 | `INVALID_DATE_RANGE` | 停在配置确认页，提示修改日期或天数。 |
+| 日期或学习天数非法 | `INVALID_DATE_RANGE` | 停在开始前设置的配置补问区，提示修改日期或天数。 |
 | 每日学习时间低于 30 分钟 | `DAILY_MINUTES_TOO_LOW` | 阻止继续，提示最低 30 分钟。 |
 | 没有可用资料 | `NO_PARSED_MATERIAL` | 提示先上传并等待解析完成。 |
 | 资料不属于当前课程或用户 | `NOT_FOUND` | 移除非法资料并提示重新选择。 |
