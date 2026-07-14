@@ -22,6 +22,23 @@
   padding: 12px 22px;
 }
 
+.workbench-topbar-inner {
+  min-width: 0;
+}
+
+.workbench-topbar-left,
+.workbench-topbar-right,
+.workbench-heading,
+.workbench-meta,
+.workbench-actions {
+  min-width: 0;
+}
+
+.workbench-heading {
+  flex: 1 1 auto;
+}
+
+.workbench-page-name,
 .workbench-title {
   max-width: min(48vw, 720px);
   overflow: hidden;
@@ -34,7 +51,29 @@
   white-space: nowrap;
 }
 
+.workbench-context-name {
+  max-width: min(28vw, 520px);
+  overflow: hidden;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 720;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workbench-back-button {
+  flex: 0 0 auto;
+}
+
+.workbench-home-button,
+.workbench-theme-button,
+.workbench-user-button {
+  flex: 0 0 auto;
+}
+
+.workbench-actions {
   flex: 0 0 auto;
 }
 
@@ -55,7 +94,9 @@
   border-color: #263750;
 }
 
-:root[data-course-nexus-theme="dark"] .workbench-title {
+:root[data-course-nexus-theme="dark"] .workbench-page-name,
+:root[data-course-nexus-theme="dark"] .workbench-title,
+:root[data-course-nexus-theme="dark"] .workbench-context-name {
   color: #e5edf7;
 }
 
