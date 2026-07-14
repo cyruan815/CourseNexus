@@ -7,8 +7,9 @@ import { flashcards } from "../guards";
 type Feedback = "correct" | "incorrect" | null;
 
 export function FlashcardResult({ cards, generatedContentId = "test-generated-content" }: { cards: Flashcard[]; generatedContentId?: string }) {
-  const original = useMemo(() => [...cards].sort((a, b) => a.sort_order - b.sort_order), [cards]);
-  const [deck, setDeck] = useState(original);
+  const initialCards = useMemo(() => [...cards].sort((a, b) => a.sort_order - b.sort_order), [cards]);
+  const [savedCards, setSavedCards] = useState(initialCards);
+  const [deck, setDeck] = useState(initialCards);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -68,7 +69,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
       const updated = await updateFlashcards(generatedContentId, nextDeck.map(({ front, back, tags, explanation }) => ({ front, back, tags, explanation })));
       const saved = flashcards(updated.content_json);
       if (!saved) throw new Error("保存后的卡片数据不可读取");
-      setDeck(saved); setIndex((current) => Math.min(current, saved.length - 1)); setFeedback(null); setFlipped(false); setRatings({});
+      setSavedCards(saved); setDeck(saved); setIndex((current) => Math.min(current, saved.length - 1)); setFeedback(null); setFlipped(false); setRatings({});
       return true;
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "卡片保存失败");
@@ -78,13 +79,13 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
 
   const addCard = async () => {
     if (!front.trim() || !back.trim()) return;
-    const ok = await persist([...deck, { id: "card_new", sort_order: deck.length + 1, front: front.trim(), back: back.trim(), tags: [], mastery_status: "unknown", explanation: explanation.trim() || null }]);
+    const ok = await persist([...savedCards, { id: "card_new", sort_order: savedCards.length + 1, front: front.trim(), back: back.trim(), tags: [], mastery_status: "unknown", explanation: explanation.trim() || null }]);
     if (ok) { setAddOpen(false); setFront(""); setBack(""); setExplanation(""); }
   };
 
   const deleteCard = async () => {
-    if (deck.length <= 1) return;
-    const ok = await persist(deck.filter((_, cardIndex) => cardIndex !== index));
+    if (savedCards.length <= 1) return;
+    const ok = await persist(savedCards.filter((savedCard) => savedCard.id !== card.id));
     if (ok) setDeleteOpen(false);
   };
 
@@ -102,7 +103,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
           <Button aria-label="打乱卡片" className="gc-flashcard-shuffle" onClick={() => reset([...deck].sort(() => Math.random() - 0.5))} variant="default">打乱</Button>
           <Menu position="bottom-end" shadow="md" width={180}>
             <Menu.Target><button aria-label="更多操作" className="gc-flashcard-more" type="button">⋯</button></Menu.Target>
-            <Menu.Dropdown><Menu.Item onClick={() => setAddOpen(true)}>添加卡片</Menu.Item><Menu.Item color="red" disabled={deck.length <= 1} onClick={() => setDeleteOpen(true)}>删除当前卡片</Menu.Item></Menu.Dropdown>
+            <Menu.Dropdown><Menu.Item onClick={() => setAddOpen(true)}>添加卡片</Menu.Item><Menu.Item color="red" disabled={savedCards.length <= 1} onClick={() => setDeleteOpen(true)}>删除当前卡片</Menu.Item></Menu.Dropdown>
           </Menu>
         </Group>
       </Group>
@@ -144,7 +145,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
       {roundComplete ? (
         <Stack align="center" className="gc-flashcard-retry" gap="sm">
           <Group justify="center">
-            <Button onClick={() => reset(original)} variant="default">练习全部</Button>
+            <Button onClick={() => reset(savedCards)} variant="default">练习全部</Button>
             <Button disabled={!deck.some((item) => ratings[item.id] === false)} onClick={() => reset(deck.filter((item) => ratings[item.id] === false))}>只练未掌握</Button>
           </Group>
         </Stack>

@@ -48,6 +48,64 @@ describe("generated content renderers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("adds a flashcard without dropping cards outside the missed-card practice deck", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {
+      id: "gen_cards", content_json: { cards: [
+        { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+        { id: "card_002", sort_order: 2, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
+        { id: "card_003", sort_order: 3, front: "New front", back: "New back", tags: [], mastery_status: "unknown" },
+      ] },
+    } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderUi(<FlashcardResult generatedContentId="gen_cards" cards={[
+      { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+      { id: "card_002", sort_order: 2, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "答错 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("添加卡片"));
+    fireEvent.change(await screen.findByRole("textbox", { name: "问题" }), { target: { value: "New front" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "答案" }), { target: { value: "New back" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存卡片" }));
+
+    expect(await screen.findByText("1 / 3")).toBeInTheDocument();
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(request.cards.map((card: { front: string }) => card.front)).toEqual(["Front 1", "Front 2", "New front"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("deletes from a missed-card practice deck without dropping cards outside that deck", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {
+      id: "gen_cards", content_json: { cards: [
+        { id: "card_001", sort_order: 1, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
+      ] },
+    } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderUi(<FlashcardResult generatedContentId="gen_cards" cards={[
+      { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+      { id: "card_002", sort_order: 2, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "答错 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(await screen.findByText("删除当前卡片"));
+    fireEvent.click(await screen.findByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByText("Front 2")).toBeInTheDocument();
+    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(request.cards.map((card: { front: string }) => card.front)).toEqual(["Front 2"]);
+    vi.unstubAllGlobals();
+  });
+
   it("shows one quiz question, judges immediately, and reports final accuracy", () => {
     renderUi(<QuizResult questions={[
       { id: "q_001", sort_order: 1, question_text: "Q1", options: (["A", "B", "C", "D"] as const).map((id) => ({ id, text: id, explanation: `Reason ${id}` })), correct_answer: "B", explanation: "Because B", difficulty: "easy", hint: "Think first" },
