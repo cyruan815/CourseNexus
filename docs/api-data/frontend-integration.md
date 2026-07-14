@@ -586,7 +586,7 @@
 
 G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 parsed 资料、检查总上下文上限，并对对应类型调用一次结构化模型。
 
-`source_citations` 在生成 POST、历史和详情中始终存在。Quiz、Flashcard、Mindmap、Outline、Knowledge List 固定返回 `[]`；Course QA、handout 和 task_test 等保留引用的能力继续按真实引用展示。
+`source_citations` 在生成 POST、历史和详情中始终存在。Quiz、Flashcard、Mindmap、Outline、Knowledge List 固定返回 `[]`；Course QA、handout 和 task_test 等保留引用的能力继续保存并通过 API 返回真实引用。生成内容详情页不展示引用面板，handout / task_test 的引用用于内部追溯和导出。
 
 ### 3.21 生成内容列表
 
@@ -603,6 +603,39 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 要求：Bearer token。只能访问当前用户自己的生成内容。
 
 响应 `data`：`GeneratedContentRead`。
+
+### 3.22.1 替换 Flashcard 完整牌组
+
+`PATCH /api/v1/generated-contents/{generated_content_id}/flashcards`
+
+要求：Bearer token。只能修改当前用户自己的 `content_type="flashcard"` 记录。该接口执行完整牌组替换，不是单卡增量更新；前端必须提交后端已保存的完整牌组，不能提交打乱顺序或“只练未掌握”形成的当前练习子集。
+
+请求：
+
+```json
+{
+  "cards": [
+    {
+      "front": "问题",
+      "back": "答案",
+      "tags": ["概念"],
+      "explanation": "补充解释"
+    }
+  ]
+}
+```
+
+`cards` 必须包含 1-100 张卡片；正面按去除首尾空白、合并连续空白并忽略大小写后不可重复。保存时后端重新生成连续 `card_001...`、`sort_order` 和 `mastery_status="unknown"`，更新生成内容的 `updated_at`。响应 `data` 为更新后的 `GeneratedContentRead`。
+
+主要错误码：
+
+| 错误码 | 场景 |
+| --- | --- |
+| `VALIDATION_ERROR` | 牌组为空、超过 100 张、正面重复或单卡字段不合法。 |
+| `NOT_FOUND` | 记录不存在、已删除或不属于当前用户。 |
+| `INVALID_GENERATED_CONTENT_TYPE` | 目标记录不是 Flashcard。 |
+
+翻卡、打乱、答对 / 答错和错卡重练仍是页面内存状态；只有添加和删除卡片会调用本接口持久化。保存失败时前端保留当前完整牌组并显示后端错误。
 
 ### 3.23 统一生成入口
 
