@@ -417,6 +417,10 @@ def test_reduce_prompt_uses_exact_course_name_and_quality_rules() -> None:
     assert "输出" in prompt
     assert "quiz/test" in prompt
     assert "最后一个二级任务" in prompt
+    assert "每天一级任务必须且只能有一个 quiz/test" in prompt
+    assert "非最后一天 quiz/test 是当日测试" in prompt
+    assert "最后一天 quiz/test 是全计划综合测试" in prompt
+    assert "最后一天必须安排综合 quiz/test" not in prompt
 
 def test_reduce_prompt_includes_diagnostic_profile_strategy() -> None:
     payload = _build_request().model_copy(
