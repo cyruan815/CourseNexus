@@ -110,11 +110,12 @@ sequenceDiagram
 
 `handout` 采用 Markdown-first 存储：
 
-- `AIGeneratedContent.title` ???????????????? `{subtask.title}??`?
-- `AIGeneratedContent.content` ????????? Markdown ?????
-- `handout.content_json` ?????????`{"format":"markdown","schema_version":1}`??????? `sections/blocks` ??????????? handout ?????
-- Handout ????? `SourceCitation`?Markdown ?????????????? `??????????????????????????`??????????????
-- ???????????????????????Handout prompt ?????????? `$$...$$`??????? `$...$`??? `\[...\]`?`\(...\)` ????? `[` / `]` ?????????????????????? Markdown ???
+- `AIGeneratedContent.title` 使用当前二级任务标题派生，通常为 `{subtask.title}讲义`。
+- `AIGeneratedContent.content` 保存一整篇可导出的 Markdown 讲义正文。
+- `handout.content_json` 只保存轻量元信息：`{"format":"markdown","schema_version":1}`；不再保存旧版 `sections/blocks` 结构，也不兼容旧结构化 handout 历史导出。
+- Handout 不生成逐条 `SourceCitation`。Markdown 一级标题下方写来源说明，例如 `本讲义基于《资料名》中“二级任务标题”相关内容生成。`，前端详情页不展示引用侧栏。
+- 后端保存前不正则改写数学公式内容；Handout prompt 负责约束模型输出 `$...$` / `$$...$$`，PDF 导出在临时 HTML 中通过本地 KaTeX 完成数学排版。
+- Handout prompt 明确要求块级公式使用 `$$...$$`、行内公式使用 `$...$`，禁止 `\[...\]`、`\(...\)` 和单独一行 `[` / `]` 包公式；公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。
 
 `task_test` 仍采用结构化 JSON 存储。`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
 任务测试题结构不变量：
@@ -204,177 +205,12 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - `frontend/tests/features/study-plans/api.test.ts` 覆盖 PDF / Markdown 导出 adapter 路径。
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖执行页已有内容时的导出按钮和文件流请求。
 - `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页只读展示，不出现提交答案入口。
-## 2026-07-13 引用、PDF 和默认参数修复补充
 
-### Handout 当前契约
-
-2026-07-14 起，新生成 `handout` 采用 Markdown-first 方案：generator 直接返回一整篇 Markdown，learning-execution 保存到 `ai_generated_contents.content`，`content_json` 只保留 `{"format":"markdown","schema_version":1}`。后端不再要求模型输出 `sections` / `blocks` / `formula_cards`，也不为 handout 创建逐条 `SourceCitation` 或 section 级引用回绑。
-
-`ensure_handout_header()` 只负责清理最外层 ```markdown fence、校验正文非空、删除模型返回的首个一级标题、写入统一 `# {StudySubTask.title}讲义` 和来源说明。它必须保留模型正文原样，不正则改写代码块、普通方括号或数学公式内容。
-
-Handout prompt 负责约束数学公式格式：行内公式只用 `$...# S06 任务讲义与任务测试题实现
-
-## 范围
-
-S06 为计划学习模式的二级任务提供按需生成内容：
-
-- `learn` / `review` 二级任务只能生成 `handout` 今日讲义。
-- `quiz` / `test` 二级任务只能生成 `task_test` 任务测试题。
-- `learn` 表示学习讲义和新内容；`review` 表示复习讲义，只回顾计划中此前已经安排学习过的内容；只有 `quiz` / `test` 可以携带 `generation_parameters.task_test` 和明确题量要求。
-- `learn` 讲义使用计划阶段清理后的正文 chunk 引用；目录页、版权页、感谢页和章节小结页不得与正文 chunk 混合作为普通 `learn` 范围，避免提前混入后续主题。
-- 生成内容统一写入 `ai_generated_contents`，通过 `study_subtask_id` 绑定二级任务。
-- 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration，不修改前端。
-- 当前只保存二级任务级 `related_material_ids_json`；P0 不新增 chunk 级任务范围字段，引用范围由当次材料上下文批次校验保证。
-
-## 代码入口
-
-- Handout schema：`backend/app/modules/generation/generators/handout/schemas.py`
-- Handout generator：`backend/app/modules/generation/generators/handout/generator.py`
-- Task test schema：`backend/app/modules/generation/generators/task_test/schemas.py`
-- Task test generator：`backend/app/modules/generation/generators/task_test/generator.py`
-- API：`backend/app/modules/learning_execution/router.py`
-- Service：`backend/app/modules/learning_execution/service.py`
-- Repository：`backend/app/modules/learning_execution/repository.py`
-- Export API：`backend/app/modules/exports/router.py`
-- Export service / renderer：`backend/app/modules/exports/service.py`、`backend/app/modules/exports/renderer.py`
-- 测试入口：`backend/tests/modules/generation/test_handout_generator.py`、`backend/tests/modules/generation/test_task_test_generator.py`、`backend/tests/modules/learning_execution/test_task_content_api.py`、`backend/tests/modules/exports/test_exports_api.py`、`backend/tests/integration/test_task_content_generation_flow.py`
-
-## API
-
-- `POST /api/v1/study-subtasks/{subtask_id}/handouts`
-- `POST /api/v1/study-subtasks/{subtask_id}/task-tests`
-- `GET /api/v1/study-subtasks/{subtask_id}/execution-context`
-- `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`
-- `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`
-
-两个 POST 接口都返回统一成功 envelope，`data` 为 `GeneratedContentRead`。默认重复请求是幂等的：同一个 `study_subtask_id + content_type` 已存在未删除且 `generation_status=success` 的内容时，接口直接返回最近一次成功内容，不调用模型、不新增 `AIGeneratedContent`。请求体可传 `force_regenerate=true` 显式重新生成新内容；failed 记录不会作为幂等命中结果。执行上下文会返回最近一次成功生成的 `handout_content_id` 或 `task_test_content_id`；失败记录不会作为执行页内容 ID 返回。
-
-任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
-
-今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，注入本地 KaTeX CSS/JS 对 `$...$` 与 `$$...$$` 数学公式做浏览器端排版，再通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
-
-## 幂等与重新生成
-
-生成入口在完成用户、课程、计划、任务层级和二级任务类型校验后，先查询当前用户下同一 `study_subtask_id + content_type` 最近一次未删除成功内容：
-
-- `force_regenerate=false` 或省略时，命中 success 直接返回该 `GeneratedContentRead`，不会创建新的 `gen_...` 记录，也不会调用 handout / task-test generator 或模型 provider。
-- `force_regenerate=true` 时跳过幂等命中，按正常生成流程创建新的 `AIGeneratedContent(generation_status=success)` 和引用。
-- `generation_status=failed` 只保留失败审计和错误码，不会阻止下一次请求重新生成，也不会被 execution-context 当作内容 ID。
-- execution-context 通过相同的“最近未删除 success”查询返回内容 ID；如果最新记录是 failed，仍返回最近一次 success，若没有 success 则返回 `null`。
-
-幂等命中路径只做一次生成内容查询，模型调用次数为 0。真正生成路径中，handout 仍按材料批次 map/reduce；task_test 会把当前二级任务允许的全部材料批次汇总为一次候选上下文，只调用一次 task-test generator 生成固定题量。
-
-## 数据流
-
-```mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant LE as learning-execution
-    participant MC as material-context
-    participant GEN as handout/task-test generator
-    participant MP as ModelProvider
-    participant DB as ai_generated_contents / source_citations
-
-    FE->>LE: POST /api/v1/study-subtasks/{id}/handouts or /api/v1/study-subtasks/{id}/task-tests
-    LE->>LE: verify user, course, plan, task, subtask
-    LE->>LE: verify subtask_type matches content_type
-    LE->>MC: iter_material_context_batches(MaterialScope from related_material_ids_json)
-    MC-->>LE: MaterialContextBatch list
-    alt handout
-        LE->>GEN: run_material_coverage(map each batch)
-        GEN->>MP: generate_text(Markdown prompt)
-        GEN-->>LE: Markdown GeneratorOutput
-    else task_test
-        LE->>GEN: generate once with all current subtask batches
-        GEN->>GEN: internally summarize candidate points from all chunks
-        GEN->>MP: generate_structured(TaskTestContent schema)
-        GEN->>GEN: validate count/type/id/options/duplicates/citations
-        GEN-->>LE: fixed-size GeneratorOutput
-    end
-    LE->>DB: save AIGeneratedContent; task_test also saves SourceCitation
-    LE-->>FE: GeneratedContentRead
-```
-
-关键约束：
-
-- 材料范围只能来自 `StudySubTask.related_material_ids_json`。
-- `MaterialScope.include_all_parsed_materials = false`，`material_ids` 为二级任务关联资料 ID。
-- S06 使用 `iter_material_context_batches()` 读取当前二级任务的全材料上下文，不使用 Top-K 检索，也不调用旧的 `resolve_context()`。
-- Handout 使用当前二级任务允许的材料范围生成一整篇 Markdown 讲义；上下文可放入单次 prompt 时优先一次生成，必须分批时由 reducer 重新合成为最终整篇 Markdown，不把多个 batch 草稿硬拼成最终稿。
-- Task test 不再“每个 batch 各生成一整套题再拼接”；它把当前二级任务的所有批次一次性传给 task-test generator，由 prompt 要求先在内部汇总候选考点，再只输出最终 `question_count` 道题。
-- Task test 的 `question_count` 是最终硬约束；当参数包含 `question_type_counts` 时，每种 `question_type` 的输出数量也是硬约束。输出多题、少题、每种题型数量不匹配、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
-- Handout 不保存逐条 `source_citations`；来源说明放在 Markdown 顶部。Task test 的题目引用必须来自本次材料上下文的 chunk id，且必须落在当前二级任务允许的材料批次内，不允许伪造 fallback 引用。
-
-## 内容结构
-
-`handout` 采用 Markdown-first 存储：
-
-- `AIGeneratedContent.title` 使用当前二级任务标题派生，通常为 `{subtask.title}讲义`。
-- `AIGeneratedContent.content` 保存一整篇可导出的 Markdown 讲义正文。
-- `handout.content_json` 只保存轻量元信息：`{"format":"markdown","schema_version":1}`；不再保存旧版 `sections/blocks` 结构，也不兼容旧结构化 handout 历史导出。
-- Handout 不生成逐条 `SourceCitation`。Markdown 一级标题下方写来源说明，例如 `本讲义基于《资料名》中“二级任务标题”相关内容生成。`，前端详情页不展示引用侧栏。
-- 后端保存前不正则改写数学公式内容；Handout prompt 负责约束模型输出 `$...$` / `$$...$$`，PDF 导出在临时 HTML 中通过本地 KaTeX 完成数学排版。
-- Handout prompt 明确要求块级公式使用 `$$...$$`、行内公式使用 `$...$`，禁止 `\[...\]`、禁止单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。
-
-`task_test` 仍采用结构化 JSON 存储。`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
-任务测试题结构不变量：
-
-- `questions.length == request.parameters.question_count`。
-- `question_type` 必须属于请求的 `question_types` 白名单。`question_type_counts` 存在时，实际输出中每种题型数量必须与请求分布完全一致。
-- 题目 `id` 必须为 `q_1..q_N`，`sort_order` 必须为 `1..N`，二者都按最终题目顺序连续且唯一。
-- `single_choice` / `multiple_choice` 必须恰好有 4 个 options；生成器按每道题自己的 options 顺序将 option id 归一化为 `A`、`B`、`C`、`D`，并同步映射 `correct_answer`。
-- 单选答案必须是命中 option id 的字符串；多选答案必须是无重复字符串数组，且所有值命中 option id。
-- `true_false` 答案必须是 boolean；`short_answer` 不要求 options，答案为非空字符串。
-- 题干经空白折叠和小写归一后不得重复；长度不少于 8 的归一化题干使用相似度阈值拒绝高度相似题。
-
-## 失败与补偿
-
-权限失败、任务不存在和二级任务类型不匹配发生在生成流程前，不创建生成记录。
-
-进入生成流程后，材料缺失、材料覆盖失败、schema 校验失败、测试题硬约束不满足和模型调用失败都会保存一条 `AIGeneratedContent`：
-
-- `generation_status = failed`
-- `study_subtask_id = 当前二级任务`
-- `content_type = handout` 或 `task_test`
-- `error_code = 稳定错误码`
-
-保存失败记录后，接口仍返回统一错误 envelope。失败记录只作为审计和重试依据，不参与幂等命中；下一次默认请求如果没有 success 会重新尝试生成。生成失败不修改二级任务完成状态，不汇总一级任务状态，也不写 `checkin_records`。
-
-如果 task_test 模型输出无法同时满足总题量、每种题型数量、题型白名单、结构、去重和引用约束，后端返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录，不做静默截断、不用部分题目成功落库。
-
-## 错误码
-
-- `UNAUTHORIZED`：未登录。
-- `NOT_FOUND`：二级任务、课程、计划或资料不可访问。
-- `STATE_CONFLICT`：任务层级或课程归属不一致，或任务类型不允许生成该内容。
-- `NO_PARSED_MATERIAL`：二级任务没有关联资料，或关联资料没有可用解析上下文。
-- `MATERIAL_COVERAGE_INCOMPLETE`：全材料覆盖未完成。
-- `GENERATION_SCHEMA_INVALID`：模型输出结构、测试题硬约束或引用不符合契约。
-- `GENERATION_FAILED`：模型调用或未知生成失败。
-- `EXPORT_UNSUPPORTED_CONTENT_TYPE`：导出格式不支持当前生成内容类型。
-- `EXPORT_CONTENT_NOT_READY`：生成内容尚未成功，不能导出。
-- `EXPORT_CONTENT_INVALID`：历史生成内容结构畸形，不能安全导出。
-- `EXPORT_FAILED`：PDF 渲染失败，不影响原 generated content。
-
-## 复杂度与资源预算
-
-材料读取按 `material_batch_max_tokens` 分批。时间复杂度约为 O(b + c)，其中 b 为材料批次数，c 为生成内容中的引用数量；引用保存按去重后的 chunk 数线性处理。
-
-Handout 模型调用次数等于材料批次数。Task test 模型调用次数固定为 1，prompt 包含当前二级任务允许材料批次中的所有候选 chunk；因此它适合当前 POC 的二级任务范围，后续若要支持更大的测试范围，应先评审候选考点摘要、chunk 级范围追溯或后台任务机制。Task test 结构校验最多处理 20 道题，题干相似度比较为 O(q²)，q 上限由 `question_count <= 20` 控制。导出接口不调用模型、不写数据库；Markdown 渲染复杂度约为 O(q + c)，PDF 渲染复杂度约为 O(s + c + p)，其中 q 为题目数，s 为讲义 section 和文本行数，c 为引用数，p 为分页后的页数。
-
-## 与执行页任务级问答的边界
-
-轻量化 T3 新增的 `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` 属于 S04 执行页问答能力，不属于 S06 任务内容生成。它复用 Course QA 的 `conversations`、`messages` 和 `source_citations`，资料范围同样来自当前二级任务的 `related_material_ids_json`，但不会创建或更新 `AIGeneratedContent`，也不参与 `handout_content_id` / `task_test_content_id` 的最近成功内容选择。
-
-因此任务内容生成、Markdown/PDF 导出和执行页问答之间的边界是：生成与导出围绕 `ai_generated_contents`；任务级问答围绕对话消息。两者都不得修改二级任务完成状态，也不得写 `checkin_records`。
-
-- 不保存学生作答，作答记录已拆到后续任务。
-- 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，今日讲义支持 PDF 导出。
-- 不新增 chunk 级任务范围持久化字段；当前只保证生成时引用来自当前二级任务相关资料的当次 material-context 批次。
-- 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
 Handout prompt 要求行内公式只使用 `$...$`，块级公式只使用独立的 `$$...$$`，禁止 `\(...\)`、`\[...\]` 和单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。后端生成阶段不做公式分隔符自动转换，PDF renderer 负责数学排版；前端 Markdown 详情页尚未接入数学渲染，后续由前端单独实现。
+
+`ensure_handout_header()` 只负责清理最外层 `markdown` 代码围栏、校验正文非空、删除模型返回的首个一级标题，并写入统一的 `# {StudySubTask.title}讲义` 和来源说明。它保留模型正文原样，不正则改写代码块、普通方括号或数学公式内容。
 
 Handout 仍只读取当前二级任务关联资料。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，仅 handout 专用分支过滤 material-context batch；公共 material-context 查询保持当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序等基础边界。
 
@@ -408,7 +244,7 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 
 本节原先描述结构化 handout 的 `content_json.sections` 展示和 section citation 绑定。该方案已被 2026-07-14 Markdown-first 方案取代：新生成 handout 的权威正文是 `GeneratedContentRead.content` Markdown，来源说明在正文顶部，前端详情页不展示引用侧栏。旧结构化 handout 不作为新数据兼容目标。
 
-任务测试题 Markdown 导出、任务讲义 PDF 导出和 task-test 引用展示仍需隐藏不适合用户可见的 parser/OCR 残留；但该引用脱敏规则不要求新 handout 保存逐条 citation。
+任务测试题 Markdown 导出以及 task-test 的内部引用追溯仍需隐藏不适合用户可见的 parser/OCR 残留；但该引用脱敏规则不要求新 handout 保存逐条 citation，生成内容详情页也不展示引用侧栏。
 
 ## 2026-07-14 Handout Markdown-first 简化
 
