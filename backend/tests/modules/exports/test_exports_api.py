@@ -433,15 +433,32 @@ def test_export_handout_pdf_success(api: ApiHarness) -> None:
     assert len(response.content) > 8_000
 
 
-def test_render_markdown_pdf_html_renders_latex_math() -> None:
+def test_render_markdown_pdf_html_enables_katex_math_rendering() -> None:
     html = render_markdown_pdf_html(
-        "# 今日讲义\n\n$$\nC = W \\log_2(1 + S/N)\n$$\n",
+        "# 今日讲义\n\n行内公式 $C = 2W$。\n\n$$\nC = W \\log_2(1 + S/N)\n$$\n",
         title="今日讲义",
     )
 
-    assert "$$" not in html
-    assert "\\log_2" not in html
-    assert "katex" in html
+    assert "renderMathInElement" in html
+    assert "__COURSE_NEXUS_MATH_READY__" in html
+    assert "katex.min.css" not in html
+    assert "KaTeX" in html
+    assert "$$" in html
+    assert "\\log_2" in html
+    assert "ignoredTags" in html
+    assert '"pre", "code"' in html
+
+
+def test_render_markdown_pdf_html_leaves_code_blocks_for_katex_to_ignore() -> None:
+    html = render_markdown_pdf_html(
+        "# 今日讲义\n\n```text\n$not_math$\n```\n\n普通公式 $E = mc^2$\n",
+        title="今日讲义",
+    )
+
+    assert "$not_math$" in html
+    assert "<code" in html
+    assert "ignoredTags" in html
+    assert '"pre", "code"' in html
 
 def test_render_real_handout_markdown_pdf() -> None:
     markdown_path = Path(__file__).resolve().parents[2] / "fixtures" / "exports" / "physical-layer-handout.md"

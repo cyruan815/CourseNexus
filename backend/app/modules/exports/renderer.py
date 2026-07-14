@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-import html
+from functools import lru_cache
+import os
 from pathlib import Path
 import re
+import shutil
 import textwrap
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -28,6 +30,8 @@ PAGE_BOTTOM_Y = 52
 
 _MARKDOWN_CHOICE_OPTION_IDS = ("A", "B", "C", "D")
 _MARKDOWN_CHOICE_QUESTION_TYPES = {"single_choice", "multiple_choice"}
+_KATEX_DIST_ENV_VAR = "COURSENEXUS_KATEX_DIST"
+_KATEX_REQUIRED_ASSETS = ("katex.min.css", "katex.min.js", "contrib/auto-render.min.js")
 _UNSAFE_CITATION_SNIPPET_MARKERS = ("formula-not-decoded", "", "", "")
 
 
@@ -64,6 +68,7 @@ def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
         html_path = Path(temp_dir) / "document.html"
         pdf_path = Path(temp_dir) / "document.pdf"
         html_path.write_text(html, encoding="utf-8")
+        _copy_katex_fonts(html_path.parent)
 
         try:
             from playwright.sync_api import sync_playwright
@@ -78,17 +83,26 @@ def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
                 page.on("pageerror", lambda error: page_errors.append(str(error)))
                 page.goto(html_path.as_uri(), wait_until="load")
                 page.emulate_media(media="print")
-                page.wait_for_function("() => !document.fonts || document.fonts.status === 'loaded'", timeout=30_000)
+                page.wait_for_function(
+                    """
+                    () => window.__COURSE_NEXUS_MATH_READY__ === true
+                      && (!document.fonts || document.fonts.status === 'loaded')
+                    """,
+                    timeout=30_000,
+                )
 
                 render_state = page.evaluate(
                     """
                     () => ({
-                      mathErrors: document.querySelectorAll('.katex-error').length
+                      mathErrors: document.querySelectorAll('.katex-error').length,
+                      mathRuntimeError: window.__COURSE_NEXUS_MATH_ERROR__ || null
                     })
                     """
                 )
                 if page_errors:
                     raise RuntimeError("PDF HTML rendering failed: " + "; ".join(page_errors))
+                if render_state.get("mathRuntimeError"):
+                    raise RuntimeError("PDF math rendering failed: " + str(render_state["mathRuntimeError"]))
                 if render_state.get("mathErrors"):
                     raise RuntimeError("PDF HTML rendering produced KaTeX errors")
 
@@ -107,9 +121,9 @@ def render_markdown_pdf(markdown: str, *, title: str = "CourseNexus") -> bytes:
 
 def render_markdown_pdf_html(markdown: str, *, title: str = "CourseNexus") -> str:
     safe_markdown = _sanitize_markdown_for_pdf(markdown)
-    body_html = _render_math_html(_build_markdown_renderer().render(safe_markdown))
+    body_html = _build_markdown_renderer().render(safe_markdown)
     template = _html_environment().from_string(_PDF_HTML_TEMPLATE)
-    return template.render(title=title, body_html=body_html, css=_PDF_CSS)
+    return template.render(title=title, body_html=body_html, css=_PDF_CSS, **_katex_assets())
 
 
 def _build_markdown_renderer() -> MarkdownIt:
@@ -127,28 +141,38 @@ def _html_environment() -> Environment:
     return Environment(autoescape=select_autoescape(("html", "xml")))
 
 
-def _render_math_html(body_html: str) -> str:
-    return re.sub(r"<p>\$\$\n(.+?)\n\$\$</p>", _math_block_replacement, body_html, flags=re.DOTALL)
+@lru_cache(maxsize=1)
+def _katex_dist_dir() -> Path:
+    configured = os.environ.get(_KATEX_DIST_ENV_VAR)
+    project_root = Path(__file__).resolve().parents[4]
+    candidates = [
+        Path(configured) if configured else None,
+        project_root / "node_modules" / "katex" / "dist",
+        project_root / "frontend" / "node_modules" / "katex" / "dist",
+    ]
+    for candidate in candidates:
+        if candidate and all((candidate / asset).is_file() for asset in _KATEX_REQUIRED_ASSETS):
+            return candidate
+    raise RuntimeError(
+        "KaTeX assets are required for handout PDF math rendering. "
+        "Run pnpm install or set COURSENEXUS_KATEX_DIST to katex/dist."
+    )
 
 
-def _math_block_replacement(match: re.Match[str]) -> str:
-    latex = html.unescape(match.group(1)).strip()
-    return f'<div class="math-display"><span class="katex">{_latex_to_readable_html(latex)}</span></div>'
+@lru_cache(maxsize=1)
+def _katex_assets() -> dict[str, str]:
+    dist_dir = _katex_dist_dir()
+    return {
+        "katex_css": (dist_dir / "katex.min.css").read_text(encoding="utf-8"),
+        "katex_js": (dist_dir / "katex.min.js").read_text(encoding="utf-8"),
+        "katex_auto_render_js": (dist_dir / "contrib" / "auto-render.min.js").read_text(encoding="utf-8"),
+    }
 
 
-def _latex_to_readable_html(latex: str) -> str:
-    readable = latex.strip()
-    readable = readable.replace(r"\times", "×")
-    readable = readable.replace(r"\cdot", "·")
-    readable = readable.replace(r"\leq", "≤")
-    readable = readable.replace(r"\geq", "≥")
-    readable = readable.replace(r"\approx", "≈")
-    readable = readable.replace(r"\log", "log")
-    escaped = html.escape(readable)
-    escaped = re.sub(r"([A-Za-z])_\{?([A-Za-z0-9]+)\}?", r"\1<sub>\2</sub>", escaped)
-    escaped = re.sub(r"([A-Za-z0-9)]+)\^\{?([A-Za-z0-9+\-/]+)\}?", r"\1<sup>\2</sup>", escaped)
-    return escaped
-
+def _copy_katex_fonts(target_dir: Path) -> None:
+    fonts_dir = _katex_dist_dir() / "fonts"
+    if fonts_dir.is_dir():
+        shutil.copytree(fonts_dir, target_dir / "fonts", dirs_exist_ok=True)
 
 def _render_handout_pdf_markdown(
     title: str,
@@ -414,18 +438,48 @@ def _sanitize_markdown_line(line: str) -> str | None:
 
 
 _PDF_HTML_TEMPLATE = """<!doctype html>
-<html lang=\"zh-CN\">
+<html lang="zh-CN">
 <head>
-  <meta charset=\"utf-8\" />
+  <meta charset="utf-8" />
   <title>{{ title }}</title>
+  <style>{{ katex_css | safe }}</style>
   <style>{{ css | safe }}</style>
 </head>
 <body>
-  <main id=\"pdf-document\">{{ body_html | safe }}</main>
+  <main id="pdf-document">{{ body_html | safe }}</main>
+  <script>{{ katex_js | safe }}</script>
+  <script>{{ katex_auto_render_js | safe }}</script>
+  <script>
+    (() => {
+      const markDone = () => { window.__COURSE_NEXUS_MATH_READY__ = true; };
+      const renderMath = () => {
+        try {
+          renderMathInElement(document.getElementById("pdf-document"), {
+            delimiters: [
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false }
+            ],
+            ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code", "option"],
+            ignoredClasses: ["no-math-render"],
+            throwOnError: false,
+            strict: "warn"
+          });
+        } catch (error) {
+          window.__COURSE_NEXUS_MATH_ERROR__ = error && error.message ? error.message : String(error);
+        } finally {
+          markDone();
+        }
+      };
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", renderMath, { once: true });
+      } else {
+        renderMath();
+      }
+    })();
+  </script>
 </body>
 </html>
 """
-
 _PDF_CSS = """
 @page {
   size: A4;
@@ -522,21 +576,17 @@ code {
   font-family: Consolas, "JetBrains Mono", monospace;
 }
 
-.math-display {
+.katex-display {
   margin: 12px 0;
-  padding: 8px 10px;
-  text-align: center;
-  overflow-wrap: anywhere;
-  border-radius: 4px;
-  background: #f7f7f7;
+  padding: 4px 0;
+  overflow-x: visible;
+  overflow-y: hidden;
+  break-inside: avoid-page;
 }
 
 .katex {
-  font-family: "Cambria Math", "Times New Roman", "Microsoft YaHei", serif;
-  font-size: 12pt;
-  line-height: 1.5;
+  font-size: 1em;
 }
-
 blockquote {
   margin: 12px 0;
   padding: 8px 12px;

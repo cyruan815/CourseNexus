@@ -52,7 +52,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 
-任务讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，并通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
+任务讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，注入本地 KaTeX CSS/JS 对 `$...$` 与 `$$...$$` 数学公式做浏览器端排版，再通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
 
 ## 幂等与重新生成
 
@@ -251,7 +251,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 
-今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，并通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
+今日讲义 PDF 导出接口同样返回文件流，不包成功 envelope。它只支持当前用户自己的成功 `handout`，生成文件名为 `handout-{generated_content_id}.pdf`；非 `handout` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。PDF renderer 使用 `markdown-it-py` + Jinja2 生成语义化 HTML，注入本地 KaTeX CSS/JS 对 `$...$` 与 `$$...$$` 数学公式做浏览器端排版，再通过 Playwright Chromium 按 A4 打印为 PDF；不保存导出历史，渲染异常返回 `EXPORT_FAILED`，不影响原 generated content。
 
 ## 幂等与重新生成
 
@@ -313,8 +313,8 @@ sequenceDiagram
 - `AIGeneratedContent.content` 保存一整篇可导出的 Markdown 讲义正文。
 - `handout.content_json` 只保存轻量元信息：`{"format":"markdown","schema_version":1}`；不再保存旧版 `sections/blocks` 结构，也不兼容旧结构化 handout 历史导出。
 - Handout 不生成逐条 `SourceCitation`。Markdown 一级标题下方写来源说明，例如 `本讲义基于《资料名》中“二级任务标题”相关内容生成。`，前端详情页不展示引用侧栏。
-- 保存前会统一规范化 Markdown 数学公式：块级 `\[...\]` 与截图中单独一行 `[` / `]` 包住且明显像 LaTeX 的公式，会转换为 `$$...$$`；行内 `\(...\)` 会转换为 `$...$`。普通 Markdown 链接、任务列表和非公式方括号块不会被转换。
-- Handout prompt 明确要求块级公式使用 `$$...$$`、行内公式使用 `$...$`，禁止 `\[...\]`、禁止单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表。
+- 后端保存前不正则改写数学公式内容；Handout prompt 负责约束模型输出 `$...$` / `$$...$$`，PDF 导出在临时 HTML 中通过本地 KaTeX 完成数学排版。
+- Handout prompt 明确要求块级公式使用 `$$...$$`、行内公式使用 `$...$`，禁止 `\[...\]`、禁止单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。
 
 `task_test` 仍采用结构化 JSON 存储。`task_test.content_json` 包含 `instructions` 和 `questions`。每道题包含 `id`、`question_type`、`question_text`、`options`、`correct_answer`、`explanation`、`source_citation_ids` 和 `sort_order`。题型支持 `single_choice`、`multiple_choice`、`true_false` 和 `short_answer`。
 任务测试题结构不变量：
@@ -374,7 +374,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
-，块级公式只用独立的 `$...$`，禁止 `\(...\)`、`\[...\]` 和单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表。前端 Markdown 渲染和 PDF renderer 负责数学排版；后端生成阶段不做公式分隔符自动转换。
+，块级公式只用独立的 `$$...$$`，禁止 `\(...\)`、`\[...\]` 和单独一行 `[` / `]` 包公式，公式不要放进代码块，变量解释使用普通 Markdown 列表；自测题或填空题的空格线使用全角低线 `＿＿＿＿`，不要使用连续 ASCII 下划线 `______`，避免 Markdown 渲染吞掉填空线。前端 Markdown 渲染和 PDF renderer 负责数学排版；后端生成阶段不做公式分隔符自动转换。
 
 Handout 仍只读取当前二级任务关联资料。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，仅 handout 专用分支过滤 material-context batch；公共 material-context 查询保持当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序等基础边界。
 
@@ -382,7 +382,7 @@ Handout 仍只读取当前二级任务关联资料。若计划快照中存在当
 
 ### PDF renderer 契约
 
-Handout PDF 导出读取 `ai_generated_contents.content` Markdown，经 Markdown -> HTML -> PDF renderer 输出文件流。renderer 可以处理标题、列表、表格、代码块和数学排版，但不创建数据库记录、不修正生成内容语义、不恢复历史结构化 handout。
+Handout PDF 导出读取 `ai_generated_contents.content` Markdown，经 Markdown -> HTML -> KaTeX auto-render -> Playwright PDF renderer 输出文件流。renderer 可以处理标题、列表、表格、代码块和数学公式排版；代码块和 inline code 中的 `$...$` 由 KaTeX ignoredTags 忽略。导出层不创建数据库记录、不修正生成内容语义、不恢复历史结构化 handout。
 
 ### 本地 POC 数据重置
 
@@ -430,7 +430,7 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 导出和前端展示口径：
 
 - Markdown 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 对成功 `handout` 直接返回 `content`。
-- PDF 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 `handout` 读取 `content`，复用 Markdown -> HTML -> PDF renderer。
+- PDF 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 `handout` 读取 `content`，复用 Markdown -> HTML -> KaTeX auto-render -> Playwright PDF renderer。
 - 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。
 - 导出不写数据库、不修改任务状态、不写打卡记录。
 

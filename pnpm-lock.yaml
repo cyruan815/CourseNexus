@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      katex:
+        specifier: 0.16.47
+        version: 0.16.47
       markmap-lib:
         specifier: 0.18.12
         version: 0.18.12(markmap-common@0.18.9)
