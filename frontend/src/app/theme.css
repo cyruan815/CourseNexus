@@ -34,8 +34,16 @@
   min-width: 0;
 }
 
-.workbench-heading {
+.workbench-topbar-left {
   flex: 1 1 auto;
+}
+
+.workbench-topbar-right {
+  flex: 0 0 auto;
+}
+
+.workbench-heading {
+  flex: 0 1 auto;
 }
 
 .workbench-page-name,

@@ -138,10 +138,20 @@
 }
 
 .study-plan-detail-hero {
+  position: relative;
   flex: 0 0 auto;
+  overflow: hidden;
+  --course-glow: rgba(47, 128, 237, 0.11);
+  --course-core: rgba(47, 128, 237, 0.16);
   background:
-    linear-gradient(135deg, rgba(232, 242, 255, 0.72), rgba(255, 247, 237, 0.5)),
+    radial-gradient(circle at 0 0, var(--course-glow), transparent 320px),
+    radial-gradient(circle at 11% 7%, var(--course-core), transparent 250px),
     #ffffff;
+}
+
+.study-plan-detail-hero > * {
+  position: relative;
+  z-index: 1;
 }
 
 .study-plan-goal {
@@ -155,7 +165,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-items: stretch;
   overflow: hidden;

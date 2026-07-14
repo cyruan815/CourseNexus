@@ -118,6 +118,8 @@ describe("CalendarPage", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
 
     expect(await screen.findByRole("heading", { level: 1, name: "学习日历" })).toBeInTheDocument();
     expect(screen.getByText("计算机网络")).toBeInTheDocument();
@@ -135,6 +137,10 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
       "href",
       "/study-subtasks/subtask_2",
+    );
+    expect(screen.getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
+      "href",
+      "/courses/crs_123/study-plans/plan_1",
     );
 
     await waitFor(() => {
@@ -203,6 +209,8 @@ describe("CalendarPage", () => {
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
     expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
     expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
 
     expect(await screen.findByRole("heading", { level: 1, name: "学习日历" })).toBeInTheDocument();
     expect(screen.getByText("全局")).toBeInTheDocument();
@@ -216,6 +224,10 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
       "href",
       "/study-subtasks/subtask_2",
+    );
+    expect(screen.getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
+      "href",
+      "/courses/crs_123/study-plans/plan_1",
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/calendar/month?month=2026-07",

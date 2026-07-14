@@ -207,9 +207,20 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
               {task.completed_subtask_count}/{task.total_subtask_count} 个二级任务完成
             </Text>
           </Stack>
-          <Badge color={statusColor(task.derived_status)} variant="light">
-            {statusLabel(task.derived_status)}
-          </Badge>
+          <Stack align="flex-end" gap="xs">
+            <Badge color={statusColor(task.derived_status)} variant="light">
+              {statusLabel(task.derived_status)}
+            </Badge>
+            <Button
+              aria-label={`查看计划详情 ${task.title}`}
+              component={Link}
+              size="xs"
+              to={`/courses/${courseId}/study-plans/${task.plan_id}`}
+              variant="subtle"
+            >
+              查看计划详情
+            </Button>
+          </Stack>
         </Group>
         <Stack gap="xs">
           {task.subtasks.map((subtask) => (
