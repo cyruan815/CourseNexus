@@ -6,8 +6,10 @@ type Block =
   | { type: "blockquote"; lines: string[] }
   | { type: "callout"; calloutType: CalloutType; title: string; lines: string[] }
   | { type: "formula"; text: string }
-  | { type: "heading"; level: 1 | 2 | 3; text: string }
+  | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
+  | { type: "hr" }
   | { type: "list"; items: string[] }
+  | { type: "orderedList"; items: string[] }
   | { type: "paragraph"; text: string }
   | { type: "table"; headers: string[]; rows: string[][] };
 
@@ -41,17 +43,27 @@ export function HandoutMarkdownRenderer({ markdown }: { markdown: string }) {
 
 function HandoutBlock({ block }: { block: Block }) {
   if (block.type === "heading") {
-    const Tag = `h${block.level}` as "h1" | "h2" | "h3";
+    const Tag = `h${block.level}` as "h1" | "h2" | "h3" | "h4";
     return <Tag>{formatHeadingText(block.text, block.level)}</Tag>;
   }
-  if (block.type === "paragraph") return <p>{block.text}</p>;
+  if (block.type === "hr") return <hr />;
+  if (block.type === "paragraph") return <p>{renderInline(block.text)}</p>;
   if (block.type === "list") {
     return (
       <ul>
         {block.items.map((item, index) => (
-          <li key={`${item}-${index}`}>{item}</li>
+          <li key={`${item}-${index}`}>{renderInline(item)}</li>
         ))}
       </ul>
+    );
+  }
+  if (block.type === "orderedList") {
+    return (
+      <ol>
+        {block.items.map((item, index) => (
+          <li key={`${item}-${index}`}>{renderInline(item)}</li>
+        ))}
+      </ol>
     );
   }
   if (block.type === "formula") {
@@ -68,7 +80,7 @@ function HandoutBlock({ block }: { block: Block }) {
           <thead>
             <tr>
               {block.headers.map((header) => (
-                <th key={header}>{header}</th>
+                <th key={header}>{renderInline(header)}</th>
               ))}
             </tr>
           </thead>
@@ -76,7 +88,7 @@ function HandoutBlock({ block }: { block: Block }) {
             {block.rows.map((row, rowIndex) => (
               <tr key={`row-${rowIndex}`}>
                 {row.map((cell, cellIndex) => (
-                  <td key={`${rowIndex}-${cellIndex}`}>{cell}</td>
+                  <td key={`${rowIndex}-${cellIndex}`}>{renderInline(cell)}</td>
                 ))}
               </tr>
             ))}
@@ -89,7 +101,7 @@ function HandoutBlock({ block }: { block: Block }) {
     return (
       <blockquote className="handout-blockquote">
         {block.lines.map((line, index) => (
-          <p key={`${line}-${index}`}>{line}</p>
+          <p key={`${line}-${index}`}>{renderInline(line)}</p>
         ))}
       </blockquote>
     );
@@ -98,7 +110,7 @@ function HandoutBlock({ block }: { block: Block }) {
     <section className={`handout-callout handout-callout-${block.calloutType}`} data-testid={`handout-callout-${block.calloutType}`}>
       <strong>{block.title}</strong>
       {block.lines.map((line, index) => (
-        <p key={`${line}-${index}`}>{line}</p>
+        <p key={`${line}-${index}`}>{renderInline(line)}</p>
       ))}
     </section>
   );
@@ -112,6 +124,13 @@ export function parseHandoutMarkdown(markdown: string): Block[] {
   while (index < lines.length) {
     const line = lines[index] ?? "";
     if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    const singleLineFormula = /^\$\$\s*(.+?)\s*\$\$$/.exec(line.trim());
+    if (singleLineFormula) {
+      blocks.push({ type: "formula", text: singleLineFormula[1].trim() });
       index += 1;
       continue;
     }
@@ -155,6 +174,12 @@ export function parseHandoutMarkdown(markdown: string): Block[] {
       continue;
     }
 
+    if (/^\s*-{3,}\s*$/.test(line)) {
+      blocks.push({ type: "hr" });
+      index += 1;
+      continue;
+    }
+
     if (/^\s*[-*]\s+/.test(line)) {
       const items: string[] = [];
       while (index < lines.length && /^\s*[-*]\s+/.test(lines[index] ?? "")) {
@@ -165,15 +190,28 @@ export function parseHandoutMarkdown(markdown: string): Block[] {
       continue;
     }
 
+    if (/^\s*\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index] ?? "")) {
+        items.push((lines[index] ?? "").replace(/^\s*\d+\.\s+/, "").trim());
+        index += 1;
+      }
+      blocks.push({ type: "orderedList", items });
+      continue;
+    }
+
     const paragraphLines: string[] = [];
     while (
       index < lines.length &&
       lines[index]?.trim() &&
       !lines[index]?.startsWith(">") &&
       lines[index]?.trim() !== "$$" &&
+      !/^\$\$\s*(.+?)\s*\$\$$/.test(lines[index]?.trim() ?? "") &&
       !parseHeading(lines[index] ?? "") &&
       !isTableStart(lines, index) &&
-      !/^\s*[-*]\s+/.test(lines[index] ?? "")
+      !/^\s*[-*]\s+/.test(lines[index] ?? "") &&
+      !/^\s*\d+\.\s+/.test(lines[index] ?? "") &&
+      !/^\s*-{3,}\s*$/.test(lines[index] ?? "")
     ) {
       paragraphLines.push((lines[index] ?? "").trim());
       index += 1;
@@ -185,9 +223,9 @@ export function parseHandoutMarkdown(markdown: string): Block[] {
 }
 
 function parseHeading(line: string): Block | null {
-  const match = /^(#{1,3})\s+(.+)$/.exec(line);
+  const match = /^(#{1,4})\s+(.+)$/.exec(line);
   if (!match) return null;
-  return { type: "heading", level: match[1].length as 1 | 2 | 3, text: match[2].trim() };
+  return { type: "heading", level: match[1].length as 1 | 2 | 3 | 4, text: match[2].trim() };
 }
 
 function parseQuoteBlock(lines: string[]): Block {
@@ -220,7 +258,7 @@ function splitTableRow(line: string): string[] {
   return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
 }
 
-function formatHeadingText(text: string, level: 1 | 2 | 3) {
+function formatHeadingText(text: string, level: 1 | 2 | 3 | 4) {
   if (level !== 3) return text;
   const match = /^(\d+(?:\.\d+)*)\s+(.+)$/.exec(text);
   if (!match) return text;
@@ -230,4 +268,13 @@ function formatHeadingText(text: string, level: 1 | 2 | 3) {
       {match[2]}
     </>
   );
+}
+
+function renderInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, index) => {
+    const bold = /^\*\*([^*]+)\*\*$/.exec(part);
+    if (bold) return <strong key={`${part}-${index}`}>{bold[1]}</strong>;
+    return part;
+  });
 }
