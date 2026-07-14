@@ -384,7 +384,10 @@ def _merge_task_test_parameters(
         stored.pop("question_type_counts", None)
         stored.pop("question_count", None)
         stored.pop("question_types", None)
-    elif "question_count" in request or "question_types" in request or "types" in request:
+    elif "types" in request:
+        stored.pop("question_type_counts", None)
+        stored.pop("question_types", None)
+    elif "question_count" in request or "question_types" in request:
         stored.pop("question_type_counts", None)
     return {**stored, **request}
 
@@ -396,9 +399,6 @@ def _has_request_question_type_counts(parameters: dict[str, object]) -> bool:
         raw_items = parameters.get(key)
         if isinstance(raw_items, list) and raw_items and all(isinstance(item, dict) for item in raw_items):
             return True
-    raw_types = parameters.get("types")
-    if isinstance(raw_types, list) and raw_types:
-        return True
     if any(key in parameters for key in ("single_choice", "multiple_choice", "true_false", "short_answer")):
         return True
     return any(isinstance(key, str) and "道" in key for key in parameters)
