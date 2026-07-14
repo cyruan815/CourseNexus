@@ -100,6 +100,23 @@ def test_handout_content_v2_allows_blocks_to_omit_citations() -> None:
     assert content.knowledge_map.source_citation_ids == []
 
 
+def test_handout_content_v2_allows_prerequisites_to_omit_citations() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["prerequisites"] = [
+        {
+            "id": "pre_1",
+            "title": "对数基础",
+            "explanation": "理解二进制对数在公式中的含义。",
+            "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
+            "source_citation_ids": [],
+            "sort_order": 1,
+        }
+    ]
+
+    content = HandoutContent.model_validate(payload)
+
+    assert content.prerequisites[0].source_citation_ids == []
+
 class PromptCapturingModelProvider(MockModelProvider):
     def __init__(self, structured_outputs: dict[type[HandoutContent], dict]) -> None:
         super().__init__(structured_outputs=structured_outputs)
@@ -242,6 +259,29 @@ def test_handout_generator_collects_and_validates_top_level_citations() -> None:
     }
 
 
+def test_handout_generator_ignores_empty_prerequisite_citations() -> None:
+    payload = _valid_handout_v2_payload()
+    payload["knowledge_map"] = None
+    payload["prerequisites"] = [
+        {
+            "id": "pre_1",
+            "title": "对数基础",
+            "explanation": "理解二进制对数在公式中的含义。",
+            "example": "log2(8)=3 表示 2 的 3 次方等于 8。",
+            "source_citation_ids": [],
+            "sort_order": 1,
+        }
+    ]
+    provider = MockModelProvider(structured_outputs={HandoutContent: payload})
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"language": "zh-CN"},
+    )
+
+    assert output.item_citation_chunk_ids == {"sec_1": ["chunk_1"]}
+
 def test_handout_generator_rejects_top_level_formula_without_citations() -> None:
     payload = _valid_handout_v2_payload()
     payload["formula_cards"] = [payload["sections"][0]["blocks"][0] | {"source_citation_ids": []}]
@@ -331,6 +371,7 @@ def test_handout_generator_prompt_includes_task_context_and_quality_requirements
     assert "不生成整章摘要" in prompt
     assert "适用条件和变量含义" in prompt
     assert "每个 section 必须填写 source_citation_ids，必须使用下方 chunk_id，数量为 1-4 个" in prompt
+    assert "prerequisites 可不填写 source_citation_ids" in prompt
     assert "每个顶层条目必须独立填写 source_citation_ids" in prompt
     assert "学生导出讲义不会逐节展示 citation" in prompt
     assert "正文不要写“来源如下”“引用如下”" in prompt
