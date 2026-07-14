@@ -638,8 +638,11 @@ export function StudyPlanCreatePage() {
 
   if (isLoadingCourse) {
     return (
-      <Box className="study-plan-page">
-        <Box className="study-plan-shell">
+      <Box className="study-plan-page workbench-page">
+        <Paper className="workbench-topbar" component="header" radius={0}>
+          <Skeleton height={34} width={280} />
+        </Paper>
+        <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Skeleton height={36} width={280} />
           <Skeleton height={520} radius="md" />
         </Box>
@@ -648,10 +651,11 @@ export function StudyPlanCreatePage() {
   }
 
   return (
-    <Box className="study-plan-page">
-      <Box className="study-plan-shell" component="main">
-        <Group className="study-plan-nav" justify="space-between" wrap="nowrap">
+    <Box className="study-plan-page workbench-page">
+      <Paper className="workbench-topbar" component="header" radius={0}>
+        <Group justify="space-between" wrap="nowrap">
           <Button
+            className="workbench-back-button"
             component={Link}
             leftSection={<IconArrowLeft size={16} />}
             to={courseId ? `/courses/${courseId}` : "/"}
@@ -659,9 +663,14 @@ export function StudyPlanCreatePage() {
           >
             返回课程
           </Button>
-          <Badge color="teal" variant="light">智能回填</Badge>
+          <Group gap="sm" wrap="nowrap">
+            <Text className="workbench-title" component="span">创建学习计划</Text>
+            <Badge color="teal" variant="light">智能回填</Badge>
+          </Group>
         </Group>
+      </Paper>
 
+      <Box className="study-plan-shell" component="main" data-workbench-scroll="locked">
         <Group align="flex-start" className="study-plan-header" justify="space-between">
           <Stack gap={4}>
             <Text c="dimmed" size="sm">{course?.name ?? "课程"}</Text>

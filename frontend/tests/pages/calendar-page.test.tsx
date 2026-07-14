@@ -113,7 +113,11 @@ describe("CalendarPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderCalendarPage();
+    const { container } = renderCalendarPage();
+
+    expect(container.querySelector(".workbench-page")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
 
     expect(await screen.findByRole("heading", { name: "计算机网络学习日历" })).toBeInTheDocument();
     expect(screen.getByText("物理层复习")).toBeInTheDocument();
@@ -189,7 +193,11 @@ describe("CalendarPage", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    renderCalendarPage("/calendar?date=2026-07-14");
+    const { container } = renderCalendarPage("/calendar?date=2026-07-14");
+
+    expect(container.querySelector(".workbench-page")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".calendar-course-shell")).toHaveAttribute("data-workbench-scroll", "locked");
 
     expect(await screen.findByRole("heading", { name: "全局学习日历" })).toBeInTheDocument();
     expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);

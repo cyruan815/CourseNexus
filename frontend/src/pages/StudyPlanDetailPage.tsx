@@ -237,8 +237,11 @@ export function StudyPlanDetailPage() {
 
   if (isLoading) {
     return (
-      <Box className="study-plan-page">
-        <Box className="study-plan-shell">
+      <Box className="study-plan-page workbench-page">
+        <Paper className="workbench-topbar" component="header" radius={0}>
+          <Skeleton height={34} width={280} />
+        </Paper>
+        <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Skeleton height={36} width={280} />
           <Skeleton height={520} radius="md" />
         </Box>
@@ -248,8 +251,19 @@ export function StudyPlanDetailPage() {
 
   if (error || !detail) {
     return (
-      <Box className="study-plan-page">
-        <Box className="study-plan-shell">
+      <Box className="study-plan-page workbench-page">
+        <Paper className="workbench-topbar" component="header" radius={0}>
+          <Button
+            className="workbench-back-button"
+            component={Link}
+            leftSection={<IconArrowLeft size={16} />}
+            to={courseId ? `/courses/${courseId}` : "/"}
+            variant="subtle"
+          >
+            返回课程
+          </Button>
+        </Paper>
+        <Box className="study-plan-shell" data-workbench-scroll="locked">
           <Alert color="red" role="alert" title="学习计划加载失败" variant="light">
             {error ?? "学习计划不存在"}
           </Alert>
@@ -362,9 +376,38 @@ export function StudyPlanDetailPage() {
   }
 
   return (
-    <Box className="study-plan-page">
-      <Box className="study-plan-shell" component="main">
-        <Group className="study-plan-nav" justify="space-between" wrap="nowrap">
+    <Box className="study-plan-page workbench-page">
+      <Paper className="workbench-topbar" component="header" radius={0}>
+        <Group justify="space-between" wrap="nowrap">
+          <Button
+            className="workbench-back-button"
+            component={Link}
+            leftSection={<IconArrowLeft size={16} />}
+            to={courseId ? `/courses/${courseId}` : "/"}
+            variant="subtle"
+          >
+            返回课程
+          </Button>
+          <Group gap="xs" wrap="nowrap">
+            <Text className="workbench-title" component="span">{detail.plan.title}</Text>
+            <Button
+              leftSection={<IconRotateClockwise size={16} />}
+              onClick={() => setIsLifecycleOpen((current) => !current)}
+              variant="light"
+            >
+              重新生成
+            </Button>
+            <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+              删除计划
+            </Button>
+            <Button disabled leftSection={<IconDownload size={16} />} variant="light">
+              导出计划（待接入）
+            </Button>
+          </Group>
+        </Group>
+      </Paper>
+      <Box className="study-plan-shell" component="main" data-workbench-scroll="locked">
+        <Group className="study-plan-nav" hidden aria-hidden="true" justify="space-between" wrap="nowrap">
           <Button
             component={Link}
             leftSection={<IconArrowLeft size={16} />}

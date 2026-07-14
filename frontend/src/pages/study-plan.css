@@ -1,5 +1,9 @@
 .study-plan-page {
+  height: 100vh;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background:
     linear-gradient(180deg, #f4f8fc 0, #f7fafc 260px),
     #f7fafc;
@@ -7,20 +11,31 @@
 }
 
 .study-plan-shell {
-  display: grid;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 18px 20px 28px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: hidden;
+  padding: 10px;
 }
 
 .study-plan-nav {
   min-height: 42px;
 }
 
+.study-plan-shell > .study-plan-nav,
+.study-plan-execution-shell > .study-plan-nav {
+  display: none;
+}
+
 .study-plan-header {
+  flex: 0 0 auto;
   border-bottom: 1px solid #d9e2ec;
-  padding-bottom: 14px;
+  padding: 10px 12px 14px;
 }
 
 .study-plan-header h1,
@@ -32,10 +47,13 @@
 }
 
 .study-plan-grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
-  gap: 12px;
-  align-items: start;
+  gap: 10px;
+  align-items: stretch;
+  overflow: hidden;
 }
 
 .study-plan-panel,
@@ -48,6 +66,8 @@
 .study-plan-panel {
   display: grid;
   gap: 14px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .study-plan-panel h2 {
@@ -88,7 +108,8 @@
 }
 
 .study-plan-preview-empty {
-  min-height: 360px;
+  min-height: 0;
+  height: 100%;
   display: grid;
   place-items: center;
   border-color: #bfdbfe;
@@ -117,6 +138,7 @@
 }
 
 .study-plan-detail-hero {
+  flex: 0 0 auto;
   background:
     linear-gradient(135deg, rgba(232, 242, 255, 0.72), rgba(255, 247, 237, 0.5)),
     #ffffff;
@@ -130,10 +152,13 @@
 }
 
 .study-plan-detail-layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px;
-  align-items: start;
+  gap: 10px;
+  align-items: stretch;
+  overflow: hidden;
 }
 
 .study-plan-disabled-row {
@@ -147,6 +172,9 @@
 }
 
 .study-plan-lifecycle-panel {
+  flex: 0 1 auto;
+  max-height: min(48vh, 520px);
+  overflow: auto;
   border-color: #bfdbfe;
   background:
     linear-gradient(135deg, rgba(239, 246, 255, 0.86), rgba(248, 255, 253, 0.9)),
@@ -184,36 +212,44 @@
 }
 
 .study-plan-delete-panel {
+  flex: 0 0 auto;
   border-color: #fecaca;
   background: #fffafa;
 }
 
 .study-plan-execution-shell {
+  flex: 1;
+  min-height: 0;
   display: grid;
   gap: 14px;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 18px 20px 28px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  overflow: hidden;
+  padding: 10px;
 }
 
 .study-plan-execution-grid {
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(230px, 0.72fr) minmax(440px, 1.45fr) minmax(280px, 0.85fr);
-  gap: 12px;
-  align-items: start;
+  gap: 10px;
+  align-items: stretch;
+  overflow: hidden;
 }
 
 .study-plan-execution-sidebar,
 .study-plan-execution-main,
 .study-plan-execution-aside {
+  min-height: 0;
   border-color: #d6e0eb;
   background: #ffffff;
+  overflow: auto;
   padding: 16px;
 }
 
 .study-plan-execution-sidebar {
-  position: sticky;
-  top: 14px;
+  position: static;
 }
 
 .study-plan-execution-main h1 {
@@ -322,6 +358,12 @@
 
   .study-plan-execution-sidebar {
     position: static;
+  }
+
+  .study-plan-grid,
+  .study-plan-detail-layout,
+  .study-plan-execution-grid {
+    overflow: auto;
   }
 }
 

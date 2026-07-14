@@ -317,8 +317,8 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
   const title = monthData?.course_name ? `${monthData.course_name}学习日历` : "课程学习日历";
 
   return (
-    <Box className="home-workbench calendar-placeholder-page">
-      <Paper className="home-header" component="header" radius={0}>
+    <Box className="home-workbench calendar-placeholder-page workbench-page">
+      <Paper className="home-header workbench-topbar" component="header" radius={0}>
         <Group justify="space-between" wrap="nowrap">
           <Group gap="md" wrap="nowrap">
             <ActionIcon aria-label="返回首页" component={Link} radius="xl" size={42} to="/" variant="default">
@@ -329,7 +329,7 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
           <Badge color="blue" variant="light">{month}</Badge>
         </Group>
       </Paper>
-      <Box className="calendar-course-shell" component="main">
+      <Box className="calendar-course-shell" component="main" data-workbench-scroll="locked">
         <Paper className="calendar-month-panel" radius="md" withBorder>
           <Stack gap="md">
             <Group justify="space-between" wrap="nowrap">
@@ -562,8 +562,8 @@ function GlobalCalendarPage() {
   }
 
   return (
-    <Box className="home-workbench calendar-placeholder-page">
-      <Paper className="home-header" component="header" radius={0}>
+    <Box className="home-workbench calendar-placeholder-page workbench-page">
+      <Paper className="home-header workbench-topbar" component="header" radius={0}>
         <Group justify="space-between" wrap="nowrap">
           <Group gap="md" wrap="nowrap">
             <ActionIcon aria-label="返回首页" component={Link} radius="xl" size={42} to="/" variant="default">
@@ -574,7 +574,7 @@ function GlobalCalendarPage() {
           <Badge color="blue" variant="light">{month}</Badge>
         </Group>
       </Paper>
-      <Box className="calendar-course-shell" component="main">
+      <Box className="calendar-course-shell" component="main" data-workbench-scroll="locked">
         <Paper className="calendar-month-panel" radius="md" withBorder>
           <Stack gap="md">
             <Group justify="space-between" wrap="nowrap">
