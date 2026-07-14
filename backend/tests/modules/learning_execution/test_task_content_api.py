@@ -243,6 +243,25 @@ def _set_plan_subtask_citation_scope(db: Session, *, citation_chunk_ids: object)
     db.commit()
 
 
+def _set_stored_task_test_generation_parameters(db: Session, *, parameters: dict[str, object]) -> None:
+    plan = db.get(StudyPlan, "sp_api_content")
+    assert plan is not None
+    plan.parsed_config_json = {
+        "task_snapshot": [
+            {
+                "sort_order": 1,
+                "subtasks": [
+                    {
+                        "sort_order": 1,
+                        "generation_parameters": {"task_test": parameters},
+                    }
+                ],
+            }
+        ]
+    }
+    db.add(plan)
+    db.commit()
+
 class CountingHandoutModelProvider:
     def __init__(self, *, markdown: str = "# 任务知识点讲义\n\n根据任务范围生成讲义。") -> None:
         self.prompts: list[str] = []
@@ -298,6 +317,57 @@ class CountingTaskTestModelProvider:
         )
 
 
+class FlexibleTaskTestModelProvider:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
+        raise AssertionError("answer_question should not be called")
+
+    def generate_structured(self, *, prompt, output_schema):
+        self.prompts.append(prompt)
+        assert output_schema is TaskTestContent
+        question_count = 5
+        if "题数：2" in prompt:
+            question_count = 2
+        elif "题数：3" in prompt:
+            question_count = 3
+        question_type = "short_answer" if "题型：short_answer" in prompt else "single_choice"
+        questions = []
+        for index in range(1, question_count + 1):
+            if question_type == "short_answer":
+                questions.append(
+                    {
+                        "id": f"q_{index}",
+                        "question_type": "short_answer",
+                        "question_text": f"请简述主键的作用 {index}。",
+                        "options": [],
+                        "correct_answer": "主键用于唯一标识表中的一行。",
+                        "explanation": "主键用于唯一标识表中的一行。",
+                        "source_citation_ids": ["chunk_api_content"],
+                        "sort_order": index,
+                    }
+                )
+            else:
+                questions.append(
+                    {
+                        "id": f"q_{index}",
+                        "question_type": "single_choice",
+                        "question_text": f"主键的作用是什么 {index}？",
+                        "options": [
+                            {"id": "A", "text": "唯一标识一行"},
+                            {"id": "B", "text": "存储图片"},
+                            {"id": "C", "text": "表达外键"},
+                            {"id": "D", "text": "删除数据"},
+                        ],
+                        "correct_answer": "A",
+                        "explanation": "主键用于唯一标识表中的一行。",
+                        "source_citation_ids": ["chunk_api_content"],
+                        "sort_order": index,
+                    }
+                )
+        return TaskTestContent.model_validate({"instructions": "完成下列题目。", "questions": questions})
+
 class BrokenModelProvider:
     def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
         raise AssertionError("answer_question should not be called")
@@ -319,24 +389,6 @@ def _successful_contents(db: Session, *, subtask_id: str, content_type: str) -> 
         ).scalars()
     )
 
-
-def _handout_output(
-    *,
-    overview: str,
-    summary: str,
-    sections: list[dict[str, object]],
-    item_citation_chunk_ids: dict[str, list[str]],
-) -> GeneratorOutput:
-    return GeneratorOutput(
-        title="今日讲义",
-        content_json={
-            "overview": overview,
-            "learning_objectives": ["解释主键和外键"],
-            "sections": sections,
-            "summary": summary,
-        },
-        item_citation_chunk_ids=item_citation_chunk_ids,
-    )
 
 
 def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
@@ -382,6 +434,7 @@ def test_reduce_handout_outputs_rejects_empty_markdown_batches() -> None:
 
     assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
 
+
 def test_generate_handout_for_learn_subtask_saves_markdown_content_without_citations(api: ApiHarness) -> None:
     user_id, headers = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
@@ -426,7 +479,11 @@ def test_generate_task_test_for_quiz_subtask_saves_content(api: ApiHarness) -> N
     assert data["content_type"] == "task_test"
     assert data["study_subtask_id"] == subtask_id
     assert data["generation_status"] == "success"
+    assert data["title"] == "任务内容测试题"
     assert data["content_json"]["questions"][0]["question_type"] == "single_choice"
+    content = api.db.get(AIGeneratedContent, data["id"])
+    assert content is not None
+    assert content.title == "任务内容测试题"
 
 
 def test_generate_task_test_multi_batch_generates_requested_question_count_once(api: ApiHarness) -> None:
@@ -479,7 +536,7 @@ def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) ->
     assert citations == []
 
 
-def test_generate_handout_saves_normalized_markdown_math(api: ApiHarness) -> None:
+def test_generate_handout_preserves_markdown_math_and_brackets_verbatim(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
     provider = CountingHandoutModelProvider(
@@ -489,8 +546,9 @@ def test_generate_handout_saves_normalized_markdown_math(api: ApiHarness) -> Non
             "[\n"
             "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
             "]\n\n"
-            "另一种写法：\\[C = B \\log_2(1 + S/N)\\]\n\n"
-            "行内公式 \\(C = B \\log_2(1 + S/N)\\) 用来说明信道容量。"
+            "标准块级公式：\n\n"
+            "$$\nC = B \\log_2(1 + S/N)\n$$\n\n"
+            "行内公式 $C = B \\log_2(1 + S/N)$ 用来说明信道容量。"
         )
     )
 
@@ -504,17 +562,14 @@ def test_generate_handout_saves_normalized_markdown_math(api: ApiHarness) -> Non
         max_tokens=10_000,
     )
 
-    assert "[\n\\frac" not in result.content
-    assert "\\[" not in result.content
-    assert "\\]" not in result.content
-    assert "\\(" not in result.content
-    assert "\\)" not in result.content
-    assert "$$\n\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n$$" in result.content
+    assert "[\n\\frac{S}{N}" in result.content
     assert "$$\nC = B \\log_2(1 + S/N)\n$$" in result.content
     assert "$C = B \\log_2(1 + S/N)$" in result.content
     stored = api.db.get(AIGeneratedContent, result.id)
     assert stored is not None
     assert stored.content == result.content
+    assert stored.title == "任务内容讲义"
+    assert stored.content.startswith("# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。")
 
 def test_generate_handout_passes_planner_and_diagnostic_context_to_prompt(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
@@ -907,6 +962,110 @@ def test_generate_handout_material_coverage_incomplete_saves_failed_record(api: 
     assert content.generation_status == "failed"
     assert content.error_code == "MATERIAL_COVERAGE_INCOMPLETE"
 
+
+def test_generate_task_test_types_alias_overrides_stored_distribution(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _set_stored_task_test_generation_parameters(
+        api.db,
+        parameters={
+            "question_count": 3,
+            "question_types": ["single_choice"],
+            "question_type_counts": [{"question_type": "single_choice", "question_count": 3}],
+            "difficulty": "medium",
+        },
+    )
+    provider = FlexibleTaskTestModelProvider()
+
+    result = generate_task_test_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"types": ["short_answer"]},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert "题数：5；题型：short_answer" in provider.prompts[0]
+    assert len(result.content_json["questions"]) == 5
+    assert {question["question_type"] for question in result.content_json["questions"]} == {"short_answer"}
+
+
+def test_generate_task_test_questions_alias_overrides_stored_distribution(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _set_stored_task_test_generation_parameters(
+        api.db,
+        parameters={
+            "question_count": 3,
+            "question_types": ["single_choice"],
+            "question_type_counts": [{"question_type": "single_choice", "question_count": 3}],
+            "difficulty": "medium",
+        },
+    )
+    provider = FlexibleTaskTestModelProvider()
+
+    result = generate_task_test_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"questions": [{"type": "short_answer", "count": 2}]},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert "题数：2；题型：short_answer" in provider.prompts[0]
+    assert "每种题型数量：short_answer 2 道" in provider.prompts[0]
+    assert len(result.content_json["questions"]) == 2
+    assert {question["question_type"] for question in result.content_json["questions"]} == {"short_answer"}
+
+
+def test_generate_task_test_difficulty_override_keeps_stored_distribution(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _set_stored_task_test_generation_parameters(
+        api.db,
+        parameters={
+            "question_count": 3,
+            "question_types": ["single_choice"],
+            "question_type_counts": [{"question_type": "single_choice", "question_count": 3}],
+            "difficulty": "medium",
+        },
+    )
+    provider = FlexibleTaskTestModelProvider()
+
+    result = generate_task_test_for_subtask(
+        api.db,
+        user_id=user_id,
+        subtask_id=subtask_id,
+        parameters={"difficulty": "hard"},
+        force_regenerate=True,
+        model_provider=provider,
+        max_tokens=10_000,
+    )
+
+    assert "题数：3；题型：single_choice" in provider.prompts[0]
+    assert "每种题型数量：single_choice 3 道" in provider.prompts[0]
+    assert "难度：hard" in provider.prompts[0]
+    assert len(result.content_json["questions"]) == 3
+    assert {question["question_type"] for question in result.content_json["questions"]} == {"single_choice"}
+
+
+def test_generate_task_test_conflicting_alias_parameters_return_validation_error(api: ApiHarness) -> None:
+    user_id, headers = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+
+    response = api.client.post(
+        f"/api/v1/study-subtasks/{subtask_id}/task-tests",
+        headers=headers,
+        json={"parameters": {"types": ["short_answer"], "question_types": ["single_choice"]}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert api.db.execute(select(AIGeneratedContent)).scalars().all() == []
 
 def _stored_task_test_parameters_with_counts() -> dict[str, object]:
     return {

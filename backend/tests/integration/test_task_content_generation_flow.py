@@ -19,7 +19,6 @@ from app.modules.checkins.models import CheckinRecord
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.generation.generators.handout.schemas import HandoutContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.learning_execution import router as learning_router
 from app.modules.materials.models import CourseMaterial, MaterialChunk
@@ -49,25 +48,14 @@ def api() -> Generator[ApiHarness, None, None]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
-        structured_outputs={
-            HandoutContent: {
-                "schema_version": 2,
-                "title": "数据库约束讲义",
-                "overview": "学习数据库约束。",
-                "learning_objectives": ["解释主键", "解释外键"],
-                "sections": [
-                    {
-                        "id": "sec_1",
-                        "title": "主键与外键",
-                        "blocks": [{"type": "paragraph", "text": "主键唯一标识一行，外键表达表之间的关系。"}],
-                        "key_points": ["主键唯一", "外键关联"],
-                        "source_citation_ids": ["chunk_flow_1", "chunk_flow_2"],
-                        "sort_order": 1,
-                    }
-                ],
-                "summary": "完成数据库约束学习。",
-            }
-        }
+        text_outputs=[
+            "# 学习约束讲义\n\n"
+            "本讲义基于《主键.pdf》《外键.pdf》中“学习约束”相关内容生成。\n\n"
+            "## 概览\n\n"
+            "主键唯一标识一行，外键表达表之间的关系。\n\n"
+            "## 总结\n\n"
+            "完成数据库约束学习。"
+        ]
     )
     app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
         structured_outputs={

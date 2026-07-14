@@ -35,10 +35,10 @@ class HandoutGenerator:
         params = HandoutGenerationParameters.model_validate(parameters)
         title = _handout_title(params)
         prompt = _build_prompt(context=context, params=params, title=title)
-        markdown = _normalize_markdown(self.model_provider.generate_text(prompt=prompt))
+        raw_markdown = self.model_provider.generate_text(prompt=prompt)
+        markdown = ensure_handout_header(markdown=raw_markdown, title=title, source_note=params.source_note)
         if not markdown:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
-        markdown = ensure_handout_header(markdown=markdown, title=title, source_note=params.source_note)
         _assert_no_known_terminology_errors(markdown)
         return GeneratorOutput(
             title=title,
@@ -124,11 +124,13 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- 使用一个一级标题作为讲义标题。",
             source_note_rule,
             "- 使用二级/三级标题组织：概览、学习目标、正文、例题或公式、易错点、总结。",
-            "- 块级数学公式必须使用 $$ 独立公式块，例如：$$\\nC = B \\log_2(1 + S/N)\\n$$。",
-            "- 行内数学公式必须使用 $...$，例如：$C = B \\log_2(1 + S/N)$。",
-            "- 不要使用 \\[...\\] 或单独一行 [ / ] 包裹公式。",
+            "- 行内公式只使用 $...$，例如：$C = B \\log_2(1 + S/N)$。",
+            "- 块级公式只使用独立的 $$...$$，例如：$$\\nC = B \\log_2(1 + S/N)\\n$$。",
+            "- 禁止使用 \\(...\\) 和 \\[...\\]。",
+            "- 禁止用单独一行的 [ 和 ] 包裹公式。",
             "- 公式不要放进代码块。",
             "- 变量解释用普通 Markdown 列表，不要混进公式块。",
+            "- 输出前检查所有数学公式分隔符。",
             "- 对比内容使用 Markdown 表格。",
             "- 如果课程材料不足以支持某个结论，明确说明课程材料未提供足够信息，不要自行编造。",
             "- 只服务当前 subtask 的学习目标，不生成整章摘要或泛泛课程总结。",
@@ -205,73 +207,12 @@ def ensure_handout_header(*, markdown: str, title: str, source_note: str | None)
     if not markdown:
         return markdown
     note = source_note.strip() if isinstance(source_note, str) else ""
-    if not note:
-        return normalize_markdown_math(markdown)
     lines = markdown.splitlines()
     if lines and lines[0].startswith("# "):
-        body = "\n".join(lines[1:]).strip()
-        if body.startswith(note):
-            return normalize_markdown_math(markdown)
-        return normalize_markdown_math("\n\n".join(part for part in [f"# {title}", note, body] if part))
-    if markdown.startswith(note):
-        return normalize_markdown_math(markdown)
-    return normalize_markdown_math("\n\n".join([f"# {title}", note, markdown]))
-
-
-def normalize_markdown_math(markdown: str) -> str:
-    markdown = _normalize_markdown(markdown)
-    markdown = re.sub(r"\\\[\s*([^\n]+?)\s*\\\]", _single_line_block_math_replacement, markdown)
-    markdown = _normalize_latex_block_delimiters(markdown, opener=r"\[", closer=r"\]")
-    markdown = _normalize_latex_block_delimiters(markdown, opener="[", closer="]")
-    return re.sub(r"\\\((.+?)\\\)", _inline_math_replacement, markdown, flags=re.DOTALL)
-
-
-def _single_line_block_math_replacement(match: re.Match[str]) -> str:
-    body = match.group(1).strip()
-    if not body or not _looks_like_latex(body):
-        return match.group(0)
-    return f"$$\n{body}\n$$"
-
-
-def _normalize_latex_block_delimiters(markdown: str, *, opener: str, closer: str) -> str:
-    lines = markdown.splitlines()
-    normalized: list[str] = []
-    index = 0
-    while index < len(lines):
-        if lines[index].strip() != opener:
-            normalized.append(lines[index])
-            index += 1
-            continue
-        end_index = index + 1
-        body_lines: list[str] = []
-        while end_index < len(lines) and lines[end_index].strip() != closer:
-            body_lines.append(lines[end_index])
-            end_index += 1
-        if end_index >= len(lines):
-            normalized.append(lines[index])
-            normalized.extend(body_lines)
-            index = end_index
-            continue
-        body = "\n".join(body_lines).strip()
-        if body and _looks_like_latex(body):
-            normalized.extend(["$$", body, "$$"])
-        else:
-            normalized.append(lines[index])
-            normalized.extend(body_lines)
-            normalized.append(lines[end_index])
-        index = end_index + 1
-    return "\n".join(normalized)
-
-
-def _inline_math_replacement(match: re.Match[str]) -> str:
-    body = match.group(1).strip()
-    if not body or not _looks_like_latex(body):
-        return match.group(0)
-    return f"${body}$"
-
-
-def _looks_like_latex(value: str) -> bool:
-    return bool(re.search(r"\\[A-Za-z]+|[_^]\{?|=", value))
+        markdown = "\n".join(lines[1:]).strip()
+    if note and markdown.startswith(note):
+        markdown = markdown[len(note):].strip()
+    return "\n\n".join(part for part in [f"# {title}", note, markdown] if part)
 
 
 def _page_label(chunk: object) -> str | int | None:

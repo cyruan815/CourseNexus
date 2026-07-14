@@ -358,6 +358,13 @@ def _merge_task_content_parameters(
     try:
         return TaskTestGenerationParameters.model_validate(merged).model_dump(mode="json")
     except ValidationError as exc:
+        if parameters:
+            raise CourseNexusError(
+                code="VALIDATION_ERROR",
+                message="任务测试题请求参数无效",
+                status_code=422,
+                details={"field": "parameters", "errors": exc.errors()},
+            ) from exc
         raise CourseNexusError(
             code="GENERATION_SCHEMA_INVALID",
             message="任务测试题生成参数无效",
@@ -377,7 +384,7 @@ def _merge_task_test_parameters(
         stored.pop("question_type_counts", None)
         stored.pop("question_count", None)
         stored.pop("question_types", None)
-    elif "question_count" in request or "question_types" in request:
+    elif "question_count" in request or "question_types" in request or "types" in request:
         stored.pop("question_type_counts", None)
     return {**stored, **request}
 
@@ -385,14 +392,16 @@ def _merge_task_test_parameters(
 def _has_request_question_type_counts(parameters: dict[str, object]) -> bool:
     if isinstance(parameters.get("question_type_counts"), list):
         return True
-    for key in ("items", "question_types"):
+    for key in ("items", "questions", "question_types"):
         raw_items = parameters.get(key)
         if isinstance(raw_items, list) and raw_items and all(isinstance(item, dict) for item in raw_items):
             return True
+    raw_types = parameters.get("types")
+    if isinstance(raw_types, list) and raw_types:
+        return True
     if any(key in parameters for key in ("single_choice", "multiple_choice", "true_false", "short_answer")):
         return True
     return any(isinstance(key, str) and "道" in key for key in parameters)
-
 
 def _handout_task_context_parameters(target: repository.ExecutionTarget) -> dict[str, object]:
     diagnostic_profile = _stored_diagnostic_profile(target)
