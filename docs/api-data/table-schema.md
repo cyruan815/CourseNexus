@@ -497,28 +497,23 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 ### handout
 
+新生成任务讲义不再把结构化章节树写入 `content_json`。完整 Markdown 正文保存到 `ai_generated_contents.content`，`content_json` 只保存格式元信息：
+
 ```json
 {
-  "overview": "本次任务学习目标概览",
-  "learning_objectives": ["解释核心概念"],
-  "sections": [
-    {
-      "id": "sec_1",
-      "title": "章节标题",
-      "body": "讲义正文",
-      "key_points": ["重点 1"],
-      "source_citation_ids": ["cit_..."],
-      "sort_order": 1
-    }
-  ],
-  "summary": "本次任务总结"
+  "format": "markdown",
+  "schema_version": 1
 }
 ```
 
 规则：
 
 - `handout` 只绑定 `learn` / `review` 二级任务。
-- 每个 section 必须至少有一个 `source_citation_ids`，且引用必须来自本次材料上下文。
+- `ai_generated_contents.title` 使用 `{StudySubTask.title}讲义`。
+- Markdown 正文第一段为来源说明，例如 `本讲义基于《资料名》中“二级任务标题”相关内容生成。`。
+- 新生成 `handout` 不创建逐条 `SourceCitation`，不在 `content_json` 保存 `sections` / `blocks` / `source_citation_ids`。
+- 历史结构化 handout 不提供迁移或导出兼容；本地 POC 通过重置 SQLite 数据库处理旧数据。
+- 后端不使用正则改写数学公式，公式分隔符由 handout prompt 约束；前端和 PDF 的数学排版属于各自渲染模块职责。
 
 ### task_test
 

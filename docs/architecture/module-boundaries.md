@@ -235,4 +235,4 @@ S06 的 public API 放在 `learning_execution`，因为入口是二级任务执�
 
 S06 不复用通用 `generation-orchestrator` service 的 Top-K / `resolve_context()` 路径；它只复用公共 `Generator` 协议、`GeneratorRegistry`、`ModelProvider`、`iter_material_context_batches()` 和 `run_material_coverage()`。这样可以保证任务内容覆盖二级任务绑定资料，并禁止无来源 fallback 引用。
 
-`handout-generator` 负责输出完整 Markdown 讲义正文，不输出逐条引用；`task-test-generator` 继续负责结构化题目和引用 chunk id。两者都不更新 `StudySubTask.status`、不汇总 `StudyTask.status`、不写 `checkin_records`。生成成功或进入生成流程后的失败由 `learning_execution` 保存到 `AIGeneratedContent`。
+`handout-generator` 负责输出完整 Markdown 讲义正文，不输出逐条引用；公式分隔符由 handout prompt 约束，前端/PDF 渲染模块负责数学排版，后端生成器不做正则公式改写。`task-test-generator` 继续负责结构化题目和引用 chunk id。两者都不更新 `StudySubTask.status`、不汇总 `StudyTask.status`、不写 `checkin_records`。生成成功或进入生成流程后的失败由 `learning_execution` 保存到 `AIGeneratedContent`。
