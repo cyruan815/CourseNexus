@@ -128,9 +128,18 @@ class DiagnosticApiProvider:
                                     "subtask_type": "learn",
                                     "description": "根据诊断 profile 继续生成 preview",
                                     "related_material_ids": material_ids,
-                                    "estimated_minutes": 60,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_diagnostic"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "diagnostic final test",
+                                    "subtask_type": "test",
+                                    "description": "cover diagnostic preview scope",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_diagnostic"],
+                                    "sort_order": 2,
                                 }
                             ],
                         }

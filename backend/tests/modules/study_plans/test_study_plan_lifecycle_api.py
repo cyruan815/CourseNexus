@@ -77,9 +77,18 @@ class ConfigParseProvider:
                                     "subtask_type": "learn",
                                     "description": "学习核心概念",
                                     "related_material_ids": material_ids,
-                                    "estimated_minutes": 60,
+                                    "estimated_minutes": 45,
                                     "citation_chunk_ids": ["chk_api"],
                                     "sort_order": 1,
+                                },
+                                {
+                                    "title": "api final test",
+                                    "subtask_type": "test",
+                                    "description": "cover generated preview scope",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_api"],
+                                    "sort_order": 2,
                                 }
                             ],
                         }
@@ -231,9 +240,18 @@ def _save_payload(title: str = "传输层冲刺计划", material_id: str = "mat_
                         "subtask_type": "learn",
                         "description": "按用户确认内容保存",
                         "related_material_ids": [material_id],
-                        "estimated_minutes": 60,
+                        "estimated_minutes": 45,
                         "citation_chunk_ids": ["chk_api"],
                         "sort_order": 1,
+                    },
+                    {
+                        "title": "saved api test",
+                        "subtask_type": "test",
+                        "description": "cover confirmed task scope",
+                        "related_material_ids": [material_id],
+                        "estimated_minutes": 15,
+                        "citation_chunk_ids": ["chk_api"],
+                        "sort_order": 2,
                     }
                 ],
             }

@@ -58,6 +58,7 @@ from app.modules.study_plans.schemas import (
     StudySubTaskPreview,
     StudyTaskPreview,
 )
+from app.modules.study_plans.task_tree_rules import validate_daily_assessment_contract
 
 
 logger = get_logger("study_plan.build")
@@ -1625,6 +1626,13 @@ def _validate_confirmed_task_tree(
                         "scoped_material_ids": sorted(scoped_material_ids),
                     },
                 )
+
+
+    validate_daily_assessment_contract(task_previews, make_error=_confirmed_task_tree_error)
+
+
+def _confirmed_task_tree_error(message: str, details: dict[str, object] | None) -> CourseNexusError:
+    return CourseNexusError(code="VALIDATION_ERROR", message=message, status_code=422, details=details)
 
 
 def _raise_invalid_confirmed_task_tree(message: str, *, details: dict[str, object] | None = None) -> None:

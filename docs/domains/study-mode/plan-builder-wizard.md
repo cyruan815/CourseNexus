@@ -810,3 +810,18 @@ else:
 C4 后，`POST /study-plan-config-parses`、`POST /study-plan-diagnostic-questions`、`POST /study-plan-diagnostic-profiles`、`POST /study-plans/preview` 和保存请求都复用创建页当前 `materialScope`。资料范围变化会清空配置解析未补齐提示、清空已有 `diagnostic_profile`，并把现有 preview 标记为过期以禁用保存。创建页草稿同时持久化 `materialScope`，刷新后恢复。
 
 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 覆盖指定已解析资料进入 parse 和 preview 请求。当前本地 Vitest 仍受 `entities ./decode` exports 问题影响，可能在收集测试前失败；`frontend:build` 可用于验证 TS/Vite 编译。
+
+## 2026-07-14 每日唯一测试计划规则
+
+计划生成阶段负责保证每日测试结构，不把该规则下沉到 learning_execution、handout generator 或 task_test generator。
+
+当前 planner reduce prompt 要求：
+
+- 每个一级任务必须且只能安排一个 `quiz` / `test`。
+- 该 `quiz` / `test` 必须是当天最后一个二级任务。
+- 非最后一天的测试是当日测试，覆盖当天前置 `learn` / `review`。
+- 最后一天的测试是全计划综合测试，覆盖全计划所有已安排的 `learn` / `review`，最后一天不再额外安排当天测试。
+
+Preview 校验由 `backend/app/modules/study_plans/planner.py::validate_preview()` 调用 `backend/app/modules/study_plans/task_tree_rules.py::validate_daily_assessment_contract()` 完成。覆盖范围不修改生成器逻辑，而是体现在计划数据本身：非最后一天测试的 `related_material_ids` / `citation_chunk_ids` 必须覆盖当天前置学习任务的并集；最后一天综合测试必须覆盖全计划所有非测试任务的并集。
+
+因此后续讲义生成仍只认 `learn` / `review`，任务测试题生成仍只认 `quiz` / `test`，生成 API、数据库表和 migration 均不需要改变。

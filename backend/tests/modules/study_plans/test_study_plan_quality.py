@@ -524,26 +524,174 @@ def test_validate_preview_requires_quiz_or_test_to_be_last() -> None:
         planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
 
-def test_validate_preview_requires_subtask_citations() -> None:
-    preview = _preview(
-        goal_text="期末复习",
+
+def test_validate_preview_requires_exactly_one_assessment_per_day() -> None:
+    missing_assessment_preview = _preview(
+        goal_text="review for final",
         tasks=[
             StudyTaskPreview(
-                title="第一天",
+                title="day 1",
                 task_date=date(2026, 7, 12),
                 sort_order=1,
-                subtasks=[_subtask(citation_chunk_ids=[])],
+                subtasks=[_subtask(estimated_minutes=90, sort_order=1)],
             ),
             StudyTaskPreview(
-                title="第二天",
+                title="day 2",
                 task_date=date(2026, 7, 13),
                 sort_order=2,
-                subtasks=[_subtask()],
+                subtasks=[_subtask(title="final test", subtask_type="test", estimated_minutes=90, sort_order=1)],
             ),
         ],
     )
 
-    with pytest.raises(CourseNexusError, match="二级任务必须引用资料 chunk"):
+    with pytest.raises(CourseNexusError) as missing_exc:
+        planner.validate_preview(preview=missing_assessment_preview, scoped_material_ids={"mat_net"})
+
+    assert missing_exc.value.code == "GENERATION_SCHEMA_INVALID"
+    assert missing_exc.value.details["assessment_count"] == 0
+
+    duplicated_assessment_preview = _preview(
+        goal_text="review for final",
+        tasks=[
+            StudyTaskPreview(
+                title="day 1",
+                task_date=date(2026, 7, 12),
+                sort_order=1,
+                subtasks=[
+                    _subtask(estimated_minutes=60, sort_order=1),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=20, sort_order=2),
+                    _subtask(title="extra test", subtask_type="test", estimated_minutes=20, sort_order=3),
+                ],
+            ),
+            StudyTaskPreview(
+                title="day 2",
+                task_date=date(2026, 7, 13),
+                sort_order=2,
+                subtasks=[_subtask(title="final test", subtask_type="test", estimated_minutes=90, sort_order=1)],
+            ),
+        ],
+    )
+
+    with pytest.raises(CourseNexusError) as duplicated_exc:
+        planner.validate_preview(preview=duplicated_assessment_preview, scoped_material_ids={"mat_net"})
+
+    assert duplicated_exc.value.code == "GENERATION_SCHEMA_INVALID"
+    assert duplicated_exc.value.details["assessment_count"] == 2
+
+
+def test_validate_preview_requires_daily_assessment_to_cover_same_day_learning_scope() -> None:
+    preview = _preview(
+        goal_text="review for final",
+        tasks=[
+            StudyTaskPreview(
+                title="day 1",
+                task_date=date(2026, 7, 12),
+                sort_order=1,
+                subtasks=[
+                    _subtask(title="learn formula", estimated_minutes=50, citation_chunk_ids=["chk_001"], sort_order=1),
+                    _subtask(title="review coding", subtask_type="review", estimated_minutes=40, citation_chunk_ids=["chk_002"], sort_order=2),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=30, citation_chunk_ids=["chk_001"], sort_order=3),
+                ],
+            ),
+            StudyTaskPreview(
+                title="day 2",
+                task_date=date(2026, 7, 13),
+                sort_order=2,
+                subtasks=[_subtask(title="final test", subtask_type="test", estimated_minutes=90, citation_chunk_ids=["chk_001", "chk_002"], sort_order=1)],
+            ),
+        ],
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details["missing_chunk_ids"] == ["chk_002"]
+
+
+def test_validate_preview_requires_final_assessment_to_cover_full_plan_learning_scope() -> None:
+    preview = _preview(
+        goal_text="review for final",
+        tasks=[
+            StudyTaskPreview(
+                title="day 1",
+                task_date=date(2026, 7, 12),
+                sort_order=1,
+                subtasks=[
+                    _subtask(title="learn formula", estimated_minutes=60, citation_chunk_ids=["chk_001"], sort_order=1),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=30, citation_chunk_ids=["chk_001"], sort_order=2),
+                ],
+            ),
+            StudyTaskPreview(
+                title="day 2",
+                task_date=date(2026, 7, 13),
+                sort_order=2,
+                subtasks=[
+                    _subtask(title="review coding", subtask_type="review", estimated_minutes=60, citation_chunk_ids=["chk_002"], sort_order=1),
+                    _subtask(title="final test", subtask_type="test", estimated_minutes=30, citation_chunk_ids=["chk_001"], sort_order=2),
+                ],
+            ),
+        ],
+    )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
+
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details["missing_chunk_ids"] == ["chk_002"]
+
+
+def test_validate_preview_accepts_daily_and_final_assessment_contract() -> None:
+    preview = _preview(
+        goal_text="review for final",
+        tasks=[
+            StudyTaskPreview(
+                title="day 1",
+                task_date=date(2026, 7, 12),
+                sort_order=1,
+                subtasks=[
+                    _subtask(title="learn formula", estimated_minutes=60, citation_chunk_ids=["chk_001"], sort_order=1),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=30, citation_chunk_ids=["chk_001"], sort_order=2),
+                ],
+            ),
+            StudyTaskPreview(
+                title="day 2",
+                task_date=date(2026, 7, 13),
+                sort_order=2,
+                subtasks=[
+                    _subtask(title="review coding", subtask_type="review", estimated_minutes=60, citation_chunk_ids=["chk_002"], sort_order=1),
+                    _subtask(title="final test", subtask_type="test", estimated_minutes=30, citation_chunk_ids=["chk_001", "chk_002"], sort_order=2),
+                ],
+            ),
+        ],
+    )
+
+    planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
+
+
+def test_validate_preview_requires_subtask_citations() -> None:
+    preview = _preview(
+        goal_text="review for final",
+        tasks=[
+            StudyTaskPreview(
+                title="day 1",
+                task_date=date(2026, 7, 12),
+                sort_order=1,
+                subtasks=[
+                    _subtask(citation_chunk_ids=[]),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=30, sort_order=2),
+                ],
+            ),
+            StudyTaskPreview(
+                title="day 2",
+                task_date=date(2026, 7, 13),
+                sort_order=2,
+                subtasks=[_subtask(title="final test", subtask_type="test", estimated_minutes=120, sort_order=1)],
+            ),
+        ],
+    )
+
+    with pytest.raises(CourseNexusError, match="\u4e8c\u7ea7\u4efb\u52a1\u5fc5\u987b\u5f15\u7528\u8d44\u6599 chunk"):
         planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
 
@@ -551,24 +699,24 @@ def test_validate_preview_rejects_completion_goal_with_underused_daily_time() ->
     preview = _preview(
         tasks=[
             StudyTaskPreview(
-                title="第一天",
+                title="\u7b2c\u4e00\u5929",
                 task_date=date(2026, 7, 12),
                 sort_order=1,
                 subtasks=[
                     _subtask(estimated_minutes=50, sort_order=1),
-                    _subtask(title="阶段自测", subtask_type="quiz", estimated_minutes=30, sort_order=2),
+                    _subtask(title="\u9636\u6bb5\u81ea\u6d4b", subtask_type="quiz", estimated_minutes=30, sort_order=2),
                 ],
             ),
             StudyTaskPreview(
-                title="第二天",
+                title="\u7b2c\u4e8c\u5929",
                 task_date=date(2026, 7, 13),
                 sort_order=2,
-                subtasks=[_subtask(title="综合自测", subtask_type="test", estimated_minutes=120, sort_order=1)],
+                subtasks=[_subtask(title="\u7efc\u5408\u81ea\u6d4b", subtask_type="test", estimated_minutes=120, sort_order=1)],
             ),
         ]
     )
 
-    with pytest.raises(CourseNexusError, match="每日任务时长利用不足"):
+    with pytest.raises(CourseNexusError, match="\u6bcf\u65e5\u4efb\u52a1\u65f6\u957f\u5229\u7528\u4e0d\u8db3"):
         planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
 
@@ -576,25 +724,28 @@ def test_validate_preview_completion_goal_requires_final_assessment() -> None:
     preview = _preview(
         tasks=[
             StudyTaskPreview(
-                title="第一天",
+                title="\u7b2c\u4e00\u5929",
                 task_date=date(2026, 7, 12),
                 sort_order=1,
-                subtasks=[_subtask(estimated_minutes=120)],
+                subtasks=[
+                    _subtask(estimated_minutes=90, sort_order=1),
+                    _subtask(title="daily quiz", subtask_type="quiz", estimated_minutes=30, sort_order=2),
+                ],
             ),
             StudyTaskPreview(
-                title="第二天",
+                title="\u7b2c\u4e8c\u5929",
                 task_date=date(2026, 7, 13),
                 sort_order=2,
-                subtasks=[_subtask(title="综合复习", subtask_type="review", estimated_minutes=120)],
+                subtasks=[_subtask(title="\u7efc\u5408\u590d\u4e60", subtask_type="review", estimated_minutes=120)],
             ),
         ]
     )
 
-    with pytest.raises(CourseNexusError, match="最后一天必须包含综合自测"):
+    with pytest.raises(CourseNexusError) as exc_info:
         planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
-
-
+    assert exc_info.value.code == "GENERATION_SCHEMA_INVALID"
+    assert exc_info.value.details["assessment_count"] == 0
 
 def test_config_parse_schema_normalizes_nullable_trace_fields() -> None:
     parsed = StudyPlanParsedConfig.model_validate(

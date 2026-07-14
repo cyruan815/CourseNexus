@@ -305,3 +305,15 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 - 导出不写数据库、不修改任务状态、不写打卡记录。
 
 任务测试题 `task_test` 暂时仍保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；本轮只同步标题规则，`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`，不再固定为“任务测试题”。
+
+## 2026-07-14 测试任务范围来自计划阶段
+
+每日唯一测试规则属于 Study Plan 层。任务内容生成层不重新计算“今天学了什么”或“全计划学了什么”，只消费当前二级任务已经保存的范围。
+
+- `learn` / `review` 仍然只能生成 `handout`。
+- `quiz` / `test` 仍然只能生成 `task_test`。
+- 非最后一天测试的 `related_material_ids_json` / `citation_chunk_ids` 在计划阶段已覆盖当天前置学习任务。
+- 最后一天综合测试的 `related_material_ids_json` / `citation_chunk_ids` 在计划阶段已覆盖全计划所有非测试任务。
+- `task_test` 生成继续读取当前测试二级任务的 `related_material_ids_json` 和默认 `generation_parameters.task_test`；本轮不修改 `backend/app/modules/learning_execution/service.py`、handout generator、task_test generator、generated_content、exports 或 migration。
+
+这保证了测试题生成链路仍按原有二级任务范围运行，同时让“当天测试 / 全计划综合测试”的语义在计划数据里可追溯。
