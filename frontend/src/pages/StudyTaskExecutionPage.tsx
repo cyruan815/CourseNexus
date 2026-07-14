@@ -545,10 +545,21 @@ export function StudyTaskExecutionPage() {
         <Box className="study-plan-execution-grid">
           <Paper className="study-plan-execution-sidebar" radius="md" withBorder>
             <Stack gap="md">
-              <Stack gap={4}>
-                <Text c="dimmed" size="sm">{context.course.name}</Text>
-                <Title order={2}>今日学习任务</Title>
-              </Stack>
+              <Group align="flex-start" className="study-plan-execution-sidebar-header" justify="space-between" wrap="nowrap">
+                <Stack gap={4}>
+                  <Text c="dimmed" size="sm">{context.course.name}</Text>
+                  <Title order={2}>今日学习任务</Title>
+                </Stack>
+                <Button
+                  className="study-plan-plan-detail-link"
+                  component={Link}
+                  size="xs"
+                  to={`/courses/${context.course.course_id}/study-plans/${context.plan.plan_id}`}
+                  variant="subtle"
+                >
+                  查看计划详情
+                </Button>
+              </Group>
               <Stack gap={6}>
                 <Group justify="space-between">
                   <Text size="sm">进度</Text>
@@ -560,17 +571,7 @@ export function StudyTaskExecutionPage() {
               <Stack gap="sm">
                 {sortedTasks.map((task) => (
                   <Stack className="study-plan-execution-taskrail" gap="xs" key={task.task_id}>
-                    <Group align="flex-start" justify="space-between" wrap="nowrap">
-                      <Text fw={750} size="sm">{task.title}</Text>
-                      <Button
-                        component={Link}
-                        size="xs"
-                        to={`/courses/${context.course.course_id}/study-plans/${context.plan.plan_id}`}
-                        variant="subtle"
-                      >
-                        查看计划详情
-                      </Button>
-                    </Group>
+                    <Text fw={750} size="sm">{task.title}</Text>
                     {task.subtasks.map((subtask) => {
                       const isCurrent = subtask.subtask_id === context.current_subtask_id;
                       const isCompleted = subtask.status === "completed";
@@ -605,8 +606,8 @@ export function StudyTaskExecutionPage() {
             </Stack>
           </Paper>
 
-          <Paper className="study-plan-execution-main" radius="md" withBorder>
-            <Stack gap="lg">
+          <Paper className="study-plan-execution-main has-pinned-completion" radius="md" withBorder>
+            <Stack className="study-plan-execution-main-stack" gap="lg">
               <Stack gap={8}>
                 <Group gap="xs">
                   <Badge color="violet" variant="light">{subtaskTypeLabel(currentSubtask.subtask_type)}</Badge>
@@ -745,7 +746,7 @@ export function StudyTaskExecutionPage() {
                 </Stack>
               </Paper>
 
-              <Group justify="flex-end">
+              <Group className="study-plan-completion-actions is-pinned-bottom" justify="flex-end">
                 {currentSubtask.status === "completed" ? (
                   <Button
                     color="gray"

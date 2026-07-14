@@ -579,8 +579,8 @@ function CalendarPanel() {
                       {calendarDay.day ? <span className="home-calendar-day">{calendarDay.day}</span> : null}
                       {summary ? (
                         <span className="home-calendar-cell-summary">
-                          <span>{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
-                          <span>{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
+                          <span className="home-calendar-task-title">{summary.task_summaries[0]?.title ?? `${summary.task_count} 个任务`}</span>
+                          <span className="home-calendar-task-progress">{summary.completed_subtask_count}/{summary.subtask_count} 完成</span>
                         </span>
                       ) : calendarDay.day ? <span aria-hidden className="home-calendar-task-dots" /> : null}
                     </Box>

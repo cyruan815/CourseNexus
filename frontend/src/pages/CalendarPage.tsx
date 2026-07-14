@@ -207,20 +207,9 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
               {task.completed_subtask_count}/{task.total_subtask_count} 个二级任务完成
             </Text>
           </Stack>
-          <Stack align="flex-end" gap="xs">
-            <Badge color={statusColor(task.derived_status)} variant="light">
-              {statusLabel(task.derived_status)}
-            </Badge>
-            <Button
-              aria-label={`查看计划详情 ${task.title}`}
-              component={Link}
-              size="xs"
-              to={`/courses/${courseId}/study-plans/${task.plan_id}`}
-              variant="subtle"
-            >
-              查看计划详情
-            </Button>
-          </Stack>
+          <Badge color={statusColor(task.derived_status)} variant="light">
+            {statusLabel(task.derived_status)}
+          </Badge>
         </Group>
         <Stack gap="xs">
           {task.subtasks.map((subtask) => (
@@ -240,7 +229,16 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
             </Box>
           ))}
         </Stack>
-        <Group justify="flex-end">
+        <Group aria-label={`${task.title}操作`} className="calendar-task-actions" justify="flex-end" role="group">
+          <Button
+            aria-label={`查看计划详情 ${task.title}`}
+            component={Link}
+            size="xs"
+            to={`/courses/${courseId}/study-plans/${task.plan_id}`}
+            variant="subtle"
+          >
+            查看计划详情
+          </Button>
           <Button
             aria-label={`${actionLabel} ${task.title}`}
             component={Link}

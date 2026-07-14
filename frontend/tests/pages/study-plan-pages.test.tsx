@@ -604,10 +604,15 @@ describe("study plan pages", () => {
     expect(screen.getAllByText("学习: 向量空间").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
-    expect(screen.getByRole("link", { name: "查看计划详情" })).toHaveAttribute(
+    const sidebarHeader = container.querySelector(".study-plan-execution-sidebar-header");
+    expect(sidebarHeader).toBeInTheDocument();
+    expect(within(sidebarHeader as HTMLElement).getByRole("link", { name: "查看计划详情" })).toHaveAttribute(
       "href",
       "/courses/crs_123/study-plans/plan_1",
     );
+    expect(container.querySelector(".study-plan-execution-taskrail .study-plan-plan-detail-link")).not.toBeInTheDocument();
+    expect(container.querySelector(".study-plan-execution-main")).toHaveClass("has-pinned-completion");
+    expect(container.querySelector(".study-plan-completion-actions")).toHaveClass("is-pinned-bottom");
   });
 
   it("previews, invalidates stale previews, then saves and navigates to detail", async () => {

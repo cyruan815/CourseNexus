@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -134,13 +134,15 @@ describe("CalendarPage", () => {
     expect(await screen.findByRole("heading", { name: "2026-07-14 任务" })).toBeInTheDocument();
     expect(screen.getByText("学习: 物理层功能")).toBeInTheDocument();
     expect(screen.getByText("测试: 物理层小测")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
-      "href",
-      "/study-subtasks/subtask_2",
-    );
-    expect(screen.getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
+    const taskActions = screen.getByRole("group", { name: "物理层复习操作" });
+    expect(taskActions).toHaveClass("calendar-task-actions");
+    expect(within(taskActions).getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
       "href",
       "/courses/crs_123/study-plans/plan_1",
+    );
+    expect(within(taskActions).getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
+      "href",
+      "/study-subtasks/subtask_2",
     );
 
     await waitFor(() => {
@@ -221,13 +223,15 @@ describe("CalendarPage", () => {
     expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
     expect(await screen.findByRole("heading", { name: "2026-07-14 待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "计算机网络" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
-      "href",
-      "/study-subtasks/subtask_2",
-    );
-    expect(screen.getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
+    const taskActions = screen.getByRole("group", { name: "物理层复习操作" });
+    expect(taskActions).toHaveClass("calendar-task-actions");
+    expect(within(taskActions).getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
       "href",
       "/courses/crs_123/study-plans/plan_1",
+    );
+    expect(within(taskActions).getByRole("link", { name: "继续学习 物理层复习" })).toHaveAttribute(
+      "href",
+      "/study-subtasks/subtask_2",
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/calendar/month?month=2026-07",
