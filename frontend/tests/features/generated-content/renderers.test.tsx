@@ -65,7 +65,6 @@ describe("generated content renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "答错 0" }));
     fireEvent.click(screen.getByRole("button", { name: "下一张" }));
     fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
-    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
     fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("添加卡片"));
@@ -94,7 +93,6 @@ describe("generated content renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "答错 0" }));
     fireEvent.click(screen.getByRole("button", { name: "下一张" }));
     fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
-    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
     fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(await screen.findByText("删除当前卡片"));
@@ -168,7 +166,6 @@ describe("generated content renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一张" }));
     fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
     expect(screen.getByText("答对了！")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
     fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
     expect(screen.getByText("Front 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
@@ -187,6 +184,34 @@ describe("generated content renderers", () => {
     expect(screen.queryByRole("button", { name: "查看答案" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "翻转查看答案" }));
     expect(screen.getByText("Back 1")).toBeInTheDocument();
+  });
+
+  it("shows retry controls on the final card and includes unrated cards as missed", () => {
+    renderUi(<FlashcardResult cards={[
+      { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+      { id: "card_002", sort_order: 2, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
+      { id: "card_003", sort_order: 3, front: "Front 3", back: "Back 3", tags: [], mastery_status: "unknown" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+
+    expect(screen.getByRole("button", { name: "练习全部" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "只练未掌握" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "只练未掌握" }));
+    expect(screen.getByText("Front 2")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+  });
+
+  it("disables missed-card practice when every card is rated correct", () => {
+    renderUi(<FlashcardResult cards={[
+      { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+    ]} />);
+
+    expect(screen.getByRole("button", { name: "只练未掌握" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
+    expect(screen.getByRole("button", { name: "只练未掌握" })).toBeDisabled();
   });
 
   it("navigates outline sections and filters knowledge items", () => {
