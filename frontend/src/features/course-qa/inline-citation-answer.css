@@ -13,9 +13,9 @@
 
 .inline-citation-marker {
   display: inline-grid;
-  width: 22px;
-  height: 22px;
-  margin: 0 2px;
+  width: 18px;
+  height: 18px;
+  margin: 0 1px;
   place-items: center;
   border: 0;
   border-radius: 999px;
@@ -23,7 +23,7 @@
   color: #475569;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   vertical-align: super;
 }
