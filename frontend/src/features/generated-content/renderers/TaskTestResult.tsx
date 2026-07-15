@@ -62,6 +62,7 @@ function isCorrect(question: TaskTestQuestion, answer: DraftAnswer): boolean | n
 
 export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
   const ordered = [...questions].sort((left, right) => left.sort_order - right.sort_order);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [interaction, setInteraction] = useState<InteractionState>(() => ({
     answers: {},
     attemptKey,
@@ -69,6 +70,7 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
   }));
   const answers = interaction.attemptKey === attemptKey ? interaction.answers : {};
   const submitted = interaction.attemptKey === attemptKey ? interaction.submitted : {};
+  const activeIndex = Math.min(currentIndex, Math.max(ordered.length - 1, 0));
 
   const setAnswer = (questionId: string, answer: DraftAnswer) => {
     setInteraction((current) => {
@@ -104,6 +106,8 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
         先完成作答，再逐题提交查看反馈。作答结果仅保存在当前页面，不会写入学习记录。
       </Text>
       {ordered.map((question, index) => {
+        if (index !== activeIndex) return null;
+
         const answer = answers[question.id];
         const isSubmitted = Boolean(submitted[question.id]);
         const correct = isSubmitted ? isCorrect(question, answer) : null;
@@ -152,6 +156,7 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
                     return (
                       <Checkbox
                         checked={selected}
+                        className="gc-task-test-checkbox"
                         disabled={isSubmitted}
                         key={option.id}
                         label={`${option.id}. ${option.text}`}
@@ -194,7 +199,25 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
                 />
               ) : null}
 
-              <Group justify="flex-end">
+              <Group justify="space-between">
+                <Group gap="xs">
+                  <Button
+                    disabled={activeIndex === 0}
+                    onClick={() => setCurrentIndex((value) => Math.max(value - 1, 0))}
+                    size="xs"
+                    variant="default"
+                  >
+                    上一题
+                  </Button>
+                  <Button
+                    disabled={activeIndex >= ordered.length - 1}
+                    onClick={() => setCurrentIndex((value) => Math.min(value + 1, ordered.length - 1))}
+                    size="xs"
+                    variant="default"
+                  >
+                    下一题
+                  </Button>
+                </Group>
                 <Button
                   disabled={!canSubmit || isSubmitted}
                   onClick={() => setInteraction((current) => ({
