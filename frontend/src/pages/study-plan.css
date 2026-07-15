@@ -216,6 +216,74 @@
   background: #f8fffd;
 }
 
+.study-plan-generation-log {
+  overflow: hidden;
+  border-color: #e6dccf;
+  background:
+    linear-gradient(115deg, rgba(255, 248, 238, 0.92), rgba(248, 252, 255, 0.94)),
+    #fffaf4;
+  box-shadow: 0 18px 40px rgba(55, 65, 81, 0.12);
+}
+
+.study-plan-generation-log-header {
+  min-height: 52px;
+  border-bottom: 1px solid #eadfd2;
+  padding: 12px 18px;
+}
+
+.study-plan-generation-dots {
+  flex: 0 0 auto;
+}
+
+.study-plan-generation-dots > div {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #2f8195;
+  opacity: 0.46;
+}
+
+.study-plan-generation-dots > div:nth-child(4) {
+  opacity: 1;
+}
+
+.study-plan-generation-log-body {
+  max-height: 360px;
+  overflow: hidden;
+  padding: 10px 18px 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 15px;
+  line-height: 1.75;
+  color: #707493;
+}
+
+.study-plan-generation-log-row {
+  display: grid;
+  grid-template-columns: 82px 54px 108px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 28px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.study-plan-generation-log-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.study-plan-generation-log-row span:nth-child(2) {
+  color: #2f8195;
+  font-weight: 800;
+}
+
+.study-plan-generation-log-row span:nth-child(3) {
+  color: #8270aa;
+}
+
+.study-plan-generation-log-row span:nth-child(4) {
+  color: #e58422;
+}
+
 .study-plan-date-input {
   display: grid;
   gap: 5px;
