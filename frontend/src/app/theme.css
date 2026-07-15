@@ -1,8 +1,8 @@
 :root {
   --course-page-bg: #faf9f7;
   --course-surface-bg: var(--course-page-bg);
-  --cn-button-primary-bg: #2f6fbb;
-  --cn-button-primary-hover-bg: #285f9f;
+  --cn-button-primary-bg: #3378c7;
+  --cn-button-primary-hover-bg: #2d6daf;
   --cn-button-primary-text: #ffffff;
   --cn-button-primary-soft-bg: #edf5ff;
   --cn-button-primary-soft-hover-bg: #deecff;
