@@ -30,7 +30,7 @@ from app.modules.material_context.service import retrieve_relevant_context
 
 logger = get_logger("course_qa.answer")
 
-_INLINE_CITATION_PATTERN = re.compile(r"\[\[cite:[^\]]+\]\]")
+_INLINE_CITATION_PATTERN = re.compile(r"\[\[cite:[^\]\r\n]+\]\]|\[cite:[^\]\r\n]+\]")
 
 
 def _new_conversation_id() -> str:

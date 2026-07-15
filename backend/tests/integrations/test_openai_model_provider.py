@@ -161,3 +161,33 @@ def test_openai_model_provider_deduplicates_repeated_citations() -> None:
 
     assert answer.answer_text == "Alpha [[cite:chk_1]] again [[cite:chk_1]]"
     assert answer.citation_chunk_ids == ["chk_1"]
+
+
+def test_openai_model_provider_normalizes_adjacent_single_bracket_citation() -> None:
+    fake_client = FakeClient(FakeResponses(output_text="Fiber [[cite:1]][cite:2]"))
+    chunks = [
+        ContextChunk(
+            material_id="mat_1",
+            chunk_id="chk_1",
+            material_name="notes.md",
+            page=None,
+            page_index=0,
+            heading="Fiber features",
+            content_text="High bandwidth",
+        ),
+        ContextChunk(
+            material_id="mat_1",
+            chunk_id="chk_2",
+            material_name="notes.md",
+            page=None,
+            page_index=1,
+            heading="Wired media",
+            content_text="Fiber is a wired medium",
+        ),
+    ]
+    provider = OpenAIModelProvider(api_key="test-key", model="gpt-test", client=fake_client)
+
+    answer = provider.answer_question(question="Which medium?", context_chunks=chunks)
+
+    assert answer.answer_text == "Fiber [[cite:chk_1]][[cite:chk_2]]"
+    assert answer.citation_chunk_ids == ["chk_1", "chk_2"]

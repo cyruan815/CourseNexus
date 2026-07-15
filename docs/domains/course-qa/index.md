@@ -40,12 +40,12 @@ sequenceDiagram
 ## 行内引用算法
 
 1. prompt 将检索 chunk 标为从 1 开始的上下文序号，并要求模型在相关论述后输出 `[[cite:N]]`。
-2. model-provider 只把落在本次上下文范围内的 `N` 映射为内部 chunk id；越界标记直接删除。
+2. model-provider 只把落在本次上下文范围内的 `N` 映射为内部 chunk id；越界标记直接删除。模型偶发输出的单层 `[cite:N]` 也会先按同一范围校验并规范化，避免原始标记泄漏。
 3. course-qa 将 provider 返回的 chunk id 与本次检索结果取交集，按首次出现去重。
 4. 内部 chunk 标记转换为连续的 `[[cite:1]]`、`[[cite:2]]`，并以同序保存 `SourceCitation`。
 5. provider 返回了有效引用 id 但没有行内标记时，兼容路径把引用角标附加到回答末尾；未检索或伪造 id 不生成引用。
 
-不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果。
+不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
 
 ## 复杂度与资源预算
 

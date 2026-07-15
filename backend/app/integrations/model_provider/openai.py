@@ -16,7 +16,7 @@ from app.modules.material_context.schemas import ContextChunk
 
 logger = get_logger("model.generate")
 
-_MODEL_CITATION_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]")
+_MODEL_CITATION_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]|\[cite:(\d+)\]")
 
 
 class OpenAIModelProvider:
@@ -231,7 +231,7 @@ def _resolve_model_citations(answer_text: str, context_chunks: list[ContextChunk
     citation_chunk_ids: list[str] = []
 
     def replace_marker(match: re.Match[str]) -> str:
-        context_index = int(match.group(1)) - 1
+        context_index = int(match.group(1) or match.group(2)) - 1
         if context_index < 0 or context_index >= len(context_chunks):
             return ""
         chunk_id = context_chunks[context_index].chunk_id

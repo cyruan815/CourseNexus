@@ -21,7 +21,12 @@ function citationLocation(citation: InlineAnswerCitation): string {
 
 function answerWithCitationLinks(content: string, citations: InlineAnswerCitation[]): string {
   let validMarkerCount = 0;
-  const normalized = content.replace(/\[\[cite:(\d+)\]\]/g, (_marker, rawOrdinal: string) => {
+  const normalized = content.replace(/\[\[cite:(\d+)\]\]|\[cite:(\d+)\]/g, (
+    _marker,
+    standardOrdinal: string | undefined,
+    singleBracketOrdinal: string | undefined,
+  ) => {
+    const rawOrdinal = standardOrdinal ?? singleBracketOrdinal;
     const ordinal = Number(rawOrdinal);
     if (!Number.isInteger(ordinal) || ordinal < 1 || ordinal > citations.length) {
       return "";
