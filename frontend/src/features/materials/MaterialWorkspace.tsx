@@ -640,11 +640,11 @@ export function MaterialWorkspace({
           >
             <IconChevronDown
               className={`material-workspace__folder-chevron${isExpanded ? " is-expanded" : ""}`}
-              size={20}
+              size={17}
               stroke={1.8}
             />
             <span className="material-workspace__folder-icon" aria-hidden>
-              <IconFolder size={21} stroke={1.8} />
+              <IconFolder size={18} stroke={1.8} />
             </span>
             <span className="material-workspace__folder-copy">
               <span className="material-workspace__folder-name">{folderName}</span>
