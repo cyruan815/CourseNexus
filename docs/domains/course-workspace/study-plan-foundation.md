@@ -21,7 +21,7 @@
 - 提交问卷前必须回答所有必填诊断题，并补齐完整学习日期范围；否则不调用 profile、preview 或 save。
 - 点击“提交问卷”后前端自动依次调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`、`POST /api/v1/courses/{course_id}/study-plans/preview` 和 `POST /api/v1/courses/{course_id}/study-plans`；用户不再看到手动预览 Modal、重新生成按钮或保存按钮。
 - 创建页对 preview/save 的关键 `ApiError.code` 使用可恢复提示：`NO_PARSED_MATERIAL` 引导先上传或等待资料解析完成，`MATERIAL_COVERAGE_INCOMPLETE` 引导调整资料范围，`PREVIEW_TASKS_REQUIRED` 引导重新生成预览，`IDEMPOTENCY_CONFLICT` 引导重新生成预览后保存，`STATE_CONFLICT` 引导刷新或重新创建计划，避免直接把后端技术 message 暴露给用户。
-- 保存请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview exact `tasks`；保存成功后跳转计划详情页。当前自动闭环每次提交问卷只发起一次保存尝试，失败后停留在问卷阶段供用户重试。
+- 保存请求携带 `Idempotency-Key`，并提交 `client_flow = "wizard_v1"`、preview `title` 与 preview exact `tasks`。前端在首次进入保存阶段时把 exact save payload、preview、输入签名和幂等键作为同一份待保存尝试写入创建草稿；保存响应丢失或网络失败后，未修改问卷的重试只重发该 payload 并复用原幂等键，不重新调用 profile / preview。问卷输入变化后才生成新的待保存尝试；后端返回 `IDEMPOTENCY_CONFLICT` 时废弃旧尝试，允许下一次重新生成。保存成功后立即停止草稿持久化并清理创建草稿，再展示本次计划日历和“进入计划”按钮，避免用户在完成页刷新后重复创建计划。
 
 ## 详情页状态流转
 
@@ -32,7 +32,7 @@
 - 用户确认替换时调用 `PUT /api/v1/study-plans/{plan_id}`，提交新 preview 的 `title`、exact `tasks`、`material_scope`、`client_flow = "wizard_v1"` 和当前详情的 `expected_updated_at`。后端若返回 `STATE_CONFLICT`，前端只提示刷新或新建计划，不强行覆盖。
 - 删除计划已接入二次确认；确认后调用 `DELETE /api/v1/study-plans/{plan_id}`，成功回到课程详情页。删除是软删除，不删除课程资料或已有生成内容。
 - 导出计划仍保持 disabled / 后续接入；学习计划自身没有前端伪造导出。C11 只在执行页为已有成功 `handout` 提供 PDF 导出、为已有成功 `task_test` 提供 Markdown 导出。
-- 2026-07-15 执行页三栏布局支持用户拖拽两条竖向分隔条调整任务列表、主内容和 AI 助教宽度。前端只在浏览器 `localStorage` 保存 `course-nexus:study-plan-execution-columns` 本地偏好，不写后端；列宽有最小值保护，窄屏仍按既有 `900px` 以下单列布局降级。
+- 2026-07-15 执行页三栏布局支持用户拖拽两条竖向分隔条调整任务列表、主内容和 AI 助教宽度。前端只在浏览器 `localStorage` 保存 `course-nexus:study-plan-execution-columns` 本地偏好，不写后端；列宽有最小值保护，页面挂载和容器尺寸变化时会把超出当前网格的历史像素宽度按可收缩空间同比压回可用宽度。执行页在视口不超过 `1100px` 时提前切换单列并隐藏拖拽条，避免三栏最小总宽度在临界窄屏被裁切；其他学习计划页面仍沿用既有 `900px` 响应式规则。
 
 ## 测试入口
 

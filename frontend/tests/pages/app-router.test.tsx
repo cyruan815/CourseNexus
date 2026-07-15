@@ -199,7 +199,7 @@ describe("AppRouter", () => {
 
     renderRouter();
 
-    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
   });
 
   it("renders protected study plan detail route for authenticated users", async () => {

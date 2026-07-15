@@ -795,6 +795,55 @@ describe("study plan pages", () => {
     expect(window.localStorage.getItem("course-nexus:study-plan-execution-columns")).toContain("\"left\":360");
   });
 
+  it("fits persisted execution column widths to the current grid", async () => {
+    window.localStorage.setItem("course-nexus:study-plan-execution-columns", JSON.stringify({
+      left: 500,
+      main: 900,
+      right: 500,
+    }));
+    const boundingRectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 800,
+      height: 800,
+      left: 0,
+      right: 1200,
+      toJSON: () => ({}),
+      top: 0,
+      width: 1200,
+      x: 0,
+      y: 0,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+          return Promise.resolve(successResponse(executionContext, "req_execution"));
+        }
+
+        return Promise.resolve(successResponse({}));
+      }),
+    );
+
+    const { container } = renderStudyPlanRoutes("/study-subtasks/subtask_1");
+    const grid = await waitFor(() => {
+      const executionGrid = container.querySelector(".study-plan-execution-grid") as HTMLElement | null;
+      expect(executionGrid).toBeInTheDocument();
+      expect(executionGrid?.style.getPropertyValue("--study-plan-execution-left")).not.toBe("500px");
+      return executionGrid as HTMLElement;
+    });
+    const fittedTotal = ["left", "main", "right"].reduce((total, column) => (
+      total + Number.parseInt(grid.style.getPropertyValue(`--study-plan-execution-${column}`), 10)
+    ), 0);
+
+    expect(fittedTotal).toBe(1180);
+    expect(JSON.parse(window.localStorage.getItem("course-nexus:study-plan-execution-columns") ?? "{}")).toEqual({
+      left: expect.any(Number),
+      main: expect.any(Number),
+      right: expect.any(Number),
+    });
+    boundingRectSpy.mockRestore();
+  });
+
   it("turns a natural language goal into a mixed questionnaire, auto-saves, and enters detail after calendar preview", async () => {
     freezeStudyPlanDate();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -987,6 +1036,87 @@ describe("study plan pages", () => {
         }),
       );
     });
+  });
+
+  it("reuses the prepared save payload and idempotency key after a lost save response", async () => {
+    freezeStudyPlanDate();
+    const saveRequests: RequestInit[] = [];
+    let saveAttemptCount = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          goal_text: "复习线性代数第一章",
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: null,
+          preference: "balanced",
+          material_scope: {
+            include_all_parsed_materials: true,
+            material_ids: [],
+          },
+          unresolved_fields: ["start_date", "duration_days"],
+        }, "req_config_parse"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-profiles")) {
+        return Promise.resolve(successResponse(diagnosticProfile, "req_diagnostic_profile"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
+        saveRequests.push(init);
+        saveAttemptCount += 1;
+        if (saveAttemptCount === 1) {
+          return Promise.reject(new TypeError("模拟保存响应丢失"));
+        }
+        return Promise.resolve(successResponse(savedDetail, "req_save"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+    expect(await screen.findByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/materials", expect.anything());
+    });
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "复习线性代数第一章" },
+    });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+    expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/B\. 明天/));
+    fireEvent.click(screen.getByLabelText(/A\. 2 天/));
+    fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
+    fireEvent.click(screen.getByLabelText("概念理解"));
+
+    fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    expect(await screen.findByText("模拟保存响应丢失")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    expect(await screen.findByRole("button", { name: "进入计划" })).toBeInTheDocument();
+
+    expect(saveRequests).toHaveLength(2);
+    expect(saveRequests[0]?.body).toBe(saveRequests[1]?.body);
+    expect((saveRequests[0]?.headers as Record<string, string>)["Idempotency-Key"]).toBe(
+      (saveRequests[1]?.headers as Record<string, string>)["Idempotency-Key"],
+    );
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/study-plan-diagnostic-profiles"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/study-plans/preview"))).toHaveLength(1);
+    expect(window.localStorage.getItem("course-nexus:study-plan-create:crs_123")).toBeNull();
   });
 
   it("shows a calendar planning animation while the plan is being generated", async () => {
