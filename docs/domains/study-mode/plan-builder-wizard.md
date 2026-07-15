@@ -2,8 +2,8 @@
 
 ## 状态
 
-- 日期：2026-07-14
-- 状态：设计已确认；后端每日学习时间自动估算、配置补问字段、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。前端创建页已接入自然语言目标 -> 混合问卷 -> 自动 preview/save -> 计划详情的最小闭环。
+- 日期：2026-07-15
+- 状态：设计已确认；后端每日学习时间自动估算、配置补问字段、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy`、诊断后 capacity 闭环、preview 测试覆盖补齐和题量文案错误一次重试已实施。前端创建页已接入自然语言目标 -> 混合问卷 -> 自动 preview/save -> 计划详情的最小闭环。
 - 范围：从用户点进学习计划生成开始，到自然语言配置解析、开始前设置中的配置补问与学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 2026-07-14 前端 C13 落地说明
@@ -760,7 +760,7 @@ else:
 | 资料还在解析或解析失败 | `NO_PARSED_MATERIAL` | 提示等待解析完成或重新上传可解析资料。 |
 | 诊断答案和当前资料快照不匹配 | `DIAGNOSTIC_STALE` | 返回学前诊断重新回答。 |
 | preview 容量超出 | `PLAN_OVER_CAPACITY` warning | 展示 warning 和调整建议，可以允许用户修改后重试。 |
-| 模型输出枚举或结构非法 | `GENERATION_SCHEMA_INVALID` | 展示生成失败并允许重新生成。 |
+| 模型输出枚举或结构非法 | `GENERATION_SCHEMA_INVALID` | 后端先对可确定的测试覆盖引用做修复；若 learn/review 错放测试题量要求，带错误原因重试一次；仍非法时展示生成失败并允许重新生成。 |
 | 保存请求未提交 tasks | 兼容路径 / 后续 `PREVIEW_TASKS_REQUIRED` | 当前旧客户端仍兼容保存前生成 preview；新向导强制 tasks 属于 P6 口径收紧。 |
 | 保存请求幂等键重复 | 成功返回 / `IDEMPOTENCY_CONFLICT` | 同 key 同请求返回既有计划；同 key 不同请求返回冲突。 |
 
@@ -834,3 +834,13 @@ C4 后，`POST /study-plan-config-parses`、`POST /study-plan-diagnostic-questio
 Preview 校验由 `backend/app/modules/study_plans/planner.py::validate_preview()` 调用 `backend/app/modules/study_plans/task_tree_rules.py::validate_daily_assessment_contract()` 完成。覆盖范围不修改生成器逻辑，而是体现在计划数据本身：非最后一天测试的 `related_material_ids` / `citation_chunk_ids` 必须覆盖当天前置学习任务的并集；最后一天综合测试必须覆盖全计划所有非测试任务的并集。
 
 因此后续讲义生成仍只认 `learn` / `review`，任务测试题生成仍只认 `quiz` / `test`，生成 API、数据库表和 migration 均不需要改变。
+
+## 2026-07-15 Preview 可恢复结构错误处理
+
+计划 preview 阶段新增两类后端恢复策略，位置在 `backend/app/modules/study_plans/service.py::preview_study_plan()` 与 `backend/app/modules/study_plans/planner.py`：
+
+- 对 `quiz` / `test` 缺少覆盖引用的情况，后端在 validate 前调用 `repair_daily_assessment_coverage()` 确定性补齐 `related_material_ids` 和 `citation_chunk_ids`。非最后一天补齐当天前置 `learn` / `review` 的并集，最后一天补齐全计划非测试任务的并集。
+- 对 `learn` / `review` 文案中误含“10 道选择题”这类明确测试题量要求的情况，后端不在本地删文案，而是把 `学习或复习任务不能包含测试题量要求` 写入 planner reduce prompt，最多重新 reduce 一次，要求模型把题量文字和 `generation_parameters.task_test` 移到当天最后一个 `quiz` / `test`。
+- 其他 `GENERATION_SCHEMA_INVALID` 仍保持失败，不做静默修复；第二次 reduce 后仍非法也直接失败，避免无限模型调用和保存坏任务树。
+
+测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖覆盖引用补齐和 retry prompt；`backend/tests/modules/study_plans/test_study_plan_foundation.py` 覆盖真实 `preview_study_plan()` 首次失败后一次重试成功。
