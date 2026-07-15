@@ -1213,11 +1213,11 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 | 执行页任务问答 | `POST /api/v1/study-subtasks/{subtask_id}/qa/questions` | 请求体只含 `conversation_id` 和 `question`；后端固定使用当前二级任务关联资料范围。 |
 | 二级任务完成 | `PUT /api/v1/study-subtasks/{subtask_id}/completion` | 请求体为 `{ "completed": boolean }`，不是 toggle。 |
 | 今日讲义生成 | `POST /api/v1/study-subtasks/{subtask_id}/handouts` | 返回 `GeneratedContentRead`；默认复用最近一次 success，`force_regenerate=true` 重建。 |
-| 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；P2 只读展示通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情。 |
+| 任务测试题生成 | `POST /api/v1/study-subtasks/{subtask_id}/task-tests` | 返回 `GeneratedContentRead`；前端通过 `task_test_content_id` 再调用 `GET /api/v1/generated-contents/{generated_content_id}` 读取详情，并提供浏览器内存内逐题作答交互。 |
 | 任务测试题 Markdown 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 返回 Markdown 文件流；只支持成功的 `task_test`，不保存作答、不判分、不生成 PDF。 |
 | 今日讲义 PDF 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 返回 PDF 文件流；只支持成功的 `handout`，不保存导出历史，不支持任务测试题 PDF。 |
 
-任务测试题后端生成和 Markdown 文件导出已实现；当前前端缺口是 P2 轻量只读展示。提交答案、判分、attempt 历史和反馈闭环属于后续 P9 / phase-1 S08，不在 P2 中引入。
+任务测试题后端生成和 Markdown 文件导出已实现。前端现在提供浏览器内存内的逐题作答交互：用户提交单道题后才显示正确答案和解析；单选、多选、判断题只做本地即时判断，简答题只显示参考答案和解析。该交互不调用新增 API，不保存 attempt 历史，不写错题本，也不影响二级任务完成、打卡或导出。
 ## 5. 前端最小工作台验收口径
 
 - 前端页面只需要覆盖基础集成路径：登录、课程列表、课程详情选择、资料上传、资料范围选择、问答提交和引用展示。
@@ -1266,7 +1266,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 - 新生成 handout 不提供逐条 `source_citations`，详情页不要展示引用侧栏、引用列表、逐节来源入口，也不要显示“当前没有可展示的引用来源”空引用面板。
 - 旧 `content_json.sections/blocks` 结构化 handout 不再作为新数据兼容目标；前端可以按通用畸形内容兜底处理。
 
-`task_test` 暂时保持结构化 JSON 展示和逐题引用数据，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`。逐题引用继续用于后端导出和内部追溯，生成内容详情页不展示引用侧栏。
+`task_test` 保持结构化 JSON 和逐题引用数据，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`。逐题引用继续用于后端导出和内部追溯，生成内容详情页不展示引用侧栏；浏览器端可以基于结构化题目做本地逐题提交反馈，但不保存作答记录。
 ## 7. 2026-07-15 任务讲义 Markdown 前端接入口径
 
 新生成 `handout` 的权威正文仍是 `GeneratedContentRead.content` Markdown，`content_json` 只保存 `{"format":"markdown","schema_version":1}`。前端详情页必须通过 `GeneratedContentRenderer` 的 `handout` 分支进入 `HandoutMarkdownRenderer`，不要自行拼接旧 `content_json.sections/blocks`，不要使用 `dangerouslySetInnerHTML`。
