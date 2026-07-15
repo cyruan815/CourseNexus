@@ -58,21 +58,24 @@
 
 .study-plan-create-flow {
   display: grid;
-  grid-template-columns: minmax(0, 900px);
+  grid-template-columns: minmax(0, 760px);
   justify-content: center;
+  align-content: start;
   overflow: visible;
+  padding-top: 8px;
 }
 
 .study-plan-create-shell {
   overflow: auto;
-  padding-block: 18px 28px;
+  padding: 14px 20px 32px;
 }
 
 .study-plan-create-flow > .study-plan-panel {
-  border: 0;
-  background: transparent;
-  padding: 0;
+  border-color: #d6e0eb;
+  background: #ffffff;
+  padding: 22px;
   overflow: visible;
+  box-shadow: 0 18px 42px rgba(31, 41, 55, 0.08);
 }
 
 .study-plan-panel,
@@ -216,72 +219,193 @@
   background: #f8fffd;
 }
 
-.study-plan-generation-log {
-  overflow: hidden;
-  border-color: #e6dccf;
-  background:
-    linear-gradient(115deg, rgba(255, 248, 238, 0.92), rgba(248, 252, 255, 0.94)),
-    #fffaf4;
-  box-shadow: 0 18px 40px rgba(55, 65, 81, 0.12);
+.study-plan-create-nav {
+  flex: 0 0 auto;
+  min-height: 48px;
+  border-bottom: 1px solid #d9e2ec;
+  padding: 2px 4px 12px;
 }
 
-.study-plan-generation-log-header {
-  min-height: 52px;
-  border-bottom: 1px solid #eadfd2;
-  padding: 12px 18px;
-}
-
-.study-plan-generation-dots {
+.study-plan-create-nav a,
+.study-plan-create-nav button {
   flex: 0 0 auto;
 }
 
-.study-plan-generation-dots > div {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: #2f8195;
-  opacity: 0.46;
+.study-plan-preparing-card,
+.study-plan-calendar-generation {
+  border-color: #d6e0eb;
+  background:
+    linear-gradient(135deg, rgba(248, 251, 255, 0.92), rgba(244, 255, 251, 0.86)),
+    #ffffff;
+  padding: 22px;
 }
 
-.study-plan-generation-dots > div:nth-child(4) {
-  opacity: 1;
-}
-
-.study-plan-generation-log-body {
-  max-height: 360px;
-  overflow: hidden;
-  padding: 10px 18px 18px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-size: 15px;
-  line-height: 1.75;
-  color: #707493;
-}
-
-.study-plan-generation-log-row {
+.study-plan-preparing-steps {
   display: grid;
-  grid-template-columns: 82px 54px 108px minmax(0, 1fr);
-  gap: 10px;
-  min-height: 28px;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.study-plan-preparing-step {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #fbfdff;
+  box-shadow: inset 0 -3px 0 rgba(20, 184, 166, 0.14);
+  animation: study-plan-step-rise 1000ms ease both;
+}
+
+.study-plan-preparing-step:nth-child(2) {
+  box-shadow: inset 0 -3px 0 rgba(37, 99, 235, 0.13);
+}
+
+.study-plan-preparing-step:nth-child(3) {
+  box-shadow: inset 0 -3px 0 rgba(245, 158, 11, 0.16);
+}
+
+.study-plan-loading-rows {
+  border-top: 1px solid #e5edf5;
+  padding-top: 12px;
+}
+
+.study-plan-loading-row {
+  min-height: 24px;
+  color: #334155;
+  animation: study-plan-row-in 220ms ease both;
+}
+
+.study-plan-loading-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #14b8a6;
+}
+
+.study-plan-calendar-generation {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.study-plan-calendar-generation-icon {
+  flex: 0 0 auto;
+  color: #0f766e;
+}
+
+.study-plan-calendar-card {
+  overflow: hidden;
+  border-color: #d6e0eb;
+  background: #ffffff;
+}
+
+.study-plan-calendar-card-header {
+  min-height: 48px;
+  border-bottom: 1px solid #e5edf5;
+  padding: 10px 12px;
+}
+
+.study-plan-calendar-nav-button {
+  min-width: 34px;
+  padding-inline: 0;
+}
+
+.study-plan-calendar-weekdays,
+.study-plan-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.study-plan-calendar-weekdays {
+  padding: 8px 0;
+  text-align: center;
+}
+
+.study-plan-calendar-grid {
+  border-left: 1px solid #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.study-plan-calendar-cell {
+  position: relative;
+  min-height: 68px;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+  animation: study-plan-calendar-cell-in 260ms ease both;
+}
+
+.study-plan-calendar-cell.is-muted {
+  background: #fbfdff;
+  color: #94a3b8;
+}
+
+.study-plan-calendar-cell.is-planned {
+  background: #f0fdfa;
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.26);
+}
+
+.study-plan-calendar-day {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.study-plan-calendar-cell.is-muted .study-plan-calendar-day {
+  color: #94a3b8;
+}
+
+.study-plan-calendar-task {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  left: 7px;
+  min-height: 20px;
+  border-radius: 4px;
+  background: #ccfbf1;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 20px;
+  overflow: hidden;
+  padding-inline: 6px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.study-plan-generation-log-row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+@keyframes study-plan-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.study-plan-generation-log-row span:nth-child(2) {
-  color: #2f8195;
-  font-weight: 800;
+@keyframes study-plan-step-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.study-plan-generation-log-row span:nth-child(3) {
-  color: #8270aa;
-}
-
-.study-plan-generation-log-row span:nth-child(4) {
-  color: #e58422;
+@keyframes study-plan-calendar-cell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .study-plan-date-input {
