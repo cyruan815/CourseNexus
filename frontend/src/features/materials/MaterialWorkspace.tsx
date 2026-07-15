@@ -5,11 +5,13 @@ import {
   IconCheck,
   IconChevronDown,
   IconDotsVertical,
+  IconEdit,
   IconFolder,
   IconFolderPlus,
   IconLink,
   IconLoader2,
   IconSearch,
+  IconTrash,
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
@@ -95,6 +97,8 @@ function materialKind(material: Material): string {
   };
   return labels[normalizedType] ?? (normalizedType.slice(0, 4).toUpperCase() || "FILE");
 }
+
+const materialContextMenuWidth = 168;
 
 export function MaterialWorkspace({
   courseId,
@@ -480,14 +484,14 @@ export function MaterialWorkspace({
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setContextMenu({ folder, kind: "folder", x: Math.max(8, rect.right - 148), y: rect.bottom + 4 });
+    setContextMenu({ folder, kind: "folder", x: Math.max(8, rect.right - materialContextMenuWidth), y: rect.bottom + 4 });
   }
 
   function openMaterialMenu(event: MouseEvent<HTMLElement>, material: Material) {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setContextMenu({ kind: "material", material, x: Math.max(8, rect.right - 148), y: rect.bottom + 4 });
+    setContextMenu({ kind: "material", material, x: Math.max(8, rect.right - materialContextMenuWidth), y: rect.bottom + 4 });
   }
 
   function handleParse(material: Material) {
@@ -835,7 +839,8 @@ export function MaterialWorkspace({
           {contextMenu.kind === "folder" ? (
             <>
               <button onClick={() => openRenameFolderModal(contextMenu.folder)} role="menuitem" type="button">
-                重命名文件夹
+                <IconEdit aria-hidden size={17} stroke={1.9} />
+                <span>重命名文件夹</span>
               </button>
               <button
                 onClick={() => {
@@ -845,25 +850,30 @@ export function MaterialWorkspace({
                 role="menuitem"
                 type="button"
               >
-                上传到此文件夹
+                <IconUpload aria-hidden size={17} stroke={1.9} />
+                <span>上传到此文件夹</span>
               </button>
-              <button onClick={() => requestDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
-                删除文件夹
+              <button className="is-danger" onClick={() => requestDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
+                <IconTrash aria-hidden size={17} stroke={1.9} />
+                <span>删除文件夹</span>
               </button>
             </>
           ) : null}
           {contextMenu.kind === "material" ? (
             <>
               <button onClick={() => openRenameMaterialModal(contextMenu.material)} role="menuitem" type="button">
-                重命名资料
+                <IconEdit aria-hidden size={17} stroke={1.9} />
+                <span>重命名资料</span>
               </button>
               {contextMenu.material.parse_status === "parse_failed" ? (
                 <button onClick={() => handleParse(contextMenu.material)} role="menuitem" type="button">
-                  重试解析
+                  <IconLoader2 aria-hidden size={17} stroke={1.9} />
+                  <span>重试解析</span>
                 </button>
               ) : null}
-              <button onClick={() => requestDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
-                删除资料
+              <button className="is-danger" onClick={() => requestDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
+                <IconTrash aria-hidden size={17} stroke={1.9} />
+                <span>删除资料</span>
               </button>
             </>
           ) : null}
