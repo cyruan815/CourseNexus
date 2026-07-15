@@ -16,7 +16,7 @@ The five independent generators write `ai_generated_contents` only. The existing
 - 表名使用 `snake_case` 复数形式；API 字段和 Pydantic schema 继续使用 `snake_case`。
 - ID 使用后端生成的不透明字符串，建议 UUID 或 ULID，不使用自增 ID 暴露业务含义。
 - `created_at`、`updated_at`、`deleted_at` 使用 ISO 8601 datetime 语义；数据库层可用 timezone-aware datetime。
-- 主要业务表默认使用软删除；用户主动删除资料或资料文件夹是例外，执行不可恢复的物理删除。
+- 主要业务表默认使用软删除；用户主动删除资料、资料文件夹或 AI 生成内容是例外，执行不可恢复的物理删除。
 - `user_id` 是权限隔离的核心字段；即使可以经由课程间接追溯到用户，常用业务表也保留 `user_id` 冗余以便过滤和防止越权。
 - 结构化 AI 内容 v0.1 优先写入 `ai_generated_contents.content_json`，暂不强制拆 `quiz`、`flashcard`、`mindmap` 独立表。
 
@@ -104,7 +104,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 实现规则：
 
 - 有 `updated_at` 的表，更新业务字段时必须同步更新。
-- 有 `deleted_at` 的表，删除接口默认写入 `deleted_at`，不物理删除业务数据。
+- 有 `deleted_at` 的表，删除接口默认写入 `deleted_at`，不物理删除业务数据；资料、资料文件夹和 AI 生成内容按各自规则执行物理删除。
 - 软删除数据默认不进入列表、检索上下文、日历聚合、今日待办和生成上下文。
 
 ## 枚举
@@ -335,6 +335,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - `material_name`、页码和 `hit_text` 是快照字段，资料删除后仍用于历史展示；`chunk_id` 同时置空。
 - 数据库约束保留`page`和`page_index`至少一个非空。无分页Text/Markdown引用兼容保存`page=null,page_index=0`；0是未知位置哨兵，前端展示“页码未知”，不得解释为真实第0页。
 - 生成内容引用的`sort_order`从1连续递增；历史兼容数据允许为null，读取时使用`ASC NULLS LAST`和引用ID保证SQLite/PostgreSQL顺序一致。
+- 用户永久删除生成内容时，同一事务物理删除所有关联 `source_citations`，不保留生成内容引用快照。
 
 ## ai_generated_contents
 
@@ -354,7 +355,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `error_code` | string | 是 | null | INDEX | 失败错误码。 |
 | `created_at` | datetime | 否 | 当前时间 | INDEX | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
-| `deleted_at` | datetime | 是 | null | INDEX | 删除时间。 |
+| `deleted_at` | datetime | 是 | null | INDEX | 历史兼容字段；生成内容删除接口直接物理删除记录，不持久化删除时间。 |
 
 规则：
 
@@ -364,6 +365,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - S06 进入生成流程后的失败也写入本表，`generation_status = failed` 且 `error_code` 为稳定错误码。
 - 课程详情页生成的课程自测 Quiz 使用 `content_type = quiz`。
 - 保留逐条引用的能力通过 `source_citations.generated_content_id` 关联；新生成 `handout` 不写该表，`task_test` 继续写逐题引用。
+- 用户删除生成内容时，先删除关联引用，再物理删除 `ai_generated_contents` 主记录；删除不可恢复。
 
 ## study_plans
 

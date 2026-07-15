@@ -466,7 +466,7 @@ function GeneratedContentPanel({
       <Modal centered onClose={closeActions} opened={Boolean(deleteTarget)} title="删除生成内容" transitionProps={{ duration: 0 }}>
         <Stack gap="md">
           {actionError ? <Alert color="red" role="alert" title="删除失败" variant="light">{actionError}</Alert> : null}
-          <Text>确认删除“{deleteTarget?.title}”吗？删除后该内容将从课程页面中移除。</Text>
+          <Text>确认删除“{deleteTarget?.title}”吗？该内容及其引用记录将被永久删除，无法恢复。</Text>
           <Group justify="flex-end">
             <Button disabled={isSubmitting} onClick={closeActions} variant="default">取消</Button>
             <Button color="red" loading={isSubmitting} onClick={submitDelete}>确认删除</Button>

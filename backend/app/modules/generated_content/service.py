@@ -13,6 +13,7 @@ from app.modules.generated_content.repository import (
     get_active_generated_content_for_user,
     list_active_generated_contents_for_course,
     list_generated_content_citations,
+    permanently_delete_generated_content,
 )
 from app.modules.generated_content.schemas import (
     FlashcardCardsUpdate,
@@ -106,10 +107,11 @@ def delete_generated_content(
     if content is None:
         raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
     now = datetime.now(timezone.utc)
-    content.deleted_at = now
-    content.updated_at = now
-    save_generated_content(db, content)
-    return build_generated_content_read(db, content)
+    deleted_snapshot = build_generated_content_read(db, content).model_copy(
+        update={"deleted_at": now, "updated_at": now}
+    )
+    permanently_delete_generated_content(db, content)
+    return deleted_snapshot
 
 
 def update_flashcard_cards(

@@ -22,3 +22,9 @@ Generation does not use Top-K retrieval, batching, map/reduce, cross-batch mergi
 Successful generation writes only `ai_generated_contents`. It does not create `source_citations`; list/detail/POST responses retain the top-level `source_citations` field as `[]` for API compatibility.
 
 The total context limit is configured by `MATERIAL_CONTEXT_MAX_TOKENS`, default `120000`. Overflow is never silently truncated.
+
+## Permanent deletion
+
+`DELETE /api/v1/generated-contents/{id}` first loads an active record under the current user and assembles the response snapshot. In one database transaction it then deletes every `source_citations` row whose `generated_content_id` matches before deleting the `ai_generated_contents` row. There are no generated-content files, vector entries, or external jobs to clean up.
+
+For `C` associated citations, deletion is `O(C)` with two delete statements and one commit. Any database failure rolls back both deletes, so the main record and its citations cannot be partially removed. The irreversible migration `20260715_0005` applies the same order to purge records left by the earlier soft-delete behavior; downgrade cannot reconstruct deleted user data.

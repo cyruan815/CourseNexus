@@ -868,6 +868,9 @@ describe("CourseDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "自定义期末提纲 更多操作" }));
     fireEvent.click(await screen.findByText("删除"));
     expect(screen.getByRole("dialog", { name: "删除生成内容" })).toHaveTextContent("自定义期末提纲");
+    expect(screen.getByRole("dialog", { name: "删除生成内容" })).toHaveTextContent(
+      "该内容及其引用记录将被永久删除，无法恢复",
+    );
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {

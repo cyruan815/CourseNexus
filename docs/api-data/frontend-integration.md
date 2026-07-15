@@ -634,7 +634,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `DELETE /api/v1/generated-contents/{generated_content_id}`
 
-要求：Bearer token。只能删除当前用户自己的未删除生成内容。删除采用软删除，写入 `deleted_at` 和 `updated_at`；响应 `data` 为删除后的 `GeneratedContentRead`。删除后该记录不再出现在课程生成内容列表，详情接口返回 `404 NOT_FOUND`，数据库正文与历史引用快照保留。
+要求：Bearer token。只能删除当前用户自己的未删除生成内容。删除在单个数据库事务中物理删除该生成内容及其 `source_citations` 引用记录，不可恢复；响应 `data` 为删除前内容快照，并在响应模型中填入本次删除的 `deleted_at` 和 `updated_at`，该快照不会继续保存在数据库。删除后该记录不再出现在课程生成内容列表，详情接口返回 `404 NOT_FOUND`。
 
 ### 3.22.2 替换 Flashcard 完整牌组
 

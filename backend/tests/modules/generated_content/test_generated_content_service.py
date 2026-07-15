@@ -335,7 +335,7 @@ def test_rename_generated_content_changes_only_normalized_title(db: Session) -> 
     assert [citation.id for citation in renamed.source_citations] == ["cit_rename"]
 
 
-def test_delete_generated_content_soft_deletes_and_preserves_snapshot(db: Session) -> None:
+def test_delete_generated_content_permanently_removes_content_and_citations(db: Session) -> None:
     user = register_user(db, UserCreate(username="content-deleter", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
     content = create_content(db, user.id, course.id, "gen_delete", content_type="handout")
@@ -351,8 +351,10 @@ def test_delete_generated_content_soft_deletes_and_preserves_snapshot(db: Sessio
     deleted = delete_generated_content(db, user_id=user.id, generated_content_id=content.id)
 
     assert deleted.deleted_at is not None
-    assert db.get(AIGeneratedContent, content.id) is not None
-    assert db.get(SourceCitation, citation.id) is not None
+    assert deleted.id == content.id
+    assert [item.id for item in deleted.source_citations] == [citation.id]
+    assert db.get(AIGeneratedContent, content.id) is None
+    assert db.get(SourceCitation, citation.id) is None
     assert list_generated_contents(db, user_id=user.id, course_id=course.id) == []
     with pytest.raises(CourseNexusError) as exc_info:
         get_generated_content_detail(db, user_id=user.id, generated_content_id=content.id)

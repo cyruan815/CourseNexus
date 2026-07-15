@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.course_qa.models import SourceCitation
@@ -23,6 +23,14 @@ def save_generated_content(db: Session, content: AIGeneratedContent) -> AIGenera
     db.commit()
     db.refresh(content)
     return content
+
+
+def permanently_delete_generated_content(db: Session, content: AIGeneratedContent) -> None:
+    db.execute(
+        delete(SourceCitation).where(SourceCitation.generated_content_id == content.id)
+    )
+    db.delete(content)
+    db.commit()
 
 
 def list_active_generated_contents_for_course(
