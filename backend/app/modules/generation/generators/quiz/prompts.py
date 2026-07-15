@@ -6,6 +6,9 @@ def build_quiz_prompt(context: MaterialGenerationContext, *, parameters: QuizPar
     return (
         "Generate the final course quiz using only the complete material context below. "
         f"Return exactly {parameters.question_count} unique single-choice questions when the material supports it. "
+        "Return a concise Simplified Chinese topic_title (30 characters maximum). For one chapter, use its chapter title; "
+        "for multiple chapters, summarize their shared topic. Do not include the feature name, counts, or parentheses. "
+        "Write every question, option, explanation, and hint in Simplified Chinese; formulas, units, protocol names, and necessary professional abbreviations may remain in English. "
         "Test conceptual understanding, distinctions, and simple application instead of copying source sentences. "
         "Each question must have options A-D, one unambiguous correct answer, plausible distractors, "
         "a concise overall explanation, and an optional short hint that guides without revealing the answer. "

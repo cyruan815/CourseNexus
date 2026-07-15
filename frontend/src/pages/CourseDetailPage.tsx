@@ -419,7 +419,7 @@ function GeneratedContentPanel({
               return (
                 <Paper aria-disabled="true" aria-label={`正在生成 ${displayTitle}`} className="course-detail-generated-item is-pending" key={pending.id} radius="md" withBorder>
                   <Stack className="course-detail-generated-copy" gap={2}>
-                    <Text fw={700} size="sm">{displayTitle}</Text>
+                    <Text className="course-detail-generated-title" fw={700} size="sm" title={displayTitle}>{displayTitle}</Text>
                     <Text c="dimmed" size="xs">{generationLoadingMessage(pending.content_type)}</Text>
                   </Stack>
                   <Group className="course-detail-generation-state" gap="xs" wrap="nowrap">
@@ -440,7 +440,7 @@ function GeneratedContentPanel({
                     to={`/generated-contents/${content.id}`}
                   >
                     <Stack className="course-detail-generated-copy" gap={2}>
-                      <Text fw={700} lineClamp={2} size="sm" title={displayTitle}>{displayTitle}</Text>
+                      <Text className="course-detail-generated-title" fw={700} lineClamp={2} size="sm" title={displayTitle}>{displayTitle}</Text>
                       <Text c="dimmed" size="xs">{formatGeneratedContentAge(content.created_at, now)}</Text>
                     </Stack>
                   </Box>

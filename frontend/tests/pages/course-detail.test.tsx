@@ -25,7 +25,7 @@ const generatedContent = {
   study_subtask_id: null,
   source_message_id: null,
   content_type: "outline",
-  title: "期末复习提纲",
+  title: "第七章 物理层",
   content: "第一章重点",
   content_json: null,
   generation_status: "success",
@@ -359,8 +359,9 @@ describe("CourseDetailPage", () => {
 
     renderDetailPage();
 
-    expect(await screen.findByText("复习提纲")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看生成内容 复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
+    const generatedTitle = await screen.findByText("复习提纲 · 第七章 物理层");
+    expect(generatedTitle).toHaveAttribute("title", "复习提纲 · 第七章 物理层");
+    expect(screen.getByRole("link", { name: "查看生成内容 复习提纲 · 第七章 物理层" })).toHaveAttribute("href", "/generated-contents/gen_1");
     expect(screen.getByRole("link", { name: "查看学习计划 高等数学期末计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_1");
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {

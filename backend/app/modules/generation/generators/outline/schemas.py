@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.generation.generators.topic import TopicTitle
+
 
 class OutlineParameters(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -30,6 +32,7 @@ class OutlineDraft(BaseModel):
 
 class OutlineGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    topic_title: TopicTitle
     sections: list[OutlineDraft] = Field(min_length=1)
 
 

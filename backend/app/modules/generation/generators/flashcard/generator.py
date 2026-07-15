@@ -13,6 +13,7 @@ from app.modules.generation.generators.flashcard.schemas import (
     FlashcardParameters,
     FlashcardRead,
 )
+from app.modules.generation.generators.topic import ensure_chinese_topic
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialGenerationContext
 
@@ -32,6 +33,7 @@ class FlashcardGenerator:
             prompt=build_flashcard_prompt(context, parameters=params),
             output_schema=FlashcardGenerationResult,
         )
+        topic_title = ensure_chinese_topic(result.topic_title)
         cards = [
             FlashcardRead(id=f"card_{index:03d}", sort_order=index, **draft.model_dump())
             for index, draft in enumerate(result.cards[: params.card_count], start=1)
@@ -41,7 +43,7 @@ class FlashcardGenerator:
         except ValidationError as exc:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Flashcard structure is invalid") from exc
         return GeneratorOutput(
-            title=f"Flashcards ({len(cards)} cards)",
+            title=topic_title,
             content_json=content.model_dump(mode="json", exclude_none=True),
         )
 

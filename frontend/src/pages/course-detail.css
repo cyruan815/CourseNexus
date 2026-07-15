@@ -706,6 +706,16 @@
   z-index: 1;
 }
 
+.course-detail-generated-copy {
+  min-width: 0;
+}
+
+.course-detail-generated-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .course-detail-generation-state {
   flex: 0 0 auto;
   color: #5f54c7;

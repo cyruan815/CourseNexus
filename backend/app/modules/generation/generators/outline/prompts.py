@@ -7,6 +7,8 @@ def build_outline_prompt(context: MaterialGenerationContext, *, parameters: Outl
         "Generate the final review outline using only the complete material context below. "
         f"Return at most {parameters.section_count} sections in the requested order. "
         f"Organization: {parameters.organization}. Review goal: {parameters.review_goal or 'none'}. "
+        "Return a concise Simplified Chinese topic_title (30 characters maximum). For one chapter, use its chapter title; "
+        "for multiple chapters, summarize their shared topic. Do not include the feature name, counts, or parentheses. "
         f"Detail: {parameters.detail_level}. Give every section a distinct learning purpose, avoid repeated summaries, "
         "and provide an actionable review suggestion. Do not create calendar events, tasks, deadlines, or study-plan fields. "
         "Do not return source IDs, source order keys, or citations.\n\n"
