@@ -187,7 +187,7 @@ class MindmapBlock(OptionalCitationBoundModel):
 class MermaidBlock(OptionalCitationBoundModel):
     type: Literal["mermaid"] = "mermaid"
     title: str = Field(min_length=1)
-    diagram_type: Literal["flowchart", "sequence", "class", "state", "er"] = "flowchart"
+    diagram_type: Literal["flowchart", "sequence", "class", "state", "er", "mindmap"] = "flowchart"
     code: str = Field(min_length=1)
     explanation: str = Field(min_length=1)
 
