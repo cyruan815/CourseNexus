@@ -50,6 +50,40 @@ def test_generation_history_and_detail_return_same_json_and_empty_citations(
     assert listed["source_citations"] == detail["source_citations"] == []
 
 
+def test_generated_content_can_be_renamed_and_deleted(
+    client, alice_api, api_course_factory, api_material_factory
+) -> None:
+    course_id = api_course_factory(alice_api)
+    api_material_factory(alice_api, course_id, filename="one.md", content=b"Alpha")
+    app.dependency_overrides[generation_router.get_generation_model_provider_factory] = lambda: lambda _: OutlineProvider()
+    created = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers=alice_api.headers,
+        json={"content_type": "outline", "parameters": {"section_count": 1}},
+    ).json()["data"]
+
+    renamed_response = client.patch(
+        f"/api/v1/generated-contents/{created['id']}",
+        headers=alice_api.headers,
+        json={"title": "  自定义复习提纲  "},
+    )
+    assert renamed_response.status_code == 200
+    assert renamed_response.json()["data"]["title"] == "自定义复习提纲"
+
+    deleted_response = client.delete(
+        f"/api/v1/generated-contents/{created['id']}",
+        headers=alice_api.headers,
+    )
+    assert deleted_response.status_code == 200
+    assert deleted_response.json()["data"]["deleted_at"] is not None
+    assert client.get(
+        f"/api/v1/generated-contents/{created['id']}", headers=alice_api.headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/courses/{course_id}/generated-contents", headers=alice_api.headers
+    ).json()["data"] == []
+
+
 def test_invalid_parameters_return_422_without_history(client, alice_api, api_course_factory, api_material_factory) -> None:
     course_id = api_course_factory(alice_api)
     api_material_factory(alice_api, course_id)

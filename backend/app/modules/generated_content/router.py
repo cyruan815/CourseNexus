@@ -6,8 +6,14 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_required_user
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.generated_content.schemas import FlashcardCardsUpdate
-from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents, update_flashcard_cards
+from app.modules.generated_content.schemas import FlashcardCardsUpdate, GeneratedContentUpdate
+from app.modules.generated_content.service import (
+    delete_generated_content,
+    get_generated_content_detail,
+    list_generated_contents,
+    rename_generated_content,
+    update_flashcard_cards,
+)
 from app.modules.users.models import User
 from app.shared.responses import success_response
 
@@ -36,6 +42,38 @@ def get_generated_content_endpoint(
     content = get_generated_content_detail(db, user_id=current_user.id, generated_content_id=generated_content_id)
     data = content.model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))
+
+
+@router.patch("/generated-contents/{generated_content_id}")
+def rename_generated_content_endpoint(
+    generated_content_id: str,
+    payload: GeneratedContentUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    content = rename_generated_content(
+        db,
+        user_id=current_user.id,
+        generated_content_id=generated_content_id,
+        title=payload.title,
+    )
+    return success_response(content.model_dump(mode="json"), request_id=get_request_id(request))
+
+
+@router.delete("/generated-contents/{generated_content_id}")
+def delete_generated_content_endpoint(
+    generated_content_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    content = delete_generated_content(
+        db,
+        user_id=current_user.id,
+        generated_content_id=generated_content_id,
+    )
+    return success_response(content.model_dump(mode="json"), request_id=get_request_id(request))
 
 
 @router.patch("/generated-contents/{generated_content_id}/flashcards")

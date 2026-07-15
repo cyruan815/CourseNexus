@@ -626,7 +626,17 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 响应 `data`：`GeneratedContentRead`。
 
-### 3.22.1 替换 Flashcard 完整牌组
+### 3.22.1 重命名与删除生成内容
+
+`PATCH /api/v1/generated-contents/{generated_content_id}`
+
+要求：Bearer token。只能修改当前用户自己的未删除生成内容。请求体为 `{"title":"新的名称"}`；标题去除首尾空白后长度为 1-255，响应 `data` 为更新后的 `GeneratedContentRead`。重命名只修改 `title` 和 `updated_at`，不改变正文、结构化结果、生成状态、资料范围或引用快照。
+
+`DELETE /api/v1/generated-contents/{generated_content_id}`
+
+要求：Bearer token。只能删除当前用户自己的未删除生成内容。删除采用软删除，写入 `deleted_at` 和 `updated_at`；响应 `data` 为删除后的 `GeneratedContentRead`。删除后该记录不再出现在课程生成内容列表，详情接口返回 `404 NOT_FOUND`，数据库正文与历史引用快照保留。
+
+### 3.22.2 替换 Flashcard 完整牌组
 
 `PATCH /api/v1/generated-contents/{generated_content_id}/flashcards`
 

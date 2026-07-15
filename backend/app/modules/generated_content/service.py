@@ -14,7 +14,12 @@ from app.modules.generated_content.repository import (
     list_active_generated_contents_for_course,
     list_generated_content_citations,
 )
-from app.modules.generated_content.schemas import FlashcardCardsUpdate, GeneratedContentCitationRead, GeneratedContentRead
+from app.modules.generated_content.schemas import (
+    FlashcardCardsUpdate,
+    GeneratedContentCitationRead,
+    GeneratedContentRead,
+    GeneratedContentUpdate,
+)
 from app.modules.generation.generators.flashcard.schemas import FlashcardContent, FlashcardRead
 from app.modules.generated_content.repository import save_generated_content
 
@@ -72,6 +77,38 @@ def get_generated_content_detail(
     content = get_active_generated_content_for_user(db, user_id=user_id, generated_content_id=generated_content_id)
     if content is None:
         raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    return build_generated_content_read(db, content)
+
+
+def rename_generated_content(
+    db: Session,
+    *,
+    user_id: str,
+    generated_content_id: str,
+    title: str,
+) -> GeneratedContentRead:
+    content = get_active_generated_content_for_user(db, user_id=user_id, generated_content_id=generated_content_id)
+    if content is None:
+        raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    content.title = GeneratedContentUpdate(title=title).title
+    content.updated_at = datetime.now(timezone.utc)
+    save_generated_content(db, content)
+    return build_generated_content_read(db, content)
+
+
+def delete_generated_content(
+    db: Session,
+    *,
+    user_id: str,
+    generated_content_id: str,
+) -> GeneratedContentRead:
+    content = get_active_generated_content_for_user(db, user_id=user_id, generated_content_id=generated_content_id)
+    if content is None:
+        raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    now = datetime.now(timezone.utc)
+    content.deleted_at = now
+    content.updated_at = now
+    save_generated_content(db, content)
     return build_generated_content_read(db, content)
 
 

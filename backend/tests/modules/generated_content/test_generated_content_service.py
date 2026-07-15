@@ -21,7 +21,13 @@ import app.modules.generated_content.service as generated_content_service
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.repository import save_generated_content
 from app.modules.generated_content.schemas import FlashcardCardsUpdate
-from app.modules.generated_content.service import get_generated_content_detail, list_generated_contents, update_flashcard_cards
+from app.modules.generated_content.service import (
+    delete_generated_content,
+    get_generated_content_detail,
+    list_generated_contents,
+    rename_generated_content,
+    update_flashcard_cards,
+)
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -297,6 +303,81 @@ def test_soft_deleted_generated_contents_remain_excluded(db: Session) -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         get_generated_content_detail(db, user_id=user.id, generated_content_id=deleted.id)
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_rename_generated_content_changes_only_normalized_title(db: Session) -> None:
+    user = register_user(db, UserCreate(username="content-renamer", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    content = create_content(db, user.id, course.id, "gen_rename", content_type="handout")
+    create_citation(
+        db,
+        citation_id="cit_rename",
+        generated_content_id=content.id,
+        material_id="mat_rename",
+        chunk_id="chunk_rename",
+        sort_order=1,
+    )
+    original_json = content.content_json
+    original_status = content.generation_status
+    original_updated_at = content.updated_at
+
+    renamed = rename_generated_content(
+        db,
+        user_id=user.id,
+        generated_content_id=content.id,
+        title="  期末重点讲义  ",
+    )
+
+    assert renamed.title == "期末重点讲义"
+    assert renamed.content_json == original_json
+    assert renamed.generation_status == original_status
+    assert renamed.updated_at > original_updated_at
+    assert [citation.id for citation in renamed.source_citations] == ["cit_rename"]
+
+
+def test_delete_generated_content_soft_deletes_and_preserves_snapshot(db: Session) -> None:
+    user = register_user(db, UserCreate(username="content-deleter", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    content = create_content(db, user.id, course.id, "gen_delete", content_type="handout")
+    citation = create_citation(
+        db,
+        citation_id="cit_delete",
+        generated_content_id=content.id,
+        material_id="mat_delete",
+        chunk_id="chunk_delete",
+        sort_order=1,
+    )
+
+    deleted = delete_generated_content(db, user_id=user.id, generated_content_id=content.id)
+
+    assert deleted.deleted_at is not None
+    assert db.get(AIGeneratedContent, content.id) is not None
+    assert db.get(SourceCitation, citation.id) is not None
+    assert list_generated_contents(db, user_id=user.id, course_id=course.id) == []
+    with pytest.raises(CourseNexusError) as exc_info:
+        get_generated_content_detail(db, user_id=user.id, generated_content_id=content.id)
+    assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_generated_content_mutations_hide_cross_user_records(db: Session) -> None:
+    owner = register_user(db, UserCreate(username="content-owner", password="password123"))
+    other = register_user(db, UserCreate(username="content-other", password="password123"))
+    course = create_course(db, owner.id, CourseCreate(name="Networks"))
+    content = create_content(db, owner.id, course.id, "gen_private_mutation")
+
+    with pytest.raises(CourseNexusError) as rename_exc:
+        rename_generated_content(
+            db,
+            user_id=other.id,
+            generated_content_id=content.id,
+            title="不可修改",
+        )
+    assert rename_exc.value.code == "NOT_FOUND"
+
+    with pytest.raises(CourseNexusError) as delete_exc:
+        delete_generated_content(db, user_id=other.id, generated_content_id=content.id)
+    assert delete_exc.value.code == "NOT_FOUND"
+    assert get_generated_content_detail(db, user_id=owner.id, generated_content_id=content.id).id == content.id
 
 
 def test_flashcard_cards_update_rejects_duplicate_fronts_and_oversized_decks() -> None:
