@@ -18,7 +18,11 @@ from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.schemas import GeneratedContentRead
 from app.modules.generated_content.service import build_generated_content_read
 from app.modules.generation.generators.handout import build_generator as build_handout_generator
-from app.modules.generation.generators.handout.generator import ensure_handout_header
+from app.modules.generation.generators.handout.generator import (
+    _assert_no_mermaid,
+    _handout_has_visual,
+    ensure_handout_header,
+)
 from app.modules.generation.generators.task_test import build_generator as build_task_test_generator
 from app.modules.generation.generators.task_test.schemas import TaskTestContent, TaskTestGenerationParameters
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
@@ -712,6 +716,9 @@ def _reduce_handout_outputs(
         )
     if not markdown:
         raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
+    _assert_no_mermaid(markdown)
+    if not _handout_has_visual(markdown):
+        raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="讲义必须至少包含一张安全 SVG 图示", status_code=500)
     return GeneratorOutput(
         title=title,
         content=markdown,
@@ -732,7 +739,8 @@ def _build_handout_synthesis_prompt(*, title: str, source_note: str | None, mark
             "请把它们合成为一整篇上下连贯、去重后的最终 Markdown 讲义，不要简单拼接，不要保留批次标题。",
             f"最终讲义一级标题必须是：{title}",
             source_rule,
-            "只输出 Markdown 正文，不要输出 JSON，不要输出 HTML，不要包裹代码块，不要写逐条 citation 或 source_citation_ids。",
+            "最终讲义必须保留或重画至少一张安全内联 SVG 图示，不要输出 Mermaid 代码块或 Mermaid 语法。",
+            "只输出 Markdown 正文，不要输出 JSON，不要输出非 SVG HTML，不要包裹代码块，不要写逐条 citation 或 source_citation_ids。",
             draft_sections,
         ]
     )

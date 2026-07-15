@@ -47,6 +47,7 @@ class HandoutGenerator:
             if not markdown:
                 raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
             _assert_no_known_terminology_errors(markdown)
+            _assert_no_mermaid(markdown)
             if _handout_has_visual(markdown):
                 return GeneratorOutput(
                     title=title,
@@ -56,7 +57,7 @@ class HandoutGenerator:
                 )
             last_visual_error = CourseNexusError(
                 code="GENERATION_SCHEMA_INVALID",
-                message="讲义必须至少包含一张 SVG 或 Mermaid 图示",
+                message="讲义必须至少包含一张安全 SVG 图示",
                 status_code=500,
             )
 
@@ -66,16 +67,25 @@ class HandoutGenerator:
 
 
 def _handout_has_visual(markdown: str) -> bool:
-    return bool(_SVG_PATTERN.search(markdown) or _MERMAID_FENCE_PATTERN.search(markdown))
+    return bool(_SVG_PATTERN.search(markdown))
 
 
 def _with_visual_retry_feedback(prompt: str) -> str:
     return "\n\n".join(
         [
             prompt,
-            "Retry feedback: the previous handout was missing a required visual diagram. Return the full Markdown handout again and include at least one safe SVG diagram or Mermaid diagram that directly explains the most visual or conceptual part of this subtask.",
+            "Retry feedback: the previous handout was missing a required visual diagram. Return the full Markdown handout again and include at least one safe inline SVG diagram that directly explains the most visual or conceptual part of this subtask. Do not output Mermaid.",
         ]
     )
+
+
+def _assert_no_mermaid(markdown: str) -> None:
+    if _MERMAID_FENCE_PATTERN.search(markdown):
+        raise CourseNexusError(
+            code="GENERATION_SCHEMA_INVALID",
+            message="讲义不允许包含 Mermaid 图表代码块",
+            status_code=500,
+        )
 
 
 def _assert_no_known_terminology_errors(markdown: str) -> None:
@@ -125,6 +135,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             f"讲义标题必须是：{title}",
             "不要输出 JSON。",
             "不要输出 HTML callout 或非 SVG 原始 HTML；允许按图示规则输出安全 SVG。",
+            "不要输出 Mermaid 代码块或 Mermaid 语法。",
             "不要写 citation marker、source_citation_ids 或逐条资料来源注释。",
         ]
     )
@@ -159,15 +170,14 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- 禁止使用 \\(...\\) 和 \\[...\\]。",
             "- 禁止用单独一行的 [ 和 ] 包裹公式。",
             "- 公式不要放进代码块。",
-            "- Visual rule: every handout must include at least one visual diagram.",
+            "- Visual rule: every handout must include at least one safe inline SVG visual diagram.",
             "- Use a visual diagram whenever a conceptual, structural, process, topology, encoding, signal, or comparison explanation would be easier to understand as a picture.",
-            "- Use Mermaid mindmap for knowledge hierarchy, concept maps, and chapter/topic relationships.",
-            "- Use Mermaid flowchart for procedures, system pipelines, state changes, and dependency chains.",
-            "- Use safe SVG for spatial layouts, network topology, physical-layer workflows, signal waveforms, encoding examples, and diagrams that need precise node placement.",
+            "- Use safe inline SVG for knowledge hierarchy, concept maps, procedures, system pipelines, state changes, dependency chains, spatial layouts, network topology, physical-layer workflows, signal waveforms, encoding examples, and comparison diagrams.",
+            "- Never output fenced ```mermaid code blocks, graph/flowchart/sequenceDiagram/mindmap diagram code, or Mermaid syntax.",
             "- SVG may only use safe presentation elements such as svg, g, rect, line, path, circle, ellipse, polygon, polyline, text, tspan, defs, marker, title, and desc.",
             "- SVG may only use safe presentation attributes such as viewBox, x, y, cx, cy, r, width, height, fill, stroke, stroke-width, stroke-dasharray, text-anchor, dominant-baseline, transform, and marker-end.",
             "- SVG must not contain script, iframe, object, embed, foreignObject, style, onload, onclick, onerror, javascript:, data:, external images, external fonts, or external links.",
-            "- Do not wrap SVG or Mermaid in HTML containers; output SVG directly or use a fenced ```mermaid code block.",
+            "- Do not wrap SVG in HTML containers; output SVG directly.",
             "- 变量解释用普通 Markdown 列表，不要混进公式块。",
             "- 重要教学提示使用 GitHub alert 风格 blockquote，不要输出 HTML callout。",
             "- 支持的 callout 类型只有 NOTE、EXAMPLE、SUMMARY、WARNING、TIP。",
