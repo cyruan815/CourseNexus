@@ -721,6 +721,14 @@ export function StudyPlanCreatePage() {
 
   function updateGoalText(nextGoalText: string) {
     updateField(() => {
+      if (nextGoalText !== goalText) {
+        startDateRef.current = "";
+        setStartDate("");
+        setEndDate("");
+        setDurationDaysText("");
+        setDailyMinutes("");
+        setPreference(defaultPreference);
+      }
       setGoalText(nextGoalText);
     }, "goal_text");
   }

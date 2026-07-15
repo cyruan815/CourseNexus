@@ -83,7 +83,7 @@
 - 后端返回的 `StudyPlanDiagnosticProfile` 保存在创建页状态中；后续点击“生成预览”时作为 `diagnostic_profile` 放入 `StudyPlanPreviewRequest`。
 - 学情诊断在创建页为必填；未完成诊断时不允许生成 preview。
 - 修改 `goal_text` 或 `material_scope` 会清空已有诊断 profile；解析回填每日时长、学习方式或已识别日期只会让 preview 过期，默认保留诊断结果。
-- 创建页会按 courseId 将 `goal_text`、已识别日期、每日时长、资料范围和已生成的诊断 profile 写入浏览器 `localStorage` 草稿；刷新页面后恢复这些输入，保存计划成功后清理草稿。preview 结果本身不持久化，刷新期间仍在运行的后端 preview 请求不会自动回填到新页面。
+- 创建页会按 courseId 将 `goal_text`、已识别日期、每日时长、资料范围和已生成的诊断 profile 写入浏览器 `localStorage` 草稿；刷新页面后恢复这些输入，保存计划成功后清理草稿。用户修改 `goal_text` 时，前端会清空旧目标解析出的日期、天数、每日时长和学习方式，避免新目标缺少日期时被旧草稿误判为已补齐。preview 结果本身不持久化，刷新期间仍在运行的后端 preview 请求不会自动回填到新页面。
 - `NO_PARSED_MATERIAL` 在向导内提示先上传并等待资料解析完成；`DIAGNOSTIC_STALE` 提示重新获取问题并作答；其他错误透传 API message 或显示通用失败提示。
 
 已知性能观察：真实 preview 依赖 `study_plan_generator` 模型执行 map/reduce 两段结构化生成；本地日志中 `deepseek-v4-flash` 单次 preview 曾耗时约 184-196 秒，其中两段 `generate_structured` 分别约 86-100 秒。诊断 questions/profile 接口本身通常为毫秒级，不是 preview 慢的主要来源。
