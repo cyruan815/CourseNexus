@@ -105,7 +105,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 42px;
+  gap: 26px;
   color: #111827;
   font-size: clamp(52px, 7vw, 104px);
   line-height: 0.95;
@@ -124,6 +124,7 @@
   color: #111827;
   font-size: clamp(46px, 5vw, 78px);
   font-weight: 900;
+  transform: translateY(8px);
 }
 
 .auth-welcome__main h2 {
@@ -367,5 +368,6 @@
 
   .auth-welcome__main h1 > span {
     font-size: 44px;
+    transform: none;
   }
 }
