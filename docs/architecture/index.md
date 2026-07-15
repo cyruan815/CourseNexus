@@ -20,6 +20,7 @@
 | [adr/0001-tech-stack.md](adr/0001-tech-stack.md) | v0.1 技术栈与本地 POC 架构选择。 | 2026-07-09 |
 | [adr/0003-local-rag-stack.md](adr/0003-local-rag-stack.md) | 本地资料上下文与 RAG 核心依赖和运行边界。 | 2026-07-10 |
 | [adr/0006-handout-pdf-rendering.md](adr/0006-handout-pdf-rendering.md) | 今日讲义 PDF 导出采用 Markdown/HTML/Playwright Chromium 打印链路。 | 2026-07-13 |
+| [adr/0007-frontend-handout-mermaid-svg.md](adr/0007-frontend-handout-mermaid-svg.md) | 前端讲义在可信本地 POC 中采用 Mermaid 和 rehype-raw 渲染图表与原始 SVG。 | 2026-07-15 |
 
 ## 推荐阅读顺序
 

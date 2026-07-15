@@ -311,3 +311,61 @@
 .handout-markdown p .katex {
   font-size: 1.02em;
 }
+
+.handout-markdown img,
+.handout-markdown svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.handout-markdown pre {
+  margin: 22px 0;
+  padding: 16px 18px;
+  overflow-x: auto;
+  border: 1px solid var(--handout-line);
+  border-radius: 8px;
+  background: #f7f9f9;
+}
+
+.handout-markdown pre code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre;
+}
+
+.handout-mermaid {
+  margin: 26px 0;
+  padding: 18px;
+  overflow-x: auto;
+  border: 1px solid var(--handout-line);
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.handout-mermaid-diagram svg {
+  display: block;
+  width: auto;
+  margin: 0 auto;
+}
+
+.handout-mermaid-loading {
+  color: var(--handout-muted);
+  text-align: center;
+}
+
+.handout-mermaid-error {
+  color: var(--handout-accent-deep);
+  background: var(--handout-accent-soft);
+}
+
+.handout-mermaid-error strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.handout-mermaid-error pre {
+  margin: 0;
+  color: var(--handout-text);
+  background: var(--handout-paper);
+}
