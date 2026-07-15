@@ -927,7 +927,7 @@ function DeleteCourseModal({
           <Button disabled={isSubmitting} onClick={onClose} variant="default">
             取消
           </Button>
-          <Button color="red" loading={isSubmitting} onClick={onConfirm}>
+          <Button className="cn-danger-button" color="red" loading={isSubmitting} onClick={onConfirm}>
             确认删除
           </Button>
         </Group>

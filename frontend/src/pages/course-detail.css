@@ -47,14 +47,15 @@
 .course-detail-nav-icon,
 .course-detail-user-button,
 .course-detail-theme-single-button {
-  border-color: #d6e0eb;
-  background: #ffffff;
-  color: #111827;
+  border-color: var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: var(--cn-button-neutral-text);
 }
 
 .course-detail-theme-single-button:hover,
 .course-detail-user-button:hover {
-  background: #e8f2ff;
+  border-color: var(--cn-button-neutral-hover-border);
+  background: var(--cn-button-neutral-hover-bg);
 }
 
 .course-detail-shell {
@@ -145,21 +146,21 @@
 }
 
 .course-detail-plan-button {
-  background: #e8f2ff;
-  color: #2563eb;
+  background: var(--cn-button-primary-soft-bg);
+  color: var(--cn-button-primary-soft-text);
 }
 
 .course-detail-plan-button:hover {
-  background: #dbeafe;
+  background: var(--cn-button-primary-soft-hover-bg);
 }
 
 .course-detail-plan-more-button {
-  background: #2563eb;
-  color: #ffffff;
+  background: var(--cn-button-primary-bg);
+  color: var(--cn-button-primary-text);
 }
 
 .course-detail-plan-more-button:hover {
-  background: #1d4ed8;
+  background: var(--cn-button-primary-hover-bg);
 }
 
 .course-detail-material-card {
@@ -338,8 +339,13 @@
 }
 
 .course-detail-send-button {
-  background: #dbeafe;
-  color: #2563eb;
+  background: var(--cn-button-primary-soft-bg);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.course-detail-send-button:hover {
+  background: var(--cn-button-primary-soft-hover-bg);
+  color: var(--cn-button-primary-soft-text);
 }
 
 .course-detail-studio {

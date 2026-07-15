@@ -354,8 +354,8 @@
 
 .study-plan-goal-submit-button {
   pointer-events: auto;
-  background: #228be6;
-  color: #ffffff;
+  background: var(--cn-button-primary-bg);
+  color: var(--cn-button-primary-text);
   width: 38px;
   min-width: 38px;
   height: 38px;
@@ -363,7 +363,7 @@
 }
 
 .study-plan-goal-submit-button:hover {
-  background: #1c7ed6;
+  background: var(--cn-button-primary-hover-bg);
 }
 
 .study-plan-preparing-card,

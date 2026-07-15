@@ -213,6 +213,7 @@ export function ProfilePage() {
             返回首页
           </Button>
           <Button
+            className="cn-danger-button"
             color="red"
             leftSection={<IconLogout size={16} />}
             loading={isLoggingOut}

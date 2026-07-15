@@ -131,9 +131,13 @@
   height: 50px;
   margin-top: 36px;
   border-radius: 6px;
-  background: #2f80ed;
+  background: var(--cn-button-primary-bg);
   box-shadow: 0 8px 18px rgba(47, 128, 237, 0.18);
   font-weight: 800;
+}
+
+.auth-welcome__main .mantine-Button-root:hover {
+  background: var(--cn-button-primary-hover-bg);
 }
 
 .auth-page {
@@ -278,9 +282,13 @@
   width: 100%;
   height: 48px;
   border-radius: 6px;
-  background: #2f80ed;
+  background: var(--cn-button-primary-bg);
   box-shadow: 0 8px 18px rgba(47, 128, 237, 0.16);
   font-weight: 800;
+}
+
+.auth-form-card .mantine-Button-root:hover {
+  background: var(--cn-button-primary-hover-bg);
 }
 
 @media (max-width: 920px) {
