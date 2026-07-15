@@ -77,3 +77,11 @@
 .gc-task-test-question { padding: 16px; border-color: #d9dee7; background: #fbfdff; }
 .gc-text-fallback { white-space: pre-wrap; }
 @media (max-width: 700px) { .gc-outline { grid-template-columns: 1fr; } .gc-outline nav > div { flex-direction: row; overflow-x: auto; } .gc-mindmap-canvas { min-height: 390px; } .gc-knowledge-glossary { padding: 22px 18px; } .gc-knowledge-toolbar { grid-template-columns: 1fr; } .gc-knowledge-progress-copy > div { align-items: flex-start; flex-direction: column; gap: 2px; } .gc-knowledge-terms article { grid-template-columns: 36px minmax(0,1fr) 36px; gap: 12px; } .gc-knowledge-terms article p { grid-column: 2 / 4; } }
+.gc-task-test-intro { color: #667085; }
+.gc-task-test-options { display: grid; gap: 8px; }
+.gc-task-test-option { justify-content: flex-start; min-height: 40px; white-space: normal; text-align: left; }
+.gc-task-test-option.is-selected { border-color: #5d74d8; background: #f1f4ff; }
+.gc-task-test-feedback { padding: 12px 14px; border-radius: 8px; background: #f7f8fb; }
+.gc-task-test-feedback.is-correct { background: #eef9f3; color: #176b49; }
+.gc-task-test-feedback.is-wrong { background: #fff1f1; color: #9f343a; }
+.gc-task-test-answer { font-weight: 700; }
