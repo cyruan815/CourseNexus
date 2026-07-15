@@ -159,7 +159,7 @@
   display: grid;
   gap: 12px;
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 12px;
 }
 
@@ -194,7 +194,7 @@
   border-color: #bfdbfe;
   background:
     linear-gradient(135deg, rgba(232, 242, 255, 0.82), rgba(230, 255, 250, 0.54)),
-    #FDFBF9;
+    #FEFDFC;
   color: #2563eb;
   padding: 30px;
   text-align: center;
@@ -212,7 +212,7 @@
 
 .study-plan-subtask {
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 12px;
 }
 
@@ -506,7 +506,7 @@
 }
 
 .study-plan-calendar-cell.is-muted {
-  background: #FDFBF9;
+  background: #FEFDFC;
   color: #94a3b8;
 }
 
@@ -711,7 +711,7 @@
 .study-plan-switcher-item {
   display: block;
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   color: inherit;
   padding: 12px;
   text-decoration: none;
@@ -753,7 +753,7 @@
   align-items: center;
   justify-content: space-between;
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 10px 12px;
 }
 
@@ -954,7 +954,7 @@
 .study-plan-execution-step {
   width: 100%;
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -1084,7 +1084,7 @@
 
 .study-plan-material-row {
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 7px 9px;
 }
 
