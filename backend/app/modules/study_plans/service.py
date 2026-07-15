@@ -18,7 +18,7 @@ from app.integrations.model_provider.base import ModelProvider
 from app.modules.checkins.service import recalculate_checkin
 from app.modules.courses.service import assert_course_owner
 from app.modules.generation.generators.task_test.schemas import TaskTestGenerationParameters
-from app.modules.material_context.coverage import run_material_coverage
+from app.modules.material_context.coverage import map_material_coverage_batches, reduce_material_coverage
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
 from app.modules.material_context.service import (
     iter_material_context_batches,
@@ -414,14 +414,18 @@ def preview_study_plan(
             tasks=task_previews,
         )
 
+    mapped_result = map_material_coverage_batches(
+        batches=batches,
+        expected_material_ids=expected_material_ids,
+        map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
+    )
+
     retry_feedback: str | None = None
     last_error: CourseNexusError | None = None
     preview: StudyPlanPreview | None = None
     for attempt in range(2):
-        coverage_result = run_material_coverage(
-            batches=batches,
-            expected_material_ids=expected_material_ids,
-            map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
+        coverage_result = reduce_material_coverage(
+            mapped_result=mapped_result,
             reduce_results=lambda mapped_batches: reduce_results(
                 mapped_batches,
                 retry_feedback=retry_feedback,
@@ -2472,4 +2476,3 @@ def _date_range(start_date: date, end_date: date) -> list[date]:
 
 def _subtask_label(subtask_type: str) -> str:
     return {"learn": "学习", "review": "复习", "quiz": "自测"}[subtask_type]
-

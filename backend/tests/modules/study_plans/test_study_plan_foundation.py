@@ -121,10 +121,12 @@ class FoundationPlanProvider:
 class QuantityRetryPlanProvider:
     def __init__(self, material_id: str) -> None:
         self.material_id = material_id
+        self.map_prompts: list[str] = []
         self.reduce_prompts: list[str] = []
 
     def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
         if output_schema.__name__ == "PlanBatchExtraction":
+            self.map_prompts.append(prompt)
             return output_schema.model_validate(
                 {
                     "units": [
@@ -178,7 +180,6 @@ class QuantityRetryPlanProvider:
                 }
             )
         raise AssertionError(output_schema)
-
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, content: bytes = b"Alpha") -> str:
     material = upload_file_material(
         db,
@@ -251,6 +252,7 @@ def test_preview_study_plan_retries_when_learn_task_contains_question_quantity(
         max_tokens=12_000,
     )
 
+    assert len(provider.map_prompts) == 1
     assert len(provider.reduce_prompts) == 2
     assert "学习或复习任务不能包含测试题量要求" in provider.reduce_prompts[1]
     assert preview.tasks[0].subtasks[0].description == "学习公式含义"
