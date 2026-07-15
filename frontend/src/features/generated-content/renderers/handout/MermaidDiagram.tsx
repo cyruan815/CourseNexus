@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import type { MermaidConfig } from "mermaid";
 
 type MermaidRenderState =
   | { status: "loading" }
@@ -6,6 +7,12 @@ type MermaidRenderState =
   | { status: "error" };
 
 let mermaidRenderSequence = 0;
+
+export const MERMAID_CONFIG = {
+  htmlLabels: false,
+  startOnLoad: false,
+  securityLevel: "strict",
+} satisfies MermaidConfig;
 
 const allowedSvgTags = new Set([
   "a",
@@ -135,7 +142,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
     void (async () => {
       try {
         const { default: mermaid } = await import("mermaid");
-        mermaid.initialize({ startOnLoad: false, securityLevel: "strict" });
+        mermaid.initialize(MERMAID_CONFIG);
         const requestId = `${renderId}-${++mermaidRenderSequence}`;
         const { svg } = await mermaid.render(requestId, chart);
         if (active) setState({ status: "ready", svg: sanitizeMermaidSvg(svg) });

@@ -130,9 +130,14 @@ describe("HandoutMarkdownRenderer", () => {
     );
 
     expect(await screen.findByTestId("mermaid-svg")).toBeInTheDocument();
+    expect(screen.getByText("Flow")).toBeInTheDocument();
     expect(document.querySelector(".handout-mermaid-diagram")).not.toBeNull();
     expect(mermaidMocks.initialize).toHaveBeenCalledWith(
-      expect.objectContaining({ startOnLoad: false, securityLevel: "strict" }),
+      expect.objectContaining({
+        htmlLabels: false,
+        startOnLoad: false,
+        securityLevel: "strict",
+      }),
     );
     expect(mermaidMocks.render).toHaveBeenCalledWith(
       expect.stringMatching(/^handout-mermaid-/),
