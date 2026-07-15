@@ -3,28 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MERMAID_CONFIG } from "../../../src/features/generated-content/renderers/handout/MermaidDiagram";
 
+type MeasurableSvgPrototype = SVGElement & {
+  getBBox: () => DOMRect;
+  getComputedTextLength: () => number;
+};
+
 describe("Mermaid real SVG rendering", () => {
-  const originalGetBBox = SVGElement.prototype.getBBox;
-  const originalGetComputedTextLength = SVGElement.prototype.getComputedTextLength;
+  const svgPrototype = SVGElement.prototype as MeasurableSvgPrototype;
+  const originalGetBBox = svgPrototype.getBBox;
+  const originalGetComputedTextLength = svgPrototype.getComputedTextLength;
 
   beforeEach(() => {
-    SVGElement.prototype.getBBox = () => ({
-      bottom: 20,
-      height: 20,
-      left: 0,
-      right: 100,
-      toJSON: () => ({}),
-      top: 0,
-      width: 100,
-      x: 0,
-      y: 0,
-    });
-    SVGElement.prototype.getComputedTextLength = () => 80;
+    svgPrototype.getBBox = () => new DOMRect(0, 0, 100, 20);
+    svgPrototype.getComputedTextLength = () => 80;
   });
 
   afterEach(() => {
-    SVGElement.prototype.getBBox = originalGetBBox;
-    SVGElement.prototype.getComputedTextLength = originalGetComputedTextLength;
+    svgPrototype.getBBox = originalGetBBox;
+    svgPrototype.getComputedTextLength = originalGetComputedTextLength;
     document.body.replaceChildren();
     vi.restoreAllMocks();
   });
