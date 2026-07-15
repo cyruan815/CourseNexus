@@ -1,6 +1,6 @@
 .profile-page {
   min-height: 100vh;
-  background: var(--course-surface-bg, #f6f8fb);
+  background: var(--course-page-bg);
   color: var(--mantine-color-dark-8);
 }
 

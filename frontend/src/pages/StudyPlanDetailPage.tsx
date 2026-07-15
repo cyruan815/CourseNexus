@@ -723,14 +723,6 @@ export function StudyPlanDetailPage() {
 
         <Box className="study-plan-detail-layout">
           <Paper className="study-plan-panel study-plan-task-structure-panel" radius="md" withBorder>
-            <Group justify="space-between" wrap="nowrap">
-              <Stack gap={2}>
-                <Title order={2}>任务结构</Title>
-                <Text c="dimmed" size="sm">只读展示后端已保存的计划、任务和子任务。</Text>
-              </Stack>
-              <Badge color="violet" variant="light">任务结构</Badge>
-            </Group>
-
             <Stack gap="sm">
               {sortedTasks.map((task) => (
                 <Paper className="study-plan-task" key={task.id} radius="md" withBorder>

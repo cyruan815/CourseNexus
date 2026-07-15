@@ -1,4 +1,4 @@
-.generated-content-page { min-height: 100vh; background: #f5f7f9; color: #1f2937; }
+.generated-content-page { min-height: 100vh; background: var(--course-page-bg); color: #1f2937; }
 .generated-content-shell { width: min(1180px, calc(100vw - 32px)); margin: 0 auto; padding: 24px 0 40px; }
 .generated-content-header { padding: 8px 2px 4px; }
 .generated-content-header h1 { margin-top: 8px; font-size: 28px; line-height: 1.25; }
