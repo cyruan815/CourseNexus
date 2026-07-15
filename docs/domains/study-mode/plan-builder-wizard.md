@@ -841,6 +841,7 @@ Preview 校验由 `backend/app/modules/study_plans/planner.py::validate_preview(
 
 - 对 `quiz` / `test` 缺少覆盖引用的情况，后端在 validate 前调用 `repair_daily_assessment_coverage()` 确定性补齐 `related_material_ids` 和 `citation_chunk_ids`。非最后一天补齐当天前置 `learn` / `review` 的并集，最后一天补齐全计划非测试任务的并集。
 - 对 `learn` / `review` 文案中误含“10 道选择题”这类明确测试题量要求的情况，后端不在本地删文案，而是把 `学习或复习任务不能包含测试题量要求` 写入 planner reduce prompt，最多重新 reduce 一次，要求模型把题量文字和 `generation_parameters.task_test` 移到当天最后一个 `quiz` / `test`。
+- 资源预算：`preview_study_plan()` 先完成一次材料 map 并缓存 `PlanBatchExtraction` 列表；可恢复结构错误只复用该 map 结果额外执行一次 reduce。一次 preview 最多消耗每个材料批次 1 次 map、最多 2 次 reduce。
 - 其他 `GENERATION_SCHEMA_INVALID` 仍保持失败，不做静默修复；第二次 reduce 后仍非法也直接失败，避免无限模型调用和保存坏任务树。
 
 测试入口：`backend/tests/modules/study_plans/test_study_plan_quality.py` 覆盖覆盖引用补齐和 retry prompt；`backend/tests/modules/study_plans/test_study_plan_foundation.py` 覆盖真实 `preview_study_plan()` 首次失败后一次重试成功。
