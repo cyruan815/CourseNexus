@@ -51,52 +51,91 @@
   line-height: 1;
 }
 
-.profile-checkin-strip {
+.profile-year-heatmap {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.profile-heatmap-months {
+  align-items: end;
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(14, minmax(34px, 1fr));
+  gap: 3px;
+  min-width: max-content;
+  padding-bottom: 5px;
+}
+
+.profile-heatmap-months span {
+  color: rgba(27, 40, 64, 0.72);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.profile-heatmap-body {
+  display: flex;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.profile-heatmap-weekdays {
+  display: grid;
+  gap: 3px;
+  grid-template-rows: repeat(7, 12px);
+  width: 26px;
+}
+
+.profile-heatmap-weekdays span {
+  align-items: center;
+  color: rgba(27, 40, 64, 0.72);
+  display: flex;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.profile-heatmap-grid {
+  display: grid;
+  gap: 3px;
+  grid-template-rows: repeat(7, 12px);
+  min-width: max-content;
 }
 
 .profile-checkin-cell {
-  align-items: center;
-  aspect-ratio: 1;
-  border: 1px solid rgba(31, 48, 79, 0.1);
-  border-radius: 8px;
-  display: flex;
-  justify-content: center;
+  border: 1px solid rgba(31, 48, 79, 0.08);
+  border-radius: 3px;
+  display: block;
+  height: 12px;
   min-width: 0;
+  width: 12px;
 }
 
-.profile-checkin-cell span {
-  color: rgba(27, 40, 64, 0.78);
-  font-size: 0.78rem;
-  font-weight: 700;
+.profile-checkin-cell.is-empty {
+  border-color: transparent;
+  pointer-events: none;
 }
 
 .profile-checkin-cell.level-0,
 .profile-checkin-cell.level-1 {
-  background: #edf1f6;
+  background: #ebedf0;
 }
 
 .profile-checkin-cell.level-2 {
-  background: #d9ecff;
+  background: #9be9a8;
 }
 
 .profile-checkin-cell.level-3 {
-  background: #b8ddff;
+  background: #40c463;
 }
 
 .profile-checkin-cell.level-4 {
-  background: #83c4f7;
+  background: #30a14e;
 }
 
 .profile-checkin-cell.level-5 {
-  background: #3d96de;
+  background: #216e39;
 }
 
-.profile-checkin-cell.level-4 span,
-.profile-checkin-cell.level-5 span {
-  color: #ffffff;
+.profile-heatmap-legend {
+  min-width: max-content;
+  padding: 12px 4px 0;
 }
 
 @media (max-width: 760px) {
@@ -109,7 +148,7 @@
     grid-template-columns: 1fr;
   }
 
-  .profile-checkin-strip {
-    grid-template-columns: repeat(7, minmax(34px, 1fr));
+  .profile-year-heatmap {
+    margin-right: -12px;
   }
 }

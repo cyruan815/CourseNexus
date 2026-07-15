@@ -67,10 +67,10 @@ describe("ProfilePage", () => {
           updated_at: "2026-07-14T10:00:00+08:00",
         }, "req_today");
       }
-      if (url === "/api/v1/checkins?start_date=2026-07-01&end_date=2026-07-14") {
+      if (url === "/api/v1/checkins?start_date=2026-01-01&end_date=2026-12-31") {
         return jsonResponse({
-          start_date: "2026-07-01",
-          end_date: "2026-07-14",
+          start_date: "2026-01-01",
+          end_date: "2026-12-31",
           items: [
             {
               id: "chk_13",
@@ -119,6 +119,11 @@ describe("ProfilePage", () => {
     expect(screen.getByLabelText("2026-07-14 打卡颜色等级 3")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/checkins/2026-07-14",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(screen.getByLabelText("2026-12-31 打卡颜色等级 0")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/checkins?start_date=2026-01-01&end_date=2026-12-31",
       expect.objectContaining({ method: "GET" }),
     );
   });
