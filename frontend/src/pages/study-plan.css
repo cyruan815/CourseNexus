@@ -284,7 +284,14 @@
   min-height: 32px;
   color: #334155;
   font-weight: 650;
-  animation: study-plan-row-in 320ms ease both;
+  opacity: 0.4;
+  transition:
+    opacity 320ms ease,
+    transform 320ms ease;
+}
+
+.study-plan-loading-row.is-active {
+  opacity: 1;
 }
 
 .study-plan-loading-row-dot {
@@ -292,6 +299,10 @@
   height: 9px;
   border-radius: 999px;
   background: #14b8a6;
+}
+
+.study-plan-loading-row.is-current .study-plan-loading-row-dot {
+  animation: study-plan-dot-pulse 1.2s ease-in-out infinite;
 }
 
 .study-plan-calendar-generation {
@@ -441,14 +452,16 @@
   color: #0f766e;
 }
 
-@keyframes study-plan-row-in {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
+@keyframes study-plan-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.28);
+    transform: scale(1);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  50% {
+    box-shadow: 0 0 0 7px rgba(20, 184, 166, 0);
+    transform: scale(1.18);
   }
 }
 

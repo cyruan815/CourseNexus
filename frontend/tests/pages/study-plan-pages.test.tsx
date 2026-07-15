@@ -619,13 +619,24 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
 
     expect(await screen.findByText("正在整理问卷")).toBeInTheDocument();
-    expect(screen.getAllByText("理解目标").length).toBeGreaterThan(0);
-    expect(screen.queryByText("准备问题")).not.toBeInTheDocument();
+    const loadingRows = screen.getAllByTestId("study-plan-loading-row");
+    expect(loadingRows).toHaveLength(3);
+    expect(within(loadingRows[0]).getByText("理解目标")).toBeInTheDocument();
+    expect(within(loadingRows[1]).getByText("匹配资料")).toBeInTheDocument();
+    expect(within(loadingRows[2]).getByText("准备问题")).toBeInTheDocument();
+    expect(loadingRows[0]).toHaveStyle({ opacity: "0.4" });
+    expect(loadingRows[0]).toHaveClass("is-current");
+    expect(loadingRows[0]).not.toHaveClass("is-active");
+    expect(loadingRows[1]).not.toHaveClass("is-active");
+    expect(loadingRows[2]).not.toHaveClass("is-active");
     expect(screen.queryByText("+00.018")).not.toBeInTheDocument();
 
+    await waitFor(() => expect(loadingRows[0]).toHaveStyle({ opacity: "0.43" }), { timeout: 1_400 });
+    expect(loadingRows[0]).toHaveClass("is-current");
+
     parseDeferred.resolve();
-    expect(await screen.findByText("匹配资料")).toBeInTheDocument();
-    expect(await screen.findByText("准备问题")).toBeInTheDocument();
+    await waitFor(() => expect(loadingRows[1]).toHaveClass("is-active"));
+    await waitFor(() => expect(loadingRows[2]).toHaveClass("is-active"));
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
   });
 
