@@ -65,7 +65,7 @@
   line-height: 1.45;
 }
 
-.handout-markdown h3 span {
+.handout-markdown .handout-heading-number {
   display: inline-block;
   margin-right: 10px;
   color: var(--handout-secondary-deep);

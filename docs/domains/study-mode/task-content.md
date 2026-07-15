@@ -330,6 +330,7 @@ Callout Markdown 约定：
 代码入口：
 
 - 前端讲义 renderer：`frontend/src/features/generated-content/renderers/handout/HandoutMarkdownRenderer.tsx`
+- 前端 callout AST 转换：`frontend/src/features/generated-content/renderers/handout/remarkHandoutCallouts.ts`
 - 前端讲义样式：`frontend/src/features/generated-content/renderers/handout/handout-markdown.css`
 - 生成内容详情分发：`frontend/src/features/generated-content/GeneratedContentRenderer.tsx`
 - 开发预览页：`frontend/src/pages/HandoutPreviewPage.tsx`，仅 DEV 路由 `/dev/handout-preview`
@@ -337,6 +338,8 @@ Callout Markdown 约定：
 - PDF renderer：`backend/app/modules/exports/renderer.py`
 
 前端正式依赖 `react-markdown + remark-gfm + remark-math + rehype-katex` 渲染 handout Markdown。`handout` 详情页不再使用通用 `ReactMarkdown` 分支，而是复用 `HandoutMarkdownRenderer({ markdown })`，因此 dev preview 和真实详情页共享公式、表格、列表和 callout 行为。KaTeX CSS 由 renderer 引入；长公式允许横向滚动，避免正文布局被撑坏。
+
+前端把完整讲义交给单个 `ReactMarkdown` 实例解析，不在渲染前按行切割 Markdown。`remarkHandoutCallouts` 只在 Markdown AST 中把首段以受支持 `[!TYPE]` 开头的 blockquote 转换为带类型 class 的 callout；代码围栏中的同形文本仍是 code 节点，不参与转换。三级标题若以 `1.1` 这类编号开头，只单独包装首个文本节点中的编号，其余加粗、链接、行内代码和 KaTeX React 节点保持原结构，禁止把已经渲染的 children 转回纯文本。
 
 Handout prompt 必须只输出 Markdown，不输出 HTML callout。重要教学块使用 GitHub alert 风格 blockquote，支持类型固定为：
 
