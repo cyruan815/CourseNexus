@@ -25,8 +25,9 @@ describe("AppRouter", () => {
 
     renderRouter();
 
-    expect(screen.getByRole("heading", { name: /课枢 CourseNexus/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课枢" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "开始" })).toHaveAttribute("href", "/login");
+    expect(document.querySelector("canvas.auth-welcome__particles")).toBeInTheDocument();
   });
 
   it("renders home for authenticated users", async () => {
@@ -79,8 +80,9 @@ describe("AppRouter", () => {
 
     renderRouter();
 
-    expect(screen.getByRole("heading", { name: "课枢 CourseNexus" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
+    expect(document.querySelector(".home-brand-title")).toBeInTheDocument();
+    expect(document.querySelector("canvas.auth-welcome__particles")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的课程" })).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "计算机网络" })).toHaveAttribute("href", "/courses/crs_network");
   });
 
@@ -90,6 +92,7 @@ describe("AppRouter", () => {
     renderRouter();
 
     expect(screen.getByRole("heading", { name: "登录 CourseNexus" })).toBeInTheDocument();
+    expect(document.querySelector("canvas.auth-welcome__particles")).not.toBeInTheDocument();
   });
 
   it("keeps register page public", () => {
@@ -98,6 +101,7 @@ describe("AppRouter", () => {
     renderRouter();
 
     expect(screen.getByRole("heading", { name: "注册 CourseNexus" })).toBeInTheDocument();
+    expect(document.querySelector("canvas.auth-welcome__particles")).not.toBeInTheDocument();
   });
 
   it("renders protected course detail route for authenticated users", async () => {

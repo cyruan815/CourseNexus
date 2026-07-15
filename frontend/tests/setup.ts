@@ -27,3 +27,19 @@ Object.defineProperty(window, "ResizeObserver", {
   writable: true,
   value: ResizeObserverMock,
 });
+
+Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+  writable: true,
+  value: vi.fn().mockReturnValue({
+    beginPath: vi.fn(),
+    clearRect: vi.fn(),
+    globalAlpha: 1,
+    lineCap: "butt",
+    lineTo: vi.fn(),
+    lineWidth: 1,
+    moveTo: vi.fn(),
+    setTransform: vi.fn(),
+    stroke: vi.fn(),
+    strokeStyle: "#000000",
+  }),
+});

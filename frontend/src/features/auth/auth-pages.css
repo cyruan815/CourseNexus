@@ -18,6 +18,16 @@
     radial-gradient(circle at 18% 18%, rgba(20, 184, 166, 0.18), transparent 340px);
 }
 
+.auth-welcome__particles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .auth-welcome__nav {
   position: relative;
   z-index: 1;
