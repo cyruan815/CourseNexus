@@ -60,4 +60,13 @@ describe("generated content list helpers", () => {
   ])("formats %s as %s", (createdAt, expected) => {
     expect(formatGeneratedContentAge(createdAt, new Date("2026-07-15T09:00:00.000Z"))).toBe(expected);
   });
+
+  it("treats legacy timezone-less generated timestamps as UTC", () => {
+    expect(
+      formatGeneratedContentAge(
+        "2026-07-15T14:18:10",
+        new Date("2026-07-15T16:49:45.000Z"),
+      ),
+    ).toBe("2 小时前");
+  });
 });

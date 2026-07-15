@@ -371,6 +371,8 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 
 成功响应统一为 `{data, meta}`，其中 `data` 是 `GeneratedContentRead`，至少包含 `id`、`course_id`、`study_subtask_id`、`content_type`、`title`、`content_json`、`generation_status`、`error_code`、`created_at` 和 `updated_at`。
 
+`GeneratedContentRead` 的 `created_at`、`updated_at` 和可选 `deleted_at` 统一使用北京时间 ISO 8601 字符串，必须包含 `+08:00` 时区偏移，例如 `2026-07-15T22:18:10+08:00`。数据库中的无时区 SQLite 时间按 UTC 解释后再转换，客户端不得把无时区时间直接当作本地时间。
+
 生成规则：
 
 - `learn` / `review` 只能调用 handout endpoint；调用 task-test endpoint 返回 `STATE_CONFLICT`。
