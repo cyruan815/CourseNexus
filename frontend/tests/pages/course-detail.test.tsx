@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, type InitialEntry, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -172,7 +172,10 @@ describe("CourseDetailPage", () => {
     expect(screen.getByText("王老师")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "资料区" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "问答区" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "AI 生成内容区" })).toBeInTheDocument();
+    const studio = screen.getByRole("region", { name: "学习工具与 AI 生成内容" });
+    expect(within(studio).getByRole("region", { name: "学习工具区" })).toBeInTheDocument();
+    expect(within(studio).getByRole("separator", { name: "学习工具与 AI 生成内容分隔线" })).toBeInTheDocument();
+    expect(within(studio).getByRole("region", { name: "AI 生成内容区" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "制定学习计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/new");
     expect(screen.queryByRole("button", { name: "查看今日待办（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();

@@ -492,10 +492,24 @@
   color: #2563eb;
 }
 
+.course-detail-studio {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .course-detail-tools {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.course-detail-studio-divider {
+  flex: 0 0 auto;
+  border-color: #d6e0eb;
 }
 
 .course-detail-tool-grid {
@@ -681,9 +695,6 @@
 
   .course-detail-right {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: 1.4fr 1fr;
-    gap: 10px;
   }
 
 }

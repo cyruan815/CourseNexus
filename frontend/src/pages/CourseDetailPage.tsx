@@ -318,10 +318,10 @@ function ToolCard({
 
 function ToolsPanel({ generatingType, onGenerate }: { generatingType: string | null; onGenerate: (contentType: string) => void }) {
   return (
-    <Paper aria-label="学习工具区" className="course-detail-card course-detail-tools" component="section" radius="md" withBorder>
+    <Box aria-label="学习工具区" className="course-detail-tools" component="section">
       <Title order={2}>{"学习工具"}</Title>
       <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard isGenerating={generatingType === item.type} item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
-    </Paper>
+    </Box>
   );
 }
 
@@ -400,7 +400,7 @@ function GeneratedContentPanel({
 
   return (
     <>
-      <Paper aria-label="AI 生成内容区" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
+      <Box aria-label="AI 生成内容区" className="course-detail-generated" component="section">
         <Title order={2}>{"AI 生成内容"}</Title>
         {contents.length > 0 ? (
           <Stack className="course-detail-generated-list" gap="xs">
@@ -441,7 +441,7 @@ function GeneratedContentPanel({
         ) : (
           <Stack className="course-detail-generated-empty" gap="xs"><IconSparkles size={34} stroke={1.6} /><Text fw={700}>{"还没有生成内容"}</Text><Text c="dimmed" size="sm">{"选择左侧资料范围后，可使用学习工具生成内容。"}</Text></Stack>
         )}
-      </Paper>
+      </Box>
       <Modal centered onClose={closeActions} opened={Boolean(renameTarget)} title="重命名生成内容" transitionProps={{ duration: 0 }}>
         <Stack gap="md">
           {actionError ? <Alert color="red" role="alert" title="重命名失败" variant="light">{actionError}</Alert> : null}
@@ -538,8 +538,11 @@ export function CourseDetailWorkbench({
           </Stack>
 
           <Stack className="course-detail-right" gap="sm">
-            <ToolsPanel generatingType={generatingType} onGenerate={onGenerate} />
-            <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} />
+            <Paper aria-label="学习工具与 AI 生成内容" className="course-detail-card course-detail-studio" component="section" radius="md" withBorder>
+              <ToolsPanel generatingType={generatingType} onGenerate={onGenerate} />
+              <Divider aria-label="学习工具与 AI 生成内容分隔线" className="course-detail-studio-divider" />
+              <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} />
+            </Paper>
           </Stack>
         </Box>
       </Box>
