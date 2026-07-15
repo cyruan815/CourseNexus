@@ -294,6 +294,20 @@
   overflow-y: hidden;
 }
 
+.handout-markdown .katex .katex-mathml {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip: rect(1px, 1px, 1px, 1px);
+}
+
+.handout-markdown .katex .katex-html {
+  display: inline-block;
+}
+
 .handout-markdown p .katex {
   font-size: 1.02em;
 }
