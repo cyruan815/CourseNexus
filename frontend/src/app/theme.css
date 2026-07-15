@@ -1,12 +1,46 @@
 :root {
   --course-page-bg: #faf9f7;
   --course-surface-bg: var(--course-page-bg);
+  --cn-button-primary-bg: #2563eb;
+  --cn-button-primary-hover-bg: #1d4ed8;
+  --cn-button-primary-text: #ffffff;
+  --cn-button-primary-soft-bg: #e8f2ff;
+  --cn-button-primary-soft-hover-bg: #dbeafe;
+  --cn-button-primary-soft-text: #2563eb;
+  --cn-button-neutral-bg: #ffffff;
+  --cn-button-neutral-border: #d6e0eb;
+  --cn-button-neutral-text: #111827;
+  --cn-button-neutral-hover-bg: #e8f2ff;
+  --cn-button-neutral-hover-border: #bfdbfe;
+  --cn-button-icon-hover-bg: #eef4ff;
+  --cn-button-icon-hover-border: #b8c9f6;
+  --cn-button-danger-bg: #dc2626;
+  --cn-button-danger-hover-bg: #b91c1c;
+  --cn-button-danger-soft-bg: #fff1f2;
+  --cn-button-danger-soft-text: #b42318;
 }
 
 :root[data-course-nexus-theme="dark"] {
   color-scheme: dark;
   --course-page-bg: #0f172a;
   --course-surface-bg: var(--course-page-bg);
+  --cn-button-primary-bg: #2b5f86;
+  --cn-button-primary-hover-bg: #3474a4;
+  --cn-button-primary-text: #ffffff;
+  --cn-button-primary-soft-bg: #172b52;
+  --cn-button-primary-soft-hover-bg: #1e3a68;
+  --cn-button-primary-soft-text: #9cc9ff;
+  --cn-button-neutral-bg: #162235;
+  --cn-button-neutral-border: #334761;
+  --cn-button-neutral-text: #e5edf7;
+  --cn-button-neutral-hover-bg: #1e2b42;
+  --cn-button-neutral-hover-border: #42607f;
+  --cn-button-icon-hover-bg: #172b52;
+  --cn-button-icon-hover-border: #42607f;
+  --cn-button-danger-bg: #b91c1c;
+  --cn-button-danger-hover-bg: #991b1b;
+  --cn-button-danger-soft-bg: #3b171f;
+  --cn-button-danger-soft-text: #fca5a5;
 }
 
 html,
@@ -98,6 +132,102 @@ body,
 
 .workbench-actions {
   flex: 0 0 auto;
+}
+
+.mantine-Button-root:not([data-variant]):not(.cn-danger-button),
+.mantine-Button-root[data-variant="filled"]:not(.cn-danger-button) {
+  --button-bg: var(--cn-button-primary-bg);
+  --button-hover: var(--cn-button-primary-hover-bg);
+  --button-color: var(--cn-button-primary-text);
+  --button-hover-color: var(--cn-button-primary-text);
+  background: var(--cn-button-primary-bg);
+  color: var(--cn-button-primary-text);
+}
+
+.mantine-Button-root:not([data-variant]):not(.cn-danger-button):hover,
+.mantine-Button-root[data-variant="filled"]:not(.cn-danger-button):hover {
+  background: var(--cn-button-primary-hover-bg);
+  color: var(--cn-button-primary-text);
+}
+
+.mantine-Button-root[data-variant="light"]:not(.cn-danger-button) {
+  --button-bg: var(--cn-button-primary-soft-bg);
+  --button-hover: var(--cn-button-primary-soft-hover-bg);
+  --button-color: var(--cn-button-primary-soft-text);
+  --button-hover-color: var(--cn-button-primary-soft-text);
+  background: var(--cn-button-primary-soft-bg);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.mantine-Button-root[data-variant="light"]:not(.cn-danger-button):hover {
+  background: var(--cn-button-primary-soft-hover-bg);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.mantine-Button-root[data-variant="default"],
+.mantine-ActionIcon-root[data-variant="default"] {
+  --button-bg: var(--cn-button-neutral-bg);
+  --button-bd: 1px solid var(--cn-button-neutral-border);
+  --button-color: var(--cn-button-neutral-text);
+  --button-hover: var(--cn-button-neutral-hover-bg);
+  --button-hover-color: var(--cn-button-neutral-text);
+  --ai-bg: var(--cn-button-neutral-bg);
+  --ai-bd: 1px solid var(--cn-button-neutral-border);
+  --ai-color: var(--cn-button-neutral-text);
+  --ai-hover: var(--cn-button-neutral-hover-bg);
+  --ai-hover-color: var(--cn-button-neutral-text);
+  border-color: var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: var(--cn-button-neutral-text);
+}
+
+.mantine-Button-root[data-variant="default"]:hover,
+.mantine-ActionIcon-root[data-variant="default"]:hover {
+  border-color: var(--cn-button-neutral-hover-border);
+  background: var(--cn-button-neutral-hover-bg);
+  color: var(--cn-button-neutral-text);
+}
+
+.mantine-Button-root[data-variant="subtle"]:not(.cn-danger-button),
+.mantine-ActionIcon-root[data-variant="subtle"]:not(.cn-danger-button) {
+  --button-color: var(--cn-button-primary-soft-text);
+  --button-hover: var(--cn-button-primary-soft-bg);
+  --button-hover-color: var(--cn-button-primary-soft-text);
+  --ai-color: var(--cn-button-primary-soft-text);
+  --ai-hover: var(--cn-button-primary-soft-bg);
+  --ai-hover-color: var(--cn-button-primary-soft-text);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.mantine-Button-root[data-variant="subtle"]:not(.cn-danger-button):hover,
+.mantine-ActionIcon-root[data-variant="subtle"]:not(.cn-danger-button):hover {
+  background: var(--cn-button-primary-soft-bg);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.mantine-Button-root.cn-danger-button:not([data-variant]),
+.mantine-Button-root.cn-danger-button[data-variant="filled"] {
+  --button-bg: var(--cn-button-danger-bg);
+  --button-hover: var(--cn-button-danger-hover-bg);
+  --button-color: #ffffff;
+  --button-hover-color: #ffffff;
+  background: var(--cn-button-danger-bg);
+  color: #ffffff;
+}
+
+.mantine-Button-root.cn-danger-button:not([data-variant]):hover,
+.mantine-Button-root.cn-danger-button[data-variant="filled"]:hover {
+  background: var(--cn-button-danger-hover-bg);
+  color: #ffffff;
+}
+
+.mantine-Button-root.cn-danger-button[data-variant="light"] {
+  --button-bg: var(--cn-button-danger-soft-bg);
+  --button-hover: var(--cn-button-danger-soft-bg);
+  --button-color: var(--cn-button-danger-soft-text);
+  --button-hover-color: var(--cn-button-danger-soft-text);
+  background: var(--cn-button-danger-soft-bg);
+  color: var(--cn-button-danger-soft-text);
 }
 
 :root[data-course-nexus-theme="dark"] .home-workbench,

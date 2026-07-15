@@ -446,7 +446,7 @@ export function StudyPlanDetailPage() {
             >
               重新生成
             </Button>
-            <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+            <Button className="cn-danger-button" color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
               删除计划
             </Button>
           </Group>
@@ -524,7 +524,7 @@ export function StudyPlanDetailPage() {
                   >
                     重新生成
                   </Button>
-                  <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+                  <Button className="cn-danger-button" color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
                     删除计划
                   </Button>
                 </Group>
@@ -546,7 +546,7 @@ export function StudyPlanDetailPage() {
                   >
                     重新生成
                   </Button>
-                  <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
+                  <Button className="cn-danger-button" color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
                     删除计划
                   </Button>
                 </Group>
@@ -704,7 +704,7 @@ export function StudyPlanDetailPage() {
               <Button disabled={isDeletingPlan} onClick={() => setIsDeleteConfirmOpen(false)} variant="subtle">
                 取消
               </Button>
-              <Button color="red" loading={isDeletingPlan} onClick={handleDeletePlan}>
+              <Button className="cn-danger-button" color="red" loading={isDeletingPlan} onClick={handleDeletePlan}>
                 确认删除
               </Button>
             </Group>

@@ -494,7 +494,7 @@ function GeneratedContentPanel({
           <Text>确认删除“{deleteTarget?.title}”吗？该内容及其引用记录将被永久删除，无法恢复。</Text>
           <Group justify="flex-end">
             <Button disabled={isSubmitting} onClick={closeActions} variant="default">取消</Button>
-            <Button color="red" loading={isSubmitting} onClick={submitDelete}>确认删除</Button>
+            <Button className="cn-danger-button" color="red" loading={isSubmitting} onClick={submitDelete}>确认删除</Button>
           </Group>
         </Stack>
       </Modal>

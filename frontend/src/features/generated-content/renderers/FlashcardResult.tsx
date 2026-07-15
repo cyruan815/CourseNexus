@@ -152,7 +152,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
         <Stack><Textarea label="问题" onChange={(event) => setFront(event.currentTarget.value)} required value={front} /><Textarea label="答案" onChange={(event) => setBack(event.currentTarget.value)} required value={back} /><TextInput label="补充解释（可选）" onChange={(event) => setExplanation(event.currentTarget.value)} value={explanation} /><Group justify="flex-end"><Button onClick={() => setAddOpen(false)} variant="default">取消</Button><Button disabled={!front.trim() || !back.trim()} loading={saving} onClick={addCard}>保存卡片</Button></Group></Stack>
       </Modal>
       <Modal onClose={() => setDeleteOpen(false)} opened={deleteOpen} title="删除当前卡片">
-        <Stack><p>确定删除“{card.front}”吗？删除后将永久保存。</p><Group justify="flex-end"><Button onClick={() => setDeleteOpen(false)} variant="default">取消</Button><Button color="red" loading={saving} onClick={deleteCard}>确认删除</Button></Group></Stack>
+        <Stack><p>确定删除“{card.front}”吗？删除后将永久保存。</p><Group justify="flex-end"><Button onClick={() => setDeleteOpen(false)} variant="default">取消</Button><Button className="cn-danger-button" color="red" loading={saving} onClick={deleteCard}>确认删除</Button></Group></Stack>
       </Modal>
     </section>
   );

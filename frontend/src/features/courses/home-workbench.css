@@ -28,14 +28,15 @@
 
 .home-theme-single-button,
 .home-user-button {
-  border-color: #d6e0eb;
-  background: #ffffff;
-  color: #111827;
+  border-color: var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: var(--cn-button-neutral-text);
 }
 
 .home-theme-single-button:hover,
 .home-user-button:hover {
-  background: #e8f2ff;
+  border-color: var(--cn-button-neutral-hover-border);
+  background: var(--cn-button-neutral-hover-bg);
 }
 
 .home-shell {
@@ -147,14 +148,14 @@
 }
 
 .home-plan-button {
-  background: #2563eb;
-  color: #ffffff;
+  background: var(--cn-button-primary-bg);
+  color: var(--cn-button-primary-text);
   border-radius: 12px;
   box-shadow: none;
 }
 
 .home-plan-button:hover {
-  background: #1d4ed8;
+  background: var(--cn-button-primary-hover-bg);
 }
 
 .home-next-task {
@@ -531,7 +532,7 @@
 .home-add-course {
   display: grid;
   place-items: center;
-  border: 1px dashed #93c5fd;
+  border: 1px dashed var(--cn-button-neutral-hover-border);
   background: #f8fbff;
   cursor: pointer;
   font: inherit;
@@ -548,8 +549,8 @@
 }
 
 .home-add-course:hover {
-  border-color: #2f80ed;
-  background: #e8f2ff;
+  border-color: var(--cn-button-primary-bg);
+  background: var(--cn-button-primary-soft-bg);
 }
 
 .home-course-state-card {
