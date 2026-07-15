@@ -92,7 +92,17 @@
   max-width: 700px;
   width: 100%;
   justify-self: center;
+  border-color: #c9ece8;
+  background:
+    linear-gradient(135deg, rgba(242, 255, 252, 0.96), rgba(247, 253, 255, 0.96)),
+    #f6fffc;
   padding: 28px;
+}
+
+.study-plan-create-flow > .study-plan-goal-card h2 {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.18;
 }
 
 .study-plan-create-flow > .study-plan-process-panel {
@@ -243,18 +253,12 @@
     #ffffff;
 }
 
-.study-plan-required-config,
-.study-plan-config-summary {
+.study-plan-required-config {
   display: grid;
   gap: 12px;
   border-color: #fde68a;
   background: #fffdf2;
   padding: 12px;
-}
-
-.study-plan-config-summary {
-  border-color: #bde7df;
-  background: #f8fffd;
 }
 
 .study-plan-create-nav {
@@ -285,15 +289,13 @@
 }
 
 .study-plan-goal-input .mantine-Textarea-input {
-  min-height: 184px;
-  border-color: #bde7df;
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(240, 253, 250, 0.62), rgba(255, 255, 255, 0.96)),
-    #ffffff;
+  min-height: 136px;
+  border-color: #c7d4df;
+  border-radius: 10px;
+  background: #ffffff;
   color: #0f172a;
   line-height: 1.7;
-  padding: 18px;
+  padding: 16px 18px;
   resize: vertical;
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
@@ -509,6 +511,11 @@
 .study-plan-date-question {
   display: grid;
   gap: 18px;
+}
+
+.study-plan-question-group,
+.study-plan-question-note {
+  display: block;
   border: 1px solid #d7eee9;
   border-radius: 10px;
   background: #f8fffd;
