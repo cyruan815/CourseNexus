@@ -921,7 +921,7 @@ function DeleteCourseModal({
           </Alert>
         ) : null}
         <Text>
-          确认删除“{course?.name}”吗？删除后该课程及其资料、对话、生成内容、学习计划会按后端策略隐藏。
+          删除后，这门课程会从课程列表中移除；相关资料、对话、生成内容和学习计划也会一起隐藏。
         </Text>
         <Group justify="flex-end">
           <Button disabled={isSubmitting} onClick={onClose} variant="default">

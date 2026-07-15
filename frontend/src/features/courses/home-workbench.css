@@ -381,6 +381,38 @@
   min-width: 220px;
 }
 
+.calendar-clear-filter-button {
+  border: 1px solid var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: var(--cn-button-neutral-text);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.calendar-clear-filter-button:not(:disabled):hover {
+  border-color: var(--cn-button-neutral-hover-border);
+  background: var(--cn-button-neutral-hover-bg);
+  color: var(--cn-button-primary-soft-text);
+}
+
+.calendar-clear-filter-button:disabled,
+.calendar-clear-filter-button[data-disabled] {
+  border-color: var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: #9aa6b2;
+  cursor: default;
+  opacity: 0.72;
+}
+
+.calendar-clear-filter-button:disabled:hover,
+.calendar-clear-filter-button[data-disabled]:hover {
+  border-color: var(--cn-button-neutral-border);
+  background: var(--cn-button-neutral-bg);
+  color: #9aa6b2;
+}
+
 .home-term-select {
   width: 214px;
 }

@@ -723,6 +723,7 @@ function GlobalCalendarPage() {
               />
               <Button
                 aria-label="清除课程筛选"
+                className="calendar-clear-filter-button"
                 disabled={!selectedCourseId}
                 onClick={() => handleCourseFilterChange("__all__")}
                 variant="subtle"
