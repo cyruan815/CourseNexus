@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -169,7 +169,7 @@ describe("GeneratedContentDetailPage", () => {
     expect(screen.queryByText("这段逐条引用不应在 handout 详情页展示")).not.toBeInTheDocument();
   });
 
-  it("renders task test generated content as a readonly review view without citation panel", async () => {
+  it("renders task test generated content with per-question submit feedback and without citation panel", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -246,12 +246,19 @@ describe("GeneratedContentDetailPage", () => {
 
     expect(await screen.findByRole("heading", { name: "基础题任务测试题" })).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
+    expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
     expect(screen.getByText("TCP 是面向连接的协议。")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：正确")).toBeInTheDocument();
+    expect(screen.queryByText("正确答案：正确")).not.toBeInTheDocument();
     expect(screen.getByText("UDP 会在传输数据前建立连接。")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：错误")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
+    expect(screen.queryByText("正确答案：错误")).not.toBeInTheDocument();
+
+    const firstCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
+    fireEvent.click(within(firstCard).getByRole("button", { name: "A. 加法和数乘封闭" }));
+    fireEvent.click(within(firstCard).getByRole("button", { name: "提交答案" }));
+    expect(within(firstCard).getByText("回答正确")).toBeInTheDocument();
+    expect(within(firstCard).getByText("正确答案：A")).toBeInTheDocument();
+    expect(within(firstCard).getByText("解析：向量空间需要对加法和数乘封闭。")).toBeInTheDocument();
+
     expect(screen.queryByRole("heading", { name: "引用来源" })).not.toBeInTheDocument();
     expect(screen.queryByText("物理层.pdf · 12")).not.toBeInTheDocument();
     expect(screen.queryByText("测试题引用仍展示")).not.toBeInTheDocument();

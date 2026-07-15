@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { GeneratedContentRenderer } from "../../../src/features/generated-content/GeneratedContentRenderer";
 
@@ -29,5 +29,39 @@ describe("GeneratedContentRenderer", () => {
     expect(document.querySelector(".katex")).toBeInTheDocument();
     expect(screen.queryByText("notes.md")).not.toBeInTheDocument();
     expect(screen.queryByText("hidden citation")).not.toBeInTheDocument();
+  });
+
+  it("renders task test answers only after a question is submitted", () => {
+    render(
+      <MantineProvider>
+        <GeneratedContentRenderer
+          content={{
+            ...base,
+            content_type: "task_test",
+            content_json: {
+              questions: [
+                {
+                  id: "q_1",
+                  sort_order: 1,
+                  question_type: "true_false",
+                  question_text: "TCP 是面向连接的协议。",
+                  options: [],
+                  correct_answer: true,
+                  explanation: "TCP 会在传输数据前建立连接。",
+                },
+              ],
+            },
+          } as never}
+        />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByText("TCP 是面向连接的协议。")).toBeInTheDocument();
+    expect(screen.queryByText("正确答案：正确")).not.toBeInTheDocument();
+    const card = screen.getByLabelText("第 1 题：TCP 是面向连接的协议。");
+    fireEvent.click(within(card).getByRole("button", { name: "正确" }));
+    fireEvent.click(within(card).getByRole("button", { name: "提交答案" }));
+    expect(within(card).getByText("回答正确")).toBeInTheDocument();
+    expect(within(card).getByText("正确答案：正确")).toBeInTheDocument();
   });
 });
