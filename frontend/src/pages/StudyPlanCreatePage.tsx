@@ -35,6 +35,7 @@ import type {
   StudyPlanDiagnosticQuestion,
   StudyPlanPreview,
   StudyPlanPreviewRequest,
+  StudyPlanSaveRequest,
   StudyPlanTopicMasteryAnswer,
   WeakArea,
 } from "../features/study-plans/types";
@@ -57,6 +58,14 @@ interface StudyPlanCreateDraftStorage {
   dailyMinutes?: string;
   preference?: PlanPreference;
   materialScope?: MaterialScope;
+  pendingSaveAttempt?: StudyPlanPendingSaveAttempt;
+}
+
+interface StudyPlanPendingSaveAttempt {
+  idempotencyKey: string;
+  payload: StudyPlanSaveRequest;
+  preview: StudyPlanPreview;
+  signature: string;
 }
 
 function createStudyPlanIdempotencyKey(courseId: string): string {
@@ -81,8 +90,28 @@ function readCreateDraft(courseId: string): StudyPlanCreateDraftStorage | null {
   }
 }
 
+function isStudyPlanPendingSaveAttempt(value: unknown): value is StudyPlanPendingSaveAttempt {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.idempotencyKey === "string"
+    && typeof candidate.signature === "string"
+    && Boolean(candidate.payload)
+    && typeof candidate.payload === "object"
+    && Boolean(candidate.preview)
+    && typeof candidate.preview === "object"
+  );
+}
+
 function writeCreateDraft(courseId: string, draft: StudyPlanCreateDraftStorage) {
-  window.localStorage.setItem(createDraftStorageKey(courseId), JSON.stringify(draft));
+  try {
+    window.localStorage.setItem(createDraftStorageKey(courseId), JSON.stringify(draft));
+  } catch {
+    // Draft persistence is best effort; storage limits must not block plan creation or retry in this session.
+  }
 }
 
 function clearCreateDraft(courseId: string) {
@@ -491,7 +520,9 @@ export function StudyPlanCreatePage() {
   const [isGenerationComplete, setIsGenerationComplete] = useState(false);
   const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
   const [generatedPlanPreview, setGeneratedPlanPreview] = useState<StudyPlanPreview | null>(null);
+  const [pendingSaveAttempt, setPendingSaveAttempt] = useState<StudyPlanPendingSaveAttempt | null>(null);
   const startDateRef = useRef("");
+  const isDraftPersistenceDisabledRef = useRef(false);
   const startDateOptions = useMemo(() => buildStartDateOptions(), []);
 
   useEffect(() => {
@@ -501,6 +532,7 @@ export function StudyPlanCreatePage() {
     }
 
     const storedDraft = readCreateDraft(courseId);
+    isDraftPersistenceDisabledRef.current = false;
     setGoalText(storedDraft?.goalText ?? "");
     setStartDate(storedDraft?.startDate ?? "");
     startDateRef.current = storedDraft?.startDate ?? "";
@@ -516,6 +548,11 @@ export function StudyPlanCreatePage() {
     setDailyMinutes(storedDraft?.dailyMinutes ?? "");
     setPreference(storedDraft?.preference ?? defaultPreference);
     setMaterialScope(storedDraft?.materialScope ?? defaultScope);
+    setPendingSaveAttempt(
+      isStudyPlanPendingSaveAttempt(storedDraft?.pendingSaveAttempt)
+        ? storedDraft.pendingSaveAttempt
+        : null,
+    );
     setPhase("goal");
     setQuestionVersion(null);
     setDiagnosticQuestions([]);
@@ -527,7 +564,7 @@ export function StudyPlanCreatePage() {
   }, [courseId]);
 
   useEffect(() => {
-    if (!courseId || !isDraftHydrated) {
+    if (!courseId || !isDraftHydrated || isDraftPersistenceDisabledRef.current) {
       return;
     }
 
@@ -539,6 +576,7 @@ export function StudyPlanCreatePage() {
       dailyMinutes,
       preference,
       materialScope,
+      pendingSaveAttempt: pendingSaveAttempt ?? undefined,
     });
   }, [
     courseId,
@@ -548,6 +586,7 @@ export function StudyPlanCreatePage() {
     goalText,
     isDraftHydrated,
     materialScope,
+    pendingSaveAttempt,
     preference,
     startDate,
   ]);
@@ -913,28 +952,58 @@ export function StudyPlanCreatePage() {
     setGeneratedPlanPreview(null);
 
     try {
-      const nextProfile = await createDiagnosticProfile(courseId, {
-        question_version: questionVersion,
-        topic_mastery: topicMastery,
-        weak_area: weakAreaAnswer,
-        diagnostic_note: diagnosticNote.trim() || null,
-        material_scope: materialScope,
+      const attemptSignature = JSON.stringify({
+        diagnosticNote: diagnosticNote.trim() || null,
+        draft,
+        questionVersion,
+        topicMastery,
+        weakArea: weakAreaAnswer,
       });
-      const previewRequest: StudyPlanPreviewRequest = {
-        ...draft,
-        diagnostic_profile: nextProfile,
-      };
-      const nextPreview = await previewStudyPlan(courseId, previewRequest);
-      const result = await saveStudyPlan(courseId, {
-        ...previewRequest,
-        title: nextPreview.title,
-        client_flow: "wizard_v1",
-        tasks: nextPreview.tasks,
-      }, createStudyPlanIdempotencyKey(courseId));
-      setGeneratedPlanPreview(nextPreview);
+      let saveAttempt = pendingSaveAttempt?.signature === attemptSignature
+        ? pendingSaveAttempt
+        : null;
+
+      if (!saveAttempt) {
+        const nextProfile = await createDiagnosticProfile(courseId, {
+          question_version: questionVersion,
+          topic_mastery: topicMastery,
+          weak_area: weakAreaAnswer,
+          diagnostic_note: diagnosticNote.trim() || null,
+          material_scope: materialScope,
+        });
+        const previewRequest: StudyPlanPreviewRequest = {
+          ...draft,
+          diagnostic_profile: nextProfile,
+        };
+        const nextPreview = await previewStudyPlan(courseId, previewRequest);
+        saveAttempt = {
+          idempotencyKey: createStudyPlanIdempotencyKey(courseId),
+          payload: {
+            ...previewRequest,
+            title: nextPreview.title,
+            client_flow: "wizard_v1",
+            tasks: nextPreview.tasks,
+          },
+          preview: nextPreview,
+          signature: attemptSignature,
+        };
+        setPendingSaveAttempt(saveAttempt);
+      }
+
+      const result = await saveStudyPlan(
+        courseId,
+        saveAttempt.payload,
+        saveAttempt.idempotencyKey,
+      );
+      isDraftPersistenceDisabledRef.current = true;
+      clearCreateDraft(courseId);
+      setGeneratedPlanPreview(saveAttempt.preview);
       setSavedPlanId(result.plan.id);
       setIsGenerationComplete(true);
     } catch (nextError) {
+      if (nextError instanceof ApiError && nextError.code === "IDEMPOTENCY_CONFLICT") {
+        setPendingSaveAttempt(null);
+      }
       setError(studyPlanActionErrorMessage(nextError, "生成学习计划失败"));
       setPhase("questionnaire");
       setIsGenerationComplete(false);
@@ -964,6 +1033,7 @@ export function StudyPlanCreatePage() {
       setIsGenerationComplete(false);
       setSavedPlanId(null);
       setGeneratedPlanPreview(null);
+      setPendingSaveAttempt(null);
     }
   }
 

@@ -1045,6 +1045,21 @@
   white-space: nowrap;
 }
 
+@media (max-width: 1100px) {
+  .study-plan-execution-grid {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .study-plan-execution-sidebar {
+    position: static;
+  }
+
+  .study-plan-execution-resizer {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .study-plan-grid,
   .study-plan-course-layout,

@@ -427,6 +427,68 @@ function normalizeExecutionColumnWidths(widths: ExecutionColumnWidths): Executio
   };
 }
 
+function sameExecutionColumnWidths(
+  left: ExecutionColumnWidths | null,
+  right: ExecutionColumnWidths,
+): boolean {
+  return Boolean(
+    left
+    && left.left === right.left
+    && left.main === right.main
+    && left.right === right.right,
+  );
+}
+
+function fitExecutionColumnWidths(
+  widths: ExecutionColumnWidths,
+  gridWidth: number,
+): ExecutionColumnWidths {
+  const minimumTotal = (
+    EXECUTION_COLUMN_MIN_WIDTHS.left
+    + EXECUTION_COLUMN_MIN_WIDTHS.main
+    + EXECUTION_COLUMN_MIN_WIDTHS.right
+  );
+  const availableWidth = Math.round(gridWidth - EXECUTION_RESIZE_GUTTER_WIDTH * 2);
+  const normalizedWidths = normalizeExecutionColumnWidths({
+    left: Math.max(widths.left, EXECUTION_COLUMN_MIN_WIDTHS.left),
+    main: Math.max(widths.main, EXECUTION_COLUMN_MIN_WIDTHS.main),
+    right: Math.max(widths.right, EXECUTION_COLUMN_MIN_WIDTHS.right),
+  });
+  const currentTotal = normalizedWidths.left + normalizedWidths.main + normalizedWidths.right;
+
+  if (!Number.isFinite(availableWidth) || availableWidth < minimumTotal || currentTotal <= availableWidth) {
+    return normalizedWidths;
+  }
+
+  const targetFlexibleWidth = availableWidth - minimumTotal;
+  const currentFlexibleWidths = {
+    left: normalizedWidths.left - EXECUTION_COLUMN_MIN_WIDTHS.left,
+    main: normalizedWidths.main - EXECUTION_COLUMN_MIN_WIDTHS.main,
+    right: normalizedWidths.right - EXECUTION_COLUMN_MIN_WIDTHS.right,
+  };
+  const currentFlexibleTotal = (
+    currentFlexibleWidths.left
+    + currentFlexibleWidths.main
+    + currentFlexibleWidths.right
+  );
+  if (currentFlexibleTotal <= 0) {
+    return EXECUTION_COLUMN_MIN_WIDTHS;
+  }
+
+  const left = EXECUTION_COLUMN_MIN_WIDTHS.left + Math.round(
+    targetFlexibleWidth * (currentFlexibleWidths.left / currentFlexibleTotal),
+  );
+  const right = EXECUTION_COLUMN_MIN_WIDTHS.right + Math.round(
+    targetFlexibleWidth * (currentFlexibleWidths.right / currentFlexibleTotal),
+  );
+
+  return normalizeExecutionColumnWidths({
+    left,
+    main: availableWidth - left - right,
+    right,
+  });
+}
+
 function isExecutionColumnWidths(value: unknown): value is ExecutionColumnWidths {
   if (!value || typeof value !== "object") {
     return false;
@@ -478,11 +540,11 @@ function defaultExecutionColumnWidths(gridWidth: number): ExecutionColumnWidths 
   const left = Math.round(availableWidth * (EXECUTION_COLUMN_DEFAULT_RATIOS.left / ratioTotal));
   const right = Math.round(availableWidth * (EXECUTION_COLUMN_DEFAULT_RATIOS.right / ratioTotal));
 
-  return normalizeExecutionColumnWidths({
+  return fitExecutionColumnWidths({
     left,
     main: availableWidth - left - right,
     right,
-  });
+  }, gridWidth);
 }
 
 function resizeExecutionColumns(
@@ -562,6 +624,26 @@ export function StudyTaskExecutionPage() {
     const normalizedWidths = normalizeExecutionColumnWidths(nextWidths);
     setExecutionColumnWidths(normalizedWidths);
     persistExecutionColumnWidths(normalizedWidths);
+  };
+
+  const fitExecutionColumnsToGrid = (): void => {
+    const gridWidth = executionGridRef.current?.getBoundingClientRect().width ?? 0;
+    if (gridWidth <= 0) {
+      return;
+    }
+
+    setExecutionColumnWidths((currentWidths) => {
+      const fittedWidths = fitExecutionColumnWidths(
+        currentWidths ?? defaultExecutionColumnWidths(gridWidth),
+        gridWidth,
+      );
+      if (sameExecutionColumnWidths(currentWidths, fittedWidths)) {
+        return currentWidths;
+      }
+
+      persistExecutionColumnWidths(fittedWidths);
+      return fittedWidths;
+    });
   };
 
   const updateExecutionColumnResize = (clientX: number): void => {
@@ -660,6 +742,25 @@ export function StudyTaskExecutionPage() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [executionColumnWidths]);
+
+  useEffect(() => {
+    const executionGrid = executionGridRef.current;
+    if (!executionGrid) {
+      return undefined;
+    }
+
+    fitExecutionColumnsToGrid();
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => fitExecutionColumnsToGrid());
+    resizeObserver?.observe(executionGrid);
+    window.addEventListener("resize", fitExecutionColumnsToGrid);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", fitExecutionColumnsToGrid);
+    };
+  }, [context]);
 
   useEffect(() => {
     if (!generationNotice) {
