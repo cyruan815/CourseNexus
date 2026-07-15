@@ -1,5 +1,5 @@
 import { MantineProvider } from "@mantine/core";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { FlashcardResult } from "../../../src/features/generated-content/renderers/FlashcardResult";
@@ -126,6 +126,23 @@ describe("generated content renderers", () => {
     expect(screen.queryByText("小测完成")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "完成测验" }));
     expect(screen.getByText("正确率 50%")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "本次答题记录" })).toBeInTheDocument();
+    const firstRecord = screen.getByRole("article", { name: "第 1 题答题记录" });
+    const secondRecord = screen.getByRole("article", { name: "第 2 题答题记录" });
+    expect(within(firstRecord).getByText("Q1")).toBeInTheDocument();
+    expect(within(secondRecord).getByText("Q2")).toBeInTheDocument();
+    expect(screen.getAllByText("你的选择：B")).toHaveLength(2);
+    expect(within(firstRecord).getByRole("radio", { name: "B. B" })).toHaveClass("gc-quiz-option-correct");
+    expect(within(secondRecord).getByRole("radio", { name: "B. B" })).toHaveClass("gc-quiz-option-wrong");
+    expect(within(secondRecord).getByRole("radio", { name: "A. A" })).toHaveClass("gc-quiz-option-correct");
+    expect(screen.getAllByRole("radio")).toHaveLength(8);
+    expect(screen.getAllByRole("radio").every((option) => option.hasAttribute("disabled"))).toBe(true);
+    expect(screen.queryByRole("button", { name: "下一题" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看提示" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新开始" }));
+    expect(screen.getByText("Q1")).toBeInTheDocument();
+    expect(screen.queryByText("本次答题记录")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "B. B" })).not.toBeDisabled();
   });
 
   it("flips flashcards and retries missed cards", () => {
