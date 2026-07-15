@@ -6,13 +6,18 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_required_user
 from app.core.request_id import get_request_id
 from app.db.session import get_db
-from app.modules.generated_content.schemas import FlashcardCardsUpdate, GeneratedContentUpdate
+from app.modules.generated_content.schemas import (
+    FlashcardCardsUpdate,
+    GeneratedContentUpdate,
+    KnowledgeItemLearningStateUpdate,
+)
 from app.modules.generated_content.service import (
     delete_generated_content,
     get_generated_content_detail,
     list_generated_contents,
     rename_generated_content,
     update_flashcard_cards,
+    update_knowledge_item_learning_state,
 )
 from app.modules.users.models import User
 from app.shared.responses import success_response
@@ -89,5 +94,26 @@ def update_flashcard_cards_endpoint(
         user_id=current_user.id,
         generated_content_id=generated_content_id,
         cards=[card.model_dump(mode="json") for card in payload.cards],
+    )
+    return success_response(content.model_dump(mode="json"), request_id=get_request_id(request))
+
+
+@router.patch(
+    "/generated-contents/{generated_content_id}/knowledge-items/{knowledge_item_id}/learning-state"
+)
+def update_knowledge_item_learning_state_endpoint(
+    generated_content_id: str,
+    knowledge_item_id: str,
+    payload: KnowledgeItemLearningStateUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    content = update_knowledge_item_learning_state(
+        db,
+        user_id=current_user.id,
+        generated_content_id=generated_content_id,
+        knowledge_item_id=knowledge_item_id,
+        learned=payload.learned,
     )
     return success_response(content.model_dump(mode="json"), request_id=get_request_id(request))

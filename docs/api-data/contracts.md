@@ -126,7 +126,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 
 ## 独立生成公共契约
 
-- `POST /api/v1/courses/{course_id}/generations`、`GET /api/v1/courses/{course_id}/generated-contents` 和 `GET /api/v1/generated-contents/{generated_content_id}` 路径保持不变；`PATCH /api/v1/generated-contents/{generated_content_id}/flashcards` 负责替换当前用户 Flashcard 的完整牌组。
+- `POST /api/v1/courses/{course_id}/generations`、`GET /api/v1/courses/{course_id}/generated-contents` 和 `GET /api/v1/generated-contents/{generated_content_id}` 路径保持不变；`PATCH /api/v1/generated-contents/{generated_content_id}/flashcards` 负责替换当前用户 Flashcard 的完整牌组；`PATCH /api/v1/generated-contents/{generated_content_id}/knowledge-items/{knowledge_item_id}/learning-state` 只更新当前用户某个知识点的 `learned` 布尔状态。
 - 生成服务调用 `resolve_generation_context()`，按稳定顺序合并所有选定 parsed chunk，并在模型调用前检查总 token 上限。
 - 注册类型固定为`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`；G01完成公共链路，具体真实生成由G02-G06分别完成。
 - `mindmap` 成功记录的 `content_json` 包含 `schema_version`、`renderer`、`root_node_id`、`nodes`、`edges`、`markmap_markdown` 和 `markmap_data`；Markdown 和 `markmap-lib` 预处理结果均保存在数据库 JSON 中，不对应本地文件路径。
@@ -134,7 +134,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `flashcard` 参数支持 `card_count`、`card_style`、`include_formulas` 和 `focus`；成功记录写入 `content_json.cards`，`mastery_status` 固定为 `unknown`。
 - Flashcard 牌组替换接收 1-100 张卡片，拒绝规范化后重复的正面，重新生成连续 ID 和顺序；前端必须以完整持久化牌组为写入基线，不能用打乱或错卡重练子集覆盖后端记录。
 - `outline` 参数支持组织方式、章节数量、复习目标和详细度；成功记录写入 `content_json.sections`，不包含学习计划或任务字段。
-- `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`。
+- `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`。最终 item 的 `learned` 默认为 `false`，历史 item 缺失时按 `false` 解释；学习状态接口只接受 `learned`，不允许借此修改知识点名称、定义、重要程度或章节。
 - 每个最终业务条目使用稳定 `id`，列表型结果同时使用连续 `sort_order`；业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。
 - 生成 POST、历史和详情的 `GeneratedContentRead` 统一包含 `source_citations`；这五类内容固定返回 `[]`，包括数据库中可能仍存在旧引用行的历史记录。
 - Handout 和 Task Test 的真实 `source_citations` 继续保存在后端并通过 API 返回，用于内部追溯与导出；生成内容详情页不展示引用面板。

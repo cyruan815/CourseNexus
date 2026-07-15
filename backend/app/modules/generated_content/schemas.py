@@ -61,3 +61,9 @@ class FlashcardCardsUpdate(BaseModel):
         if len(normalized) != len(set(normalized)):
             raise ValueError("Flashcard fronts must be unique")
         return self
+
+
+class KnowledgeItemLearningStateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    learned: bool

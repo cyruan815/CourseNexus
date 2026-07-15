@@ -477,3 +477,88 @@ def test_update_flashcard_cards_rejects_wrong_owner_and_non_flashcard(db: Sessio
     with pytest.raises(CourseNexusError) as type_exc:
         update_flashcard_cards(db, user_id=owner.id, generated_content_id=outline.id, cards=cards)
     assert type_exc.value.code == "INVALID_GENERATED_CONTENT_TYPE"
+
+
+def test_update_knowledge_item_learning_state_persists_only_target_item(db: Session) -> None:
+    user = register_user(db, UserCreate(username="knowledge-progress", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Networks"))
+    content = create_content(db, user.id, course.id, "gen_knowledge", content_type="knowledge_list")
+    content.content_json = {"items": [
+        {
+            "id": "kp_001",
+            "sort_order": 1,
+            "name": "奈奎斯特定理",
+            "definition": "理想信道的码元速率限制。",
+            "importance": "high",
+            "related_section": "物理层",
+        },
+        {
+            "id": "kp_002",
+            "sort_order": 2,
+            "name": "香农定理",
+            "definition": "有噪声信道的容量限制。",
+            "importance": "high",
+            "related_section": "信道容量",
+            "learned": False,
+        },
+    ]}
+    save_generated_content(db, content)
+
+    learned = generated_content_service.update_knowledge_item_learning_state(
+        db,
+        user_id=user.id,
+        generated_content_id=content.id,
+        knowledge_item_id="kp_001",
+        learned=True,
+    )
+
+    assert learned.content_json["items"][0]["learned"] is True
+    assert learned.content_json["items"][1]["learned"] is False
+    assert learned.content_json["items"][0]["definition"] == "理想信道的码元速率限制。"
+
+    unlearned = generated_content_service.update_knowledge_item_learning_state(
+        db,
+        user_id=user.id,
+        generated_content_id=content.id,
+        knowledge_item_id="kp_001",
+        learned=False,
+    )
+
+    assert unlearned.content_json["items"][0]["learned"] is False
+
+
+def test_update_knowledge_item_learning_state_rejects_invalid_targets(db: Session) -> None:
+    owner = register_user(db, UserCreate(username="knowledge-owner", password="password123"))
+    other = register_user(db, UserCreate(username="knowledge-other", password="password123"))
+    course = create_course(db, owner.id, CourseCreate(name="Networks"))
+    knowledge = create_content(db, owner.id, course.id, "gen_private_knowledge", content_type="knowledge_list")
+    knowledge.content_json = {"items": [{
+        "id": "kp_001",
+        "sort_order": 1,
+        "name": "信道容量",
+        "definition": "信道能够可靠传输信息的上限。",
+        "importance": "high",
+        "related_section": "物理层",
+    }]}
+    save_generated_content(db, knowledge)
+    outline = create_content(db, owner.id, course.id, "gen_outline_progress", content_type="outline")
+    failed = create_content(
+        db,
+        owner.id,
+        course.id,
+        "gen_failed_knowledge",
+        content_type="knowledge_list",
+        generation_status="failed",
+    )
+
+    cases = [
+        ({"user_id": other.id, "generated_content_id": knowledge.id, "knowledge_item_id": "kp_001"}, "NOT_FOUND"),
+        ({"user_id": owner.id, "generated_content_id": outline.id, "knowledge_item_id": "kp_001"}, "INVALID_GENERATED_CONTENT_TYPE"),
+        ({"user_id": owner.id, "generated_content_id": failed.id, "knowledge_item_id": "kp_001"}, "STATE_CONFLICT"),
+        ({"user_id": owner.id, "generated_content_id": knowledge.id, "knowledge_item_id": "kp_999"}, "NOT_FOUND"),
+    ]
+
+    for kwargs, expected_code in cases:
+        with pytest.raises(CourseNexusError) as exc_info:
+            generated_content_service.update_knowledge_item_learning_state(db, learned=True, **kwargs)
+        assert exc_info.value.code == expected_code

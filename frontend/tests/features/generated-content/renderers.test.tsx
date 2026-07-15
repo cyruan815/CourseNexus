@@ -162,7 +162,7 @@ describe("generated content renderers", () => {
     expect(screen.getByText("Two")).toBeVisible();
     expect(screen.getByText("Review two")).toBeVisible();
     unmount();
-    renderUi(<KnowledgeListResult items={[
+    renderUi(<KnowledgeListResult generatedContentId="gen_knowledge" items={[
       { id: "kp_001", sort_order: 1, name: "Euler", definition: "Path", importance: "high", related_section: "Graph" },
       { id: "kp_002", sort_order: 2, name: "Matrix", definition: "Array", importance: "low", related_section: "Algebra" },
     ]} />);
@@ -171,5 +171,54 @@ describe("generated content renderers", () => {
     fireEvent.change(screen.getByPlaceholderText("搜索知识点"), { target: { value: "Euler" } });
     expect(screen.getByText("Euler")).toBeInTheDocument();
     expect(screen.queryByText("Matrix")).not.toBeInTheDocument();
+  });
+
+  it("persists learned knowledge items and keeps progress based on the full list", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: {
+      id: "gen_knowledge",
+      content_json: { items: [
+        { id: "kp_001", sort_order: 1, name: "奈奎斯特定理", definition: "理想信道限制", importance: "high", related_section: "物理层", learned: true },
+        { id: "kp_002", sort_order: 2, name: "香农定理", definition: "有噪声信道限制", importance: "high", related_section: "信道容量", learned: true },
+      ] },
+    } }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderUi(<KnowledgeListResult generatedContentId="gen_knowledge" items={[
+      { id: "kp_001", sort_order: 1, name: "奈奎斯特定理", definition: "理想信道限制", importance: "high", related_section: "物理层", learned: true },
+      { id: "kp_002", sort_order: 2, name: "香农定理", definition: "有噪声信道限制", importance: "high", related_section: "信道容量" },
+    ]} />);
+
+    expect(screen.getByText("已学习 1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("奈奎斯特定理").closest("article")).toHaveClass("is-learned");
+    fireEvent.change(screen.getByPlaceholderText("搜索知识点"), { target: { value: "香农" } });
+    expect(screen.getByText("已学习 1 / 2")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "标记香农定理为已学习" }));
+
+    expect(await screen.findByText("已学习 2 / 2")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("香农定理").closest("article")).toHaveClass("is-learned");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_knowledge/knowledge-items/kp_002/learning-state",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ learned: true }) }),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("rolls back a knowledge learning state when persistence fails", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: "SAVE_FAILED", message: "保存失败" },
+    }), { status: 500, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderUi(<KnowledgeListResult generatedContentId="gen_knowledge" items={[
+      { id: "kp_001", sort_order: 1, name: "奈奎斯特定理", definition: "理想信道限制", importance: "high", related_section: "物理层" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "标记奈奎斯特定理为已学习" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("保存失败");
+    expect(screen.getByText("已学习 0 / 1")).toBeInTheDocument();
+    expect(screen.getByText("奈奎斯特定理").closest("article")).not.toHaveClass("is-learned");
+    vi.unstubAllGlobals();
   });
 });

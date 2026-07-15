@@ -17,7 +17,7 @@ export function GeneratedContentRenderer({ content }: { content: GeneratedConten
   if (content.content_type === "flashcard") { const value = flashcards(content.content_json); return value ? <FlashcardResult cards={value} generatedContentId={content.id} /> : invalid; }
   if (content.content_type === "mindmap") { const value = mindmapContent(content.content_json); return value ? <MindmapResult content={value} /> : invalid; }
   if (content.content_type === "outline") { const value = outlineSections(content.content_json); return value ? <OutlineResult sections={value} /> : invalid; }
-  if (content.content_type === "knowledge_list") { const value = knowledgeItems(content.content_json); return value ? <KnowledgeListResult items={value} /> : invalid; }
+  if (content.content_type === "knowledge_list") { const value = knowledgeItems(content.content_json); return value ? <KnowledgeListResult generatedContentId={content.id} items={value} /> : invalid; }
   if (content.content_type === "handout") {
     const markdown = content.content?.trim();
     return markdown ? <HandoutMarkdownRenderer markdown={markdown} /> : invalid;

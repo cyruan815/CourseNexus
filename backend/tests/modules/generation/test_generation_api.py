@@ -21,6 +21,19 @@ class FailingProvider:
         raise CourseNexusError(code="GENERATION_FAILED", message="provider failed", status_code=502)
 
 
+class KnowledgeListProvider:
+    def generate_structured(self, *, prompt, output_schema):
+        return output_schema.model_validate({
+            "topic_title": "第七章 物理层",
+            "items": [{
+                "name": "奈奎斯特定理",
+                "definition": "理想低通信道的码元速率限制。",
+                "importance": "high",
+                "related_section": "第七章",
+            }],
+        })
+
+
 def test_generation_requires_authentication(client) -> None:
     response = client.post("/api/v1/courses/crs_missing/generations", json={"content_type": "outline"})
     assert response.status_code == 401
@@ -111,3 +124,33 @@ def test_model_failure_persists_failed_history(client, alice_api, api_course_fac
     assert data["generation_status"] == "failed"
     assert data["error_code"] == "GENERATION_FAILED"
     assert data["source_citations"] == []
+
+
+def test_knowledge_item_learning_state_endpoint_persists_boolean_only(
+    client, alice_api, api_course_factory, api_material_factory
+) -> None:
+    course_id = api_course_factory(alice_api)
+    api_material_factory(alice_api, course_id)
+    app.dependency_overrides[generation_router.get_generation_model_provider_factory] = (
+        lambda: lambda _: KnowledgeListProvider()
+    )
+    created = client.post(
+        f"/api/v1/courses/{course_id}/generations",
+        headers=alice_api.headers,
+        json={"content_type": "knowledge_list", "parameters": {"item_count": 1}},
+    ).json()["data"]
+
+    response = client.patch(
+        f"/api/v1/generated-contents/{created['id']}/knowledge-items/kp_001/learning-state",
+        headers=alice_api.headers,
+        json={"learned": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["content_json"]["items"][0]["learned"] is True
+    invalid = client.patch(
+        f"/api/v1/generated-contents/{created['id']}/knowledge-items/kp_001/learning-state",
+        headers=alice_api.headers,
+        json={"learned": False, "name": "篡改名称"},
+    )
+    assert invalid.status_code == 422

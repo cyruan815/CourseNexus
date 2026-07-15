@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
@@ -14,6 +15,7 @@ from app.modules.generated_content.repository import (
     list_active_generated_contents_for_course,
     list_generated_content_citations,
     permanently_delete_generated_content,
+    save_generated_content,
 )
 from app.modules.generated_content.schemas import (
     FlashcardCardsUpdate,
@@ -22,11 +24,12 @@ from app.modules.generated_content.schemas import (
     GeneratedContentUpdate,
 )
 from app.modules.generation.generators.flashcard.schemas import FlashcardContent, FlashcardRead
-from app.modules.generated_content.repository import save_generated_content
+from app.modules.generation.generators.knowledge_list.schemas import KnowledgeListContent
 
 
 POC_GENERATION_TYPES = {"quiz", "flashcard", "mindmap", "outline", "knowledge_list"}
 logger = get_logger("generated_content.flashcards")
+knowledge_progress_logger = get_logger("generated_content.knowledge_progress")
 
 
 def _assemble_generated_content_reads(
@@ -146,5 +149,58 @@ def update_flashcard_cards(
         user_id,
         before_count,
         len(normalized.cards),
+    )
+    return build_generated_content_read(db, content)
+
+
+def update_knowledge_item_learning_state(
+    db: Session,
+    *,
+    user_id: str,
+    generated_content_id: str,
+    knowledge_item_id: str,
+    learned: bool,
+) -> GeneratedContentRead:
+    content = get_active_generated_content_for_user(
+        db,
+        user_id=user_id,
+        generated_content_id=generated_content_id,
+    )
+    if content is None:
+        raise CourseNexusError(code="NOT_FOUND", message="生成内容不存在", status_code=404)
+    if content.content_type != "knowledge_list":
+        raise CourseNexusError(
+            code="INVALID_GENERATED_CONTENT_TYPE",
+            message="只有知识点清单可以更新学习状态",
+            status_code=409,
+        )
+    if content.generation_status != "success":
+        raise CourseNexusError(
+            code="STATE_CONFLICT",
+            message="只有生成成功的知识点清单可以更新学习状态",
+            status_code=409,
+        )
+    try:
+        knowledge_list = KnowledgeListContent.model_validate(content.content_json)
+    except ValidationError as exc:
+        raise CourseNexusError(
+            code="GENERATED_CONTENT_SCHEMA_INVALID",
+            message="知识点清单结构无效",
+            status_code=409,
+        ) from exc
+
+    target = next((item for item in knowledge_list.items if item.id == knowledge_item_id), None)
+    if target is None:
+        raise CourseNexusError(code="NOT_FOUND", message="知识点不存在", status_code=404)
+    target.learned = learned
+    content.content_json = knowledge_list.model_dump(mode="json")
+    content.updated_at = datetime.now(timezone.utc)
+    save_generated_content(db, content)
+    knowledge_progress_logger.info(
+        "Knowledge item learning state updated | content=%s item=%s user=%s learned=%s",
+        content.id,
+        knowledge_item_id,
+        user_id,
+        learned,
     )
     return build_generated_content_read(db, content)
