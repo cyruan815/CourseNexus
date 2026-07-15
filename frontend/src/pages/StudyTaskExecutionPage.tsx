@@ -1013,7 +1013,7 @@ export function StudyTaskExecutionPage() {
                         <Paper
                           aria-current={isCurrent ? "step" : undefined}
                           aria-label={`切换到任务 ${subtask.title}`}
-                          className={isCurrent ? "study-plan-execution-step is-current" : "study-plan-execution-step"}
+                          className={`study-plan-execution-step${isCurrent ? " is-current" : ""}${isCompleted ? " is-complete" : ""}`}
                           component="button"
                           disabled={isSwitchingSubtask}
                           key={subtask.subtask_id}
