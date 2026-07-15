@@ -27,6 +27,7 @@
 | TD-017 | [资料理解流水线完整性与检索质量改造](material-understanding-pipeline-tech-debt.md)：当前把解析成功近似为内容完整，且问答检索缺少目录治理、去重、任务路由和全文覆盖保证。 | 可能静默漏页/漏元素、误标 `complete`、重解析破坏旧可用结果，并让 Top-K 被重复目录占满；涉及多格式解析、数据/索引兼容和前端透明度。 | 高 | 待规划（独立大型改造） |
 | TD-018 | 学习计划创建流程尚未继承课程详情页材料复选框的勾选范围；POC 阶段暂以课程全部已解析资料作为默认范围。 | 用户在课程详情页勾选的材料只影响当前页问答和课程内容生成，进入学习计划创建页后不会自动沿用，后续无法按用户显式选择精确控制计划资料来源。 | 中 | 已确认后置（POC 默认全部资料） |
 | TD-019 | 同一课程下多个学习计划默认使用课程名称作为计划标题，缺少可辨识的计划命名规则。 | 计划列表、详情和日历等入口难以区分目标、主题或时间范围不同的计划，增加误选、误删和查看错误计划的风险。 | 中 | 待设计 |
+| TD-020 | `learning_execution` 直接导入 handout generator 的 `_assert_no_mermaid()` 和 `_handout_has_visual()` 私有校验函数。 | Study Mode 编排层耦合生成器内部实现；私有函数重命名或校验策略调整可能产生跨模块回归，也缺少稳定的公共复用契约。 | 中 | 已确认后置（不阻塞 PR #20） |
 
 ## TD-015：问答模型接口兼容
 
@@ -136,6 +137,29 @@
 - 计划列表、详情、日历和待办中的课程名称与计划名称职责清晰，不因标题消歧引入重复拼接。
 - 增加后端默认命名与校验测试、前端编辑与保存测试，以及旧计划标题兼容测试。
 - 实现后同步更新 Study Mode 计划生成领域文档、相关 API 契约和本条状态。
+
+## TD-020：Handout 校验跨模块私有函数耦合
+
+### 当前行为与接受范围
+
+- PR #20 为确保多批次 handout reducer 的最终 Markdown 同样禁止 Mermaid 且至少包含安全内联 SVG，在 `backend/app/modules/learning_execution/service.py` 中直接导入 `backend/app/modules/generation/generators/handout/generator.py` 的 `_assert_no_mermaid()` 和 `_handout_has_visual()`。
+- 两个函数以下划线命名，当前属于 handout generator 内部实现，不是对其他业务模块承诺的稳定接口。
+- 当前调用能复用同一套 Mermaid / SVG 判断，功能行为正确；本轮不为消除耦合修改 PR #20，也不阻塞该 PR 合并。
+- 本技术债不涉及数据库、migration、公开 API 或数据 schema。
+
+### 后续处理方向
+
+- 由 handout generation 模块提供公开校验入口，例如 `validate_handout_markdown()`，统一负责 Mermaid 禁止规则、必需图示规则和稳定错误码。
+- `HandoutGenerator.generate()` 与 `learning_execution` 多批次 reducer 都调用该公共入口，不在编排层复制正则、错误文案或校验顺序。
+- 公共入口的职责应限定为 handout 最终 Markdown 校验，不把模型调用、重试或持久化逻辑下沉进去。
+- 若校验策略继续扩展，应优先放入 handout 专用 validation 模块，避免 `learning_execution` 依赖 generator 文件中的内部辅助函数。
+
+### 完成标准
+
+- `learning_execution` 不再导入 handout 模块的下划线私有函数。
+- 单批次 generator 与多批次 reducer 使用同一公开校验契约，并保持 `GENERATION_SCHEMA_INVALID` 等现有错误语义稳定。
+- 自动化测试覆盖安全 SVG 通过、Mermaid 拒绝、缺少图示拒绝，以及单批次和多批次路径的一致行为。
+- 修复后同步更新 Study Mode 任务内容领域文档和本条状态。
 
 ## 更新规则
 
