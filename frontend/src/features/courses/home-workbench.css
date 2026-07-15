@@ -163,8 +163,8 @@
 }
 
 .home-todo-item {
-  border-color: #dbeafe;
-  background: #fbfdff;
+  border-color: #ECE8E2;
+  background: #FDFBF9;
   color: #1f2937;
   padding: 12px;
   text-decoration: none;
@@ -538,8 +538,8 @@
   min-height: 184px;
   display: flex;
   align-items: center;
-  border-color: #d6e0eb;
-  background: #fbfdff;
+  border-color: #ECE8E2;
+  background: #FDFBF9;
   padding: 24px;
 }
 
@@ -680,8 +680,8 @@
 }
 
 .calendar-task-card {
-  border-color: #dbeafe;
-  background: #fbfdff;
+  border-color: #ECE8E2;
+  background: #FDFBF9;
   padding: 18px 20px;
 }
 
