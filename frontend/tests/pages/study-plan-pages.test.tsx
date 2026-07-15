@@ -528,6 +528,11 @@ function seedCompletedDiagnosticDraft(overrides: Record<string, unknown> = {}) {
   );
 }
 
+function freezeStudyPlanDate() {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 6, 12, 12));
+}
+
 async function waitForMaterialsLoaded() {
   await screen.findByText(materials[0].name);
 }
@@ -535,6 +540,7 @@ async function waitForMaterialsLoaded() {
 describe("study plan pages", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     window.localStorage.clear();
   });
 
@@ -748,6 +754,7 @@ describe("study plan pages", () => {
   });
 
   it("creates a diagnostic profile and sends it with the preview request", async () => {
+    freezeStudyPlanDate();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
@@ -811,12 +818,8 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "提交诊断" }));
 
     expect(await screen.findByText("诊断已完成")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("开始日期"), {
-      target: { value: "2026-07-13" },
-    });
-    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
-      target: { value: "3" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
+    fireEvent.click(screen.getByRole("button", { name: /B\. 3 天/ }));
     expect(await screen.findByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("study-plan-preview"));
 
@@ -842,6 +845,7 @@ describe("study plan pages", () => {
   });
 
   it("asks for a missing study date range after parsing before previewing", async () => {
+    freezeStudyPlanDate();
     seedCompletedDiagnosticDraft({
       goalText: "复习线性代数第一章",
     });
@@ -891,13 +895,15 @@ describe("study plan pages", () => {
       expect.anything(),
     );
 
-    fireEvent.change(screen.getByLabelText("开始日期"), {
-      target: { value: "2026-07-13" },
-    });
-    await waitFor(() => expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13"));
-    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
-      target: { value: "2" },
-    });
+    expect(screen.getByRole("button", { name: /A\. 今天/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /B\. 明天/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /C\. 下周一/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /D\. 自定义开始日期/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
+    expect(screen.getByRole("button", { name: /A\. 2 天/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /D\. 自定义学习天数/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /A\. 2 天/ }));
     expect(await screen.findByText(/2026-07-13 - 2026-07-14/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("study-plan-preview"));
@@ -1020,6 +1026,7 @@ describe("study plan pages", () => {
   });
 
   it("requires a completed diagnostic profile before previewing", async () => {
+    freezeStudyPlanDate();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
@@ -1041,12 +1048,8 @@ describe("study plan pages", () => {
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
-    fireEvent.change(screen.getByLabelText("开始日期"), {
-      target: { value: "2026-07-13" },
-    });
-    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
-      target: { value: "3" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
+    fireEvent.click(screen.getByRole("button", { name: /B\. 3 天/ }));
     expect(await screen.findByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
 
     const previewButton = screen.getByTestId("study-plan-preview");

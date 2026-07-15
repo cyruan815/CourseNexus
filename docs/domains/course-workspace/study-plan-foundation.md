@@ -10,13 +10,13 @@
 - 课程详情左侧学习计划卡片读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时跳转创建页，有计划时计划标题跳转详情页。
 - 2026-07-13 C1 已将前端学习计划 API/type 适配层扩展到 S02 生命周期接口：配置解析、学前诊断问题、诊断 profile、preview、保存、列表、详情、重生成 preview、替换和删除。该变更只提供 adapter，不在现有页面启用诊断、重生成、替换或删除交互。
 - 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 只展示当前页面真实可编辑且仍无有效值的字段，系统追溯字段不展示为“需手动补齐”。
-- 2026-07-14 C13 已将创建页从配置表单页改为“学习目标 + 资料范围 + 必选学情诊断 + 预览确认”流程页。预览改为大 Modal，保存计划和重新生成都在 Modal 内完成；右侧常驻预览栏已移除。2026-07-15 修正：由于后端 preview/save 契约仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，当前创建页在自然语言解析后若缺少完整日期范围，会补问开始日期和学习天数，并派生 `end_date` 后再允许 preview。
+- 2026-07-14 C13 已将创建页从配置表单页改为“学习目标 + 资料范围 + 必选学情诊断 + 预览确认”流程页。预览改为大 Modal，保存计划和重新生成都在 Modal 内完成；右侧常驻预览栏已移除。2026-07-15 修正：由于后端 preview/save 契约仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，当前创建页在自然语言解析后若缺少完整日期范围，会以题目形式补问开始日期和学习天数，并派生 `end_date` 后再允许 preview。
 
 ## 创建页状态流转
 
 - 用户先填写自然语言 `goal_text`，选择 `material_scope`，再点击“开始学情诊断”。创建页不再展示开始日期、结束日期、每日时长和学习方式的大表单。
 - 用户可以点击“发送目标”，用当前 `goal_text` 和当前 `material_scope` 请求配置解析；解析结果只作为已识别目标信息展示和后续诊断 / preview 请求输入。
-- 当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。当前创建页在自然语言解析后若仍缺少完整日期范围，会展示轻量“补齐学习时间”区，只要求用户填写开始日期和学习天数；前端用日历日期运算派生 `end_date`，并把 `start_date + duration_days/end_date` 放入诊断 `confirmedConfig` 和 preview 请求。每日学习时长仍不作为必填项。
+- 当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。当前创建页在自然语言解析后若仍缺少完整日期范围，会展示轻量“补齐学习时间”区，并按缺失项逐题补问：缺 `start_date` 时展示“今天 / 明天 / 下周一 / 自定义开始日期”，缺 `duration_days` 或 `end_date` 时展示“2 天 / 3 天 / 7 天 / 自定义学习天数”。前端用日历日期运算派生 `end_date`，并把 `start_date + duration_days/end_date` 放入诊断 `confirmedConfig` 和 preview 请求。每日学习时长仍不作为必填项。
 - `daily_available_minutes` 不作为创建页必填项；只有自然语言解析出有效每日时长时才随 preview 请求提交，否则省略，让后端按资料量估算。`preference` 未解析时使用默认 `balanced`。
 - 点击“生成计划预览”前必须已有 `diagnostic_profile`，且资料范围内必须至少有一份 parsed 资料；若使用“指定资料”，默认从 0 份开始，未勾选时提示用户必须选择至少一份已解析资料，否则不调用 preview。
 - 点击“生成计划预览”调用 `POST /api/v1/courses/{course_id}/study-plans/preview`，成功后打开预览 Modal。

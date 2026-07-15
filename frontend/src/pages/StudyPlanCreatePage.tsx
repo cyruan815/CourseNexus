@@ -117,6 +117,12 @@ const preferenceLabels: Record<PlanPreference, string> = {
   sprint: "冲刺强化",
 };
 
+const durationDayOptions = [
+  { label: "A. 2 天", value: "2" },
+  { label: "B. 3 天", value: "3" },
+  { label: "C. 7 天", value: "7" },
+];
+
 const unresolvedFieldLabels: Record<string, string> = {
   goal_text: "学习目标",
   start_date: "开始日期",
@@ -163,6 +169,38 @@ function resolveDurationDays(startDate: string, endDate: string): number | null 
   }
 
   return Math.floor((endTime - startTime) / 86_400_000) + 1;
+}
+
+function formatCalendarDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addCalendarDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function nextMonday(date: Date): Date {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0) {
+    return addCalendarDays(date, 8);
+  }
+  const daysUntilNextMonday = ((8 - dayOfWeek) % 7) || 7;
+  return addCalendarDays(date, daysUntilNextMonday);
+}
+
+function buildStartDateOptions(today = new Date()) {
+  const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const tomorrow = addCalendarDays(todayDate, 1);
+  const monday = nextMonday(todayDate);
+
+  return [
+    { label: `A. 今天（${formatCalendarDate(todayDate)}）`, value: formatCalendarDate(todayDate) },
+    { label: `B. 明天（${formatCalendarDate(tomorrow)}）`, value: formatCalendarDate(tomorrow) },
+    { label: `C. 下周一（${formatCalendarDate(monday)}）`, value: formatCalendarDate(monday) },
+  ];
 }
 
 function studyPlanActionErrorMessage(error: unknown, fallback: string): string {
@@ -316,6 +354,8 @@ export function StudyPlanCreatePage() {
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preference, setPreference] = useState<PlanPreference>(defaultPreference);
   const [materialScope, setMaterialScope] = useState<MaterialScope>(defaultScope);
+  const [isCustomStartDateOpen, setIsCustomStartDateOpen] = useState(false);
+  const [isCustomDurationDaysOpen, setIsCustomDurationDaysOpen] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [diagnosticProfile, setDiagnosticProfile] = useState<StudyPlanDiagnosticProfile | null>(null);
   const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
@@ -334,6 +374,7 @@ export function StudyPlanCreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
   const startDateRef = useRef("");
+  const startDateOptions = useMemo(() => buildStartDateOptions(), []);
 
   useEffect(() => {
     if (!courseId) {
@@ -850,31 +891,79 @@ export function StudyPlanCreatePage() {
                   <Stack gap={2}>
                     <Title order={3}>补齐学习时间</Title>
                     <Text c="dimmed" size="sm">
-                      自然语言里没有识别出完整日期时，请补充开始日期和学习天数，再生成计划预览。
+                      自然语言里没有识别出完整日期时，请按问题补齐缺失项，再生成计划预览。
                     </Text>
                   </Stack>
-                  <Group align="flex-end" grow>
-                    <TextInput
-                      label="开始日期"
-                      onChange={(event) => updateStartDate(event.currentTarget.value)}
-                      type="date"
-                      value={startDate}
-                    />
-                    <Box className="study-plan-date-input">
-                      <Text component="label" htmlFor="study-plan-duration-days" size="sm">
-                        学习天数
-                      </Text>
-                      <input
-                        data-testid="study-plan-duration-days"
-                        id="study-plan-duration-days"
-                        min={1}
-                        onChange={(event) => updateDurationDays(event.currentTarget.value)}
-                        placeholder="例如：3"
-                        type="number"
-                        value={durationDaysText}
-                      />
+                  {!startDate ? (
+                    <Box className="study-plan-date-question">
+                      <Text fw={700}>你想从哪天开始学习？</Text>
+                      <Group gap="xs" mt="xs">
+                        {startDateOptions.map((option) => (
+                          <Button
+                            key={option.value}
+                            onClick={() => updateStartDate(option.value)}
+                            variant="light"
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                        <Button
+                          onClick={() => setIsCustomStartDateOpen(true)}
+                          variant={isCustomStartDateOpen ? "filled" : "light"}
+                        >
+                          D. 自定义开始日期
+                        </Button>
+                      </Group>
+                      {isCustomStartDateOpen ? (
+                        <TextInput
+                          className="study-plan-date-custom-input"
+                          label="自定义开始日期"
+                          mt="sm"
+                          onChange={(event) => updateStartDate(event.currentTarget.value)}
+                          type="date"
+                          value={startDate}
+                        />
+                      ) : null}
                     </Box>
-                  </Group>
+                  ) : null}
+                  {startDate && !endDate ? (
+                    <Box className="study-plan-date-question">
+                      <Text fw={700}>这次计划准备学几天？</Text>
+                      <Group gap="xs" mt="xs">
+                        {durationDayOptions.map((option) => (
+                          <Button
+                            key={option.value}
+                            onClick={() => updateDurationDays(option.value)}
+                            variant="light"
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                        <Button
+                          onClick={() => setIsCustomDurationDaysOpen(true)}
+                          variant={isCustomDurationDaysOpen ? "filled" : "light"}
+                        >
+                          D. 自定义学习天数
+                        </Button>
+                      </Group>
+                      {isCustomDurationDaysOpen ? (
+                        <Box className="study-plan-date-input study-plan-date-custom-input">
+                          <Text component="label" htmlFor="study-plan-duration-days" size="sm">
+                            自定义学习天数
+                          </Text>
+                          <input
+                            data-testid="study-plan-duration-days"
+                            id="study-plan-duration-days"
+                            min={1}
+                            onChange={(event) => updateDurationDays(event.currentTarget.value)}
+                            placeholder="例如：5"
+                            type="number"
+                            value={durationDaysText}
+                          />
+                        </Box>
+                      ) : null}
+                    </Box>
+                  ) : null}
                   {startDate && endDate ? (
                     <Text c="dimmed" size="sm">
                       已确认：{startDate} - {endDate}
