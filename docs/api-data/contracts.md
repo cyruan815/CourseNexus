@@ -384,6 +384,7 @@ S06 已实现两个按需生成接口，前端可在契约评审后接入：
 - 成功和进入生成流程后的失败都写入 `ai_generated_contents`；权限、任务不存在和任务类型不匹配不会创建生成记录。
 - execution-context 只返回最近一次成功内容 ID；最新 failed 记录不会覆盖 `handout_content_id` / `task_test_content_id`。
 - 生成不会改变二级任务完成状态，不触发一级任务汇总，也不写 `checkin_records`。
+- 前端可以基于成功 `task_test.content_json.questions` 提供本地逐题作答、提交后反馈和解析展示；该状态只存在浏览器内存，不新增 API 请求，不保存 attempt 历史，不参与任务完成、打卡、导出或后端判分。
 
 错误码：401 `UNAUTHORIZED`；404 `NOT_FOUND`；409 `STATE_CONFLICT`；422 `VALIDATION_ERROR`；400 `NO_PARSED_MATERIAL`；409 `MATERIAL_COVERAGE_INCOMPLETE`；500 `GENERATION_SCHEMA_INVALID`；502 `GENERATION_FAILED`。
 

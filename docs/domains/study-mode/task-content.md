@@ -10,7 +10,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `learn` 讲义使用计划阶段清理后的正文 chunk 引用；目录页、版权页、感谢页和章节小结页不得与正文 chunk 混合作为普通 `learn` 范围，避免提前混入后续主题。
 - 生成内容统一写入 `ai_generated_contents`，通过 `study_subtask_id` 绑定二级任务。
 - 任务讲义只在学习计划执行上下文中展示；课程详情的课程级生成内容列表排除 `content_type=handout` 且 `study_subtask_id` 非空的记录，但不删除讲义，也不影响详情、重新生成或 PDF 导出。
-- 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration；前端只接入任务内容的生成、只读展示与导出入口。
+- 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration；前端接入任务内容的生成、任务讲义只读展示、任务测试题本地逐题交互与导出入口。
 - 当前只保存二级任务级 `related_material_ids_json`；P0 不新增 chunk 级任务范围字段，引用范围由当次材料上下文批次校验保证。
 
 ## 代码入口
@@ -28,7 +28,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - 前端类型：`frontend/src/features/study-plans/types.ts`
 - 前端页面：`frontend/src/pages/StudyTaskExecutionPage.tsx`
 - 测试入口：`backend/tests/modules/generation/test_handout_generator.py`、`backend/tests/modules/generation/test_task_test_generator.py`、`backend/tests/modules/learning_execution/test_task_content_api.py`、`backend/tests/modules/exports/test_exports_api.py`、`backend/tests/integration/test_task_content_generation_flow.py`
-- 前端测试入口：`frontend/tests/features/study-plans/api.test.ts`、`frontend/tests/pages/study-plan-pages.test.tsx`
+- 前端测试入口：`frontend/tests/features/study-plans/api.test.ts`、`frontend/tests/features/generated-content/task-test-result.test.tsx`、`frontend/tests/features/generated-content/generated-content-renderer.test.tsx`、`frontend/tests/pages/generated-content-detail.test.tsx`、`frontend/tests/pages/study-plan-pages.test.tsx`
 
 ## API
 
@@ -46,9 +46,9 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
-- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-14 前端为 `task_test` 增加只读题目展示：执行页在本次按需生成返回 `GeneratedContentRead.content_json.questions` 后展示题干、选项、正确答案和解析；生成内容详情页也按同一结构渲染只读视图。`true_false` 的 boolean 答案按 `true = 正确`、`false = 错误` 展示。该视图不提供作答、提交、判分或 attempt 历史。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-15 前端为 `task_test` 接入本地逐题交互：执行页和生成内容详情页都读取 `GeneratedContentRead.content_json.questions`，用户提交单道题后才显示正确答案 / 参考答案和解析；选择题与判断题只做浏览器内存内即时判断，简答题不自动判分。该视图不保存 attempt 历史。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
-- C9 不接入测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
+- C9/C11 不接入测试题作答持久化、后端判分、attempt 历史或反馈闭环；当前逐题提交反馈只存在浏览器内存，刷新后可以丢失。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
 - 2026-07-15 执行页已在“任务讲义”内容区内直接渲染成功 `handout` 的 Markdown 正文：页面通过 `GET /api/v1/generated-contents/{generated_content_id}` 读取 `GeneratedContentRead.content`，复用 `frontend/src/features/generated-content/renderers/handout/HandoutMarkdownRenderer.tsx` 展示标题、段落、列表、加粗、代码块、GFM 表格、`$...$` / `$$...$$` 数学公式和 GitHub alert 风格 callout；不读取旧 `content_json.sections`，不展示空引用面板，也不伪造逐条来源。已有成功讲义、本次生成成功讲义和生成内容详情页复用同一讲义渲染组件。
 
@@ -171,7 +171,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 因此任务内容生成、Markdown/PDF 导出和执行页问答之间的边界是：生成与导出围绕 `ai_generated_contents`；任务级问答围绕对话消息。两者都不得修改二级任务完成状态，也不得写 `checkin_records`。
 
-- 不保存学生作答，作答记录已拆到后续任务。
+- 不持久化学生作答；浏览器内逐题提交状态可以丢失，作答记录和后端 attempt 已拆到后续任务。
 - 不实现任务测试题 PDF 导出；轻量阶段任务测试题只提供 Markdown 导出，任务讲义支持 PDF 导出。
 - 不新增 chunk 级任务范围持久化字段；当前只保证生成时引用来自当前二级任务相关资料的当次 material-context 批次。
 - 自动化测试使用 `MockModelProvider` / 测试 provider，不调用真实模型。
@@ -206,7 +206,8 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 
 - `frontend/tests/features/study-plans/api.test.ts` 覆盖 PDF / Markdown 导出 adapter 路径。
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖执行页已有内容时的导出按钮和文件流请求。
-- `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页只读展示，不出现提交答案入口。
+- `frontend/tests/features/generated-content/task-test-result.test.tsx` 覆盖 `task_test` 本地逐题作答、单选、多选、判断和简答提交反馈。
+- `frontend/tests/features/generated-content/generated-content-renderer.test.tsx` 和 `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页提交后反馈，不展示引用侧栏。
 
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
@@ -325,6 +326,24 @@ Callout Markdown 约定：
 
 这保证了测试题生成链路仍按原有二级任务范围运行，同时让“当天测试 / 全计划综合测试”的语义在计划数据里可追溯。
 
+
+## 2026-07-15 任务测试题逐题交互
+
+前端将 `task_test` 从只读答案展示升级为浏览器内存内的逐题交互。执行页和生成内容详情页共用 `frontend/src/features/generated-content/renderers/TaskTestResult.tsx`，并通过 `frontend/src/features/generated-content/guards.ts` 校验 `GeneratedContentRead.content_json.questions`。本功能不新增后端接口、attempt 记录、错题本或打卡副作用。
+
+交互规则：
+
+- `single_choice` 显示“单选”标签，用户选择一个选项后提交，提交后本地判断正确 / 错误，并显示正确答案和解析。
+- `multiple_choice` 显示“多选”标签，用户可勾选多个选项，提交后按选项集合完全一致判断正确 / 错误，并显示正确答案和解析。
+- `true_false` 显示“判断”标签，用户选择“正确 / 错误”，提交后本地判断并显示正确答案和解析。
+- `short_answer` 显示“简答”标签和文本框，提交后不自动判分，只显示参考答案和解析。
+- 每道题独立提交；未提交题目不显示正确答案或解析。刷新页面后本地作答状态可以丢失。
+
+验证入口：
+
+- `pnpm --dir frontend exec vitest --run tests/features/generated-content/task-test-result.test.tsx --maxWorkers=1`
+- `pnpm --dir frontend exec vitest --run tests/features/generated-content/generated-content-renderer.test.tsx tests/pages/generated-content-detail.test.tsx --maxWorkers=1`
+- `pnpm --dir frontend exec vitest --run tests/pages/study-plan-pages.test.tsx --maxWorkers=1`
 ## 2026-07-15 任务讲义正式 Markdown 渲染契约
 
 本节更新 2026-07-15 预览切片后的当前权威口径：讲义详情页、后端生成 prompt 和 PDF 导出均使用同一套 Markdown-first / callout 契约。前文仍提到“今日讲义”、结构化 handout 或仅预览的描述时，以本节为准。
