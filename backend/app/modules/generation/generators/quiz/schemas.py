@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.generation.generators.topic import TopicTitle
+
 
 Difficulty = Literal["easy", "medium", "hard"]
 RequestedDifficulty = Literal["easy", "medium", "hard", "mixed"]
@@ -80,6 +82,7 @@ class QuizDraft(BaseModel):
 
 class QuizGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    topic_title: TopicTitle
     questions: list[QuizDraft] = Field(min_length=1)
 
 

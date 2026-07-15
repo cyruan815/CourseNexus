@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.generation.generators.topic import TopicTitle
+
 
 Importance = Literal["low", "medium", "high"]
 
@@ -34,6 +36,7 @@ class KnowledgeDraft(BaseModel):
 
 class KnowledgeGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    topic_title: TopicTitle
     items: list[KnowledgeDraft] = Field(min_length=1)
 
 

@@ -12,4 +12,12 @@ describe("course detail generated-content layout", () => {
     expect(itemRule).toContain("flex: 0 0 auto");
     expect(itemRule).toContain("min-height: 64px");
   });
+
+  it("keeps long generated titles on one ellipsized line", () => {
+    const titleRule = styles.match(/\.course-detail-generated-title\s*\{([^}]+)\}/)?.[1] ?? "";
+
+    expect(titleRule).toContain("overflow: hidden");
+    expect(titleRule).toContain("text-overflow: ellipsis");
+    expect(titleRule).toContain("white-space: nowrap");
+  });
 });

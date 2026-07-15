@@ -13,6 +13,7 @@ from app.modules.generation.generators.knowledge_list.schemas import (
     KnowledgeListContent,
     KnowledgeListParameters,
 )
+from app.modules.generation.generators.topic import ensure_chinese_topic
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialGenerationContext
 
@@ -35,6 +36,7 @@ class KnowledgeListGenerator:
             prompt=build_knowledge_prompt(context, parameters=params),
             output_schema=KnowledgeGenerationResult,
         )
+        topic_title = ensure_chinese_topic(result.topic_title)
         minimum = IMPORTANCE[params.minimum_importance]
         drafts = [item for item in result.items if IMPORTANCE[item.importance] >= minimum][: params.item_count]
         items = [
@@ -46,7 +48,7 @@ class KnowledgeListGenerator:
         except ValidationError as exc:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Knowledge-list structure is invalid") from exc
         return GeneratorOutput(
-            title=f"Knowledge List ({len(items)} items)",
+            title=topic_title,
             content_json=content.model_dump(mode="json"),
         )
 

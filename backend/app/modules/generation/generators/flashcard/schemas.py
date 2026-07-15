@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.generation.generators.topic import TopicTitle
+
 
 class FlashcardParameters(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -51,6 +53,7 @@ class FlashcardDraft(BaseModel):
 
 class FlashcardGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    topic_title: TopicTitle
     cards: list[FlashcardDraft] = Field(min_length=1)
 
 

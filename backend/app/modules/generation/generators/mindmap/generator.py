@@ -18,6 +18,7 @@ from app.modules.generation.generators.mindmap.schemas import (
     MindmapNode,
     MindmapParameters,
 )
+from app.modules.generation.generators.topic import ensure_chinese_topic
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialGenerationContext
 
@@ -80,6 +81,7 @@ class MindmapGenerator:
             prompt=build_mindmap_prompt(context, parameters=params),
             output_schema=MindmapGenerationResult,
         )
+        topic_title = ensure_chinese_topic(result.topic_title)
         if len(result.nodes) > params.max_nodes:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Mindmap exceeds requested limits")
 
@@ -113,7 +115,7 @@ class MindmapGenerator:
         except ValidationError as exc:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Mindmap graph is invalid") from exc
         return GeneratorOutput(
-            title=f"Knowledge Mindmap: {root_node.label}",
+            title=topic_title,
             content_json=content.model_dump(mode="json", by_alias=True),
         )
 

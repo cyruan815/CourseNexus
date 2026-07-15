@@ -13,6 +13,7 @@ from app.modules.generation.generators.outline.schemas import (
     OutlineParameters,
     OutlineSection,
 )
+from app.modules.generation.generators.topic import ensure_chinese_topic
 from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialGenerationContext
 
@@ -32,6 +33,7 @@ class OutlineGenerator:
             prompt=build_outline_prompt(context, parameters=params),
             output_schema=OutlineGenerationResult,
         )
+        topic_title = ensure_chinese_topic(result.topic_title)
         summary_limit = {"concise": 300, "standard": 800, "detailed": 2000}[params.detail_level]
         sections = [
             OutlineSection(
@@ -48,7 +50,7 @@ class OutlineGenerator:
         except ValidationError as exc:
             raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="Outline structure is invalid") from exc
         return GeneratorOutput(
-            title=f"Review Outline ({len(sections)} sections)",
+            title=topic_title,
             content_json=content.model_dump(mode="json"),
         )
 

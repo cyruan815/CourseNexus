@@ -16,6 +16,23 @@ describe("generated content list helpers", () => {
     expect(generatedContentTitle("knowledge_list")).toBe("知识点清单");
   });
 
+  it("appends new semantic topic titles after the canonical feature name", () => {
+    expect(generatedContentTitle("quiz", "第七章 物理层")).toBe("Quiz · 第七章 物理层");
+    expect(generatedContentTitle("flashcard", "物理层与数据链路层")).toBe("知识闪卡 · 物理层与数据链路层");
+  });
+
+  it("extracts useful topics from legacy generated titles", () => {
+    expect(generatedContentTitle("mindmap", "Knowledge Mindmap: 物理层")).toBe("思维导图 · 物理层");
+    expect(generatedContentTitle("outline", "第七章 物理层复习提纲")).toBe("复习提纲 · 第七章 物理层");
+  });
+
+  it("does not treat legacy generic names or counts as chapter topics", () => {
+    expect(generatedContentTitle("quiz", "Course Quiz (10 questions)")).toBe("Quiz");
+    expect(generatedContentTitle("quiz", "Quiz（共 10 道）")).toBe("Quiz");
+    expect(generatedContentTitle("flashcard", "记忆卡片（20张）")).toBe("知识闪卡");
+    expect(generatedContentTitle("knowledge_list", "知识点清单（12项）")).toBe("知识点清单");
+  });
+
   it("provides specific progress copy for every generated content type", () => {
     expect(generationLoadingMessage("quiz")).toBe("正在生成题目与逐项解析");
     expect(generationLoadingMessage("flashcard")).toBe("正在整理记忆卡片");

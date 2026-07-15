@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.generation.generators.topic import TopicTitle
+
 
 class MindmapParameters(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -44,6 +46,7 @@ class MindmapDraftEdge(BaseModel):
 
 class MindmapGenerationResult(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    topic_title: TopicTitle
     root_node_id: str = Field(min_length=1)
     nodes: list[MindmapDraftNode] = Field(min_length=1)
     edges: list[MindmapDraftEdge] = Field(default_factory=list)
