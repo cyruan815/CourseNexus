@@ -157,6 +157,7 @@ pnpm frontend:build
 - 2026-07-12 前端补齐资料区资源管理器式交互：页面不再同时展示旧侧栏和资料下拉视图，改为单一文件夹树列表；资料区底部空白区域右键可新建文件夹、上传资料或添加链接；资料右键可重命名、解析或删除；文件夹右键可重命名、上传到此文件夹或删除；资料可拖拽到文件夹或未分类完成移动；左键点击其他位置会关闭右键菜单。当前新建文件夹、添加链接、重命名和删除均使用 Mantine 弹窗，不使用浏览器原生 confirm / prompt；接口失败时保留现有列表并展示后端错误。
 - 2026-07-13 资料删除统一为不可恢复的物理删除：删除资料记录、SQLite chunk、RAG 向量和原始文件；问答与生成内容保留，引用退化为无资料外键的快照。SQLite、Chroma 和文件系统不共享事务，因此使用文件暂存、RAG 快照和失败补偿保证同步请求的一致性。
 - 2026-07-15 资料工作区支持点击 PDF 资料名称打开悬浮预览窗；前端使用鉴权请求获取 Blob 并在关闭或替换时释放 object URL，后端仅向当前用户返回位于存储根目录内的 PDF 原文。
+- 2026-07-15 课程详情资料工作区按已确认的 Product Design 视觉目标完成重构：保留现有三栏宽度和全部资料接口，头部提供选择统计与新建文件夹、上传资料、添加链接三个明确入口，主体使用搜索、一级文件夹和逐文件状态组成的圆角局部滚动列表。课程详情页不保留常驻底部拖拽区；只有点击上传按钮或文件夹菜单中的上传入口后，上传弹窗才承载文件选择与拖拽，并继续沿用单文件上传后自动解析的既有流程。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
@@ -168,3 +169,4 @@ pnpm frontend:build
 - 2026-07-13: After a file upload returns `parse_status = uploaded`, the frontend immediately shows the material as `parsing` and calls the retry-parse API. Parse API failure keeps the uploaded material visible and surfaces the backend error.
 - 2026-07-13: Material row actions are opened from a three-dot left-click button. The material menu keeps rename and delete, and only exposes "retry parse" for `parse_failed`; it no longer asks users to manually start parsing for newly uploaded materials.
 - 2026-07-13: Folder actions are also opened from a three-dot left-click button. The materials workspace no longer exposes custom business actions from right-clicking folders or the blank list area; top action buttons provide create folder, upload material, and add link entry points. Upload prompt copy shows the target folder on its own line and bolds the folder name.
+- 2026-07-15: The redesigned resource rows expose file type, file size, parse status, folder counts, search, selection, menus, drag-to-move, and PDF preview without changing the existing APIs. The selected-count summary only counts explicit checked parsed files; an empty explicit selection still means the default all-parsed scope.

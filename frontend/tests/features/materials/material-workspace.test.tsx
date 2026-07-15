@@ -91,6 +91,46 @@ describe("MaterialWorkspace", () => {
     vi.mocked(materialsApi.listMaterials).mockResolvedValue(materials);
   });
 
+  it("presents the redesigned resource summary without a persistent upload dropzone", async () => {
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "课程资料" })).toBeInTheDocument();
+    expect(screen.getByText("已选择 0 份资料，共 1 份可用")).toBeInTheDocument();
+    expect(screen.getByText("资料选择")).toBeInTheDocument();
+    expect(screen.getByText("PDF")).toBeInTheDocument();
+    expect(screen.getByText("100 B")).toBeInTheDocument();
+    expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "上传资料" }));
+
+    expect(screen.getByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
+    expect(screen.getByLabelText("拖拽上传课程资料")).toBeInTheDocument();
+  });
+
+  it("renders development preview data without calling list APIs", async () => {
+    vi.mocked(materialsApi.listMaterialFolders).mockClear();
+    vi.mocked(materialsApi.listMaterials).mockClear();
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="preview-course"
+        initialData={{ folders: [folder], materials }}
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("第一章.pdf")).toBeInTheDocument();
+    expect(materialsApi.listMaterialFolders).not.toHaveBeenCalled();
+    expect(materialsApi.listMaterials).not.toHaveBeenCalled();
+  });
+
   it("opens a PDF preview modal when clicking the material name", async () => {
     vi.mocked(materialsApi.getMaterialPdf).mockResolvedValue(
       new Blob(["%PDF-1.4"], { type: "application/pdf" }),
@@ -405,7 +445,7 @@ describe("MaterialWorkspace", () => {
     expect(within(dialog).getByText(/上传后会自动进入解析流程/)).toBeInTheDocument();
   });
 
-  it("does not expose workspace actions from right-clicking the blank area", async () => {
+  it("does not expose workspace actions from right-clicking the resource list", async () => {
     renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
@@ -414,8 +454,8 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    const blankArea = await screen.findByText("可在顶部按钮新建文件夹、上传资料或添加链接");
-    fireEvent.contextMenu(blankArea);
+    const resourceList = await screen.findByLabelText("资料列表区域");
+    fireEvent.contextMenu(resourceList);
 
     expect(screen.queryByRole("menuitem", { name: "新建文件夹" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "添加链接" })).not.toBeInTheDocument();
@@ -436,7 +476,7 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByRole("menuitem", { name: "删除文件夹" })).not.toBeInTheDocument();
   });
 
-  it("keeps folder actions in the folder header instead of the blank prompt area", async () => {
+  it("keeps folder actions in the folder header without a persistent upload area", async () => {
     renderWorkspace(
       <MaterialWorkspace
         courseId="crs_1"
@@ -446,10 +486,10 @@ describe("MaterialWorkspace", () => {
     );
 
     const folderAction = await screen.findByRole("button", { name: "第一周 更多操作" });
-    const blankPrompt = await screen.findByText("可在顶部按钮新建文件夹、上传资料或添加链接");
 
     expect(folderAction.closest(".material-workspace__folder-head")).not.toBeNull();
-    expect(blankPrompt.closest(".material-workspace__context-zone")?.querySelector("button")).toBeNull();
+    expect(screen.queryByText("可在顶部按钮新建文件夹、上传资料或添加链接")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
   });
 
   it("creates a link material from the top action button", async () => {

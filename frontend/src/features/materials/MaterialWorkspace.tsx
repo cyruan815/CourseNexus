@@ -1,6 +1,18 @@
 import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
-import { IconDotsVertical, IconUpload, IconX } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconChevronDown,
+  IconDotsVertical,
+  IconFolder,
+  IconFolderPlus,
+  IconLink,
+  IconLoader2,
+  IconSearch,
+  IconUpload,
+  IconX,
+} from "@tabler/icons-react";
 
 import { ApiError } from "../../api/errors";
 import {
@@ -37,6 +49,11 @@ type ActionTarget =
 
 interface MaterialWorkspaceProps {
   courseId: string;
+  initialData?: {
+    expandedFolderIds?: string[];
+    folders: MaterialFolder[];
+    materials: Material[];
+  };
   materialScope: MaterialScope;
   onParsedMaterialsChange?: (materials: Material[]) => void;
   onMaterialScopeChange: (scope: MaterialScope) => void;
@@ -64,8 +81,37 @@ function materialMatchesSearch(material: Material, query: string): boolean {
   return material.name.toLowerCase().includes(query.toLowerCase());
 }
 
+function formatFileSize(size: number | null): string {
+  if (size === null) {
+    return "大小未知";
+  }
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function materialKind(material: Material): string {
+  if (material.source_type === "url") {
+    return "URL";
+  }
+  const normalizedType = material.material_type.toLowerCase();
+  const labels: Record<string, string> = {
+    markdown: "MD",
+    powerpoint: "PPTX",
+    presentation: "PPTX",
+    text: "TXT",
+    word: "DOCX",
+  };
+  return labels[normalizedType] ?? (normalizedType.slice(0, 4).toUpperCase() || "FILE");
+}
+
 export function MaterialWorkspace({
   courseId,
+  initialData,
   materialScope,
   onParsedMaterialsChange,
   onMaterialScopeChange,
@@ -97,6 +143,15 @@ export function MaterialWorkspace({
   const previewRequestId = useRef(0);
 
   useEffect(() => {
+    if (initialData) {
+      setFolders(initialData.folders);
+      setMaterials(initialData.materials);
+      setExpandedFolderIds(new Set(initialData.expandedFolderIds ?? ["unfiled", ...initialData.folders.map((folder) => folder.id)]));
+      setError(null);
+      setIsLoading(false);
+      return undefined;
+    }
+
     let ignore = false;
     setIsLoading(true);
     Promise.all([listMaterialFolders(courseId), listMaterials(courseId)])
@@ -121,7 +176,7 @@ export function MaterialWorkspace({
     return () => {
       ignore = true;
     };
-  }, [courseId]);
+  }, [courseId, initialData]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -491,6 +546,13 @@ export function MaterialWorkspace({
   function renderMaterialRow(material: Material) {
     const isParsed = material.parse_status === "parsed";
     const checked = isParsed && materialScope.material_ids.includes(material.id);
+    const kind = materialKind(material);
+    const status = statusText(material.parse_status);
+    const StatusIcon = material.parse_status === "parsed"
+      ? IconCheck
+      : material.parse_status === "parse_failed"
+        ? IconAlertCircle
+        : IconLoader2;
 
     return (
       <li
@@ -516,27 +578,44 @@ export function MaterialWorkspace({
             title={isParsed ? "选择资料" : "资料需解析成功后才能选择"}
             type="checkbox"
           />
-          <span className="material-workspace__file-icon" aria-hidden>
-            {material.source_type === "url" ? "Link" : "File"}
+          <span
+            className={`material-workspace__file-icon${material.source_type === "url" ? " material-workspace__file-icon--link" : ""}`}
+            aria-hidden
+          >
+            {kind}
           </span>
-          {material.source_type === "file" && material.material_type === "pdf" ? (
-            <button
-              aria-label={`预览资料 ${material.name}`}
-              className="material-workspace__file-name material-workspace__file-name-button"
-              onClick={(event) => {
-                event.stopPropagation();
-                void openPdfPreview(material);
-              }}
-              type="button"
-            >
-              {material.name}
-            </button>
-          ) : (
-            <span className="material-workspace__file-name">{material.name}</span>
-          )}
+          <span className="material-workspace__file-copy">
+            {material.source_type === "file" && material.material_type === "pdf" ? (
+              <button
+                aria-label={`预览资料 ${material.name}`}
+                className="material-workspace__file-name material-workspace__file-name-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void openPdfPreview(material);
+                }}
+                type="button"
+              >
+                {material.name}
+              </button>
+            ) : (
+              <span className="material-workspace__file-name">{material.name}</span>
+            )}
+            <span className="material-workspace__file-sub">
+              {material.source_type === "url" ? "网页链接" : formatFileSize(material.file_size)}
+            </span>
+          </span>
         </div>
-        <span className={`material-workspace__status material-workspace__status--${material.parse_status}`}>
-          {statusText(material.parse_status)}
+        <span
+          aria-label={status}
+          className={`material-workspace__status material-workspace__status--${material.parse_status}`}
+          title={status}
+        >
+          <StatusIcon
+            className={material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
+            size={17}
+            stroke={2}
+          />
+          <span className="material-workspace__sr-only">{status}</span>
         </span>
         <button
           aria-label={`${material.name} 更多操作`}
@@ -569,16 +648,24 @@ export function MaterialWorkspace({
       >
         <div className="material-workspace__folder-head">
           <button
+            aria-label={folderName}
             aria-expanded={isExpanded}
             className="material-workspace__folder-title"
             onClick={() => toggleFolder(folderId)}
             type="button"
           >
-            <span className={`material-workspace__folder-chevron ${isExpanded ? "is-expanded" : ""}`} aria-hidden />
+            <IconChevronDown
+              className={`material-workspace__folder-chevron${isExpanded ? " is-expanded" : ""}`}
+              size={20}
+              stroke={1.8}
+            />
             <span className="material-workspace__folder-icon" aria-hidden>
-              Folder
+              <IconFolder size={21} stroke={1.8} />
             </span>
-            <span>{folderName}</span>
+            <span className="material-workspace__folder-copy">
+              <span className="material-workspace__folder-name">{folderName}</span>
+              <span className="material-workspace__folder-meta">{folder ? "资料文件夹" : "默认文件夹"}</span>
+            </span>
           </button>
           <span className="material-workspace__folder-count">{folderMaterials.length}</span>
           {folder ? (
@@ -613,33 +700,23 @@ export function MaterialWorkspace({
   return (
     <section aria-label="资料区" className="material-workspace">
       <header className="material-workspace__header">
-        <div>
+        <div className="material-workspace__title-group">
           <h2>课程资料</h2>
-          <p>{materials.length} 份资料，{parsedMaterialIds.length} 份可用于 Agent</p>
+          <p>已选择 {checkedParsedMaterialIds.length} 份资料，共 {parsedMaterialIds.length} 份可用</p>
         </div>
         <div className="material-workspace__header-actions">
-          <button disabled={isMutating} onClick={openCreateFolderModal} type="button">
+          <button className="material-workspace__action-button" disabled={isMutating} onClick={openCreateFolderModal} type="button">
+            <IconFolderPlus size={19} stroke={1.8} />
             新建文件夹
           </button>
-          <button disabled={isMutating} onClick={() => openUploadDialog(null)} type="button">
+          <button className="material-workspace__action-button is-primary" disabled={isMutating} onClick={() => openUploadDialog(null)} type="button">
+            <IconUpload size={19} stroke={1.8} />
             上传资料
           </button>
-          <button disabled={isMutating} onClick={openCreateLinkModal} type="button">
+          <button className="material-workspace__action-button" disabled={isMutating} onClick={openCreateLinkModal} type="button">
+            <IconLink size={19} stroke={1.8} />
             添加链接
           </button>
-          <label className="material-workspace__scope-all">
-            <input
-              checked={isExplicitAllParsedScope}
-              onChange={() =>
-                onMaterialScopeChange({
-                  include_all_parsed_materials: true,
-                  material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
-                })
-              }
-              type="checkbox"
-            />
-            全部已解析资料
-          </label>
         </div>
       </header>
 
@@ -698,27 +775,47 @@ export function MaterialWorkspace({
       ) : null}
 
       {!isLoading ? (
-        <div className="material-workspace__explorer">
+        <div className="material-workspace__body">
+          <div className="material-workspace__selection-bar">
+            <span>资料选择</span>
+            <label className="material-workspace__scope-all">
+              <input
+                aria-label="全部已解析资料"
+                checked={isExplicitAllParsedScope}
+                onChange={() =>
+                  onMaterialScopeChange({
+                    include_all_parsed_materials: true,
+                    material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
+                  })
+                }
+                type="checkbox"
+              />
+              全部
+            </label>
+          </div>
+          <div className="material-workspace__explorer">
           <div className="material-workspace__toolbar">
-            <label>
+            <label className="material-workspace__search">
               <span className="material-workspace__sr-only">搜索资料</span>
+              <IconSearch aria-hidden size={21} stroke={1.8} />
               <input
                 aria-label="搜索资料"
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="搜索资料"
                 value={searchQuery}
               />
+              {searchQuery ? (
+                <button aria-label="清空搜索" onClick={() => setSearchQuery("")} type="button">
+                  <IconX size={17} stroke={1.8} />
+                </button>
+              ) : null}
             </label>
           </div>
 
           <div aria-label="资料列表区域" className="material-workspace__content">
             {renderFolderSection("unfiled", "未分类")}
             {folders.map((folder) => renderFolderSection(folder.id, folder.name, folder))}
-            <div className="material-workspace__context-zone">
-              <Text c="dimmed" size="sm">
-                可在顶部按钮新建文件夹、上传资料或添加链接
-              </Text>
-            </div>
+          </div>
           </div>
         </div>
       ) : null}

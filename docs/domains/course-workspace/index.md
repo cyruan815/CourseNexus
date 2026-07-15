@@ -14,6 +14,7 @@
 - 2026-07-14: The home workbench mini calendar intentionally stays compact: each day cell shows one task title line with ellipsis plus one independent progress line. Multi-task per-day expansion belongs to the full calendar page, not the mini calendar.
 - 2026-07-15: Calendar day task details display primary task progress as `completed/total` only. Subtask rows omit description bodies and render as a divider-separated list inside the parent task block, not as individual bordered cards.
 - 2026-07-15: Grounded answers render backend `[[cite:N]]` markers as small inline citation buttons. Hovering a marker shows the source material name, page and saved `hit_text` snapshot. Historical messages use the same `source_citations` contract; legacy answers with citations but no inline markers append their markers at the end instead of losing the sources.
+- 2026-07-15: The course detail workspace keeps its existing three-column widths while adopting the confirmed resource-panel visual system. The left material card is an 18 px rounded, locally scrolling surface; the Q&A and right studio retain their existing content, layout, and behavior and only align outer/inner radii, borders, and subtle elevation with the material card.
 
 ## 概述
 
@@ -41,6 +42,7 @@
 - 今日待办 / 学习计划区域读取 `GET /api/v1/courses/{course_id}/study-plans`；无计划时展示“制定学习计划”入口，有计划时按 `updated_at` / `created_at` 优先展示最近更新的一条计划摘要，摘要以圆角边框卡片形式链接到计划详情，不在卡片内展开多计划列表。“查看更多”入口跳转 `/calendar?courseId={course_id}`，进入本课程只读学习日历。
 - 课程详情页顶部主题切换按钮已接入本地浅色 / 深色模式骨架；个人中心和制定学习计划入口仍以待接入禁用态展示。今日待办查看和 AI 生成内容“查看全部”在没有真实页面或接口闭环前不渲染占位按钮。
 - 开发预览路由 `/preview/course-detail` 仅在 `import.meta.env.DEV` 下注册，用 mock 数据预览布局，不影响正式登录保护和正式路由。
+- 开发预览路由复用真实 `MaterialWorkspace` 结构并通过只读 `initialData` fixture 展示资料状态；正式课程详情不传该 fixture，仍从后端 API 加载资料与文件夹。
 
 未实现：
 
@@ -87,6 +89,7 @@
 - 右侧工具只接后端当前注册生成类型：`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`。后端当前没有一键生成 `note` 的工具闭环，“学习笔记”不再作为学习工具卡片展示；历史 `note` 内容类型仍保留为保存问答后的兼容类型。
 - 功能模块保持 2 列网格；支持生成的卡片整卡触发生成，不展示额外“生成入口”徽标；“知识点清单”作为重点复习入口跨整行展示。
 - 课程详情页桌面工作台高度贴合当前视口，资料列表和 AI 生成内容列表作为局部滚动区，避免页面级滚动条挤压三栏工作台。
+- 课程资料区的上传入口只存在于顶部“上传资料”按钮和文件夹菜单；课程详情页不渲染常驻底部拖拽区。上传弹窗仍支持点击或拖拽选择单个文件，并沿用上传后自动解析的既有接口链路。
 - 问答区同样采用局部滚动：对话历史在卡片中部滚动，底部资料范围和输入区不随长对话或长输入被顶出卡片。
 - 没有 PRD / 后端闭环的“查看全部”和今日待办查看动作不保留假入口；需要对应列表页、聚合接口或交互闭环后再接入。
 - 生成接口当前后端仍可能由 deterministic placeholder 提供具体类型 fallback，前端详情页只做基础结构化展示和引用展示，不把结果渲染成最终学习产品页面。
