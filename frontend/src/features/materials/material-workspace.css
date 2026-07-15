@@ -479,7 +479,7 @@
 
 .material-workspace__upload {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .material-workspace__upload-dialog {
@@ -563,7 +563,7 @@
   gap: 8px;
   justify-items: center;
   min-height: 150px;
-  padding: 24px;
+  padding: 20px;
   text-align: center;
   transition: background 160ms ease, border-color 160ms ease;
 }
