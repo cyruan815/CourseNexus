@@ -61,7 +61,8 @@
   grid-template-columns: minmax(0, 820px);
   justify-content: center;
   align-content: center;
-  overflow: visible;
+  flex: 1 1 auto;
+  overflow: hidden;
   min-height: 0;
   padding-block: 18px;
 }
@@ -72,7 +73,7 @@
 }
 
 .study-plan-create-shell.is-centered-flow {
-  min-height: 100vh;
+  min-height: 0;
 }
 
 .study-plan-create-shell.is-centered-flow .study-plan-create-flow {
@@ -82,8 +83,9 @@
 .study-plan-create-flow > .study-plan-panel {
   border-color: #d6e0eb;
   background: #ffffff;
+  max-height: 100%;
   padding: 26px;
-  overflow: visible;
+  overflow: auto;
   box-shadow: 0 18px 42px rgba(31, 41, 55, 0.08);
 }
 

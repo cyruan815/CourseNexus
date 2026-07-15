@@ -170,6 +170,7 @@
   min-height: 0;
   border-color: #d6e0eb;
   background: #fbfdff;
+  overflow: hidden;
   padding: 12px 12px 16px;
 }
 
@@ -207,14 +208,18 @@
 
 .home-calendar-grid {
   position: relative;
-  min-height: 252px;
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  height: clamp(248px, 38vh, 320px);
+  min-height: 0;
   border-left: 1px solid #e5e7eb;
   border-top: 1px solid #e5e7eb;
+  overflow: hidden;
 }
 
 .home-calendar-cell {
   position: relative;
-  min-height: 50px;
+  min-height: 0;
+  overflow: hidden;
   border: 0;
   border-right: 1px solid #e5e7eb;
   border-bottom: 1px solid #e5e7eb;
@@ -309,11 +314,12 @@
 }
 
 .home-calendar-roomy-grid {
-  min-height: 315px;
+  height: clamp(300px, 48vh, 410px);
+  min-height: 0;
 }
 
 .home-calendar-roomy-grid .home-calendar-cell {
-  min-height: 63px;
+  min-height: 0;
 }
 
 .home-calendar-roomy-grid .home-calendar-cell-summary {
@@ -542,16 +548,24 @@
   min-height: 0;
   border-color: #d6e0eb;
   background: #ffffff;
-  overflow: auto;
   padding: 22px;
 }
 
+.calendar-month-panel {
+  overflow: hidden;
+}
+
+.calendar-day-panel {
+  overflow: auto;
+}
+
 .calendar-course-grid {
-  min-height: 520px;
+  height: min(58vh, 560px);
+  min-height: 0;
 }
 
 .calendar-course-cell {
-  min-height: 92px;
+  min-height: 0;
 }
 
 .calendar-course-cell.has-tasks {
