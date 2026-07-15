@@ -1385,6 +1385,7 @@ def test_rejects_conflicting_question_type_count_generation_parameters() -> None
     assert exc_info.value.code == "VALIDATION_ERROR"
     assert exc_info.value.details["field"] == "generation_parameters.task_test"
 
+
 def test_rejects_invalid_quiz_subtask_generation_parameters() -> None:
     task = StudyTaskPreview(
         title="第二天综合测试",
@@ -1409,4 +1410,3 @@ def test_rejects_invalid_quiz_subtask_generation_parameters() -> None:
 
     assert exc_info.value.code == "VALIDATION_ERROR"
     assert exc_info.value.details["field"] == "generation_parameters.task_test"
-
