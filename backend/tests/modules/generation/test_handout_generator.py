@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.integrations.model_provider.mock import MockModelProvider
 from app.modules.generation.generators.handout.generator import HandoutGenerator
+from app.modules.generation.generators.handout.schemas import MermaidBlock
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch, MaterialContextResult
 
 
@@ -29,8 +30,9 @@ def _batch() -> MaterialContextBatch:
 
 
 class PromptCapturingTextProvider(MockModelProvider):
-    def __init__(self, text: str) -> None:
-        super().__init__(text_outputs=[text])
+    def __init__(self, text: str | list[str]) -> None:
+        text_outputs = [text] if isinstance(text, str) else text
+        super().__init__(text_outputs=text_outputs)
         self.prompts: list[str] = []
 
     def generate_text(self, *, prompt: str) -> str:
@@ -38,8 +40,35 @@ class PromptCapturingTextProvider(MockModelProvider):
         return super().generate_text(prompt=prompt)
 
 
+VISUAL_SVG = '\n\n<svg viewBox="0 0 20 20"><text x="1" y="12">diagram</text></svg>'
+
+
+def _svg_handout() -> str:
+    return (
+        "# Visual Handout\n\n"
+        "## Overview\n\n"
+        "The diagram explains the idea.\n\n"
+        '<svg viewBox="0 0 240 120"><rect x="20" y="30" width="80" height="40" />'
+        '<text x="60" y="55">A</text><line x1="100" y1="50" x2="190" y2="50" />'
+        '<rect x="190" y="30" width="40" height="40" /></svg>'
+    )
+
+
+def _mermaid_mindmap_handout() -> str:
+    return (
+        "# Visual Handout\n\n"
+        "## Knowledge map\n\n"
+        "```mermaid\n"
+        "mindmap\n"
+        "  root((Physical layer))\n"
+        "    Signal\n"
+        "    Medium\n"
+        "```\n"
+    )
+
+
 def test_handout_generator_returns_markdown_content_without_structured_json_or_citations() -> None:
-    markdown = "# 主键讲义\n\n## 概览\n\n主键用于唯一标识表中的一行。"
+    markdown = "# 主键讲义\n\n## 概览\n\n主键用于唯一标识表中的一行。" + VISUAL_SVG
     provider = PromptCapturingTextProvider(markdown)
 
     output = HandoutGenerator(model_provider=provider).generate(
@@ -49,13 +78,13 @@ def test_handout_generator_returns_markdown_content_without_structured_json_or_c
     )
 
     assert output.title == "主键讲义"
-    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n主键用于唯一标识表中的一行。"
+    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n主键用于唯一标识表中的一行。" + VISUAL_SVG
     assert output.content_json == {"format": "markdown", "schema_version": 1}
     assert output.item_citation_chunk_ids == {}
 
 
 def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() -> None:
-    provider = PromptCapturingTextProvider("# 物理层概念讲义\n\n正文")
+    provider = PromptCapturingTextProvider("# 物理层概念讲义\n\n正文" + VISUAL_SVG)
 
     HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
@@ -112,7 +141,7 @@ def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() 
 
 
 def test_handout_generator_strips_markdown_code_fence_wrappers() -> None:
-    provider = PromptCapturingTextProvider("```markdown\n# 主键讲义\n\n正文\n```")
+    provider = PromptCapturingTextProvider("```markdown\n# 主键讲义\n\n正文" + VISUAL_SVG + "\n```")
 
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
@@ -120,7 +149,7 @@ def test_handout_generator_strips_markdown_code_fence_wrappers() -> None:
         parameters={"handout_title": "主键讲义"},
     )
 
-    assert output.content == "# 主键讲义\n\n正文"
+    assert output.content == "# 主键讲义\n\n正文" + VISUAL_SVG
 
 
 
@@ -129,7 +158,7 @@ def test_handout_generator_preserves_markdown_math_delimiters_verbatim() -> None
         "# 错误标题\n\n"
         "## 概览\n\n"
         "行内公式 $C = B \\log_2(1 + S/N)$ 保持原样。\n\n"
-        "$$\nC = B \\log_2(1 + S/N)\n$$"
+        "$$\nC = B \\log_2(1 + S/N)\n$$" + VISUAL_SVG
     )
 
     output = HandoutGenerator(model_provider=provider).generate(
@@ -143,7 +172,7 @@ def test_handout_generator_preserves_markdown_math_delimiters_verbatim() -> None
         "本讲义基于《数据库讲义.pdf》中“信道容量”相关内容生成。\n\n"
         "## 概览\n\n"
         "行内公式 $C = B \\log_2(1 + S/N)$ 保持原样。\n\n"
-        "$$\nC = B \\log_2(1 + S/N)\n$$"
+        "$$\nC = B \\log_2(1 + S/N)\n$$" + VISUAL_SVG
     )
 
 
@@ -157,7 +186,7 @@ def test_handout_generator_does_not_rewrite_code_or_regular_brackets() -> None:
         "\\frac{S}{N}\n"
         "]\n"
         "```\n\n"
-        "- [ ] 待办项保持不变。"
+        "- [ ] 待办项保持不变。" + VISUAL_SVG
     )
     provider = PromptCapturingTextProvider(markdown)
 
@@ -177,7 +206,7 @@ def test_handout_generator_replaces_model_heading_and_deduplicates_source_note()
     provider = PromptCapturingTextProvider(
         "# 模型乱写标题\n\n"
         "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n"
-        "## 概览\n\n正文"
+        "## 概览\n\n正文" + VISUAL_SVG
     )
 
     output = HandoutGenerator(model_provider=provider).generate(
@@ -186,11 +215,11 @@ def test_handout_generator_replaces_model_heading_and_deduplicates_source_note()
         parameters={"handout_title": "主键讲义", "source_note": "本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。"},
     )
 
-    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n正文"
+    assert output.content == "# 主键讲义\n\n本讲义基于《数据库讲义.pdf》中“主键”相关内容生成。\n\n## 概览\n\n正文" + VISUAL_SVG
 
 
 def test_handout_generator_adds_heading_when_model_omits_heading() -> None:
-    provider = PromptCapturingTextProvider("## 概览\n\n正文")
+    provider = PromptCapturingTextProvider("## 概览\n\n正文" + VISUAL_SVG)
 
     output = HandoutGenerator(model_provider=provider).generate(
         batches=(_batch(),),
@@ -213,3 +242,67 @@ def test_handout_generator_rejects_empty_markdown() -> None:
         assert getattr(exc, "code", None) == "GENERATION_SCHEMA_INVALID"
     else:  # pragma: no cover - assertion clarity
         raise AssertionError("empty markdown should be rejected")
+
+def test_handout_generator_prompt_requires_a_visual_diagram() -> None:
+    provider = PromptCapturingTextProvider(_svg_handout())
+
+    HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "Visual Handout"},
+    )
+
+    prompt = provider.prompts[0]
+    assert "at least one visual diagram" in prompt
+    assert "Mermaid mindmap" in prompt
+    assert "Mermaid flowchart" in prompt
+    assert "safe SVG" in prompt
+    assert "foreignObject" in prompt
+    assert "javascript:" in prompt
+
+
+def test_handout_generator_retries_once_when_model_omits_visual_diagram() -> None:
+    provider = PromptCapturingTextProvider(
+        [
+            "# Visual Handout\n\n## Overview\n\nNo diagram yet.",
+            _svg_handout(),
+        ]
+    )
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "Visual Handout"},
+    )
+
+    assert len(provider.prompts) == 2
+    assert "missing a required visual diagram" in provider.prompts[1]
+    assert "<svg" in output.content
+
+
+def test_handout_generator_accepts_mermaid_mindmap_as_required_visual() -> None:
+    provider = PromptCapturingTextProvider(_mermaid_mindmap_handout())
+
+    output = HandoutGenerator(model_provider=provider).generate(
+        batches=(_batch(),),
+        expected_material_ids=frozenset({"mat_1"}),
+        parameters={"handout_title": "Visual Handout"},
+    )
+
+    assert len(provider.prompts) == 1
+    assert "```mermaid" in output.content
+    assert "mindmap" in output.content
+
+
+def test_mermaid_block_schema_accepts_mindmap_diagram_type() -> None:
+    block = MermaidBlock.model_validate(
+        {
+            "type": "mermaid",
+            "title": "Knowledge map",
+            "diagram_type": "mindmap",
+            "code": "mindmap\n  root((Physical layer))",
+            "explanation": "Shows the concept hierarchy.",
+        }
+    )
+
+    assert block.diagram_type == "mindmap"

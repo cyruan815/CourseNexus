@@ -407,3 +407,21 @@ PDF 导出同步支持相同 callout 契约。`render_markdown_pdf_html()` 会�
 - `pnpm frontend:build`
 - `uv run pytest tests/modules/generation/test_handout_generator.py`
 - `uv run pytest tests/modules/exports/test_exports_api.py -q`
+
+## 2026-07-15 任务讲义图示生成契约
+
+新生成的 `handout` 仍采用 Markdown-first 存储，但生成器现在要求每份成功讲义至少包含一张可视化图示，用于降低理解性内容的阅读负担。
+
+后端生成规则：
+
+- `backend/app/modules/generation/generators/handout/generator.py` 的 handout prompt 明确要求每份讲义至少包含 one visual diagram。
+- 概念层级、知识结构、章节关系优先使用 Mermaid `mindmap`。
+- 流程、步骤、状态变化、系统链路优先使用 Mermaid `flowchart`。
+- 物理过程、网络拓扑、编码过程、信号波形、空间布局等需要自由摆放节点的内容优先使用安全内联 SVG。
+- SVG 只允许表达性元素和属性；prompt 禁止 `script`、`iframe`、`object`、`embed`、`foreignObject`、`style`、`onload`、`onclick`、`onerror`、`javascript:`、`data:`、外部图片、外部字体和外链资源。
+- 后端保存前使用 `_handout_has_visual()` 检查正文是否包含 `<svg>...</svg>` 或 ```mermaid fenced code block。第一次模型输出缺图时，后端追加 retry feedback 最多重试一次；第二次仍缺图则返回 `GENERATION_SCHEMA_INVALID`，不保存成功讲义。
+- 历史结构化 `MermaidBlock.diagram_type` 兼容 `mindmap`，避免后续切回结构化讲义路径时拦截思维导图。
+
+当前前端讲义 renderer 会对原始 SVG 和 Mermaid 最终 SVG 做白名单净化；因此后端 prompt 的 SVG 约束和前端 sanitizer 是双层安全边界。PDF 中 Mermaid 的完整渲染仍属于独立能力，当前契约主要保证 Web 讲义详情页的可视化展示。
+
+验证入口：`backend/tests/modules/generation/test_handout_generator.py` 覆盖 prompt 约束、SVG 通过、Mermaid mindmap 通过、缺图重试和 `MermaidBlock` schema 兼容。

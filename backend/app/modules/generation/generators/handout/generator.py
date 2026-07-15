@@ -10,6 +10,9 @@ from app.modules.generation.orchestrator.contracts import GeneratorOutput
 from app.modules.material_context.schemas import MaterialContextBatch, MaterialContextResult
 
 
+_MERMAID_FENCE_PATTERN = re.compile(r"```mermaid\s*\n.*?\n```", flags=re.IGNORECASE | re.DOTALL)
+_SVG_PATTERN = re.compile(r"<svg\b.*?</svg>", flags=re.IGNORECASE | re.DOTALL)
+
 _KNOWN_TERM_CORRECTIONS = {
     "Nyquest": "Nyquist",
     "Shanon": "Shannon",
@@ -35,17 +38,44 @@ class HandoutGenerator:
         params = HandoutGenerationParameters.model_validate(parameters)
         title = _handout_title(params)
         prompt = _build_prompt(context=context, params=params, title=title)
-        raw_markdown = self.model_provider.generate_text(prompt=prompt)
-        markdown = ensure_handout_header(markdown=raw_markdown, title=title, source_note=params.source_note)
-        if not markdown:
-            raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
-        _assert_no_known_terminology_errors(markdown)
-        return GeneratorOutput(
-            title=title,
-            content=markdown,
-            content_json={"format": "markdown", "schema_version": 1},
-            item_citation_chunk_ids={},
-        )
+        markdown = ""
+        last_visual_error: CourseNexusError | None = None
+        for attempt in range(2):
+            current_prompt = prompt if attempt == 0 else _with_visual_retry_feedback(prompt)
+            raw_markdown = self.model_provider.generate_text(prompt=current_prompt)
+            markdown = ensure_handout_header(markdown=raw_markdown, title=title, source_note=params.source_note)
+            if not markdown:
+                raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
+            _assert_no_known_terminology_errors(markdown)
+            if _handout_has_visual(markdown):
+                return GeneratorOutput(
+                    title=title,
+                    content=markdown,
+                    content_json={"format": "markdown", "schema_version": 1},
+                    item_citation_chunk_ids={},
+                )
+            last_visual_error = CourseNexusError(
+                code="GENERATION_SCHEMA_INVALID",
+                message="讲义必须至少包含一张 SVG 或 Mermaid 图示",
+                status_code=500,
+            )
+
+        if last_visual_error is not None:
+            raise last_visual_error
+        raise CourseNexusError(code="GENERATION_SCHEMA_INVALID", message="模型未返回可保存的 Markdown 讲义", status_code=500)
+
+
+def _handout_has_visual(markdown: str) -> bool:
+    return bool(_SVG_PATTERN.search(markdown) or _MERMAID_FENCE_PATTERN.search(markdown))
+
+
+def _with_visual_retry_feedback(prompt: str) -> str:
+    return "\n\n".join(
+        [
+            prompt,
+            "Retry feedback: the previous handout was missing a required visual diagram. Return the full Markdown handout again and include at least one safe SVG diagram or Mermaid diagram that directly explains the most visual or conceptual part of this subtask.",
+        ]
+    )
 
 
 def _assert_no_known_terminology_errors(markdown: str) -> None:
@@ -94,7 +124,7 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "请直接输出一份完整 Markdown 讲义，面向学生阅读和导出。",
             f"讲义标题必须是：{title}",
             "不要输出 JSON。",
-            "不要输出 HTML。",
+            "不要输出 HTML callout 或非 SVG 原始 HTML；允许按图示规则输出安全 SVG。",
             "不要写 citation marker、source_citation_ids 或逐条资料来源注释。",
         ]
     )
@@ -129,6 +159,15 @@ def _build_prompt(*, context: MaterialContextResult, params: HandoutGenerationPa
             "- 禁止使用 \\(...\\) 和 \\[...\\]。",
             "- 禁止用单独一行的 [ 和 ] 包裹公式。",
             "- 公式不要放进代码块。",
+            "- Visual rule: every handout must include at least one visual diagram.",
+            "- Use a visual diagram whenever a conceptual, structural, process, topology, encoding, signal, or comparison explanation would be easier to understand as a picture.",
+            "- Use Mermaid mindmap for knowledge hierarchy, concept maps, and chapter/topic relationships.",
+            "- Use Mermaid flowchart for procedures, system pipelines, state changes, and dependency chains.",
+            "- Use safe SVG for spatial layouts, network topology, physical-layer workflows, signal waveforms, encoding examples, and diagrams that need precise node placement.",
+            "- SVG may only use safe presentation elements such as svg, g, rect, line, path, circle, ellipse, polygon, polyline, text, tspan, defs, marker, title, and desc.",
+            "- SVG may only use safe presentation attributes such as viewBox, x, y, cx, cy, r, width, height, fill, stroke, stroke-width, stroke-dasharray, text-anchor, dominant-baseline, transform, and marker-end.",
+            "- SVG must not contain script, iframe, object, embed, foreignObject, style, onload, onclick, onerror, javascript:, data:, external images, external fonts, or external links.",
+            "- Do not wrap SVG or Mermaid in HTML containers; output SVG directly or use a fenced ```mermaid code block.",
             "- 变量解释用普通 Markdown 列表，不要混进公式块。",
             "- 重要教学提示使用 GitHub alert 风格 blockquote，不要输出 HTML callout。",
             "- 支持的 callout 类型只有 NOTE、EXAMPLE、SUMMARY、WARNING、TIP。",
