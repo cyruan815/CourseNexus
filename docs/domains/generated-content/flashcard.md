@@ -7,7 +7,9 @@ The backend limits the returned array to `card_count`, validates and trims front
 
 - `FlashcardDraft.explanation` 是可选兼容字段，用于易混点或补充语境。
 - Prompt 要求每张卡只测试一个原子知识点，避免提纲段落和重复正面。
-- `FlashcardResult.tsx` 提供单卡翻转、导航、打乱、掌握/未掌握和错卡重练；这些练习状态仅在页面内存。
+- `FlashcardResult.tsx` 提供单卡翻转、导航、打乱、掌握/未掌握和错卡重练；正面或背面整张卡片均可点击翻面，正面使用云雾蓝 `#E5EDF5`，背面使用 `#EFF2F5`，切换正反面时通过独立渲染节点触发 3D 翻转动画。
+- 到达当前练习牌组最后一张后，无论是否已判定全部卡片，都会显示“练习全部”和“只练未掌握”。未明确标记为已掌握的卡片（包括标记未掌握和尚未判定）都会进入“只练未掌握”牌组；“练习全部”始终恢复完整持久化牌组。
+- 翻面、导航、判定和当前重练牌组等练习状态仅存在页面内存，不写入后端。
 
 ## 牌组编辑与持久化
 
@@ -24,5 +26,6 @@ The backend limits the returned array to `card_count`, validates and trims front
 
 测试入口：
 
-- `frontend/tests/features/generated-content/renderers.test.tsx`：完整牌组、错卡子集添加和删除。
+- `frontend/tests/features/generated-content/renderers.test.tsx`：整卡翻面、末张重练、未判定卡片处理、完整牌组以及错卡子集添加和删除。
+- `frontend/tests/features/generated-content/flashcard-styles.test.js`：正反面固定配色契约。
 - `backend/tests/modules/generated_content/test_generated_content_service.py`：归属、类型、牌组约束、规范化、更新时间和脱敏日志。
