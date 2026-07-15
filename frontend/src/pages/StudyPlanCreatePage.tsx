@@ -303,11 +303,11 @@ function sortDiagnosticQuestions(questions: StudyPlanDiagnosticQuestion[]) {
 function StudyPlanQuestionnairePreparing() {
   return (
     <Box className="study-plan-preparing-card" role="status">
-      <Stack gap="lg">
-        <Stack gap={4}>
+      <Stack className="study-plan-preparing-content" gap="lg">
+        <Stack align="center" gap={6}>
           <Text c="teal" fw={800} size="sm">正在整理问卷</Text>
-          <Title order={2}>把你的目标变成几个关键问题</Title>
-          <Text c="dimmed" size="sm">正在读取课程资料和目标语义，很快进入问卷。</Text>
+          <Title order={2} ta="center">把你的目标变成几个关键问题</Title>
+          <Text c="dimmed" maw={520} size="sm" ta="center">正在读取课程资料和目标语义，很快进入问卷。</Text>
         </Stack>
       </Stack>
     </Box>
@@ -995,7 +995,7 @@ export function StudyPlanCreatePage() {
         />
         <Box className="study-plan-create-flow">
           <Paper
-            className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}${phase === "questionnaire" ? " study-plan-questionnaire-card" : ""}${phase === "preparing" || phase === "generating" ? " study-plan-process-panel" : ""}`}
+            className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}${phase === "questionnaire" ? " study-plan-questionnaire-card" : ""}${phase === "preparing" || phase === "generating" ? " study-plan-process-panel" : ""}${phase === "preparing" ? " study-plan-preparing-panel" : ""}${phase === "generating" ? " study-plan-generating-panel" : ""}`}
             radius="md"
             withBorder
           >
