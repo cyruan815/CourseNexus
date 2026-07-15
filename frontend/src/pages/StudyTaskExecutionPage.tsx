@@ -28,6 +28,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 
 import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
@@ -295,6 +296,15 @@ function generatedContentSourceSummary(content: GeneratedContentRead | null): {
   };
 }
 
+function handoutMarkdown(content: GeneratedContentRead | null): string | null {
+  if (!content || content.content_type !== "handout") {
+    return null;
+  }
+
+  const markdown = content.content?.trim();
+  return markdown ? markdown : null;
+}
+
 function materialAvailabilityLabel(material: ExecutionMaterialRead): string {
   if (material.availability === "available") {
     return material.parse_status === "parsed" ? "可用资料" : material.parse_status ?? "可用";
@@ -483,6 +493,7 @@ export function StudyTaskExecutionPage() {
   const isGeneratingCurrentSubtask = Boolean(currentSubtask && generatingSubtaskId === currentSubtask.subtask_id);
   const isGeneratingOtherSubtask = Boolean(currentSubtask && generatingSubtaskId && generatingSubtaskId !== currentSubtask.subtask_id);
   const readonlyTaskTestQuestions = useMemo(() => parseTaskTestQuestions(currentGeneratedContent), [currentGeneratedContent]);
+  const readonlyHandoutMarkdown = useMemo(() => handoutMarkdown(currentGeneratedContent), [currentGeneratedContent]);
   const contentSourceSummary = useMemo(
     () => generatedContentSourceSummary(currentGeneratedContent),
     [currentGeneratedContent],
@@ -907,6 +918,11 @@ export function StudyTaskExecutionPage() {
                               </Text>
                             ) : null}
                           </Paper>
+                          {contentType === "handout" && readonlyHandoutMarkdown ? (
+                            <Paper className="study-plan-handout-preview" radius="md" withBorder>
+                              <ReactMarkdown>{readonlyHandoutMarkdown}</ReactMarkdown>
+                            </Paper>
+                          ) : null}
                           {contentType === "task_test" && readonlyTaskTestQuestions.length > 0 ? (
                             <Stack className="study-plan-task-test-preview" gap="sm">
                               <Group gap="xs">

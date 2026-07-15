@@ -362,6 +362,24 @@ const generatedHandout = {
   deleted_at: null,
 };
 
+const generatedMarkdownHandout = {
+  ...generatedHandout,
+  content: [
+    "# 向量空间讲义",
+    "",
+    "本讲义基于《线代第一章.pdf》中“学习: 向量空间”相关内容生成。",
+    "",
+    "## 学习目标",
+    "",
+    "- 理解 **向量空间** 的封闭性。",
+  ].join("\n"),
+  content_json: {
+    format: "markdown",
+    schema_version: 1,
+  },
+  source_citations: [],
+};
+
 const generatedTaskTest = {
   ...generatedHandout,
   id: "gen_task_test_1",
@@ -1409,6 +1427,28 @@ describe("study plan pages", () => {
     expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
     expect(await screen.findByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成任务讲义" })).not.toBeInTheDocument();
+  });
+
+  it("renders an existing handout Markdown body inside the execution page", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return Promise.resolve(successResponse(generatedMarkdownHandout, "req_generated_content"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "向量空间讲义" })).toBeInTheDocument();
+    expect(screen.getByText("向量空间")).toBeInTheDocument();
+    expect(screen.getByText("的封闭性。", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });
 
   it("exports an existing handout as a PDF file", async () => {
