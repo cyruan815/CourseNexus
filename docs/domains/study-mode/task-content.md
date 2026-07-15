@@ -9,6 +9,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `learn` 表示学习讲义和新内容；`review` 表示复习讲义，只回顾计划中此前已经安排学习过的内容；只有 `quiz` / `test` 可以携带 `generation_parameters.task_test` 和明确题量要求。
 - `learn` 讲义使用计划阶段清理后的正文 chunk 引用；目录页、版权页、感谢页和章节小结页不得与正文 chunk 混合作为普通 `learn` 范围，避免提前混入后续主题。
 - 生成内容统一写入 `ai_generated_contents`，通过 `study_subtask_id` 绑定二级任务。
+- 任务讲义只在学习计划执行上下文中展示；课程详情的课程级生成内容列表排除 `content_type=handout` 且 `study_subtask_id` 非空的记录，但不删除讲义，也不影响详情、重新生成或 PDF 导出。
 - 不新增 `handouts`、`task_tests` 或其他业务表，不修改 migration；前端只接入任务内容的生成、只读展示与导出入口。
 - 当前只保存二级任务级 `related_material_ids_json`；P0 不新增 chunk 级任务范围字段，引用范围由当次材料上下文批次校验保证。
 

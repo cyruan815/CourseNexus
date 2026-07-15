@@ -614,7 +614,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `GET /api/v1/courses/{course_id}/generated-contents`
 
-要求：Bearer token。只返回当前用户当前课程下未删除生成内容。
+要求：Bearer token。只返回当前用户当前课程下未删除生成内容，并排除学习计划任务生成的讲义，即不返回 `content_type="handout"` 且 `study_subtask_id` 非空的记录。被排除的讲义仍可由学习计划执行上下文返回的内容 ID 调用详情和导出接口。
 
 响应 `data`：`GeneratedContentRead[]`。
 

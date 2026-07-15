@@ -632,7 +632,9 @@ export function CourseDetailPage() {
     ])
       .then(([nextGeneratedContents, nextStudyPlans, conversations]) => {
         if (!ignore) {
-          setGeneratedContents(nextGeneratedContents);
+          setGeneratedContents(nextGeneratedContents.filter(
+            (content) => content.content_type !== "handout" || content.study_subtask_id === null,
+          ));
           setStudyPlans(nextStudyPlans);
           const nextConversationId = conversations[0]?.id ?? null;
           setConversationId(nextConversationId);

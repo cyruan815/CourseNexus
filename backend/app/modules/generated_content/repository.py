@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.course_qa.models import SourceCitation
@@ -46,6 +46,10 @@ def list_active_generated_contents_for_course(
                 AIGeneratedContent.user_id == user_id,
                 AIGeneratedContent.course_id == course_id,
                 AIGeneratedContent.deleted_at.is_(None),
+                or_(
+                    AIGeneratedContent.content_type != "handout",
+                    AIGeneratedContent.study_subtask_id.is_(None),
+                ),
             )
             .order_by(AIGeneratedContent.created_at.desc())
         ).scalars()

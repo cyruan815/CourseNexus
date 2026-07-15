@@ -36,6 +36,13 @@ const generatedContent = {
   updated_at: "2026-07-09T12:00:00+00:00",
   deleted_at: null,
 };
+const studyPlanHandout = {
+  ...generatedContent,
+  id: "gen_study_handout",
+  study_subtask_id: "subtask_1",
+  content_type: "handout",
+  title: "学习滑动窗口讲义",
+};
 const studyPlan = {
   id: "plan_1",
   user_id: "usr_123",
@@ -808,6 +815,27 @@ describe("CourseDetailPage", () => {
     });
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "查看生成内容 Quiz" })).toHaveAttribute("href", "/generated-contents/gen_quiz");
+  });
+
+  it("does not show study plan handouts in course generated contents", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([generatedContent, studyPlanHandout], "req_generated"));
+      }
+      if (url.endsWith("/study-plans") || url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_workspace"));
+      }
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage();
+
+    expect(await screen.findByText(generatedContent.title)).toBeInTheDocument();
+    expect(screen.queryByText(studyPlanHandout.title)).not.toBeInTheDocument();
   });
 
   it("renames and deletes generated content from the item menu", async () => {

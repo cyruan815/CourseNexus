@@ -57,6 +57,7 @@ def create_content(
     content_type: str = "outline",
     generation_status: str = "success",
     deleted_at: datetime | None = None,
+    study_subtask_id: str | None = None,
 ) -> AIGeneratedContent:
     return save_generated_content(
         db,
@@ -64,6 +65,7 @@ def create_content(
             id=content_id,
             user_id=user_id,
             course_id=course_id,
+            study_subtask_id=study_subtask_id,
             content_type=content_type,
             title="Outline",
             content="Alpha",
@@ -303,6 +305,46 @@ def test_soft_deleted_generated_contents_remain_excluded(db: Session) -> None:
     with pytest.raises(CourseNexusError) as exc_info:
         get_generated_content_detail(db, user_id=user.id, generated_content_id=deleted.id)
     assert exc_info.value.code == "NOT_FOUND"
+
+
+def test_list_generated_contents_excludes_study_plan_handouts_only(db: Session) -> None:
+    user = register_user(db, UserCreate(username="course-history", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    outline = create_content(db, user.id, course.id, "gen_outline")
+    legacy_handout = create_content(
+        db,
+        user.id,
+        course.id,
+        "gen_course_handout",
+        content_type="handout",
+    )
+    study_handout = create_content(
+        db,
+        user.id,
+        course.id,
+        "gen_study_handout",
+        content_type="handout",
+        study_subtask_id="sub_learn",
+    )
+    task_test = create_content(
+        db,
+        user.id,
+        course.id,
+        "gen_task_test",
+        content_type="task_test",
+        study_subtask_id="sub_quiz",
+    )
+
+    listed_ids = {
+        content.id for content in list_generated_contents(db, user_id=user.id, course_id=course.id)
+    }
+
+    assert listed_ids == {outline.id, legacy_handout.id, task_test.id}
+    assert get_generated_content_detail(
+        db,
+        user_id=user.id,
+        generated_content_id=study_handout.id,
+    ).id == study_handout.id
 
 
 def test_rename_generated_content_changes_only_normalized_title(db: Session) -> None:
