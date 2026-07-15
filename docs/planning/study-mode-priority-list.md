@@ -267,6 +267,40 @@ P5a 已落地：
 - 未触碰 `task_test` generator、`learning_execution` 主链路或 P0 相关测试。
 - 未改数据库，未新增 migration。
 
+### P11：长期学习计划艾宾浩斯复习调度
+
+状态：后续优化方向，待正式设计。
+
+目标：
+
+- 当学习计划持续时间超过 10 天时，自动按艾宾浩斯遗忘曲线为用户安排 `review` 复习讲义任务。
+- 复习任务应优先覆盖此前已经学习过的内容，不引入未来知识点；`related_material_ids` 和 `citation_chunk_ids` 必须来自更早日期的 `learn` / `review` 任务。
+- 推荐节奏以 `+1 / +2 / +4 / +7` 天为基础；若目标复习日超出计划范围则跳过，若当天容量不足则按 `daily_available_minutes` 压缩或在 capacity warning 中暴露。
+- 复习讲义生成应区别于普通学习讲义：强调主动回忆、易错点、概念关系、对比表、短测前自查和必要图示，而不是重新讲授新内容。
+
+建议改造范围：
+
+- Study plan reduce prompt：在 `backend/app/modules/study_plans/planner.py` 中补充长期计划复习规则，引导模型主动生成 `review` 子任务。
+- 后端确定性兜底：新增或扩展复习调度规则，例如 `apply_ebbinghaus_reviews()` / `validate_ebbinghaus_reviews()`，避免完全依赖模型自觉排复习。
+- Preview 构建链路：在 `backend/app/modules/study_plans/service.py::preview_study_plan()` 的 preview normalization 阶段插入复习补偿，并确保后续 `repair_daily_assessment_coverage()` 和 `validate_daily_assessment_contract()` 仍保证每日测试位于最后且覆盖当天前置学习 / 复习任务。
+- Handout prompt：为 `review` 任务传入可识别的 `generation_parameters.handout` 元信息，例如 `mode=review`、`review_stage=1d/2d/4d/7d`、`review_source_titles`，让讲义 prompt 生成真正的复习讲义。
+- 前端展示：`StudyPlanCreatePage` preview、`StudyPlanDetailPage` 详情和 `StudyTaskExecutionPage` 执行页可增加“遗忘曲线复习 / 第 N 次复习 / 间隔复习”标签；现有 `review -> handout` 的内容类型映射无需重做。
+
+限制：
+
+- 不建议只改 prompt；模型漏排或乱排 review 时必须有后端规则兜底或校验。
+- `duration_days > 10` 与 `duration_days >= 10` 的触发口径需在设计时确认。
+- 该能力会影响计划结构、容量计算、每日测试覆盖和讲义生成参数，不能与无关 UI 优化或 task-test 作答闭环混在同一个小改动里。
+- 若新增公开字段或稳定 metadata，需要同步更新 `docs/api-data/` 和 `docs/domains/study-mode/`。
+
+验收标准：
+
+- 10 天及以下计划不强制插入艾宾浩斯复习；超过 10 天计划会出现可解释的 `review` 复习任务。
+- 每个艾宾浩斯 `review` 只引用此前已学内容，且不破坏每日唯一 quiz/test 和 quiz/test 位于当天最后的规则。
+- 复习讲义生成入口能识别 review 模式，并输出以回忆、巩固和易错点为主的讲义。
+- Preview、计划详情和执行页能让用户看出这些任务是有意安排的长期复习，而不是普通学习任务。
+- 后端测试覆盖触发边界、引用范围、测试覆盖修复、容量约束和 handout review 参数；前端测试覆盖 preview/detail/execution 的标签与既有 `review -> handout` 行为。
+
 ### P7：version 乐观锁改造
 
 状态：工程增强。
