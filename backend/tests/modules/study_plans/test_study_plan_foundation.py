@@ -116,6 +116,69 @@ class FoundationPlanProvider:
         raise AssertionError(output_schema)
 
 
+
+
+class QuantityRetryPlanProvider:
+    def __init__(self, material_id: str) -> None:
+        self.material_id = material_id
+        self.reduce_prompts: list[str] = []
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        if output_schema.__name__ == "PlanBatchExtraction":
+            return output_schema.model_validate(
+                {
+                    "units": [
+                        {
+                            "topic": "physical layer formula",
+                            "summary": "summary",
+                            "difficulty": "medium",
+                            "estimated_minutes": 30,
+                            "related_material_ids": [self.material_id],
+                            "citation_chunk_ids": ["chk_foundation"],
+                        }
+                    ],
+                    "citation_chunk_ids": ["chk_foundation"],
+                }
+            )
+        if output_schema.__name__ == "StudyPlanReduction":
+            self.reduce_prompts.append(prompt)
+            learn_description = "学习公式并完成 10 道选择题" if len(self.reduce_prompts) == 1 else "学习公式含义"
+            quiz_description = "完成当天自测" if len(self.reduce_prompts) == 1 else "完成 10 道选择题"
+            return output_schema.model_validate(
+                {
+                    "title": "Linear Algebra 学习计划",
+                    "tasks": [
+                        {
+                            "title": "第 1 天学习任务",
+                            "task_date": "2026-07-10",
+                            "sort_order": 1,
+                            "subtasks": [
+                                {
+                                    "title": "学习公式",
+                                    "subtask_type": "learn",
+                                    "description": learn_description,
+                                    "related_material_ids": [self.material_id],
+                                    "estimated_minutes": 45,
+                                    "citation_chunk_ids": ["chk_foundation"],
+                                    "sort_order": 1,
+                                },
+                                {
+                                    "title": "当天测试",
+                                    "subtask_type": "test",
+                                    "description": quiz_description,
+                                    "related_material_ids": [self.material_id],
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_foundation"],
+                                    "sort_order": 2,
+                                },
+                            ],
+                        }
+                    ],
+                    "citation_chunk_ids": ["chk_foundation"],
+                }
+            )
+        raise AssertionError(output_schema)
+
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, content: bytes = b"Alpha") -> str:
     material = upload_file_material(
         db,
@@ -167,6 +230,31 @@ def test_preview_study_plan_uses_resolved_context(db: Session, tmp_path: Path) -
     assert preview.tasks[0].subtasks[0].related_material_ids == [material_id]
     assert preview.coverage.expected_material_ids == [material_id]
 
+
+
+
+def test_preview_study_plan_retries_when_learn_task_contains_question_quantity(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="retry-user", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
+    provider = QuantityRetryPlanProvider(material_id)
+
+    preview = preview_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=build_request(),
+        model_provider=provider,
+        max_tokens=12_000,
+    )
+
+    assert len(provider.reduce_prompts) == 2
+    assert "学习或复习任务不能包含测试题量要求" in provider.reduce_prompts[1]
+    assert preview.tasks[0].subtasks[0].description == "学习公式含义"
+    assert preview.tasks[0].subtasks[1].description == "完成 10 道选择题"
 
 def test_preview_study_plan_requires_parsed_material(db: Session) -> None:
     user = register_user(db, UserCreate(username="alice", password="password123"))
