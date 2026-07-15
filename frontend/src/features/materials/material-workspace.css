@@ -44,7 +44,7 @@
 
 .material-workspace__header {
   align-items: start;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  background: #faf9f7;
   border-bottom: 1px solid var(--resource-line);
   display: grid;
   flex: 0 0 auto;
@@ -356,7 +356,7 @@
   background: #ffffff;
   display: grid;
   gap: 6px;
-  grid-template-columns: minmax(0, 1fr) 24px 32px;
+  grid-template-columns: minmax(0, 1fr) 24px 36px;
   min-height: 40px;
   padding: 3px 8px 3px 14px;
   transition: background 140ms ease;
@@ -470,13 +470,14 @@
   display: inline-flex;
   height: 36px;
   justify-content: center;
+  justify-self: end;
   padding: 0;
   width: 36px;
 }
 
 .material-workspace button.material-workspace__file-actions {
-  height: 32px;
-  width: 32px;
+  height: 36px;
+  width: 36px;
 }
 
 .material-workspace button.material-workspace__file-actions:hover:not(:disabled),
@@ -617,28 +618,39 @@
 
 .material-workspace__context-menu {
   background: #ffffff;
-  border: 1px solid var(--resource-line);
-  border-radius: 12px;
-  box-shadow: 0 16px 36px rgb(30 41 59 / 18%);
+  border: 1px solid #e1e7ef;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgb(15 23 42 / 12%);
   display: grid;
-  min-width: 158px;
-  padding: 7px;
+  min-width: 168px;
+  padding: 8px;
   position: fixed;
   z-index: 240;
 }
 
 .material-workspace__context-menu button {
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 8px;
+  color: #111827;
   cursor: pointer;
-  min-height: 36px;
-  padding: 0 10px;
+  display: grid;
+  font-size: 14px;
+  font-weight: 500;
+  gap: 12px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-height: 40px;
+  padding: 0 12px;
   text-align: left;
 }
 
 .material-workspace__context-menu button:hover {
   background: #f1f5fb;
+}
+
+.material-workspace__context-menu button.is-danger {
+  color: #ef4444;
 }
 
 .material-workspace__sr-only {
