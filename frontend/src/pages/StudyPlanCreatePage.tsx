@@ -695,6 +695,24 @@ export function StudyPlanCreatePage() {
     () => sortDiagnosticQuestions(diagnosticQuestions),
     [diagnosticQuestions],
   );
+  const startDateChoiceValue = useMemo(() => {
+    if (isCustomStartDateOpen) {
+      return "custom";
+    }
+    if (!startDate) {
+      return "";
+    }
+    return startDateOptions.some((option) => option.value === startDate) ? startDate : "custom";
+  }, [isCustomStartDateOpen, startDate, startDateOptions]);
+  const durationDaysChoiceValue = useMemo(() => {
+    if (isCustomDurationDaysOpen) {
+      return "custom";
+    }
+    if (!durationDaysText) {
+      return "";
+    }
+    return durationDayOptions.some((option) => option.value === durationDaysText) ? durationDaysText : "custom";
+  }, [durationDaysText, isCustomDurationDaysOpen]);
   const canSubmitQuestionnaire = useMemo(() => {
     if (!questionVersion || orderedDiagnosticQuestions.length === 0 || !startDate || !endDate) {
       return false;
@@ -976,7 +994,7 @@ export function StudyPlanCreatePage() {
         />
         <Box className="study-plan-create-flow">
           <Paper
-            className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}${phase === "preparing" || phase === "generating" ? " study-plan-process-panel" : ""}`}
+            className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}${phase === "questionnaire" ? " study-plan-questionnaire-card" : ""}${phase === "preparing" || phase === "generating" ? " study-plan-process-panel" : ""}`}
             radius="md"
             withBorder
           >
@@ -991,7 +1009,7 @@ export function StudyPlanCreatePage() {
                 </Stack>
                 <Textarea
                   className="study-plan-goal-input"
-                  label="学习目标"
+                  label={<span className="study-plan-goal-input-label">学习目标</span>}
                   minRows={8}
                   onChange={(event) => updateGoalText(event.currentTarget.value)}
                   placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
@@ -1043,22 +1061,27 @@ export function StudyPlanCreatePage() {
                   </Paper>
                 ) : null}
 
-                {!startDate ? (
+                {!startDate || !endDate ? (
                   <Box className="study-plan-date-question">
-                    <Text fw={700}>你想从哪天开始学习？</Text>
-                    <Group gap="xs" mt="xs">
-                      {startDateOptions.map((option) => (
-                        <Button key={option.value} onClick={() => updateStartDate(option.value)} variant="light">
-                          {option.label}
-                        </Button>
-                      ))}
-                      <Button
-                        onClick={() => setIsCustomStartDateOpen(true)}
-                        variant={isCustomStartDateOpen ? "filled" : "light"}
-                      >
-                        D. 自定义开始日期
-                      </Button>
-                    </Group>
+                    <Radio.Group
+                      label="你想从哪天开始学习？"
+                      onChange={(value) => {
+                        if (value === "custom") {
+                          setIsCustomStartDateOpen(true);
+                          return;
+                        }
+                        setIsCustomStartDateOpen(false);
+                        updateStartDate(value);
+                      }}
+                      value={startDateChoiceValue}
+                    >
+                      <Stack className="study-plan-option-list" gap={8} mt={8}>
+                        {startDateOptions.map((option) => (
+                          <Radio key={option.value} label={option.label} value={option.value} />
+                        ))}
+                        <Radio label="D. 自定义开始日期" value="custom" />
+                      </Stack>
+                    </Radio.Group>
                     {isCustomStartDateOpen ? (
                       <TextInput
                         className="study-plan-date-custom-input"
@@ -1069,25 +1092,26 @@ export function StudyPlanCreatePage() {
                         value={startDate}
                       />
                     ) : null}
-                  </Box>
-                ) : null}
 
-                {startDate && !endDate ? (
-                  <Box className="study-plan-date-question">
-                    <Text fw={700}>这次计划准备学几天？</Text>
-                    <Group gap="xs" mt="xs">
-                      {durationDayOptions.map((option) => (
-                        <Button key={option.value} onClick={() => updateDurationDays(option.value)} variant="light">
-                          {option.label}
-                        </Button>
-                      ))}
-                      <Button
-                        onClick={() => setIsCustomDurationDaysOpen(true)}
-                        variant={isCustomDurationDaysOpen ? "filled" : "light"}
-                      >
-                        D. 自定义学习天数
-                      </Button>
-                    </Group>
+                    <Radio.Group
+                      label="这次计划准备学几天？"
+                      onChange={(value) => {
+                        if (value === "custom") {
+                          setIsCustomDurationDaysOpen(true);
+                          return;
+                        }
+                        setIsCustomDurationDaysOpen(false);
+                        updateDurationDays(value);
+                      }}
+                      value={durationDaysChoiceValue}
+                    >
+                      <Stack className="study-plan-option-list" gap={8} mt={8}>
+                        {durationDayOptions.map((option) => (
+                          <Radio key={option.value} label={option.label} value={option.value} />
+                        ))}
+                        <Radio label="D. 自定义学习天数" value="custom" />
+                      </Stack>
+                    </Radio.Group>
                     {isCustomDurationDaysOpen ? (
                       <Box className="study-plan-date-input study-plan-date-custom-input">
                         <Text component="label" htmlFor="study-plan-duration-days" size="sm">
@@ -1143,7 +1167,7 @@ export function StudyPlanCreatePage() {
                 ) : null}
 
                 <Divider />
-                <Group justify="space-between" wrap="nowrap">
+                <Group className="study-plan-questionnaire-actions" justify="space-between">
                   <Text c="dimmed" size="sm">提交后会自动生成并保存学习计划。</Text>
                   <Button
                     data-testid="study-plan-questionnaire-submit"
