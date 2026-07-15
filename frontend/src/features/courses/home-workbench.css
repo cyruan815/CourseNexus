@@ -16,14 +16,20 @@
 }
 
 .home-brand-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-size: 28px;
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1.2;
 }
 
-.home-brand-title span {
-  color: #2f80ed;
+.home-brand-title img {
+  width: 156px;
+  height: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .home-theme-single-button,
