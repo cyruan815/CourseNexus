@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 from app.modules.generation.generators.flashcard.schemas import FlashcardDraft
+
+
+BEIJING_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 class GeneratedContentCitationRead(BaseModel):
@@ -38,6 +42,14 @@ class GeneratedContentRead(BaseModel):
     updated_at: datetime
     deleted_at: datetime | None
     source_citations: list[GeneratedContentCitationRead] = Field(default_factory=list)
+
+    @field_serializer("created_at", "updated_at", "deleted_at", when_used="json")
+    def serialize_beijing_datetime(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(BEIJING_TIMEZONE).isoformat()
 
 
 class GeneratedContentUpdate(BaseModel):

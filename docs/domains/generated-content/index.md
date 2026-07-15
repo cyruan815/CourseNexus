@@ -48,6 +48,8 @@
 
 ## 4. 前端结果渲染
 
+生成内容 API 的 `created_at`、`updated_at` 和 `deleted_at` 统一输出为带 `+08:00` 偏移的北京时间。SQLite 返回的无时区时间按 UTC 解释后转换，前端生成列表再基于该绝对时间计算“几分钟前 / 几小时前 / 几天前”；历史上不带时区的响应仍按 UTC 兼容解析。
+
 - loading：详情加载中展示骨架。
 - success：`GeneratedContentDetailPage.tsx` 只负责加载、失败状态、元数据与 renderer 分派；五类独立 renderer 位于 `frontend/src/features/generated-content/renderers/`。
 - failed：展示失败提示和 `error_code`，不展示伪结果。

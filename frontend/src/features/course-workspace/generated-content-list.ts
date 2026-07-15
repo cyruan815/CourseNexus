@@ -81,7 +81,9 @@ export function createPendingGeneration(contentType: string, now = new Date()): 
 }
 
 export function formatGeneratedContentAge(createdAt: string, now = new Date()): string {
-  const elapsedMilliseconds = Math.max(0, now.getTime() - Date.parse(createdAt));
+  const hasExplicitTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(createdAt);
+  const normalizedCreatedAt = hasExplicitTimezone ? createdAt : `${createdAt}Z`;
+  const elapsedMilliseconds = Math.max(0, now.getTime() - Date.parse(normalizedCreatedAt));
   const elapsedMinutes = Math.floor(elapsedMilliseconds / 60_000);
 
   if (elapsedMinutes < 1) {
