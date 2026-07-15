@@ -3,6 +3,7 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { login, register } from "./api";
+import { WelcomeParticleCanvas } from "./WelcomeParticleCanvas";
 import "./auth-pages.css";
 
 type AuthMode = "login" | "register";
@@ -160,6 +161,7 @@ function AuthForm({ mode }: { mode: AuthMode }) {
 export function WelcomeAuthPage() {
   return (
     <main className="auth-welcome">
+      <WelcomeParticleCanvas />
       <header className="auth-welcome__nav">
         <Anchor aria-label="CourseNexus 首页" className="auth-wordmark" component={Link} to="/welcome">
           <img alt="" src="/brand/coursenexus-logo.png" />
