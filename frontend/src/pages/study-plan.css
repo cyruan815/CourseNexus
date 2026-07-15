@@ -937,6 +937,41 @@
   padding: 12px;
 }
 
+.study-plan-handout-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 12px 0;
+  color: #26364d;
+  font-size: 14px;
+}
+
+.study-plan-handout-preview th,
+.study-plan-handout-preview td {
+  border: 1px solid #d6e0eb;
+  padding: 8px 10px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.study-plan-handout-preview th {
+  background: #f1f7ff;
+  color: #102a43;
+  font-weight: 750;
+  text-align: left;
+}
+
+.study-plan-handout-preview .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 12px 0;
+  padding: 6px 0;
+}
+
+.study-plan-handout-preview .katex {
+  font-size: 1em;
+}
+
 .study-plan-task-qa {
   min-height: 0;
   display: flex;

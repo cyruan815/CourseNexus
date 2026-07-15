@@ -47,6 +47,9 @@ importers:
       dayjs:
         specifier: ^1.11.21
         version: 1.11.21
+      katex:
+        specifier: 0.16.47
+        version: 0.16.47
       markmap-view:
         specifier: 0.18.12
         version: 0.18.12(markmap-common@0.18.9)
