@@ -132,7 +132,7 @@ describe("HandoutMarkdownRenderer", () => {
     expect(await screen.findByTestId("mermaid-svg")).toBeInTheDocument();
     expect(document.querySelector(".handout-mermaid-diagram")).not.toBeNull();
     expect(mermaidMocks.initialize).toHaveBeenCalledWith(
-      expect.objectContaining({ startOnLoad: false, securityLevel: "loose" }),
+      expect.objectContaining({ startOnLoad: false, securityLevel: "strict" }),
     );
     expect(mermaidMocks.render).toHaveBeenCalledWith(
       expect.stringMatching(/^handout-mermaid-/),
@@ -148,6 +148,52 @@ describe("HandoutMarkdownRenderer", () => {
     );
 
     expect(screen.getByTestId("inline-handout-svg")).toBeInTheDocument();
+  });
+
+  it("removes executable raw HTML from handout Markdown", () => {
+    render(
+      <HandoutMarkdownRenderer
+        markdown={[
+          '<iframe title="unsafe-frame" srcdoc="<script>window.parent.document.body.dataset.compromised=1</script>"></iframe>',
+          '<svg data-testid="safe-svg" viewBox="0 0 20 20" onload="window.compromised=1">',
+          '<circle cx="10" cy="10" r="8" onclick="window.compromised=1" />',
+          "<foreignObject><div>unsafe</div></foreignObject>",
+          "</svg>",
+          '[unsafe link](javascript:window.compromised=1)',
+        ].join("\n")}
+      />,
+    );
+
+    expect(screen.queryByTitle("unsafe-frame")).not.toBeInTheDocument();
+    expect(screen.getByTestId("safe-svg")).toBeInTheDocument();
+    expect(document.querySelector("[onload]")).toBeNull();
+    expect(document.querySelector("[onclick]")).toBeNull();
+    expect(document.querySelector("foreignObject")).toBeNull();
+    expect(screen.queryByText("unsafe")).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+
+  it("sanitizes rendered Mermaid SVG before injecting it", async () => {
+    mermaidMocks.render.mockResolvedValueOnce({
+      svg: [
+        '<svg data-testid="mermaid-svg" viewBox="0 0 100 40" onload="window.compromised=1">',
+        '<foreignObject><iframe title="unsafe-mermaid-frame"></iframe></foreignObject>',
+        '<a href="javascript:window.compromised=1"><text>Flow</text></a>',
+        "</svg>",
+      ].join(""),
+    });
+
+    render(
+      <HandoutMarkdownRenderer
+        markdown={["```mermaid", "flowchart LR", "  A[Input] --> B[Output]", "```"].join("\n")}
+      />,
+    );
+
+    expect(await screen.findByTestId("mermaid-svg")).toBeInTheDocument();
+    expect(screen.queryByTitle("unsafe-mermaid-frame")).not.toBeInTheDocument();
+    expect(document.querySelector(".handout-mermaid-diagram [onload]")).toBeNull();
+    expect(document.querySelector(".handout-mermaid-diagram foreignObject")).toBeNull();
+    expect(document.querySelector(".handout-mermaid-diagram a")).not.toHaveAttribute("href");
   });
 
   it("keeps non-Mermaid fenced code as a normal code block", () => {
