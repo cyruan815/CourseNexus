@@ -43,6 +43,7 @@ class KnowledgeGenerationResult(BaseModel):
 class KnowledgeItem(KnowledgeDraft):
     id: str = Field(pattern=r"^kp_\d{3}$")
     sort_order: int = Field(ge=1)
+    learned: bool = False
 
 
 class KnowledgeListContent(BaseModel):

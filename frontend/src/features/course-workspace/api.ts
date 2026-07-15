@@ -50,6 +50,20 @@ export function updateFlashcards(generatedContentId: string, cards: Array<{ fron
   });
 }
 
+export function updateKnowledgeItemLearningState(
+  generatedContentId: string,
+  knowledgeItemId: string,
+  learned: boolean,
+): Promise<GeneratedContent> {
+  return apiRequest<GeneratedContent>(
+    `/api/v1/generated-contents/${generatedContentId}/knowledge-items/${knowledgeItemId}/learning-state`,
+    {
+      method: "PATCH",
+      body: { learned },
+    },
+  );
+}
+
 export function generateCourseContent(courseId: string, payload: GenerateContentRequest): Promise<GeneratedContent> {
   return apiRequest<GeneratedContent>(`/api/v1/courses/${courseId}/generations`, {
     method: "POST",

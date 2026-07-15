@@ -10,6 +10,7 @@ import {
   listGeneratedContents,
   listStudyPlans,
   renameGeneratedContent,
+  updateKnowledgeItemLearningState,
 } from "../../../src/features/course-workspace/api";
 import type { MaterialScope } from "../../../src/features/materials/types";
 
@@ -117,6 +118,21 @@ describe("course workspace api", () => {
       6,
       "/api/v1/courses/crs_1/study-plans",
       expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("updates one knowledge item's learning state", async () => {
+    const generatedContent = { id: "gen_1", content_json: { items: [] } };
+    const fetchMock = vi.fn().mockImplementation(() => successResponse(generatedContent));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateKnowledgeItemLearningState("gen_1", "kp_001", true)).resolves.toEqual(generatedContent);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_1/knowledge-items/kp_001/learning-state",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ learned: true }),
+      }),
     );
   });
 });

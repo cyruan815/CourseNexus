@@ -27,5 +27,20 @@ export function taskTestQuestions(value: unknown): TaskTestQuestion[] | null {
 }
 export function flashcards(value: unknown): Flashcard[] | null { const list = arrayAt(value, "cards"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.front) && text(i.back)); return valid.length === list.length && valid.length ? valid as Flashcard[] : null; }
 export function outlineSections(value: unknown): OutlineSection[] | null { const list = arrayAt(value, "sections"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.title) && text(i.summary) && text(i.review_suggestion)); return valid.length === list.length && valid.length ? valid as OutlineSection[] : null; }
-export function knowledgeItems(value: unknown): KnowledgeItem[] | null { const list = arrayAt(value, "items"); if (!list) return null; const valid = list.filter((i) => isRecord(i) && text(i.id) && number(i.sort_order) && text(i.name) && text(i.definition) && text(i.importance) && text(i.related_section)); return valid.length === list.length && valid.length ? valid as KnowledgeItem[] : null; }
+export function knowledgeItems(value: unknown): KnowledgeItem[] | null {
+  const list = arrayAt(value, "items");
+  if (!list) return null;
+  const valid = list.filter((item): item is Record<string, unknown> => (
+    isRecord(item)
+    && text(item.id)
+    && number(item.sort_order)
+    && text(item.name)
+    && text(item.definition)
+    && text(item.importance)
+    && text(item.related_section)
+    && (item.learned === undefined || typeof item.learned === "boolean")
+  ));
+  if (valid.length !== list.length || !valid.length) return null;
+  return valid.map((item) => ({ ...item, learned: item.learned === true })) as unknown as KnowledgeItem[];
+}
 export function mindmapContent(value: unknown): MindmapContent | null { if (!isRecord(value) || !text(value.root_node_id) || !Array.isArray(value.nodes) || !Array.isArray(value.edges) || !isRecord(value.markmap_data) || !isRecord(value.markmap_data.root)) return null; return value as unknown as MindmapContent; }

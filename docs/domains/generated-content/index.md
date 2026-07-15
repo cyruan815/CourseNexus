@@ -53,7 +53,7 @@
 - failed：展示失败提示和 `error_code`，不展示伪结果。
 - error：详情接口失败时展示后端错误信息。
 
-Quiz 提供单题即时判题和本地正确率；Flashcard 提供翻卡、掌握/未掌握与错卡重练；Mindmap 直接使用 `markmap-view` 渲染后端预处理树；Outline 提供章节导航；Knowledge List 提供搜索和重要程度筛选。Quiz 作答、Flashcard 练习、Outline 展开和筛选状态仅存在页面内存；Flashcard 添加 / 删除卡片通过完整牌组替换接口写入后端。
+Quiz 提供单题即时判题和本地正确率；Flashcard 提供翻卡、掌握/未掌握与错卡重练；Mindmap 直接使用 `markmap-view` 渲染后端预处理树；Outline 提供章节导航；Knowledge List 提供搜索、重要程度筛选、逐项已学习标记和整体进度。Quiz 作答、Flashcard 练习、Outline 展开和筛选状态仅存在页面内存；Flashcard 添加 / 删除卡片通过完整牌组替换接口写入后端；Knowledge List 的 `learned` 状态通过单项 PATCH 接口写回 `content_json.items`。
 
 `task_test` 使用 `TaskTestResult` 只读展示 `content_json.questions`，与课程自测 Quiz 的本地判题交互分开。它只服务计划学习执行页的任务测试题查看和 Markdown 导出，不保存学生答案。
 

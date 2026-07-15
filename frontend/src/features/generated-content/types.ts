@@ -17,7 +17,7 @@ export interface OutlineSection {
 
 export interface KnowledgeItem {
   id: string; sort_order: number; name: string; definition: string;
-  importance: "low" | "medium" | "high"; related_section: string;
+  importance: "low" | "medium" | "high"; related_section: string; learned?: boolean;
 }
 
 export interface TaskTestQuestion {

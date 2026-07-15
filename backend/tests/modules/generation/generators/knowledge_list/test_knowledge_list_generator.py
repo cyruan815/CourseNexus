@@ -17,6 +17,7 @@ def test_knowledge_list_filters_importance_and_preserves_model_order() -> None:
     assert len(provider.calls) == 1
     assert provider.calls[0][1] is KnowledgeGenerationResult
     assert [item["name"] for item in output.content_json["items"]] == ["High", "Medium"]
+    assert [item["learned"] for item in output.content_json["items"]] == [False, False]
     assert "source_citation_ids" not in output.content_json["items"][0]
     assert output.title == "第一章 进程管理"
     assert "formula conditions" in provider.calls[0][0]
