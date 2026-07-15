@@ -4,9 +4,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, #f4f8fc 0, #f7fafc 260px),
-    #f7fafc;
+  background: var(--course-page-bg);
   color: #1f2937;
 }
 
@@ -140,6 +138,14 @@
   padding: 18px;
 }
 
+.study-plan-plan-switcher,
+.study-plan-detail-hero,
+.study-plan-task-structure-panel,
+.study-plan-task,
+.study-plan-subtask {
+  background: var(--course-page-bg);
+}
+
 .study-plan-panel {
   display: grid;
   gap: 14px;
@@ -204,13 +210,13 @@
 
 .study-plan-task {
   border-color: #d6e0eb;
-  background: #fbfdff;
+  background: var(--course-page-bg);
   padding: 14px;
 }
 
 .study-plan-subtask {
   border-color: #e5edf5;
-  background: #ffffff;
+  background: #fbfdff;
   padding: 12px;
 }
 
@@ -257,7 +263,7 @@
   background:
     radial-gradient(circle at 0 0, var(--course-glow), transparent 320px),
     radial-gradient(circle at 11% 7%, var(--course-core), transparent 250px),
-    #ffffff;
+    var(--course-page-bg);
 }
 
 .study-plan-required-config {
@@ -727,6 +733,9 @@
 }
 
 .study-plan-task-structure-panel {
+  border: 0;
+  background: transparent;
+  padding: 0;
   overflow: visible;
 }
 
@@ -836,6 +845,7 @@
 .study-plan-execution-main {
   display: flex;
   flex-direction: column;
+  background: var(--course-page-bg);
 }
 
 .study-plan-execution-main-stack {
@@ -851,11 +861,13 @@
 
 .study-plan-execution-sidebar {
   position: static;
+  background: var(--course-page-bg);
 }
 
 .study-plan-execution-aside {
   display: flex;
   flex-direction: column;
+  background: var(--course-page-bg);
 }
 
 .study-plan-execution-aside-layout {
@@ -961,7 +973,7 @@
   display: flex;
   flex-direction: column;
   border-color: #dbeafe;
-  background: #f8fbff;
+  background: var(--course-page-bg);
   padding: 12px;
 }
 

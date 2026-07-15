@@ -220,7 +220,7 @@
   background:
     radial-gradient(circle at 12% 8%, rgba(203, 217, 229, 0.32), transparent 24%),
     radial-gradient(circle at 88% 92%, rgba(217, 228, 215, 0.26), transparent 26%),
-    #f4f6f5;
+    var(--course-page-bg);
 }
 
 .handout-preview-shell {

@@ -1,9 +1,23 @@
+:root {
+  --course-page-bg: #faf9f7;
+  --course-surface-bg: var(--course-page-bg);
+}
+
 :root[data-course-nexus-theme="dark"] {
   color-scheme: dark;
+  --course-page-bg: #0f172a;
+  --course-surface-bg: var(--course-page-bg);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--course-page-bg);
 }
 
 :root[data-course-nexus-theme="dark"] body {
-  background: #0f172a;
+  background: var(--course-page-bg);
 }
 
 .workbench-page {
@@ -12,13 +26,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--course-page-bg);
 }
 
 .workbench-topbar {
   flex: 0 0 auto;
   min-height: 68px;
   border-bottom: 1px solid #d9e2ec;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--course-page-bg);
   padding: 12px 22px;
 }
 
