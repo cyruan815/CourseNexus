@@ -15,11 +15,10 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconSend } from "@tabler/icons-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { IconArrowLeft, IconCalendarStats, IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
-import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
 import type { Material, MaterialScope } from "../features/materials/types";
@@ -119,19 +118,9 @@ const unresolvedFieldLabels: Record<string, string> = {
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
 
-const questionnaireLoadingLogs = [
-  ["+00.018", "INFO", "parser", "解析学习目标..."],
-  ["+00.204", "INFO", "material", "检查可用课程资料..."],
-  ["+00.389", "INFO", "diagnostic", "生成学情诊断题..."],
-  ["+01.142", "OK", "wizard", "整理问卷..."],
-];
-
-const planGeneratingLogs = [
-  ["+00.018", "INFO", "profile", "汇总问卷答案..."],
-  ["+00.204", "INFO", "diagnostic", "生成学习诊断..."],
-  ["+01.142", "INFO", "planner", "规划每日任务..."],
-  ["+02.841", "OK", "save", "保存学习计划..."],
-];
+const questionnairePreparationSteps = ["理解目标", "匹配资料", "准备问题"];
+const planGenerationSteps = ["汇总问卷答案", "生成学习诊断", "拆分每日任务", "保存学习计划"];
+const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -181,6 +170,53 @@ function formatCalendarDate(date: Date): string {
 
 function addCalendarDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function monthTitle(date: Date): string {
+  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function dateFromDateKey(dateKey: string | null | undefined): Date {
+  if (!dateKey) {
+    return new Date();
+  }
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) {
+    return new Date();
+  }
+  return new Date(year, month - 1, day);
+}
+
+function buildMonthCells(referenceDate: Date) {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const leadingDays = firstDay.getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const previousMonthLastDate = new Date(year, month, 0).getDate();
+
+  return Array.from({ length: 35 }, (_, index) => {
+    const dayOffset = index - leadingDays + 1;
+    if (dayOffset < 1) {
+      return {
+        day: previousMonthLastDate + dayOffset,
+        dateKey: null,
+        isCurrentMonth: false,
+      };
+    }
+    if (dayOffset > lastDate) {
+      return {
+        day: dayOffset - lastDate,
+        dateKey: null,
+        isCurrentMonth: false,
+      };
+    }
+    return {
+      day: dayOffset,
+      dateKey: formatCalendarDate(new Date(year, month, dayOffset)),
+      isCurrentMonth: true,
+    };
+  });
 }
 
 function nextMonday(date: Date): Date {
@@ -271,34 +307,166 @@ function sortDiagnosticQuestions(questions: StudyPlanDiagnosticQuestion[]) {
   return [...questions].sort((left, right) => left.sort_order - right.sort_order);
 }
 
-function StudyPlanGenerationLog({
-  logs,
-  title,
-}: {
-  logs: string[][];
-  title: string;
-}) {
+function AnimatedStatusRows({ rows }: { rows: string[] }) {
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    setVisibleCount(1);
+    const timer = window.setInterval(() => {
+      setVisibleCount((current) => {
+        if (current >= rows.length) {
+          window.clearInterval(timer);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 420);
+    return () => window.clearInterval(timer);
+  }, [rows]);
+
   return (
-    <Paper className="study-plan-generation-log" radius="md" role="status" withBorder>
-      <Group className="study-plan-generation-log-header" justify="space-between" wrap="nowrap">
-        <Text fw={800}>{title}</Text>
-        <Group className="study-plan-generation-dots" gap={6}>
-          {Array.from({ length: 7 }).map((_, index) => (
-            <Box aria-hidden="true" key={index} />
+    <Stack className="study-plan-loading-rows" gap={8}>
+      {rows.slice(0, visibleCount).map((row) => (
+        <Group className="study-plan-loading-row" gap="xs" key={row} wrap="nowrap">
+          <Box aria-hidden="true" className="study-plan-loading-row-dot" />
+          <Text size="sm">{row}</Text>
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
+function StudyPlanQuestionnairePreparing() {
+  return (
+    <Paper className="study-plan-preparing-card" radius="md" role="status" withBorder>
+      <Stack gap="lg">
+        <Stack gap={4}>
+          <Text c="teal" fw={800} size="sm">正在整理问卷</Text>
+          <Title order={2}>把你的目标变成几个关键问题</Title>
+          <Text c="dimmed" size="sm">正在读取课程资料和目标语义，很快进入问卷。</Text>
+        </Stack>
+        <Group className="study-plan-preparing-steps" gap="sm" wrap="nowrap">
+          {questionnairePreparationSteps.map((step, index) => (
+            <Box className="study-plan-preparing-step" key={step} style={{ animationDelay: `${index * 180}ms` }}>
+              <Text fw={750} size="sm">{step}</Text>
+            </Box>
           ))}
         </Group>
-      </Group>
-      <Box className="study-plan-generation-log-body">
-        {logs.concat(logs).map(([time, level, scope, message], index) => (
-          <Box className="study-plan-generation-log-row" key={`${time}-${scope}-${index}`}>
-            <Text component="span">{time}</Text>
-            <Text component="span" data-level={level}>{level}</Text>
-            <Text component="span">{scope}</Text>
-            <Text component="span">{message}</Text>
-          </Box>
-        ))}
-      </Box>
+        <AnimatedStatusRows rows={questionnairePreparationSteps} />
+      </Stack>
     </Paper>
+  );
+}
+
+function StudyPlanCalendarGeneration({ endDate, startDate }: { endDate: string; startDate: string }) {
+  const [referenceDate, setReferenceDate] = useState(() => dateFromDateKey(startDate));
+  const monthCells = useMemo(() => buildMonthCells(referenceDate), [referenceDate]);
+  const plannedDates = useMemo(() => {
+    const dates = new Set<string>();
+    const durationDays = resolveDurationDays(startDate, endDate) ?? 1;
+    const start = dateFromDateKey(startDate);
+    Array.from({ length: Math.max(1, durationDays) }).forEach((_, index) => {
+      dates.add(formatCalendarDate(addCalendarDays(start, index)));
+    });
+    return dates;
+  }, [endDate, startDate]);
+
+  return (
+    <Paper className="study-plan-calendar-generation" radius="md" role="status" withBorder>
+      <Stack gap="md">
+        <Group align="flex-start" justify="space-between" wrap="nowrap">
+          <Stack gap={4}>
+            <Text c="teal" fw={800} size="sm">生成学习计划</Text>
+            <Title order={2}>正在拆分每日任务</Title>
+            <Text c="dimmed" size="sm">把诊断结果、资料范围和学习日期安排到日历里。</Text>
+          </Stack>
+          <IconCalendarStats className="study-plan-calendar-generation-icon" size={34} stroke={1.7} />
+        </Group>
+
+        <Paper className="study-plan-calendar-card" radius="md" withBorder>
+          <Group className="study-plan-calendar-card-header" justify="space-between" wrap="nowrap">
+            <Text fw={800}>{monthTitle(referenceDate)}</Text>
+            <Group gap={4} wrap="nowrap">
+              <Button
+                aria-label="上个月"
+                className="study-plan-calendar-nav-button"
+                onClick={() => setReferenceDate((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+                size="compact-sm"
+                variant="subtle"
+              >
+                <IconChevronLeft size={16} />
+              </Button>
+              <Button
+                aria-label="下个月"
+                className="study-plan-calendar-nav-button"
+                onClick={() => setReferenceDate((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+                size="compact-sm"
+                variant="subtle"
+              >
+                <IconChevronRight size={16} />
+              </Button>
+            </Group>
+          </Group>
+          <Box className="study-plan-calendar-weekdays" aria-hidden="true">
+            {weekDayLabels.map((label) => (
+              <Text c="dimmed" component="span" key={label} size="xs">{label}</Text>
+            ))}
+          </Box>
+          <Box aria-label="生成中的计划日历" className="study-plan-calendar-grid" role="grid">
+            {monthCells.map((cell, index) => (
+              <Box
+                className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${cell.dateKey && plannedDates.has(cell.dateKey) ? " is-planned" : ""}`}
+                key={`${cell.dateKey ?? "muted"}-${cell.day}-${index}`}
+                role="gridcell"
+                style={{ animationDelay: `${index * 24}ms` }}
+              >
+                <span className="study-plan-calendar-day">{cell.day}</span>
+                {cell.dateKey && plannedDates.has(cell.dateKey) ? (
+                  <span className="study-plan-calendar-task">任务生成中</span>
+                ) : null}
+              </Box>
+            ))}
+          </Box>
+        </Paper>
+
+        <AnimatedStatusRows rows={planGenerationSteps} />
+      </Stack>
+    </Paper>
+  );
+}
+
+function StudyPlanCreateNav({
+  courseId,
+  courseName,
+  isBackDisabled,
+  onBack,
+}: {
+  courseId: string | undefined;
+  courseName: string;
+  isBackDisabled: boolean;
+  onBack: () => void;
+}) {
+  return (
+    <Group className="study-plan-create-nav" justify="space-between" wrap="nowrap">
+      <Group gap="sm" wrap="nowrap">
+        <Button
+          disabled={isBackDisabled}
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={onBack}
+          variant="subtle"
+        >
+          返回上一步
+        </Button>
+        <Text c="dimmed" size="sm">创建学习计划 / {courseName}</Text>
+      </Group>
+      <Button
+        component={Link}
+        to={courseId ? `/courses/${courseId}` : "/"}
+        variant="default"
+      >
+        回到课程详情
+      </Button>
+    </Group>
   );
 }
 
@@ -739,11 +907,27 @@ export function StudyPlanCreatePage() {
     }
   }
 
+  function handleStepBack() {
+    if (phase === "questionnaire") {
+      setPhase("goal");
+      setQuestionVersion(null);
+      setDiagnosticQuestions([]);
+      setDiagnosticAnswers({});
+      setDiagnosticNote("");
+      setError(null);
+    }
+  }
+
   if (isLoadingCourse) {
     return (
       <Box className="study-plan-page workbench-page">
-        <WorkbenchTopbar backFallbackTo={courseId ? `/courses/${courseId}` : "/"} pageName="创建学习计划" />
         <Box className="study-plan-shell" data-workbench-scroll="locked">
+          <StudyPlanCreateNav
+            courseId={courseId}
+            courseName="课程"
+            isBackDisabled
+            onBack={handleStepBack}
+          />
           <Skeleton height={36} width={280} />
           <Skeleton height={520} radius="md" />
         </Box>
@@ -753,14 +937,13 @@ export function StudyPlanCreatePage() {
 
   return (
     <Box className="study-plan-page workbench-page">
-      <WorkbenchTopbar
-        backFallbackTo={courseId ? `/courses/${courseId}` : "/"}
-        contextName={course?.name ?? "课程"}
-        meta={<Badge color="teal" variant="light">智能回填</Badge>}
-        pageName="创建学习计划"
-      />
-
       <Box className="study-plan-shell study-plan-create-shell" component="main" data-workbench-scroll="locked">
+        <StudyPlanCreateNav
+          courseId={courseId}
+          courseName={course?.name ?? "课程"}
+          isBackDisabled={phase !== "questionnaire"}
+          onBack={handleStepBack}
+        />
         <Box className="study-plan-create-flow">
           <Paper className="study-plan-panel" radius="md" withBorder>
             {phase === "goal" ? (
@@ -801,7 +984,7 @@ export function StudyPlanCreatePage() {
             ) : null}
 
             {phase === "preparing" ? (
-              <StudyPlanGenerationLog logs={questionnaireLoadingLogs} title="问卷生成中..." />
+              <StudyPlanQuestionnairePreparing />
             ) : null}
 
             {phase === "questionnaire" ? (
@@ -941,7 +1124,7 @@ export function StudyPlanCreatePage() {
             ) : null}
 
             {phase === "generating" ? (
-              <StudyPlanGenerationLog logs={planGeneratingLogs} title="课程生成中..." />
+              <StudyPlanCalendarGeneration endDate={endDate} startDate={startDate} />
             ) : null}
 
             {error ? (

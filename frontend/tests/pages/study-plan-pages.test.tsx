@@ -486,6 +486,14 @@ function freezeStudyPlanDate() {
   vi.setSystemTime(new Date(2026, 6, 12, 12));
 }
 
+function deferredSuccessResponse(data: unknown, requestId = "req_deferred") {
+  let resolve!: () => void;
+  const promise = new Promise<Response>((next) => {
+    resolve = () => next(successResponse(data, requestId));
+  });
+  return { promise, resolve };
+}
+
 describe("study plan pages", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -513,16 +521,69 @@ describe("study plan pages", () => {
 
     await waitFor(() => expect(container.querySelector(".study-plan-create-flow")).toBeInTheDocument());
     expect(container.querySelector(".workbench-page")).toBeInTheDocument();
-    expect(container.querySelector(".workbench-topbar")).toBeInTheDocument();
+    expect(container.querySelector(".workbench-topbar")).not.toBeInTheDocument();
+    expect(container.querySelector(".study-plan-create-nav")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
-    expect(container.querySelector(".workbench-topbar-left .workbench-back-button")).not.toBeInTheDocument();
-    expect(container.querySelector(".workbench-topbar-right .workbench-back-button")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "返回首页" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "创建学习计划" })).toBeInTheDocument();
-    expect(screen.getAllByText("高等数学").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("button", { name: "返回上一步" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "回到课程详情" })).toHaveAttribute("href", "/courses/crs_123");
+    expect(screen.getByText("创建学习计划 / 高等数学")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /切换为/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "打开个人中心" })).not.toBeInTheDocument();
+  });
+
+  it("shows a short questionnaire preparation animation while questions are loading", async () => {
+    const parseDeferred = deferredSuccessResponse({
+      goal_text: "复习线性代数第一章",
+      start_date: null,
+      end_date: null,
+      duration_days: null,
+      daily_available_minutes: null,
+      preference: "balanced",
+      material_scope: {
+        include_all_parsed_materials: true,
+        material_ids: [],
+      },
+      unresolved_fields: ["start_date", "duration_days"],
+    }, "req_config_parse");
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return parseDeferred.promise;
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/materials", expect.anything());
+    });
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "复习线性代数第一章" },
+    });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+
+    expect(await screen.findByText("正在整理问卷")).toBeInTheDocument();
+    expect(screen.getAllByText("理解目标").length).toBeGreaterThan(0);
+    expect(screen.getByText("匹配资料")).toBeInTheDocument();
+    expect(screen.getByText("准备问题")).toBeInTheDocument();
+    expect(screen.queryByText("+00.018")).not.toBeInTheDocument();
+
+    parseDeferred.resolve();
+    expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
   });
 
   it("renders the detail page inside the fixed workbench layout", async () => {
@@ -802,6 +863,81 @@ describe("study plan pages", () => {
         }),
       );
     });
+  });
+
+  it("shows a calendar planning animation while the plan is being generated", async () => {
+    freezeStudyPlanDate();
+    const profileDeferred = deferredSuccessResponse(diagnosticProfile, "req_diagnostic_profile");
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          goal_text: "复习线性代数第一章",
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: null,
+          preference: "balanced",
+          material_scope: {
+            include_all_parsed_materials: true,
+            material_ids: [],
+          },
+          unresolved_fields: ["start_date", "duration_days"],
+        }, "req_config_parse"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-profiles")) {
+        return profileDeferred.promise;
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
+        return Promise.resolve(successResponse(savedDetail, "req_save"));
+      }
+      if (url.endsWith("/study-plans/plan_1")) {
+        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/materials", expect.anything());
+    });
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "复习线性代数第一章" },
+    });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+    expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
+    fireEvent.click(screen.getByRole("button", { name: /A\. 2 天/ }));
+    fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
+    fireEvent.click(screen.getByLabelText("概念理解"));
+
+    fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+
+    expect(await screen.findByText("正在拆分每日任务")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上个月" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下个月" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /选择年月|Today|应用/ })).not.toBeInTheDocument();
+    expect(screen.getByText("July 2026")).toBeInTheDocument();
+    expect(screen.getByText("生成学习计划")).toBeInTheDocument();
+
+    profileDeferred.resolve();
+    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
   });
 
   it("shows recoverable messages when automatic plan generation fails", async () => {
