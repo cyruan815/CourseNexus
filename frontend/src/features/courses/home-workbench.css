@@ -640,11 +640,22 @@
   padding: 14px;
 }
 
+.calendar-task-progress-count {
+  line-height: 1.25;
+}
+
+.calendar-subtask-list {
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
 .calendar-subtask-row {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 10px 12px;
+  background: transparent;
+  padding: 12px 0;
+}
+
+.calendar-subtask-row + .calendar-subtask-row {
+  border-top: 1px solid #e5e7eb;
 }
 
 .calendar-empty-state {

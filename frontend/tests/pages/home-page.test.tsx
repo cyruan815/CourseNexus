@@ -254,7 +254,8 @@ describe("HomePage", () => {
       "/study-subtasks/subtask_2",
     );
     expect(screen.getByRole("link", { name: "离散数学" })).toBeInTheDocument();
-    expect(screen.getByText("1/3 个二级任务完成")).toBeInTheDocument();
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+    expect(screen.queryByText("1/3 个二级任务完成")).not.toBeInTheDocument();
     expect(screen.queryByText("今天还没有学习计划")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/todos/today?date=2026-07-14",

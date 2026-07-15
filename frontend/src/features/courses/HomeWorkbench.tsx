@@ -443,7 +443,7 @@ function TodayTodoPanel() {
                     <Text fw={750} size="sm">{task.title}</Text>
                     <Text c="dimmed" size="xs">{task.course_name}</Text>
                     <Text c="dimmed" size="xs">
-                      {task.completed_subtask_count}/{task.total_subtask_count} 个二级任务完成
+                      {task.completed_subtask_count}/{task.total_subtask_count}
                     </Text>
                   </Stack>
                   <Badge color={statusColor(task.derived_status)} size="xs" variant="light">

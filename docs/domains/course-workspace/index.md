@@ -12,6 +12,7 @@
 - 2026-07-13: The study-plan create page now saves through the new wizard contract: `client_flow = "wizard_v1"`, exact preview `tasks`, and an `Idempotency-Key` header. The page still keeps diagnostic, regeneration, replacement, execution, and calendar views as follow-up front-end work instead of pretending those flows are complete.
 - 2026-07-14: `/calendar?courseId={course_id}` now opens the real single-course study calendar. It reads the S03 course month endpoint for date summaries and the course day endpoint after the user selects a date; it remains read-only and links tasks back to existing study plan detail pages instead of inventing an execution route.
 - 2026-07-14: The home workbench mini calendar intentionally stays compact: each day cell shows one task title line with ellipsis plus one independent progress line. Multi-task per-day expansion belongs to the full calendar page, not the mini calendar.
+- 2026-07-15: Calendar day task details display primary task progress as `completed/total` only. Subtask rows omit description bodies and render as a divider-separated list inside the parent task block, not as individual bordered cards.
 - 2026-07-15: Grounded answers render backend `[[cite:N]]` markers as small inline citation buttons. Hovering a marker shows the source material name, page and saved `hit_text` snapshot. Historical messages use the same `source_citations` contract; legacy answers with citations but no inline markers append their markers at the end instead of losing the sources.
 
 ## 概述

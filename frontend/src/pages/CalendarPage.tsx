@@ -254,24 +254,21 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
         <Group justify="space-between" wrap="nowrap">
           <Stack gap={2}>
             <Text fw={750}>{task.title}</Text>
-            <Text c="dimmed" size="sm">
-              {task.completed_subtask_count}/{task.total_subtask_count} 个二级任务完成
+            <Text className="calendar-task-progress-count" c="dimmed" size="sm">
+              {task.completed_subtask_count}/{task.total_subtask_count}
             </Text>
           </Stack>
           <Badge color={statusColor(task.derived_status)} variant="light">
             {statusLabel(task.derived_status)}
           </Badge>
         </Group>
-        <Stack gap="xs">
+        <Stack className="calendar-subtask-list" gap={0}>
           {task.subtasks.map((subtask) => (
             <Box className="calendar-subtask-row" key={subtask.subtask_id}>
               <Group justify="space-between" wrap="nowrap">
                 <Stack gap={2}>
                   <Text fw={650} size="sm">{subtask.title}</Text>
-                  <Text c="dimmed" size="xs">
-                    {subtaskTypeLabel(subtask.subtask_type)}
-                    {subtask.description ? ` · ${subtask.description}` : ""}
-                  </Text>
+                  <Text c="dimmed" size="xs">{subtaskTypeLabel(subtask.subtask_type)}</Text>
                 </Stack>
                 <Badge color={statusColor(subtask.status)} size="xs" variant="light">
                   {statusLabel(subtask.status)}
