@@ -7,6 +7,17 @@ type DraftAnswer = TaskTestAnswer | undefined;
 type AnswerState = Record<string, DraftAnswer>;
 type SubmittedState = Record<string, boolean>;
 
+interface InteractionState {
+  answers: AnswerState;
+  attemptKey?: string | null;
+  submitted: SubmittedState;
+}
+
+interface TaskTestResultProps {
+  attemptKey?: string | null;
+  questions: TaskTestQuestion[];
+}
+
 function typeLabel(type: TaskTestQuestion["question_type"]) {
   const labels = {
     single_choice: "单选",
@@ -49,22 +60,41 @@ function isCorrect(question: TaskTestQuestion, answer: DraftAnswer): boolean | n
   return answer === question.correct_answer;
 }
 
-export function TaskTestResult({ questions }: { questions: TaskTestQuestion[] }) {
+export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
   const ordered = [...questions].sort((left, right) => left.sort_order - right.sort_order);
-  const [answers, setAnswers] = useState<AnswerState>({});
-  const [submitted, setSubmitted] = useState<SubmittedState>({});
+  const [interaction, setInteraction] = useState<InteractionState>(() => ({
+    answers: {},
+    attemptKey,
+    submitted: {},
+  }));
+  const answers = interaction.attemptKey === attemptKey ? interaction.answers : {};
+  const submitted = interaction.attemptKey === attemptKey ? interaction.submitted : {};
 
   const setAnswer = (questionId: string, answer: DraftAnswer) => {
-    setAnswers((current) => ({ ...current, [questionId]: answer }));
+    setInteraction((current) => {
+      const currentAnswers = current.attemptKey === attemptKey ? current.answers : {};
+      const currentSubmitted = current.attemptKey === attemptKey ? current.submitted : {};
+      return {
+        answers: { ...currentAnswers, [questionId]: answer },
+        attemptKey,
+        submitted: currentSubmitted,
+      };
+    });
   };
 
   const toggleMultipleChoice = (questionId: string, optionId: string) => {
-    setAnswers((current) => {
-      const currentValues = selectedValues(current[questionId]);
+    setInteraction((current) => {
+      const currentAnswers = current.attemptKey === attemptKey ? current.answers : {};
+      const currentSubmitted = current.attemptKey === attemptKey ? current.submitted : {};
+      const currentValues = selectedValues(currentAnswers[questionId]);
       const nextValues = currentValues.includes(optionId)
         ? currentValues.filter((value) => value !== optionId)
         : [...currentValues, optionId];
-      return { ...current, [questionId]: nextValues };
+      return {
+        answers: { ...currentAnswers, [questionId]: nextValues },
+        attemptKey,
+        submitted: currentSubmitted,
+      };
     });
   };
 
@@ -167,7 +197,11 @@ export function TaskTestResult({ questions }: { questions: TaskTestQuestion[] })
               <Group justify="flex-end">
                 <Button
                   disabled={!canSubmit || isSubmitted}
-                  onClick={() => setSubmitted((current) => ({ ...current, [question.id]: true }))}
+                  onClick={() => setInteraction((current) => ({
+                    answers: current.attemptKey === attemptKey ? current.answers : {},
+                    attemptKey,
+                    submitted: { ...(current.attemptKey === attemptKey ? current.submitted : {}), [question.id]: true },
+                  }))}
                   size="xs"
                   variant="light"
                 >

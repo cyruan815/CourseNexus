@@ -338,6 +338,7 @@ Callout Markdown 约定：
 - `true_false` 显示“判断”标签，用户选择“正确 / 错误”，提交后本地判断并显示正确答案和解析。
 - `short_answer` 显示“简答”标签和文本框，提交后不自动判分，只显示参考答案和解析。
 - 每道题独立提交；未提交题目不显示正确答案或解析。刷新页面后本地作答状态可以丢失。
+- 前端 `TaskTestResult` 通过调用方传入的 `attemptKey` 隔离浏览器内作答状态；生成内容详情页使用 `GeneratedContent.id`，执行页优先使用当前 `GeneratedContentRead.id`。当重新生成的新内容复用同一题目 `id` 时，旧 answers / submitted 状态不得继承。
 
 验证入口：
 

@@ -780,6 +780,7 @@ export function StudyTaskExecutionPage() {
     () => taskTestQuestions(currentGeneratedContent?.content_json) ?? [],
     [currentGeneratedContent?.content_json],
   );
+  const taskTestAttemptKey = currentGeneratedContent?.id ?? activeContentId ?? currentSubtask?.subtask_id ?? null;
   const contentSourceSummary = useMemo(
     () => generatedContentSourceSummary(currentGeneratedContent),
     [currentGeneratedContent],
@@ -1224,7 +1225,7 @@ export function StudyTaskExecutionPage() {
                           ) : null}
                           {contentType === "task_test" && taskTestPreviewQuestions.length > 0 ? (
                             <Box className="study-plan-task-test-preview">
-                              <TaskTestResult questions={taskTestPreviewQuestions} />
+                              <TaskTestResult attemptKey={taskTestAttemptKey} questions={taskTestPreviewQuestions} />
                             </Box>
                           ) : null}
                         </>

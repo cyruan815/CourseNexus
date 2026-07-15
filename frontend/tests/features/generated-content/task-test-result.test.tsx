@@ -55,7 +55,7 @@ const questions: TaskTestQuestion[] = [
 ];
 
 function renderResult() {
-  render(
+  return render(
     <MantineProvider>
       <TaskTestResult questions={questions} />
     </MantineProvider>,
@@ -114,5 +114,60 @@ describe("TaskTestResult", () => {
     expect(within(fourthCard).getByText("参考答案：用于估算无噪声信道的最大码元速率。")).toBeInTheDocument();
     expect(within(fourthCard).queryByText("回答正确")).not.toBeInTheDocument();
     expect(within(fourthCard).queryByText("回答错误")).not.toBeInTheDocument();
+  });
+  it("clears submitted answers when the attempt key changes even if question ids are reused", () => {
+    const firstAttemptQuestions: TaskTestQuestion[] = [
+      {
+        id: "q_001",
+        sort_order: 1,
+        question_type: "single_choice",
+        question_text: "旧题：向量空间必须满足哪类结构？",
+        options: [
+          { id: "A", text: "加法和数乘封闭" },
+          { id: "B", text: "只包含零向量" },
+        ],
+        correct_answer: "A",
+        explanation: "旧解析。",
+      },
+    ];
+    const secondAttemptQuestions: TaskTestQuestion[] = [
+      {
+        id: "q_001",
+        sort_order: 1,
+        question_type: "single_choice",
+        question_text: "新题：线性相关说明什么？",
+        options: [
+          { id: "A", text: "存在非零系数使线性组合为零" },
+          { id: "B", text: "所有向量都为零" },
+        ],
+        correct_answer: "A",
+        explanation: "新解析。",
+      },
+    ];
+
+    const { rerender } = render(
+      <MantineProvider>
+        <TaskTestResult attemptKey="gen_old" questions={firstAttemptQuestions} />
+      </MantineProvider>,
+    );
+
+    const oldCard = screen.getByLabelText("第 1 题：旧题：向量空间必须满足哪类结构？");
+    fireEvent.click(within(oldCard).getByRole("button", { name: "B. 只包含零向量" }));
+    fireEvent.click(within(oldCard).getByRole("button", { name: "提交答案" }));
+    expect(within(oldCard).getByText("回答错误")).toBeInTheDocument();
+
+    rerender(
+      <MantineProvider>
+        <TaskTestResult attemptKey="gen_new" questions={secondAttemptQuestions} />
+      </MantineProvider>,
+    );
+
+    const newCard = screen.getByLabelText("第 1 题：新题：线性相关说明什么？");
+    expect(within(newCard).getByRole("button", { name: "A. 存在非零系数使线性组合为零" })).not.toBeDisabled();
+    expect(within(newCard).getByRole("button", { name: "B. 所有向量都为零" })).not.toBeDisabled();
+    expect(within(newCard).getByRole("button", { name: "提交答案" })).toBeDisabled();
+    expect(within(newCard).queryByText("回答错误")).not.toBeInTheDocument();
+    expect(within(newCard).queryByText("正确答案：A")).not.toBeInTheDocument();
+    expect(within(newCard).queryByText("解析：新解析。")).not.toBeInTheDocument();
   });
 });
