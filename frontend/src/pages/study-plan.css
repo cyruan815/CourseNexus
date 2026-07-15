@@ -781,10 +781,46 @@
 .study-plan-execution-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(230px, 0.72fr) minmax(440px, 1.45fr) minmax(280px, 0.85fr);
-  gap: 10px;
+  grid-template-columns:
+    minmax(230px, var(--study-plan-execution-left, 0.72fr))
+    10px
+    minmax(440px, var(--study-plan-execution-main, 1.45fr))
+    10px
+    minmax(280px, var(--study-plan-execution-right, 0.85fr));
+  gap: 0;
   align-items: stretch;
   overflow: hidden;
+}
+
+.study-plan-execution-resizer {
+  min-height: 0;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.study-plan-execution-resizer::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 50%;
+  width: 2px;
+  border-radius: 999px;
+  background: #d6e0eb;
+  transform: translateX(-50%);
+  transition: background-color 160ms ease, width 160ms ease;
+}
+
+.study-plan-execution-resizer:hover::before,
+.study-plan-execution-resizer:focus-visible::before {
+  width: 4px;
+  background: #60a5fa;
+}
+
+.study-plan-execution-resizer:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
 }
 
 .study-plan-execution-sidebar,
@@ -1046,6 +1082,10 @@
   .study-plan-create-flow > .study-plan-questionnaire-card {
     max-height: calc(100vh - 138px);
     padding: 22px;
+  }
+
+  .study-plan-execution-resizer {
+    display: none;
   }
 }
 
