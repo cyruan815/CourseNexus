@@ -118,13 +118,13 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
             <p>{feedback === "correct" ? "记得很牢，继续保持。" : "没关系，再看一遍就会更熟悉。"}</p>
           </div>
         ) : flipped ? (
-          <button aria-label="翻转回问题" className="gc-flashcard gc-flashcard-answer" onClick={() => setFlipped(false)} type="button">
+          <button aria-label="翻转回问题" className="gc-flashcard gc-flashcard-answer" key="answer" onClick={() => setFlipped(false)} type="button">
             <div className="gc-flashcard-meta"><span className="gc-flashcard-side">答案</span><span aria-hidden="true">⋯</span></div>
             <h3>{card.back}</h3>
             {card.explanation ? <p className="gc-flashcard-explanation">{card.explanation}</p> : null}
           </button>
         ) : (
-          <button aria-label="翻转查看答案" className="gc-flashcard gc-flashcard-question" onClick={() => setFlipped(true)} type="button">
+          <button aria-label="翻转查看答案" className="gc-flashcard gc-flashcard-question" key="question" onClick={() => setFlipped(true)} type="button">
             <div className="gc-flashcard-meta"><span className="gc-flashcard-side">问题</span><span aria-hidden="true">⋯</span></div>
             <h3>{card.front}</h3>
           </button>
