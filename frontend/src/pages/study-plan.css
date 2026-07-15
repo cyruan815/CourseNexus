@@ -731,9 +731,9 @@
 }
 
 .study-plan-switcher-item.is-current {
-  border-color: #9dd6ce;
-  background: #f3fffc;
-  box-shadow: inset 3px 0 0 #14b8a6;
+  border-color: #2f80ed;
+  background: #f8fbff;
+  box-shadow: none;
 }
 
 .study-plan-course-detail-pane {
@@ -986,8 +986,8 @@
 }
 
 .study-plan-execution-step.is-current {
-  border-color: #9dd6ce;
-  background: #f3fffc;
+  border-color: #2f80ed;
+  background: #f8fbff;
 }
 
 .study-plan-step-icon {
@@ -997,7 +997,7 @@
 }
 
 .study-plan-step-icon.is-current {
-  color: #0f766e;
+  color: #2f80ed;
 }
 
 .study-plan-step-icon.is-complete {

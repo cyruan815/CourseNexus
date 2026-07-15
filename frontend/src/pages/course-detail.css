@@ -112,9 +112,9 @@
 }
 
 .course-detail-plan-summary {
-  border: 1px solid #ece8e2;
+  border: 1px solid #2f80ed;
   border-radius: 12px;
-  background: #fefdfc;
+  background: #f8fbff;
   color: inherit;
   display: block;
   margin: 0;
@@ -127,9 +127,9 @@
 }
 
 .course-detail-plan-summary:hover {
-  background: #fefdfc;
-  border-color: #ece8e2;
-  box-shadow: 0 0 0 1px rgba(47, 128, 237, 0.16);
+  background: #f8fbff;
+  border-color: #2f80ed;
+  box-shadow: none;
 }
 
 .course-detail-plan-title {
@@ -137,7 +137,7 @@
 }
 
 .course-detail-plan-summary:hover .course-detail-plan-title {
-  color: #2563eb;
+  color: #1f2937;
 }
 
 .course-detail-plan-actions {
