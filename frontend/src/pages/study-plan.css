@@ -60,11 +60,11 @@
   display: grid;
   grid-template-columns: minmax(0, 820px);
   justify-content: center;
-  align-content: center;
+  align-content: start;
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow: visible;
   min-height: 0;
-  padding-block: 18px;
+  padding-block: clamp(18px, 6vh, 72px);
 }
 
 .study-plan-create-shell {
@@ -83,9 +83,8 @@
 .study-plan-create-flow > .study-plan-panel {
   border-color: #d6e0eb;
   background: #ffffff;
-  max-height: 100%;
   padding: 26px;
-  overflow: auto;
+  overflow: visible;
   box-shadow: 0 18px 42px rgba(31, 41, 55, 0.08);
 }
 
