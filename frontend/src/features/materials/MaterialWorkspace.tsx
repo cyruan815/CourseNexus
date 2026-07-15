@@ -1,5 +1,5 @@
-import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Group, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Group, Menu, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   IconAlertCircle,
   IconCheck,
@@ -34,10 +34,6 @@ import {
 import type { Material, MaterialFolder, MaterialScope } from "./types";
 import "./material-workspace.css";
 
-type ContextMenu =
-  | { folder: MaterialFolder; kind: "folder"; x: number; y: number }
-  | { kind: "material"; material: Material; x: number; y: number }
-  | null;
 type DeleteTarget =
   | { kind: "folder"; folder: MaterialFolder }
   | { kind: "material"; material: Material }
@@ -98,8 +94,6 @@ function materialKind(material: Material): string {
   return labels[normalizedType] ?? (normalizedType.slice(0, 4).toUpperCase() || "FILE");
 }
 
-const materialContextMenuWidth = 168;
-
 export function MaterialWorkspace({
   courseId,
   initialData,
@@ -115,7 +109,6 @@ export function MaterialWorkspace({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploadPromptOpen, setIsUploadPromptOpen] = useState(openUploadPrompt);
   const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [draggedMaterialId, setDraggedMaterialId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -169,19 +162,6 @@ export function MaterialWorkspace({
     };
   }, [courseId, initialData]);
 
-  useEffect(() => {
-    if (!contextMenu) {
-      return undefined;
-    }
-
-    function closeContextMenu() {
-      setContextMenu(null);
-    }
-
-    document.addEventListener("mousedown", closeContextMenu);
-    return () => document.removeEventListener("mousedown", closeContextMenu);
-  }, [contextMenu]);
-
   useEffect(
     () => () => {
       if (previewUrl) {
@@ -230,7 +210,6 @@ export function MaterialWorkspace({
     setError(null);
     try {
       await action();
-      setContextMenu(null);
     } catch (nextError) {
       setError(errorMessage(nextError));
     } finally {
@@ -281,7 +260,6 @@ export function MaterialWorkspace({
   }
 
   function openCreateFolderModal() {
-    setContextMenu(null);
     setActionTarget({ kind: "createFolder" });
     setActionName("");
     setActionUrl("");
@@ -289,7 +267,6 @@ export function MaterialWorkspace({
   }
 
   function openRenameFolderModal(folder: MaterialFolder) {
-    setContextMenu(null);
     setActionTarget({ folder, kind: "renameFolder" });
     setActionName(folder.name);
     setActionUrl("");
@@ -297,7 +274,6 @@ export function MaterialWorkspace({
   }
 
   function openCreateLinkModal() {
-    setContextMenu(null);
     setActionTarget({ kind: "createLink" });
     setActionName("");
     setActionUrl("");
@@ -305,7 +281,6 @@ export function MaterialWorkspace({
   }
 
   function openRenameMaterialModal(material: Material) {
-    setContextMenu(null);
     setActionTarget({ kind: "renameMaterial", material });
     setActionName(material.name);
     setActionUrl("");
@@ -362,13 +337,11 @@ export function MaterialWorkspace({
   }
 
   function requestDeleteFolder(folder: MaterialFolder) {
-    setContextMenu(null);
     setDeleteError(null);
     setDeleteTarget({ kind: "folder", folder });
   }
 
   function requestDeleteMaterial(material: Material) {
-    setContextMenu(null);
     setDeleteError(null);
     setDeleteTarget({ kind: "material", material });
   }
@@ -480,20 +453,6 @@ export function MaterialWorkspace({
     }
   }
 
-  function openFolderMenu(event: MouseEvent<HTMLElement>, folder: MaterialFolder) {
-    event.preventDefault();
-    event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setContextMenu({ folder, kind: "folder", x: Math.max(8, rect.right - materialContextMenuWidth), y: rect.bottom + 4 });
-  }
-
-  function openMaterialMenu(event: MouseEvent<HTMLElement>, material: Material) {
-    event.preventDefault();
-    event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setContextMenu({ kind: "material", material, x: Math.max(8, rect.right - materialContextMenuWidth), y: rect.bottom + 4 });
-  }
-
   function handleParse(material: Material) {
     void mutate(async () => {
       updateMaterial(await retryParseMaterial(material.id));
@@ -532,6 +491,64 @@ export function MaterialWorkspace({
     setPreviewUrl(null);
     setPreviewError(null);
     setIsPreviewLoading(false);
+  }
+
+  function renderMaterialActionsMenu(material: Material) {
+    return (
+      <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={168} withinPortal>
+        <Menu.Target>
+          <button
+            aria-label={`${material.name} 更多操作`}
+            className="material-workspace__file-actions"
+            disabled={isMutating}
+            type="button"
+          >
+            <IconDotsVertical size={18} stroke={1.8} />
+          </button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameMaterialModal(material)}>
+            重命名资料
+          </Menu.Item>
+          {material.parse_status === "parse_failed" ? (
+            <Menu.Item leftSection={<IconLoader2 size={16} />} onClick={() => handleParse(material)}>
+              重试解析
+            </Menu.Item>
+          ) : null}
+          <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => requestDeleteMaterial(material)}>
+            删除资料
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    );
+  }
+
+  function renderFolderActionsMenu(folder: MaterialFolder) {
+    return (
+      <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={168} withinPortal>
+        <Menu.Target>
+          <button
+            aria-label={`${folder.name} 更多操作`}
+            className="material-workspace__folder-actions"
+            disabled={isMutating}
+            type="button"
+          >
+            <IconDotsVertical size={18} stroke={1.8} />
+          </button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameFolderModal(folder)}>
+            重命名文件夹
+          </Menu.Item>
+          <Menu.Item leftSection={<IconUpload size={16} />} onClick={() => openUploadDialog(folder.id)}>
+            上传到此文件夹
+          </Menu.Item>
+          <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => requestDeleteFolder(folder)}>
+            删除文件夹
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    );
   }
 
   function renderMaterialRow(material: Material) {
@@ -605,15 +622,7 @@ export function MaterialWorkspace({
           />
           <span className="material-workspace__sr-only">{status}</span>
         </span>
-        <button
-          aria-label={`${material.name} 更多操作`}
-          className="material-workspace__file-actions"
-          disabled={isMutating}
-          onClick={(event) => openMaterialMenu(event, material)}
-          type="button"
-        >
-          <IconDotsVertical size={18} stroke={1.8} />
-        </button>
+        {renderMaterialActionsMenu(material)}
       </li>
     );
   }
@@ -656,17 +665,7 @@ export function MaterialWorkspace({
             </span>
           </button>
           <span className="material-workspace__folder-count">{folderMaterials.length}</span>
-          {folder ? (
-            <button
-              aria-label={`${folderName} 更多操作`}
-              className="material-workspace__folder-actions"
-              disabled={isMutating}
-              onClick={(event) => openFolderMenu(event, folder)}
-              type="button"
-            >
-              <IconDotsVertical size={18} stroke={1.8} />
-            </button>
-          ) : null}
+          {folder ? renderFolderActionsMenu(folder) : null}
         </div>
         {isExpanded ? (
           folderMaterials.length > 0 ? (
@@ -826,57 +825,6 @@ export function MaterialWorkspace({
             {folders.map((folder) => renderFolderSection(folder.id, folder.name, folder))}
           </div>
           </div>
-        </div>
-      ) : null}
-
-      {contextMenu ? (
-        <div
-          className="material-workspace__context-menu"
-          onMouseDown={(event) => event.stopPropagation()}
-          role="menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.kind === "folder" ? (
-            <>
-              <button onClick={() => openRenameFolderModal(contextMenu.folder)} role="menuitem" type="button">
-                <IconEdit aria-hidden size={17} stroke={1.9} />
-                <span>重命名文件夹</span>
-              </button>
-              <button
-                onClick={() => {
-                  setContextMenu(null);
-                  openUploadDialog(contextMenu.folder.id);
-                }}
-                role="menuitem"
-                type="button"
-              >
-                <IconUpload aria-hidden size={17} stroke={1.9} />
-                <span>上传到此文件夹</span>
-              </button>
-              <button className="is-danger" onClick={() => requestDeleteFolder(contextMenu.folder)} role="menuitem" type="button">
-                <IconTrash aria-hidden size={17} stroke={1.9} />
-                <span>删除文件夹</span>
-              </button>
-            </>
-          ) : null}
-          {contextMenu.kind === "material" ? (
-            <>
-              <button onClick={() => openRenameMaterialModal(contextMenu.material)} role="menuitem" type="button">
-                <IconEdit aria-hidden size={17} stroke={1.9} />
-                <span>重命名资料</span>
-              </button>
-              {contextMenu.material.parse_status === "parse_failed" ? (
-                <button onClick={() => handleParse(contextMenu.material)} role="menuitem" type="button">
-                  <IconLoader2 aria-hidden size={17} stroke={1.9} />
-                  <span>重试解析</span>
-                </button>
-              ) : null}
-              <button className="is-danger" onClick={() => requestDeleteMaterial(contextMenu.material)} role="menuitem" type="button">
-                <IconTrash aria-hidden size={17} stroke={1.9} />
-                <span>删除资料</span>
-              </button>
-            </>
-          ) : null}
         </div>
       ) : null}
       <DeleteConfirmModal

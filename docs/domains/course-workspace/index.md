@@ -16,7 +16,7 @@
 - 2026-07-15: Grounded answers render backend `[[cite:N]]` markers as small inline citation buttons. Hovering a marker shows the source material name, page and saved `hit_text` snapshot. Historical messages use the same `source_citations` contract; legacy answers with citations but no inline markers append their markers at the end instead of losing the sources.
 - 2026-07-15: The course detail workspace keeps its existing three-column widths while adopting the confirmed resource-panel visual system. The left material card is an 18 px rounded, locally scrolling surface; the Q&A and right studio retain their existing content, layout, and behavior and only align outer/inner radii, borders, and subtle elevation with the material card.
 
-- 2026-07-16: The material explorer action column is right-edge aligned across folder and file rows. The material context menu uses the same compact icon-and-text popover language as the AI generated-content menu, and the material header uses the course page background color `#FAF9F7`.
+- 2026-07-16: The material explorer action column is right-edge aligned across folder and file rows. Folder and material row actions use Mantine `Menu`, matching the AI generated-content action menu instead of maintaining a self-positioned custom popover. The material header uses the course page background color `#FAF9F7`.
 
 ## 概述
 
