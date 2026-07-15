@@ -233,7 +233,7 @@
 }
 
 .course-detail-message-user {
-  margin-left: 48px;
+  margin-left: auto;
   width: fit-content;
   max-width: min(760px, calc(100% - 48px));
   background: #eef6ff;
