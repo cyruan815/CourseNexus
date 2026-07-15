@@ -24,11 +24,13 @@ export function KnowledgeListResult({
   const [items, setItems] = useState<KnowledgeItem[]>(initialItems);
   const [query, setQuery] = useState("");
   const [importance, setImportance] = useState<string | null>("all");
+  const [showUnlearnedOnly, setShowUnlearnedOnly] = useState(false);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const filtered = items.filter((item) => (
     (importance === "all" || item.importance === importance)
+    && (!showUnlearnedOnly || item.learned !== true)
     && `${item.name} ${item.definition} ${item.related_section}`.toLowerCase().includes(query.toLowerCase())
   ));
   const learnedCount = items.filter((item) => item.learned === true).length;
@@ -106,6 +108,14 @@ export function KnowledgeListResult({
           onChange={setImportance}
           value={importance}
         />
+        <button
+          aria-pressed={showUnlearnedOnly}
+          className={`gc-knowledge-unlearned-filter${showUnlearnedOnly ? " is-active" : ""}`}
+          onClick={() => setShowUnlearnedOnly((current) => !current)}
+          type="button"
+        >
+          未学习
+        </button>
       </div>
 
       {filtered.length ? (
