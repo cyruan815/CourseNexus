@@ -6,26 +6,28 @@
 
 .profile-shell {
   margin: 0 auto;
-  max-width: 1120px;
-  padding: 28px clamp(16px, 3vw, 40px) 48px;
+  max-width: 1200px;
+  padding: 16px clamp(16px, 3vw, 24px) 32px;
 }
 
 .profile-nav {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .profile-hero,
 .profile-card {
   background: #ffffff;
-  border-color: rgba(42, 57, 82, 0.12);
+  border-color: #d6e0eb;
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(29, 46, 78, 0.06);
 }
 
 .profile-hero {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 18px;
-  padding: 22px;
+  margin-bottom: 16px;
+  padding: 20px;
 }
 
 .profile-avatar {
