@@ -25,16 +25,15 @@ import type { Material, MaterialScope } from "../features/materials/types";
 import {
   createDiagnosticProfile,
   fetchDiagnosticQuestions,
-  fetchCourseStudyCalendar,
   parseStudyPlanConfig,
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
 import type {
-  CourseStudyCalendarMonth,
   MasteryLevel,
   PlanPreference,
   StudyPlanDiagnosticQuestion,
+  StudyPlanPreview,
   StudyPlanPreviewRequest,
   StudyPlanTopicMasteryAnswer,
   WeakArea,
@@ -120,16 +119,8 @@ const unresolvedFieldLabels: Record<string, string> = {
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
 
-const questionnairePreparationSteps = ["理解目标", "匹配资料", "准备问题"];
-const planGenerationSteps = ["汇总问卷答案", "生成学习诊断", "拆分每日任务", "保存学习计划"];
 const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const questionnaireAnimationDurationMs = 60_000;
-const planAnimationDurationMs = 600_000;
 const completionFlushMs = 520;
-const completionStepStaggerMs = 110;
-const loadingRowBaseProgress = 40;
-const loadingRowCompleteProgress = 100;
-const loadingRowProgressTickMs = 1_000;
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -316,82 +307,7 @@ function sortDiagnosticQuestions(questions: StudyPlanDiagnosticQuestion[]) {
   return [...questions].sort((left, right) => left.sort_order - right.sort_order);
 }
 
-function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function AnimatedStatusRows({
-  isComplete = false,
-  rows,
-  totalDurationMs,
-}: {
-  isComplete?: boolean;
-  rows: string[];
-  totalDurationMs: number;
-}) {
-  const [rowProgress, setRowProgress] = useState(() => rows.map(() => loadingRowBaseProgress));
-
-  useEffect(() => {
-    setRowProgress(rows.map(() => loadingRowBaseProgress));
-  }, [rows]);
-
-  useEffect(() => {
-    if (isComplete) {
-      const timers = rows.map((_, index) => (
-        window.setTimeout(() => {
-          setRowProgress((current) => current.map((progress, rowIndex) => (
-            rowIndex <= index ? loadingRowCompleteProgress : progress
-          )));
-        }, index * completionStepStaggerMs)
-      ));
-      return () => timers.forEach((timer) => window.clearTimeout(timer));
-    }
-
-    const secondsPerRow = totalDurationMs / Math.max(rows.length, 1) / loadingRowProgressTickMs;
-    const progressIncrement = (loadingRowCompleteProgress - loadingRowBaseProgress) / Math.max(secondsPerRow, 1);
-    const timer = window.setInterval(() => {
-      setRowProgress((current) => {
-        const activeIndex = current.findIndex((progress) => progress < loadingRowCompleteProgress);
-        if (activeIndex === -1) {
-          window.clearInterval(timer);
-          return current;
-        }
-        return current.map((progress, index) => (
-          index === activeIndex
-            ? Math.min(loadingRowCompleteProgress, progress + progressIncrement)
-            : progress
-        ));
-      });
-    }, loadingRowProgressTickMs);
-    return () => window.clearInterval(timer);
-  }, [isComplete, rows, totalDurationMs]);
-
-  const currentIndex = isComplete ? -1 : rowProgress.findIndex((progress) => progress < loadingRowCompleteProgress);
-
-  return (
-    <Stack className="study-plan-loading-rows" gap={8}>
-      {rows.map((row, index) => {
-        const isRowComplete = rowProgress[index] >= loadingRowCompleteProgress;
-        const isRowCurrent = index === currentIndex;
-        return (
-          <Group
-            className={`study-plan-loading-row${isRowComplete ? " is-active" : ""}${isRowCurrent ? " is-current" : ""}`}
-            data-testid="study-plan-loading-row"
-            gap="xs"
-            key={row}
-            style={{ opacity: rowProgress[index] / 100 }}
-            wrap="nowrap"
-          >
-            <Box aria-hidden="true" className="study-plan-loading-row-dot" />
-            <Text size="sm">{row}</Text>
-          </Group>
-        );
-      })}
-    </Stack>
-  );
-}
-
-function StudyPlanQuestionnairePreparing({ isComplete = false }: { isComplete?: boolean }) {
+function StudyPlanQuestionnairePreparing() {
   return (
     <Box className="study-plan-preparing-card" role="status">
       <Stack gap="lg">
@@ -400,77 +316,40 @@ function StudyPlanQuestionnairePreparing({ isComplete = false }: { isComplete?: 
           <Title order={2}>把你的目标变成几个关键问题</Title>
           <Text c="dimmed" size="sm">正在读取课程资料和目标语义，很快进入问卷。</Text>
         </Stack>
-        <AnimatedStatusRows
-          isComplete={isComplete}
-          rows={questionnairePreparationSteps}
-          totalDurationMs={questionnaireAnimationDurationMs}
-        />
       </Stack>
     </Box>
   );
 }
 
 function StudyPlanCalendarGeneration({
-  courseId,
   endDate,
+  generatedPreview,
   isComplete,
+  onEnterPlan,
   startDate,
 }: {
-  courseId: string | undefined;
   endDate: string;
+  generatedPreview: StudyPlanPreview | null;
   isComplete: boolean;
+  onEnterPlan: () => void;
   startDate: string;
 }) {
   const [referenceDate, setReferenceDate] = useState(() => dateFromDateKey(startDate));
-  const [calendarMonth, setCalendarMonth] = useState<CourseStudyCalendarMonth | null>(null);
   const monthCells = useMemo(() => buildMonthCells(referenceDate), [referenceDate]);
-  const currentMonthKey = monthKey(referenceDate);
-  const plannedDates = useMemo(() => {
-    const dates = new Set<string>();
-    const durationDays = resolveDurationDays(startDate, endDate) ?? 1;
-    const start = dateFromDateKey(startDate);
-    Array.from({ length: Math.max(1, durationDays) }).forEach((_, index) => {
-      dates.add(formatCalendarDate(addCalendarDays(start, index)));
-    });
-    return dates;
-  }, [endDate, startDate]);
-  const existingDateSummaries = useMemo(() => {
+  const plannedDateSummaries = useMemo(() => {
     const summaries = new Map<string, { count: number; title: string }>();
-    for (const day of calendarMonth?.days ?? []) {
-      if (day.task_count > 0) {
-        summaries.set(day.date, {
-          count: day.task_count,
-          title: day.task_summaries[0]?.title ?? `${day.task_count} 个任务`,
-        });
-      }
+    if (!isComplete || !generatedPreview) {
+      return summaries;
+    }
+    for (const task of generatedPreview.tasks) {
+      const current = summaries.get(task.task_date);
+      summaries.set(task.task_date, {
+        count: (current?.count ?? 0) + 1,
+        title: current?.title ?? task.title,
+      });
     }
     return summaries;
-  }, [calendarMonth]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    if (!courseId) {
-      setCalendarMonth(null);
-      return;
-    }
-
-    fetchCourseStudyCalendar(courseId, currentMonthKey)
-      .then((nextMonth) => {
-        if (!ignore) {
-          setCalendarMonth(nextMonth);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          setCalendarMonth(null);
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [courseId, currentMonthKey]);
+  }, [generatedPreview, isComplete]);
 
   return (
     <Box className="study-plan-calendar-generation" role="status">
@@ -485,8 +364,7 @@ function StudyPlanCalendarGeneration({
         </Group>
 
         <Box className="study-plan-calendar-legend" aria-label="日历标注说明">
-          <span><i className="is-existing" />已有计划</span>
-          <span><i className="is-planned" />本次计划日期</span>
+          <span><i className="is-planned" />本次生成计划</span>
         </Box>
 
         <Box className="study-plan-calendar-card">
@@ -521,21 +399,20 @@ function StudyPlanCalendarGeneration({
           <Box aria-label="生成中的计划日历" className="study-plan-calendar-grid" role="grid">
             {monthCells.map((cell, index) => (
               (() => {
-                const existingSummary = cell.dateKey ? existingDateSummaries.get(cell.dateKey) : undefined;
-                const isPlanned = Boolean(cell.dateKey && plannedDates.has(cell.dateKey));
+                const plannedSummary = cell.dateKey ? plannedDateSummaries.get(cell.dateKey) : undefined;
                 return (
                   <Box
-                    className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${existingSummary ? " has-existing" : ""}${isPlanned ? " is-planned" : ""}`}
+                    className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${plannedSummary ? " is-planned" : ""}`}
                     key={`${cell.dateKey ?? "muted"}-${cell.day}-${index}`}
                     role="gridcell"
                     style={{ animationDelay: `${index * 24}ms` }}
                   >
                     <span className="study-plan-calendar-day">{cell.day}</span>
                     <span className="study-plan-calendar-tags">
-                      {existingSummary ? (
-                        <span className="study-plan-calendar-task is-existing">
-                          {existingSummary.title}
-                          {existingSummary.count > 1 ? ` +${existingSummary.count - 1}` : ""}
+                      {plannedSummary ? (
+                        <span className="study-plan-calendar-task is-planned">
+                          {plannedSummary.title}
+                          {plannedSummary.count > 1 ? ` +${plannedSummary.count - 1}` : ""}
                         </span>
                       ) : null}
                     </span>
@@ -546,11 +423,11 @@ function StudyPlanCalendarGeneration({
           </Box>
         </Box>
 
-        <AnimatedStatusRows
-          isComplete={isComplete}
-          rows={planGenerationSteps}
-          totalDurationMs={planAnimationDurationMs}
-        />
+        {isComplete ? (
+          <Group justify="center">
+            <Button onClick={onEnterPlan}>进入计划</Button>
+          </Group>
+        ) : null}
       </Stack>
     </Box>
   );
@@ -617,9 +494,9 @@ export function StudyPlanCreatePage() {
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
-  const [isQuestionnairePreparationComplete, setIsQuestionnairePreparationComplete] = useState(false);
   const [isGenerationComplete, setIsGenerationComplete] = useState(false);
   const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
+  const [generatedPlanPreview, setGeneratedPlanPreview] = useState<StudyPlanPreview | null>(null);
   const startDateRef = useRef("");
   const startDateOptions = useMemo(() => buildStartDateOptions(), []);
 
@@ -723,18 +600,6 @@ export function StudyPlanCreatePage() {
       ignore = true;
     };
   }, [courseId]);
-
-  useEffect(() => {
-    if (!courseId || !isGenerationComplete || !savedPlanId) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      clearCreateDraft(courseId);
-      navigate(`/courses/${courseId}/study-plans/${savedPlanId}`, { replace: true });
-    }, completionFlushMs);
-    return () => window.clearTimeout(timer);
-  }, [courseId, isGenerationComplete, navigate, savedPlanId]);
 
   useEffect(() => {
     let ignore = false;
@@ -906,7 +771,6 @@ export function StudyPlanCreatePage() {
 
     setPhase("preparing");
     setError(null);
-    setIsQuestionnairePreparationComplete(false);
 
     try {
       const parsedConfig = await parseStudyPlanConfig(courseId, {
@@ -974,15 +838,12 @@ export function StudyPlanCreatePage() {
       setDiagnosticQuestions(questionsResponse.questions);
       setDiagnosticAnswers({});
       setDiagnosticNote("");
-      setIsQuestionnairePreparationComplete(true);
       window.setTimeout(() => {
         setPhase("questionnaire");
-        setIsQuestionnairePreparationComplete(false);
       }, completionFlushMs);
     } catch (nextError) {
       setError(studyPlanActionErrorMessage(nextError, "生成问卷失败"));
       setPhase("goal");
-      setIsQuestionnairePreparationComplete(false);
     }
   }
 
@@ -1023,6 +884,7 @@ export function StudyPlanCreatePage() {
     setError(null);
     setIsGenerationComplete(false);
     setSavedPlanId(null);
+    setGeneratedPlanPreview(null);
 
     try {
       const nextProfile = await createDiagnosticProfile(courseId, {
@@ -1043,6 +905,7 @@ export function StudyPlanCreatePage() {
         client_flow: "wizard_v1",
         tasks: nextPreview.tasks,
       }, createStudyPlanIdempotencyKey(courseId));
+      setGeneratedPlanPreview(nextPreview);
       setSavedPlanId(result.plan.id);
       setIsGenerationComplete(true);
     } catch (nextError) {
@@ -1050,7 +913,17 @@ export function StudyPlanCreatePage() {
       setPhase("questionnaire");
       setIsGenerationComplete(false);
       setSavedPlanId(null);
+      setGeneratedPlanPreview(null);
     }
+  }
+
+  function handleEnterGeneratedPlan() {
+    if (!courseId || !savedPlanId) {
+      return;
+    }
+
+    clearCreateDraft(courseId);
+    navigate(`/courses/${courseId}/study-plans/${savedPlanId}`, { replace: true });
   }
 
   function handleStepBack() {
@@ -1061,9 +934,9 @@ export function StudyPlanCreatePage() {
       setDiagnosticAnswers({});
       setDiagnosticNote("");
       setError(null);
-      setIsQuestionnairePreparationComplete(false);
       setIsGenerationComplete(false);
       setSavedPlanId(null);
+      setGeneratedPlanPreview(null);
     }
   }
 
@@ -1136,7 +1009,7 @@ export function StudyPlanCreatePage() {
             ) : null}
 
             {phase === "preparing" ? (
-              <StudyPlanQuestionnairePreparing isComplete={isQuestionnairePreparationComplete} />
+              <StudyPlanQuestionnairePreparing />
             ) : null}
 
             {phase === "questionnaire" ? (
@@ -1277,9 +1150,10 @@ export function StudyPlanCreatePage() {
 
             {phase === "generating" ? (
               <StudyPlanCalendarGeneration
-                courseId={courseId}
                 endDate={endDate}
+                generatedPreview={generatedPlanPreview}
                 isComplete={isGenerationComplete}
+                onEnterPlan={handleEnterGeneratedPlan}
                 startDate={startDate}
               />
             ) : null}

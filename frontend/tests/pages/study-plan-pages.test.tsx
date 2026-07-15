@@ -466,45 +466,6 @@ const diagnosticProfile = {
   diagnostic_note: "希望先补基础",
 };
 
-const courseStudyCalendarMonth = {
-  course_id: "crs_123",
-  course_name: "高等数学",
-  month: "2026-07",
-  days: [
-    {
-      date: "2026-07-13",
-      course_count: 1,
-      task_count: 2,
-      subtask_count: 4,
-      completed_subtask_count: 1,
-      status: "in_progress",
-      task_summaries: [
-        {
-          task_id: "task_existing_1",
-          plan_id: "plan_existing_1",
-          course_id: "crs_123",
-          course_name: "高等数学",
-          title: "已有复习任务",
-          status: "in_progress",
-          derived_status: "in_progress",
-          sort_order: 1,
-        },
-      ],
-      hidden_task_count: 0,
-    },
-    {
-      date: "2026-07-16",
-      course_count: 1,
-      task_count: 1,
-      subtask_count: 2,
-      completed_subtask_count: 0,
-      status: "not_started",
-      task_summaries: [],
-      hidden_task_count: 0,
-    },
-  ],
-};
-
 function successResponse(data: unknown, requestId = "req_1") {
   return new Response(JSON.stringify({ data, meta: { request_id: requestId } }), {
     status: 200,
@@ -637,24 +598,12 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
 
     expect(await screen.findByText("正在整理问卷")).toBeInTheDocument();
-    const loadingRows = screen.getAllByTestId("study-plan-loading-row");
-    expect(loadingRows).toHaveLength(3);
-    expect(within(loadingRows[0]).getByText("理解目标")).toBeInTheDocument();
-    expect(within(loadingRows[1]).getByText("匹配资料")).toBeInTheDocument();
-    expect(within(loadingRows[2]).getByText("准备问题")).toBeInTheDocument();
-    expect(loadingRows[0]).toHaveStyle({ opacity: "0.4" });
-    expect(loadingRows[0]).toHaveClass("is-current");
-    expect(loadingRows[0]).not.toHaveClass("is-active");
-    expect(loadingRows[1]).not.toHaveClass("is-active");
-    expect(loadingRows[2]).not.toHaveClass("is-active");
+    expect(screen.queryByText("理解目标")).not.toBeInTheDocument();
+    expect(screen.queryByText("匹配资料")).not.toBeInTheDocument();
+    expect(screen.queryByText("准备问题")).not.toBeInTheDocument();
     expect(screen.queryByText("+00.018")).not.toBeInTheDocument();
 
-    await waitFor(() => expect(loadingRows[0]).toHaveStyle({ opacity: "0.43" }), { timeout: 1_400 });
-    expect(loadingRows[0]).toHaveClass("is-current");
-
     parseDeferred.resolve();
-    await waitFor(() => expect(loadingRows[1]).toHaveClass("is-active"));
-    await waitFor(() => expect(loadingRows[2]).toHaveClass("is-active"));
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
   });
 
@@ -747,7 +696,7 @@ describe("study plan pages", () => {
     expect(container.querySelector(".study-plan-task-qa-composer")).toBeInTheDocument();
   });
 
-  it("turns a natural language goal into a mixed questionnaire, auto-saves, and navigates to detail", async () => {
+  it("turns a natural language goal into a mixed questionnaire, auto-saves, and enters detail after calendar preview", async () => {
     freezeStudyPlanDate();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -826,6 +775,8 @@ describe("study plan pages", () => {
     });
     fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
 
+    expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
     expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "开始学习" })).toHaveAttribute("href", "/study-subtasks/subtask_1");
@@ -969,9 +920,6 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-plan-diagnostic-profiles")) {
         return profileDeferred.promise;
       }
-      if (url.endsWith("/courses/crs_123/study-calendar?month=2026-07")) {
-        return Promise.resolve(successResponse(courseStudyCalendarMonth, "req_course_calendar"));
-      }
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
@@ -1010,15 +958,17 @@ describe("study plan pages", () => {
     expect(screen.queryByRole("button", { name: /选择年月|Today|应用/ })).not.toBeInTheDocument();
     expect(screen.getByText("July 2026")).toBeInTheDocument();
     expect(screen.getByText("生成学习计划")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
-    });
-    expect(await screen.findByText(/已有复习任务/)).toBeInTheDocument();
-    expect(screen.getByText("本次计划日期")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
+    expect(screen.getByText("本次生成计划")).toBeInTheDocument();
     expect(screen.queryByText("日期冲突")).not.toBeInTheDocument();
+    expect(screen.queryByText("汇总问卷答案")).not.toBeInTheDocument();
+    expect(screen.queryByText("保存学习计划")).not.toBeInTheDocument();
+    expect(screen.queryByText("第 1 天学习任务")).not.toBeInTheDocument();
 
     profileDeferred.resolve();
-    expect(await screen.findByText("保存学习计划")).toBeInTheDocument();
+    expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "高等数学学习计划" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
   });
 
