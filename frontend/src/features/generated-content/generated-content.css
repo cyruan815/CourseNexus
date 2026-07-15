@@ -1,8 +1,7 @@
 .gc-flashcard-shell { padding: 26px clamp(16px, 4vw, 42px) 34px; border-radius: 24px; background: radial-gradient(circle at 18% 24%, #dce5ff 0, transparent 28%), radial-gradient(circle at 82% 72%, #dff6ea 0, transparent 30%), #eef2f8; color: #172033; }
-.gc-flashcard-toolbar h2 { margin: 2px 0 0; font-size: 20px; }
+.gc-flashcard-toolbar h2 { margin: 0; font-size: 20px; line-height: 1.2; }
 .gc-flashcard-brand { display: flex; align-items: center; gap: 13px; }
 .gc-flashcard-logo { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: linear-gradient(135deg, #607cf1, #9b8cf5); box-shadow: 0 8px 20px rgba(96,124,241,.2); color: #fff; font-weight: 800; }
-.gc-flashcard-kicker { color: #748096; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
 .gc-flashcard-shuffle { border-color: rgba(255,255,255,.9); background: rgba(255,255,255,.66); }
 .gc-flashcard-more { width: 40px; height: 36px; border: 1px solid rgba(255,255,255,.9); border-radius: 10px; background: rgba(255,255,255,.66); color: #526078; cursor: pointer; font-size: 20px; }
 .gc-flashcard-progress-row { width: min(690px, 100%); margin: 34px auto 14px; display: grid; grid-template-columns: 72px 1fr 110px; align-items: center; gap: 14px; color: #738097; font-size: 13px; }
@@ -12,10 +11,10 @@
 .gc-flashcard-stage { width: min(690px, 100%); min-height: 410px; margin: auto; perspective: 1200px; }
 .gc-flashcard { min-height: 410px; width: 100%; padding: 27px 30px 25px; border: 1px solid rgba(255,255,255,.88); border-radius: 30px; background: rgba(255,255,255,.66); backdrop-filter: blur(16px); box-shadow: 0 24px 58px rgba(100,117,149,.16); color: inherit; text-align: left; animation: gc-card-flip .42s cubic-bezier(.2,.75,.25,1); }
 .gc-flashcard-question, .gc-flashcard-answer { display: flex; flex-direction: column; }
+.gc-flashcard-question { cursor: pointer; font: inherit; }
 .gc-flashcard h3 { max-width: 590px; margin: auto 0; font-size: clamp(24px, 3vw, 31px); line-height: 1.35; letter-spacing: -.03em; }
 .gc-flashcard-side { align-self: flex-start; padding: 7px 11px; border-radius: 99px; background: rgba(240,242,247,.82); color: #61708b; font-size: 12px; font-weight: 650; }
 .gc-flashcard-meta { display: flex; justify-content: space-between; align-items: center; color: #738097; font-size: 14px; }
-.gc-flashcard-reveal { align-self: center; padding: 8px; border: 0; background: transparent; color: #8b96a8; cursor: pointer; font: inherit; font-size: 13px; }
 .gc-flashcard-answer { border-color: rgba(255,255,255,.9); background: rgba(248,247,255,.72); cursor: pointer; }
 .gc-flashcard-answer h3 { font-size: clamp(22px, 2.6vw, 27px); }
 .gc-flashcard-explanation { margin: -42px 0 0; padding: 14px 16px; border-radius: 14px; background: rgba(241,239,251,.82); color: #626b86; line-height: 1.6; }

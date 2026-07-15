@@ -151,7 +151,8 @@ describe("generated content renderers", () => {
       { id: "card_002", sort_order: 2, front: "Front 2", back: "Back 2", tags: [], mastery_status: "unknown" },
     ]} />);
     expect(screen.queryByText("Back 1")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "查看答案" }));
+    expect(screen.queryByRole("button", { name: "查看答案" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "翻转查看答案" }));
     expect(screen.getByText("Back 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "翻转回问题" }));
     expect(screen.getByText("Front 1")).toBeInTheDocument();
@@ -167,6 +168,20 @@ describe("generated content renderers", () => {
     expect(screen.getByText("Front 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "答对 0" }));
     expect(screen.getByRole("button", { name: "练习全部" })).toBeInTheDocument();
+  });
+
+  it("shows the flashcard title without the workspace kicker", () => {
+    renderUi(<FlashcardResult cards={[
+      { id: "card_001", sort_order: 1, front: "Front 1", back: "Back 1", tags: [], mastery_status: "unknown" },
+    ]} />);
+
+    expect(screen.getByRole("heading", { name: "知识闪卡" })).toBeInTheDocument();
+    expect(screen.queryByText("CourseNexus · 学习工作台")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打乱卡片" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更多操作" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看答案" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "翻转查看答案" }));
+    expect(screen.getByText("Back 1")).toBeInTheDocument();
   });
 
   it("navigates outline sections and filters knowledge items", () => {

@@ -94,10 +94,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
       <Group className="gc-flashcard-toolbar" justify="space-between">
         <div className="gc-flashcard-brand">
           <span aria-hidden="true" className="gc-flashcard-logo">✦</span>
-          <div>
-            <span className="gc-flashcard-kicker">CourseNexus · 学习工作台</span>
-            <h2>知识闪卡</h2>
-          </div>
+          <h2>知识闪卡</h2>
         </div>
         <Group gap="xs">
           <Button aria-label="打乱卡片" className="gc-flashcard-shuffle" onClick={() => reset([...deck].sort(() => Math.random() - 0.5))} variant="default">打乱</Button>
@@ -127,11 +124,10 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
             {card.explanation ? <p className="gc-flashcard-explanation">{card.explanation}</p> : null}
           </button>
         ) : (
-          <div className="gc-flashcard gc-flashcard-question">
+          <button aria-label="翻转查看答案" className="gc-flashcard gc-flashcard-question" onClick={() => setFlipped(true)} type="button">
             <div className="gc-flashcard-meta"><span className="gc-flashcard-side">问题</span><span aria-hidden="true">⋯</span></div>
             <h3>{card.front}</h3>
-            <button className="gc-flashcard-reveal" onClick={() => setFlipped(true)} type="button">查看答案</button>
-          </div>
+          </button>
         )}
       </div>
 
