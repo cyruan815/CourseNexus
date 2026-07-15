@@ -731,8 +731,8 @@
 }
 
 .study-plan-switcher-item.is-current {
-  border-color: #2f80ed;
-  background: #f8fbff;
+  border-color: #9dd6ce;
+  background: #f3fffc;
   box-shadow: none;
 }
 
@@ -988,6 +988,16 @@
 .study-plan-execution-step.is-current {
   border-color: #2f80ed;
   background: #f8fbff;
+}
+
+.study-plan-execution-step.is-complete {
+  border-color: #9dd6ce;
+  background: #f3fffc;
+}
+
+.study-plan-execution-step.is-complete:hover {
+  border-color: #9dd6ce;
+  background: #f3fffc;
 }
 
 .study-plan-step-icon {
