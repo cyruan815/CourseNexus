@@ -1,12 +1,12 @@
 :root {
   --course-page-bg: #faf9f7;
   --course-surface-bg: var(--course-page-bg);
-  --cn-button-primary-bg: #2563eb;
-  --cn-button-primary-hover-bg: #1d4ed8;
+  --cn-button-primary-bg: #2f6fbb;
+  --cn-button-primary-hover-bg: #285f9f;
   --cn-button-primary-text: #ffffff;
-  --cn-button-primary-soft-bg: #e8f2ff;
-  --cn-button-primary-soft-hover-bg: #dbeafe;
-  --cn-button-primary-soft-text: #2563eb;
+  --cn-button-primary-soft-bg: #edf5ff;
+  --cn-button-primary-soft-hover-bg: #deecff;
+  --cn-button-primary-soft-text: #245f9e;
   --cn-button-neutral-bg: #ffffff;
   --cn-button-neutral-border: #d6e0eb;
   --cn-button-neutral-text: #111827;
