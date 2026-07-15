@@ -216,6 +216,34 @@
   background: #f8fffd;
 }
 
+.study-plan-date-input {
+  display: grid;
+  gap: 5px;
+}
+
+.study-plan-date-input label {
+  color: #212529;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.study-plan-date-input input {
+  min-height: 36px;
+  width: 100%;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2937;
+  font: inherit;
+  padding: 0 12px;
+}
+
+.study-plan-date-input input:focus {
+  border-color: #228be6;
+  outline: 2px solid rgba(34, 139, 230, 0.18);
+  outline-offset: 0;
+}
+
 .study-plan-preview-modal .mantine-Modal-body {
   max-height: min(78vh, 780px);
   overflow: auto;

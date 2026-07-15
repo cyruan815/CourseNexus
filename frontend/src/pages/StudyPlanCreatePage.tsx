@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Badge,
@@ -12,6 +12,7 @@ import {
   Stack,
   Text,
   Textarea,
+  TextInput,
   Title,
 } from "@mantine/core";
 import {
@@ -57,6 +58,7 @@ interface StudyPlanCreateDraftStorage {
   goalText?: string;
   startDate?: string;
   endDate?: string;
+  durationDays?: string;
   dailyMinutes?: string;
   preference?: PlanPreference;
   materialScope?: MaterialScope;
@@ -117,6 +119,9 @@ const preferenceLabels: Record<PlanPreference, string> = {
 
 const unresolvedFieldLabels: Record<string, string> = {
   goal_text: "学习目标",
+  start_date: "开始日期",
+  duration_days: "学习天数",
+  end_date: "结束日期",
 };
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
@@ -126,13 +131,18 @@ function resolveEndDate(startDate: string | null | undefined, durationDays: numb
     return null;
   }
 
-  const parsedStartDate = new Date(`${startDate}T00:00:00`);
-  if (Number.isNaN(parsedStartDate.getTime())) {
+  const [year, month, day] = startDate.split("-").map(Number);
+  if (!year || !month || !day) {
     return null;
   }
 
-  parsedStartDate.setDate(parsedStartDate.getDate() + durationDays - 1);
-  return parsedStartDate.toISOString().slice(0, 10);
+  const parsedStartTime = Date.UTC(year, month - 1, day);
+  if (Number.isNaN(parsedStartTime)) {
+    return null;
+  }
+
+  const endTime = parsedStartTime + (durationDays - 1) * 86_400_000;
+  return new Date(endTime).toISOString().slice(0, 10);
 }
 
 function resolveDurationDays(startDate: string, endDate: string): number | null {
@@ -140,13 +150,35 @@ function resolveDurationDays(startDate: string, endDate: string): number | null 
     return null;
   }
 
-  const parsedStartDate = new Date(`${startDate}T00:00:00`);
-  const parsedEndDate = new Date(`${endDate}T00:00:00`);
-  if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
+  const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
+  if (!startYear || !startMonth || !startDay || !endYear || !endMonth || !endDay) {
     return null;
   }
 
-  return Math.floor((parsedEndDate.getTime() - parsedStartDate.getTime()) / 86_400_000) + 1;
+  const startTime = Date.UTC(startYear, startMonth - 1, startDay);
+  const endTime = Date.UTC(endYear, endMonth - 1, endDay);
+  if (Number.isNaN(startTime) || Number.isNaN(endTime)) {
+    return null;
+  }
+
+  return Math.floor((endTime - startTime) / 86_400_000) + 1;
+}
+
+function studyPlanActionErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    const messages: Record<string, string> = {
+      NO_PARSED_MATERIAL: "当前资料还没有可用解析结果，请先上传或等待至少一份资料解析完成。",
+      MATERIAL_COVERAGE_INCOMPLETE: "资料覆盖还不完整，请调整资料范围或稍后重新生成预览。",
+      PREVIEW_TASKS_REQUIRED: "预览任务已失效，请重新生成预览后再保存。",
+      IDEMPOTENCY_CONFLICT: "本次保存请求与之前的预览不一致，请重新生成预览后再保存。",
+      STATE_CONFLICT: "学习计划状态已变化，请刷新后再试。",
+      UNAUTHORIZED: "登录已过期，请重新登录。",
+    };
+    return messages[error.code] ?? error.message;
+  }
+
+  return errorMessage(error, fallback);
 }
 
 function hasResolvedEditableValue(fieldName: string, values: {
@@ -161,6 +193,8 @@ function hasResolvedEditableValue(fieldName: string, values: {
       return values.goalText.trim().length > 0;
     case "start_date":
       return values.startDate.length > 0;
+    case "duration_days":
+      return Boolean(resolveDurationDays(values.startDate, values.endDate));
     case "end_date":
       return values.endDate.length > 0;
     case "daily_available_minutes": {
@@ -278,6 +312,7 @@ export function StudyPlanCreatePage() {
   const [goalText, setGoalText] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [durationDaysText, setDurationDaysText] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preference, setPreference] = useState<PlanPreference>(defaultPreference);
   const [materialScope, setMaterialScope] = useState<MaterialScope>(defaultScope);
@@ -298,6 +333,7 @@ export function StudyPlanCreatePage() {
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
+  const startDateRef = useRef("");
 
   useEffect(() => {
     if (!courseId) {
@@ -308,7 +344,16 @@ export function StudyPlanCreatePage() {
     const storedDraft = readCreateDraft(courseId);
     setGoalText(storedDraft?.goalText ?? "");
     setStartDate(storedDraft?.startDate ?? "");
+    startDateRef.current = storedDraft?.startDate ?? "";
     setEndDate(storedDraft?.endDate ?? "");
+    setDurationDaysText(
+      storedDraft?.durationDays ??
+      (
+        storedDraft?.startDate && storedDraft?.endDate
+          ? String(resolveDurationDays(storedDraft.startDate, storedDraft.endDate) ?? "")
+          : ""
+      ),
+    );
     setDailyMinutes(storedDraft?.dailyMinutes ?? "");
     setPreference(storedDraft?.preference ?? defaultPreference);
     setMaterialScope(storedDraft?.materialScope ?? defaultScope);
@@ -330,6 +375,7 @@ export function StudyPlanCreatePage() {
       goalText,
       startDate,
       endDate,
+      durationDays: durationDaysText,
       dailyMinutes,
       preference,
       materialScope,
@@ -339,6 +385,7 @@ export function StudyPlanCreatePage() {
     courseId,
     dailyMinutes,
     diagnosticProfile,
+    durationDaysText,
     endDate,
     goalText,
     isDraftHydrated,
@@ -346,6 +393,17 @@ export function StudyPlanCreatePage() {
     preference,
     startDate,
   ]);
+
+  useEffect(() => {
+    const durationDays = Number.parseInt(durationDaysText, 10);
+    const nextEndDate = startDate && !Number.isNaN(durationDays) && durationDays > 0
+      ? resolveEndDate(startDate, durationDays) ?? ""
+      : "";
+
+    if (nextEndDate !== endDate) {
+      setEndDate(nextEndDate);
+    }
+  }, [durationDaysText, endDate, startDate]);
 
   useEffect(() => {
     let ignore = false;
@@ -499,16 +557,19 @@ export function StudyPlanCreatePage() {
     if (!goalText.trim()) {
       return "请先填写学习目标。";
     }
-    if (startDate && endDate && startDate > endDate) {
-      return "结束日期不能早于开始日期。";
-    }
-    if (!diagnosticProfile) {
-      return "请先完成学情诊断。";
-    }
     if (!hasUsableMaterialScope) {
       return materialScope.include_all_parsed_materials
         ? "资料范围内没有可解析资料，请先上传或解析至少一份资料。"
         : "请选择至少一份已解析资料。";
+    }
+    if (!startDate || !endDate) {
+      return "请先补齐学习时间。";
+    }
+    if (startDate > endDate) {
+      return "结束日期不能早于开始日期。";
+    }
+    if (!diagnosticProfile) {
+      return "请先完成学情诊断。";
     }
     return null;
   }
@@ -534,6 +595,31 @@ export function StudyPlanCreatePage() {
     }, "goal_text");
   }
 
+  function updateStartDate(nextStartDate: string) {
+    updateField(() => {
+      startDateRef.current = nextStartDate;
+      setStartDate(nextStartDate);
+      const currentDurationDays = Number.parseInt(durationDaysText, 10);
+      setEndDate(
+        nextStartDate && !Number.isNaN(currentDurationDays) && currentDurationDays > 0
+          ? resolveEndDate(nextStartDate, currentDurationDays) ?? ""
+          : "",
+      );
+    }, "start_date");
+  }
+
+  function updateDurationDays(nextDurationDaysText: string) {
+    updateField(() => {
+      setDurationDaysText(nextDurationDaysText);
+      const nextDurationDays = Number.parseInt(nextDurationDaysText, 10);
+      setEndDate(
+        startDateRef.current && !Number.isNaN(nextDurationDays) && nextDurationDays > 0
+          ? resolveEndDate(startDateRef.current, nextDurationDays) ?? ""
+          : "",
+      );
+    }, "duration_days");
+  }
+
   async function handleParseConfig() {
     if (!courseId) {
       return;
@@ -557,21 +643,29 @@ export function StudyPlanCreatePage() {
 
       const nextGoalText = parsedConfig.goal_text ?? goalText;
       const nextStartDate = parsedConfig.start_date ?? startDate;
+      const nextEndDateValue = nextEndDate ?? endDate;
       const nextDailyMinutes = parsedConfig.daily_available_minutes
         ? String(parsedConfig.daily_available_minutes)
         : dailyMinutes;
       const nextPreference = parsedConfig.preference ?? preference;
+      const nextDurationDays = nextStartDate && nextEndDateValue
+        ? resolveDurationDays(nextStartDate, nextEndDateValue)
+        : parsedConfig.duration_days;
 
       if (parsedConfig.goal_text) {
         setGoalText(parsedConfig.goal_text);
-        setDiagnosticProfile(null);
+        if (parsedConfig.goal_text.trim() !== goalText.trim()) {
+          setDiagnosticProfile(null);
+        }
       }
       if (parsedConfig.start_date) {
+        startDateRef.current = parsedConfig.start_date;
         setStartDate(parsedConfig.start_date);
       }
       if (nextEndDate) {
         setEndDate(nextEndDate);
       }
+      setDurationDaysText(nextDurationDays && nextDurationDays > 0 ? String(nextDurationDays) : "");
       if (parsedConfig.daily_available_minutes) {
         setDailyMinutes(String(parsedConfig.daily_available_minutes));
       }
@@ -581,7 +675,7 @@ export function StudyPlanCreatePage() {
       setUnresolvedFields(visibleUnresolvedFields(parsedConfig.unresolved_fields, {
         goalText: nextGoalText,
         startDate: nextStartDate,
-        endDate: nextEndDate ?? endDate,
+        endDate: nextEndDateValue,
         dailyMinutes: nextDailyMinutes,
         preference: nextPreference,
       }));
@@ -640,7 +734,7 @@ export function StudyPlanCreatePage() {
       setIsPreviewStale(false);
       setIsPreviewModalOpen(true);
     } catch (nextError) {
-      setError(errorMessage(nextError, "生成预览失败"));
+      setError(studyPlanActionErrorMessage(nextError, "生成预览失败"));
     } finally {
       setIsPreviewing(false);
     }
@@ -668,7 +762,7 @@ export function StudyPlanCreatePage() {
       clearCreateDraft(courseId);
       navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
     } catch (nextError) {
-      setError(errorMessage(nextError, "保存计划失败"));
+      setError(studyPlanActionErrorMessage(nextError, "保存计划失败"));
     } finally {
       setIsSaving(false);
     }
@@ -747,6 +841,46 @@ export function StudyPlanCreatePage() {
                     </Text>
                   </Stack>
                 </Group>
+              </Paper>
+            ) : null}
+
+            {goalText.trim() && (!startDate || !endDate) ? (
+              <Paper className="study-plan-config-summary" radius="md" withBorder>
+                <Stack gap="sm">
+                  <Stack gap={2}>
+                    <Title order={3}>补齐学习时间</Title>
+                    <Text c="dimmed" size="sm">
+                      自然语言里没有识别出完整日期时，请补充开始日期和学习天数，再生成计划预览。
+                    </Text>
+                  </Stack>
+                  <Group align="flex-end" grow>
+                    <TextInput
+                      label="开始日期"
+                      onChange={(event) => updateStartDate(event.currentTarget.value)}
+                      type="date"
+                      value={startDate}
+                    />
+                    <Box className="study-plan-date-input">
+                      <Text component="label" htmlFor="study-plan-duration-days" size="sm">
+                        学习天数
+                      </Text>
+                      <input
+                        data-testid="study-plan-duration-days"
+                        id="study-plan-duration-days"
+                        min={1}
+                        onChange={(event) => updateDurationDays(event.currentTarget.value)}
+                        placeholder="例如：3"
+                        type="number"
+                        value={durationDaysText}
+                      />
+                    </Box>
+                  </Group>
+                  {startDate && endDate ? (
+                    <Text c="dimmed" size="sm">
+                      已确认：{startDate} - {endDate}
+                    </Text>
+                  ) : null}
+                </Stack>
               </Paper>
             ) : null}
 
