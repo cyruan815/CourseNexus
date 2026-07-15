@@ -359,17 +359,17 @@ Callout Markdown 约定：
 - 后端 handout prompt：`backend/app/modules/generation/generators/handout/generator.py`
 - PDF renderer：`backend/app/modules/exports/renderer.py`
 
-前端正式依赖 `react-markdown + remark-gfm + remark-math + rehype-katex + rehype-raw + mermaid` 渲染 handout Markdown。`handout` 详情页不再使用通用 `ReactMarkdown` 分支，而是复用 `HandoutMarkdownRenderer({ markdown })`，因此 dev preview 和真实详情页共享公式、表格、列表、callout、原始 SVG 和 Mermaid 行为。KaTeX CSS 由 renderer 引入；长公式和图表允许横向滚动，避免正文布局被撑坏。
+前端正式依赖 `react-markdown + remark-gfm + remark-math + rehype-katex + rehype-raw + rehype-sanitize + mermaid` 渲染 handout Markdown。`handout` 详情页不再使用通用 `ReactMarkdown` 分支，而是复用 `HandoutMarkdownRenderer({ markdown })`，因此 dev preview 和真实详情页共享公式、表格、列表、callout、原始 SVG 和 Mermaid 行为。KaTeX CSS 由 renderer 引入；长公式和图表允许横向滚动，避免正文布局被撑坏。
 
 图形渲染契约：
 
-- 原始 `<svg>...</svg>` 由 `rehype-raw` 转入 React 渲染树；Markdown 图片语法引用的 SVG 文件继续按普通 `<img>` 展示。
+- 原始 `<svg>...</svg>` 由 `rehype-raw` 解析，再由 `rehype-sanitize` 的 SVG 白名单净化后转入 React 渲染树；Markdown 图片语法引用的 SVG 文件继续按普通 `<img>` 展示。
 - ```mermaid` fenced code block 由 `HandoutPre` 分流给 `MermaidDiagram`，后者动态导入 Mermaid 并把源码异步渲染为内联 SVG。
-- Mermaid 初始化参数为 `startOnLoad: false`、`securityLevel: "loose"`；渲染期间显示稳定占位，失败后显示原始代码，不影响正文其余内容。
+- Mermaid 初始化参数为 `startOnLoad: false`、`securityLevel: "strict"`、根级 `htmlLabels: false`；最终 SVG 在注入前再次净化。渲染期间显示稳定占位，失败后显示原始代码，不影响正文其余内容。
 - 非 Mermaid fenced code block 仍输出普通 `<pre><code>`，不会参与图表解析。
 - 原始 SVG、SVG 图片和 Mermaid 生成 SVG 均受讲义容器的响应式宽度约束。
-- 当前实现是可信本地 POC 边界，不对原始 HTML 做净化；生产化前必须增加安全边界。前端 Mermaid 能力不改变后端 PDF renderer，PDF 中的 Mermaid 支持需要单独实现。
-- 测试入口：`frontend/tests/features/generated-content/handout-markdown-renderer.test.tsx`，覆盖 Mermaid 成功、失败、原始 SVG 和普通代码块回归。
+- 安全边界明确禁止 `script`、`iframe`、`object`、`embed`、`foreignObject`、`style`、事件属性和危险 URL scheme；扩展 SVG 白名单时必须同步补安全测试。前端 Mermaid 能力不改变后端 PDF renderer，PDF 中的 Mermaid 支持需要单独实现。
+- 测试入口：`frontend/tests/features/generated-content/handout-markdown-renderer.test.tsx`，覆盖 Mermaid 成功、失败、原生 SVG 文本标签、原始 SVG、恶意 HTML/SVG 和普通代码块回归。
 
 前端把完整讲义交给单个 `ReactMarkdown` 实例解析，不在渲染前按行切割 Markdown。`remarkHandoutCallouts` 只在 Markdown AST 中把首段以受支持 `[!TYPE]` 开头的 blockquote 转换为带类型 class 的 callout；代码围栏中的同形文本仍是 code 节点，不参与转换。三级标题若以 `1.1` 这类编号开头，只单独包装首个文本节点中的编号，其余加粗、链接、行内代码和 KaTeX React 节点保持原结构，禁止把已经渲染的 children 转回纯文本。
 
