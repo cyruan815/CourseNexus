@@ -74,7 +74,7 @@
 .gc-knowledge-item h3, .gc-mindmap-fallback h3 { font-size: 17px; }
 .gc-mindmap-canvas { height: min(68vh, 680px); min-height: 430px; overflow: hidden; border: 1px solid #d9dee7; border-radius: 6px; background: #fff; }
 .gc-mindmap-canvas svg { width: 100%; height: 100%; display: block; }
-.gc-task-test-question { padding: 16px; border-color: #d9dee7; background: #fbfdff; }
+.gc-task-test-question { padding: 16px; border-color: #ECE8E2; background: #FDFBF9; }
 .gc-text-fallback { white-space: pre-wrap; }
 @media (max-width: 700px) { .gc-outline { grid-template-columns: 1fr; } .gc-outline nav > div { flex-direction: row; overflow-x: auto; } .gc-mindmap-canvas { min-height: 390px; } .gc-knowledge-glossary { padding: 22px 18px; } .gc-knowledge-toolbar { grid-template-columns: 1fr; } .gc-knowledge-progress-copy > div { align-items: flex-start; flex-direction: column; gap: 2px; } .gc-knowledge-terms article { grid-template-columns: 36px minmax(0,1fr) 36px; gap: 12px; } .gc-knowledge-terms article p { grid-column: 2 / 4; } }
 .gc-task-test-intro { color: #667085; }
