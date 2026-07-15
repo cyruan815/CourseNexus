@@ -185,8 +185,13 @@
   border: 0;
   border-radius: 14px;
   background:
-    linear-gradient(135deg, rgba(232, 242, 255, 0.78), rgba(230, 255, 250, 0.54)),
-    #FEFDFC;
+    linear-gradient(
+      135deg,
+      #FFFDFC 0%,
+      #F8FBFF 35%,
+      #FCFEFF 70%,
+      #F5FAFF 100%
+    );
   color: #2563eb;
   padding: 28px;
   text-align: center;
