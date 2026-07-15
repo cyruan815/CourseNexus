@@ -8,10 +8,13 @@ import {
   Card,
   Divider,
   Group,
+  Menu,
+  Modal,
   Paper,
   Skeleton,
   Stack,
   Text,
+  TextInput,
   Textarea,
   Title,
 } from "@mantine/core";
@@ -20,6 +23,8 @@ import {
   IconCalendarStats,
   IconCards,
   IconChecklist,
+  IconDotsVertical,
+  IconEdit,
   IconHome2,
   IconMap,
   IconMessageCircle2,
@@ -29,6 +34,7 @@ import {
   IconSend2,
   IconSparkles,
   IconSun,
+  IconTrash,
   IconUser,
 } from "@tabler/icons-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -38,10 +44,12 @@ import { useCourseNexusTheme } from "../app/theme";
 import { InlineCitationAnswer } from "../features/course-qa/InlineCitationAnswer";
 import {
   askCourseQuestion,
+  deleteGeneratedContent,
   generateCourseContent,
   listCourseConversations,
   listConversationMessages,
   listGeneratedContents,
+  renameGeneratedContent,
 } from "../features/course-workspace/api";
 import type { GeneratedContent, Message, SourceCitation, StudyPlan } from "../features/course-workspace/types";
 import { fetchCourse } from "../features/courses/api";
@@ -322,16 +330,151 @@ function contentTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
-function GeneratedContentPanel({ contents }: { contents: GeneratedContent[] }) {
+function GeneratedContentPanel({
+  contents,
+  onDelete,
+  onRename,
+}: {
+  contents: GeneratedContent[];
+  onDelete: (content: GeneratedContent) => Promise<void>;
+  onRename: (content: GeneratedContent, title: string) => Promise<void>;
+}) {
+  const [renameTarget, setRenameTarget] = useState<GeneratedContent | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GeneratedContent | null>(null);
+  const [title, setTitle] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function openRename(content: GeneratedContent) {
+    setRenameTarget(content);
+    setTitle(content.title);
+    setActionError(null);
+  }
+
+  function openDelete(content: GeneratedContent) {
+    setDeleteTarget(content);
+    setActionError(null);
+  }
+
+  function closeActions() {
+    if (isSubmitting) {
+      return;
+    }
+    setRenameTarget(null);
+    setDeleteTarget(null);
+    setActionError(null);
+  }
+
+  async function submitRename() {
+    const normalizedTitle = title.trim();
+    if (!renameTarget || !normalizedTitle || normalizedTitle === renameTarget.title) {
+      return;
+    }
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await onRename(renameTarget, normalizedTitle);
+      setRenameTarget(null);
+    } catch (nextError) {
+      setActionError(errorMessage(nextError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitDelete() {
+    if (!deleteTarget) {
+      return;
+    }
+    setIsSubmitting(true);
+    setActionError(null);
+    try {
+      await onDelete(deleteTarget);
+      setDeleteTarget(null);
+    } catch (nextError) {
+      setActionError(errorMessage(nextError));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
-    <Paper aria-label="AI 生成内容区" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
-      <Title order={2}>{"AI 生成内容"}</Title>
-      {contents.length > 0 ? (
-        <Stack className="course-detail-generated-list" gap="xs">{contents.map((content) => <Paper aria-label={`查看生成内容 ${content.title}`} className="course-detail-generated-item" component={Link} key={content.id} radius="md" to={`/generated-contents/${content.id}`} withBorder><Group justify="space-between" wrap="nowrap"><Stack gap={2}><Text fw={700} size="sm">{content.title}</Text><Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text></Stack><Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">{content.generation_status}</Badge></Group></Paper>)}</Stack>
-      ) : (
-        <Stack className="course-detail-generated-empty" gap="xs"><IconSparkles size={34} stroke={1.6} /><Text fw={700}>{"还没有生成内容"}</Text><Text c="dimmed" size="sm">{"选择左侧资料范围后，可使用学习工具生成内容。"}</Text></Stack>
-      )}
-    </Paper>
+    <>
+      <Paper aria-label="AI 生成内容区" className="course-detail-card course-detail-generated" component="section" radius="md" withBorder>
+        <Title order={2}>{"AI 生成内容"}</Title>
+        {contents.length > 0 ? (
+          <Stack className="course-detail-generated-list" gap="xs">
+            {contents.map((content) => (
+              <Paper className="course-detail-generated-item" key={content.id} radius="md" withBorder>
+                <Box
+                  aria-label={`查看生成内容 ${content.title}`}
+                  className="course-detail-generated-link"
+                  component={Link}
+                  to={`/generated-contents/${content.id}`}
+                >
+                  <Stack gap={2}>
+                    <Text fw={700} lineClamp={2} size="sm">{content.title}</Text>
+                    <Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text>
+                  </Stack>
+                </Box>
+                <Group className="course-detail-generated-actions" gap={4} wrap="nowrap">
+                  <Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">{content.generation_status}</Badge>
+                  <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={150} withinPortal>
+                    <Menu.Target>
+                      <ActionIcon aria-label={`${content.title} 更多操作`} size="sm" variant="subtle">
+                        <IconDotsVertical size={18} />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRename(content)}>
+                        重命名
+                      </Menu.Item>
+                      <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => openDelete(content)}>
+                        删除
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        ) : (
+          <Stack className="course-detail-generated-empty" gap="xs"><IconSparkles size={34} stroke={1.6} /><Text fw={700}>{"还没有生成内容"}</Text><Text c="dimmed" size="sm">{"选择左侧资料范围后，可使用学习工具生成内容。"}</Text></Stack>
+        )}
+      </Paper>
+      <Modal centered onClose={closeActions} opened={Boolean(renameTarget)} title="重命名生成内容" transitionProps={{ duration: 0 }}>
+        <Stack gap="md">
+          {actionError ? <Alert color="red" role="alert" title="重命名失败" variant="light">{actionError}</Alert> : null}
+          <TextInput
+            data-autofocus
+            label="生成内容名称"
+            maxLength={255}
+            onChange={(event) => setTitle(event.currentTarget.value)}
+            value={title}
+          />
+          <Group justify="flex-end">
+            <Button disabled={isSubmitting} onClick={closeActions} variant="default">取消</Button>
+            <Button
+              disabled={!title.trim() || title.trim() === renameTarget?.title}
+              loading={isSubmitting}
+              onClick={submitRename}
+            >
+              保存
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal centered onClose={closeActions} opened={Boolean(deleteTarget)} title="删除生成内容" transitionProps={{ duration: 0 }}>
+        <Stack gap="md">
+          {actionError ? <Alert color="red" role="alert" title="删除失败" variant="light">{actionError}</Alert> : null}
+          <Text>确认删除“{deleteTarget?.title}”吗？删除后该内容将从课程页面中移除。</Text>
+          <Group justify="flex-end">
+            <Button disabled={isSubmitting} onClick={closeActions} variant="default">取消</Button>
+            <Button color="red" loading={isSubmitting} onClick={submitDelete}>确认删除</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
   );
 }
 
@@ -344,6 +487,8 @@ interface CourseDetailWorkbenchProps {
   materialScope?: MaterialScope;
   materialScopeNames?: string[];
   onGenerate?: (contentType: string) => void;
+  onDeleteGeneratedContent?: (content: GeneratedContent) => Promise<void>;
+  onRenameGeneratedContent?: (content: GeneratedContent, title: string) => Promise<void>;
   onQuestionChange?: (value: string) => void;
   onSendQuestion?: () => void;
   qaMessages?: QaMessage[];
@@ -360,6 +505,8 @@ export function CourseDetailWorkbench({
   materialScope = { include_all_parsed_materials: true, material_ids: [] },
   materialScopeNames = [],
   onGenerate = () => undefined,
+  onDeleteGeneratedContent = async () => undefined,
+  onRenameGeneratedContent = async () => undefined,
   onQuestionChange = () => undefined,
   onSendQuestion = () => undefined,
   qaMessages = [],
@@ -392,7 +539,7 @@ export function CourseDetailWorkbench({
 
           <Stack className="course-detail-right" gap="sm">
             <ToolsPanel generatingType={generatingType} onGenerate={onGenerate} />
-            <GeneratedContentPanel contents={generatedContents} />
+            <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} />
           </Stack>
         </Box>
       </Box>
@@ -590,6 +737,16 @@ export function CourseDetailPage() {
     }
   }
 
+  async function handleRenameGeneratedContent(content: GeneratedContent, title: string) {
+    const renamed = await renameGeneratedContent(content.id, title);
+    setGeneratedContents((current) => current.map((item) => item.id === renamed.id ? renamed : item));
+  }
+
+  async function handleDeleteGeneratedContent(content: GeneratedContent) {
+    await deleteGeneratedContent(content.id);
+    setGeneratedContents((current) => current.filter((item) => item.id !== content.id));
+  }
+
   if (isLoading) {
     return (
       <Box className="course-detail-page">
@@ -642,7 +799,9 @@ export function CourseDetailPage() {
         materialScope={materialScope}
         materialScopeNames={selectedMaterialNames}
         onGenerate={handleGenerateContent}
+        onDeleteGeneratedContent={handleDeleteGeneratedContent}
         onQuestionChange={setQuestion}
+        onRenameGeneratedContent={handleRenameGeneratedContent}
         onSendQuestion={handleSendQuestion}
         qaMessages={qaMessages}
         question={question}

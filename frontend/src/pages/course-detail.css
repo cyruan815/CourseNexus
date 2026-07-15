@@ -623,12 +623,12 @@
 }
 
 .course-detail-generated-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border-color: #d6e0eb;
   background: #fbfdff;
-  color: inherit;
-  padding: 10px 12px;
-  text-decoration: none;
+  padding: 4px 6px 4px 12px;
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -639,6 +639,18 @@
   border-color: #2f80ed;
   background: #ffffff;
   transform: translateY(-1px);
+}
+
+.course-detail-generated-link {
+  min-width: 0;
+  flex: 1;
+  color: inherit;
+  padding: 6px 0;
+  text-decoration: none;
+}
+
+.course-detail-generated-actions {
+  flex: 0 0 auto;
 }
 
 .course-detail-workspace-error {

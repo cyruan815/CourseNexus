@@ -805,4 +805,73 @@ describe("CourseDetailPage", () => {
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "查看生成内容 Quiz" })).toHaveAttribute("href", "/generated-contents/gen_quiz");
   });
+
+  it("renames and deletes generated content from the item menu", async () => {
+    const renamedContent = {
+      ...generatedContent,
+      title: "自定义期末提纲",
+      updated_at: "2026-07-15T12:00:00+00:00",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
+        return Promise.resolve(successResponse([], "req_materials"));
+      }
+      if (url.endsWith("/generated-contents/gen_1") && init?.method === "PATCH") {
+        return Promise.resolve(successResponse(renamedContent, "req_rename"));
+      }
+      if (url.endsWith("/generated-contents/gen_1") && init?.method === "DELETE") {
+        return Promise.resolve(successResponse({ ...renamedContent, deleted_at: "2026-07-15T12:01:00+00:00" }, "req_delete"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([generatedContent], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      return Promise.resolve(successResponse(course));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetailPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "期末复习提纲 更多操作" }));
+    const renameItemLabel = await screen.findByText("重命名");
+    const deleteItemLabel = screen.getByText("删除");
+    expect(renameItemLabel.closest('[role="menuitem"]')).toBeInTheDocument();
+    expect(deleteItemLabel.closest('[role="menuitem"]')).toBeInTheDocument();
+    fireEvent.click(renameItemLabel);
+    fireEvent.change(screen.getByRole("textbox", { name: "生成内容名称" }), {
+      target: { value: " 自定义期末提纲 " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(await screen.findByRole("link", { name: "查看生成内容 自定义期末提纲" })).toHaveAttribute(
+      "href",
+      "/generated-contents/gen_1",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_1",
+      expect.objectContaining({
+        body: JSON.stringify({ title: "自定义期末提纲" }),
+        method: "PATCH",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "自定义期末提纲 更多操作" }));
+    fireEvent.click(await screen.findByText("删除"));
+    expect(screen.getByRole("dialog", { name: "删除生成内容" })).toHaveTextContent("自定义期末提纲");
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("link", { name: "查看生成内容 自定义期末提纲" })).not.toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

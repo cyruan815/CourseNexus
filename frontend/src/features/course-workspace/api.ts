@@ -32,6 +32,17 @@ export function getGeneratedContent(generatedContentId: string): Promise<Generat
   return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}`, { method: "GET" });
 }
 
+export function renameGeneratedContent(generatedContentId: string, title: string): Promise<GeneratedContent> {
+  return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}`, {
+    method: "PATCH",
+    body: { title },
+  });
+}
+
+export function deleteGeneratedContent(generatedContentId: string): Promise<GeneratedContent> {
+  return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}`, { method: "DELETE" });
+}
+
 export function updateFlashcards(generatedContentId: string, cards: Array<{ front: string; back: string; tags: string[]; explanation?: string | null }>): Promise<GeneratedContent> {
   return apiRequest<GeneratedContent>(`/api/v1/generated-contents/${generatedContentId}/flashcards`, {
     method: "PATCH",

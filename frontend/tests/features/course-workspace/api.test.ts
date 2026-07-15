@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   askCourseQuestion,
+  deleteGeneratedContent,
   generateCourseContent,
   getGeneratedContent,
   listCourseConversations,
   listConversationMessages,
   listGeneratedContents,
   listStudyPlans,
+  renameGeneratedContent,
 } from "../../../src/features/course-workspace/api";
 import type { MaterialScope } from "../../../src/features/materials/types";
 
@@ -70,6 +72,8 @@ describe("course workspace api", () => {
 
     await listGeneratedContents("crs_1");
     await getGeneratedContent("gen_1");
+    await renameGeneratedContent("gen_1", "新标题");
+    await deleteGeneratedContent("gen_1");
     await generateCourseContent("crs_1", {
       content_type: "outline",
       material_scope: scope,
@@ -89,6 +93,16 @@ describe("course workspace api", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
+      "/api/v1/generated-contents/gen_1",
+      expect.objectContaining({ body: JSON.stringify({ title: "新标题" }), method: "PATCH" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/generated-contents/gen_1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
       "/api/v1/courses/crs_1/generations",
       expect.objectContaining({
         body: JSON.stringify({
@@ -100,7 +114,7 @@ describe("course workspace api", () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      6,
       "/api/v1/courses/crs_1/study-plans",
       expect.objectContaining({ method: "GET" }),
     );
