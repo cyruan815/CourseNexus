@@ -673,6 +673,102 @@ def test_validate_preview_accepts_daily_and_final_assessment_contract() -> None:
     planner.validate_preview(preview=preview, scoped_material_ids={"mat_net"})
 
 
+def test_repair_daily_assessment_coverage_adds_same_day_learn_sources() -> None:
+    task = StudyTaskPreview(
+        title="第 1 天",
+        task_date=date(2026, 7, 12),
+        sort_order=1,
+        subtasks=[
+            _subtask(
+                title="学习数据通信公式",
+                subtask_type="learn",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_001"],
+                estimated_minutes=60,
+                sort_order=1,
+            ),
+            _subtask(
+                title="学习调制编码",
+                subtask_type="learn",
+                related_material_ids=["mat_aux"],
+                citation_chunk_ids=["chk_002"],
+                estimated_minutes=60,
+                sort_order=2,
+            ),
+            _subtask(
+                title="当日自测",
+                subtask_type="quiz",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_001"],
+                estimated_minutes=60,
+                sort_order=3,
+            ),
+        ],
+    )
+
+    repaired = planner.repair_daily_assessment_coverage([task])
+
+    repaired_quiz = repaired[0].subtasks[2]
+    assert repaired_quiz.related_material_ids == ["mat_net", "mat_aux"]
+    assert repaired_quiz.citation_chunk_ids == ["chk_001", "chk_002"]
+    planner.validate_preview(preview=_preview(tasks=repaired), scoped_material_ids={"mat_net", "mat_aux"})
+
+
+def test_repair_daily_assessment_coverage_adds_full_plan_sources_to_final_test() -> None:
+    day_one = StudyTaskPreview(
+        title="第 1 天",
+        task_date=date(2026, 7, 12),
+        sort_order=1,
+        subtasks=[
+            _subtask(
+                title="学习公式",
+                subtask_type="learn",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_001"],
+                estimated_minutes=60,
+                sort_order=1,
+            ),
+            _subtask(
+                title="当日自测",
+                subtask_type="quiz",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_001"],
+                estimated_minutes=60,
+                sort_order=2,
+            ),
+        ],
+    )
+    day_two = StudyTaskPreview(
+        title="第 2 天",
+        task_date=date(2026, 7, 13),
+        sort_order=2,
+        subtasks=[
+            _subtask(
+                title="学习调制编码",
+                subtask_type="learn",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_002"],
+                estimated_minutes=60,
+                sort_order=1,
+            ),
+            _subtask(
+                title="综合测试",
+                subtask_type="test",
+                related_material_ids=["mat_net"],
+                citation_chunk_ids=["chk_002"],
+                estimated_minutes=60,
+                sort_order=2,
+            ),
+        ],
+    )
+
+    repaired = planner.repair_daily_assessment_coverage([day_one, day_two])
+
+    final_test = repaired[1].subtasks[1]
+    assert final_test.related_material_ids == ["mat_net"]
+    assert final_test.citation_chunk_ids == ["chk_002", "chk_001"]
+    planner.validate_preview(preview=_preview(tasks=repaired), scoped_material_ids={"mat_net"})
+
 def test_validate_preview_requires_subtask_citations() -> None:
     preview = _preview(
         goal_text="review for final",
@@ -1257,3 +1353,4 @@ def test_rejects_invalid_quiz_subtask_generation_parameters() -> None:
 
     assert exc_info.value.code == "VALIDATION_ERROR"
     assert exc_info.value.details["field"] == "generation_parameters.task_test"
+

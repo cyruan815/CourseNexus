@@ -257,6 +257,67 @@ def make_coverage(*, expected_material_ids: set[str], processed_material_ids: se
     )
 
 
+def repair_daily_assessment_coverage(tasks: list[StudyTaskPreview]) -> list[StudyTaskPreview]:
+    if not tasks:
+        return tasks
+
+    final_task_date = max(task.task_date for task in tasks)
+    full_plan_material_ids: list[str] = []
+    full_plan_chunk_ids: list[str] = []
+    for task in tasks:
+        for subtask in task.subtasks:
+            if is_assessment_subtask(subtask):
+                continue
+            full_plan_material_ids = _ordered_unique([*full_plan_material_ids, *subtask.related_material_ids])
+            full_plan_chunk_ids = _ordered_unique([*full_plan_chunk_ids, *subtask.citation_chunk_ids])
+
+    repaired_tasks: list[StudyTaskPreview] = []
+    for task in tasks:
+        assessments = [subtask for subtask in task.subtasks if is_assessment_subtask(subtask)]
+        if len(assessments) != 1 or not task.subtasks or task.subtasks[-1] is not assessments[0]:
+            repaired_tasks.append(task)
+            continue
+
+        assessment = assessments[0]
+        if task.task_date == final_task_date:
+            required_material_ids = full_plan_material_ids
+            required_chunk_ids = full_plan_chunk_ids
+        else:
+            required_material_ids = []
+            required_chunk_ids = []
+            for subtask in task.subtasks:
+                if subtask is assessment:
+                    break
+                if is_assessment_subtask(subtask):
+                    continue
+                required_material_ids = _ordered_unique([*required_material_ids, *subtask.related_material_ids])
+                required_chunk_ids = _ordered_unique([*required_chunk_ids, *subtask.citation_chunk_ids])
+
+        repaired_assessment = assessment.model_copy(
+            update={
+                "related_material_ids": _ordered_unique([*assessment.related_material_ids, *required_material_ids]),
+                "citation_chunk_ids": _ordered_unique([*assessment.citation_chunk_ids, *required_chunk_ids]),
+            }
+        )
+        repaired_subtasks = [
+            repaired_assessment if subtask is assessment else subtask
+            for subtask in task.subtasks
+        ]
+        repaired_tasks.append(task.model_copy(update={"subtasks": repaired_subtasks}))
+
+    return repaired_tasks
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
 def validate_preview(*, preview: StudyPlanPreview, scoped_material_ids: set[str]) -> None:
     allowed_types = {"learn", "review", "quiz", "test"}
     completion_quality_required = _requires_completion_quality(preview.goal_text)
@@ -389,3 +450,4 @@ def _minimum_required_minutes(daily_available_minutes: int) -> int:
 
 def _invalid_generation(message: str) -> CourseNexusError:
     return CourseNexusError(code="GENERATION_SCHEMA_INVALID", message=message, status_code=500)
+
