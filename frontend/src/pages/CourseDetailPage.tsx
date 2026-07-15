@@ -51,6 +51,13 @@ import {
   listGeneratedContents,
   renameGeneratedContent,
 } from "../features/course-workspace/api";
+import {
+  createPendingGeneration,
+  formatGeneratedContentAge,
+  generatedContentTitle,
+  generationLoadingMessage,
+  type PendingGeneration,
+} from "../features/course-workspace/generated-content-list";
 import type { GeneratedContent, Message, SourceCitation, StudyPlan } from "../features/course-workspace/types";
 import { fetchCourse } from "../features/courses/api";
 import { MaterialWorkspace } from "../features/materials/MaterialWorkspace";
@@ -316,34 +323,37 @@ function ToolCard({
   );
 }
 
-function ToolsPanel({ generatingType, onGenerate }: { generatingType: string | null; onGenerate: (contentType: string) => void }) {
+function ToolsPanel({ pendingGenerations, onGenerate }: { pendingGenerations: PendingGeneration[]; onGenerate: (contentType: string) => void }) {
   return (
     <Box aria-label="学习工具区" className="course-detail-tools" component="section">
       <Title order={2}>{"学习工具"}</Title>
-      <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard isGenerating={generatingType === item.type} item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
+      <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard isGenerating={pendingGenerations.some((pending) => pending.content_type === item.type)} item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
     </Box>
   );
-}
-
-function contentTypeLabel(type: string): string {
-  const labels: Record<string, string> = { flashcard: "Flashcards", knowledge_list: "知识点清单", mindmap: "Mind Map", note: "学习笔记", outline: "复习提纲", quiz: "Quiz" };
-  return labels[type] ?? type;
 }
 
 function GeneratedContentPanel({
   contents,
   onDelete,
   onRename,
+  pendingGenerations,
 }: {
   contents: GeneratedContent[];
   onDelete: (content: GeneratedContent) => Promise<void>;
   onRename: (content: GeneratedContent, title: string) => Promise<void>;
+  pendingGenerations: PendingGeneration[];
 }) {
+  const [now, setNow] = useState(() => new Date());
   const [renameTarget, setRenameTarget] = useState<GeneratedContent | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GeneratedContent | null>(null);
   const [title, setTitle] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function openRename(content: GeneratedContent) {
     setRenameTarget(content);
@@ -398,44 +408,62 @@ function GeneratedContentPanel({
     }
   }
 
+  const hasItems = pendingGenerations.length > 0 || contents.length > 0;
   return (
     <>
       <Box aria-label="AI 生成内容区" className="course-detail-generated" component="section">
-        {contents.length > 0 ? (
+        {hasItems ? (
           <Stack className="course-detail-generated-list" gap="xs">
-            {contents.map((content) => (
-              <Paper className="course-detail-generated-item" key={content.id} radius="md" withBorder>
-                <Box
-                  aria-label={`查看生成内容 ${content.title}`}
-                  className="course-detail-generated-link"
-                  component={Link}
-                  to={`/generated-contents/${content.id}`}
-                >
-                  <Stack gap={2}>
-                    <Text fw={700} lineClamp={2} size="sm">{content.title}</Text>
-                    <Text c="dimmed" size="xs">{contentTypeLabel(content.content_type)} · {content.generation_status}</Text>
+            {pendingGenerations.map((pending) => {
+              const displayTitle = generatedContentTitle(pending.content_type);
+              return (
+                <Paper aria-disabled="true" aria-label={`正在生成 ${displayTitle}`} className="course-detail-generated-item is-pending" key={pending.id} radius="md" withBorder>
+                  <Stack className="course-detail-generated-copy" gap={2}>
+                    <Text fw={700} size="sm">{displayTitle}</Text>
+                    <Text c="dimmed" size="xs">{generationLoadingMessage(pending.content_type)}</Text>
                   </Stack>
-                </Box>
-                <Group className="course-detail-generated-actions" gap={4} wrap="nowrap">
-                  <Badge color={content.generation_status === "success" ? "teal" : "yellow"} size="xs" variant="light">{content.generation_status}</Badge>
-                  <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={150} withinPortal>
-                    <Menu.Target>
-                      <ActionIcon aria-label={`${content.title} 更多操作`} size="sm" variant="subtle">
-                        <IconDotsVertical size={18} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRename(content)}>
-                        重命名
-                      </Menu.Item>
-                      <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => openDelete(content)}>
-                        删除
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Group>
-              </Paper>
-            ))}
+                  <Group className="course-detail-generation-state" gap="xs" wrap="nowrap">
+                    <span aria-hidden="true" className="course-detail-generation-spinner" />
+                    <Text fw={700} size="xs">{"生成中"}</Text>
+                  </Group>
+                </Paper>
+              );
+            })}
+            {contents.map((content) => {
+              const displayTitle = generatedContentTitle(content.content_type, content.title);
+              return (
+                <Paper className="course-detail-generated-item" key={content.id} radius="md" withBorder>
+                  <Box
+                    aria-label={`查看生成内容 ${displayTitle}`}
+                    className="course-detail-generated-link"
+                    component={Link}
+                    to={`/generated-contents/${content.id}`}
+                  >
+                    <Stack className="course-detail-generated-copy" gap={2}>
+                      <Text fw={700} lineClamp={2} size="sm" title={displayTitle}>{displayTitle}</Text>
+                      <Text c="dimmed" size="xs">{formatGeneratedContentAge(content.created_at, now)}</Text>
+                    </Stack>
+                  </Box>
+                  <Group className="course-detail-generated-actions" gap={4} wrap="nowrap">
+                    <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={150} withinPortal>
+                      <Menu.Target>
+                        <ActionIcon aria-label={`${displayTitle} 更多操作`} size="sm" variant="subtle">
+                          <IconDotsVertical size={18} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRename(content)}>
+                          重命名
+                        </Menu.Item>
+                        <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => openDelete(content)}>
+                          删除
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  </Group>
+                </Paper>
+              );
+            })}
           </Stack>
         ) : (
           <Stack className="course-detail-generated-empty" gap="xs"><IconSparkles size={34} stroke={1.6} /><Text fw={700}>{"还没有生成内容"}</Text><Text c="dimmed" size="sm">{"选择左侧资料范围后，可使用学习工具生成内容。"}</Text></Stack>
@@ -480,7 +508,6 @@ function GeneratedContentPanel({
 interface CourseDetailWorkbenchProps {
   course: Course;
   generatedContents?: GeneratedContent[];
-  generatingType?: string | null;
   isQuestionPending?: boolean;
   materialPanel: ReactNode;
   materialScope?: MaterialScope;
@@ -490,6 +517,7 @@ interface CourseDetailWorkbenchProps {
   onRenameGeneratedContent?: (content: GeneratedContent, title: string) => Promise<void>;
   onQuestionChange?: (value: string) => void;
   onSendQuestion?: () => void;
+  pendingGenerations?: PendingGeneration[];
   qaMessages?: QaMessage[];
   question?: string;
   studyPlans?: StudyPlan[];
@@ -498,7 +526,6 @@ interface CourseDetailWorkbenchProps {
 export function CourseDetailWorkbench({
   course,
   generatedContents = [],
-  generatingType = null,
   isQuestionPending = false,
   materialPanel,
   materialScope = { include_all_parsed_materials: true, material_ids: [] },
@@ -508,6 +535,7 @@ export function CourseDetailWorkbench({
   onRenameGeneratedContent = async () => undefined,
   onQuestionChange = () => undefined,
   onSendQuestion = () => undefined,
+  pendingGenerations = [],
   qaMessages = [],
   question = "",
   studyPlans = [],
@@ -538,9 +566,9 @@ export function CourseDetailWorkbench({
 
           <Stack className="course-detail-right" gap="sm">
             <Paper aria-label="学习工具与 AI 生成内容" className="course-detail-card course-detail-studio" component="section" radius="md" withBorder>
-              <ToolsPanel generatingType={generatingType} onGenerate={onGenerate} />
+              <ToolsPanel onGenerate={onGenerate} pendingGenerations={pendingGenerations} />
               <Divider aria-label="学习工具与 AI 生成内容分隔线" className="course-detail-studio-divider" />
-              <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} />
+              <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} pendingGenerations={pendingGenerations} />
             </Paper>
           </Stack>
         </Box>
@@ -565,7 +593,7 @@ export function CourseDetailPage() {
   const [question, setQuestion] = useState("");
   const [qaMessages, setQaMessages] = useState<QaMessage[]>([]);
   const [isQuestionPending, setIsQuestionPending] = useState(false);
-  const [generatingType, setGeneratingType] = useState<string | null>(null);
+  const [pendingGenerations, setPendingGenerations] = useState<PendingGeneration[]>([]);
   const [materialScope, setMaterialScope] = useState<MaterialScope>({
     include_all_parsed_materials: true,
     material_ids: [],
@@ -724,7 +752,8 @@ export function CourseDetailPage() {
       return;
     }
 
-    setGeneratingType(contentType);
+    const pendingGeneration = createPendingGeneration(contentType);
+    setPendingGenerations((current) => [pendingGeneration, ...current]);
     setWorkspaceError(null);
 
     try {
@@ -733,11 +762,11 @@ export function CourseDetailPage() {
         material_scope: materialScopeForRequest(materialScope),
         parameters: {},
       });
+      setPendingGenerations((current) => current.filter((item) => item.id !== pendingGeneration.id));
       setGeneratedContents((current) => [content, ...current]);
     } catch (nextError) {
+      setPendingGenerations((current) => current.filter((item) => item.id !== pendingGeneration.id));
       setWorkspaceError(errorMessage(nextError));
-    } finally {
-      setGeneratingType(null);
     }
   }
 
@@ -789,7 +818,6 @@ export function CourseDetailPage() {
       <CourseDetailWorkbench
         course={course}
         generatedContents={generatedContents}
-        generatingType={generatingType}
         isQuestionPending={isQuestionPending}
         materialPanel={(
           <MaterialWorkspace
@@ -807,6 +835,7 @@ export function CourseDetailPage() {
         onQuestionChange={setQuestion}
         onRenameGeneratedContent={handleRenameGeneratedContent}
         onSendQuestion={handleSendQuestion}
+        pendingGenerations={pendingGenerations}
         qaMessages={qaMessages}
         question={question}
         studyPlans={studyPlans}

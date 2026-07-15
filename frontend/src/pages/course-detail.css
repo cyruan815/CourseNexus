@@ -640,6 +640,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
+  overflow: hidden;
   border-color: #d6e0eb;
   background: #fbfdff;
   padding: 4px 6px 4px 12px;
@@ -649,7 +651,7 @@
     transform 160ms ease;
 }
 
-.course-detail-generated-item:hover {
+.course-detail-generated-item:not(.is-pending):hover {
   border-color: #2f80ed;
   background: #ffffff;
   transform: translateY(-1px);
@@ -665,6 +667,80 @@
 
 .course-detail-generated-actions {
   flex: 0 0 auto;
+}
+
+.course-detail-generated-item.is-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  border-color: transparent;
+  background:
+    linear-gradient(#fbfbff, #fbfbff) padding-box,
+    linear-gradient(105deg, #aa9df6, #79c5e7, #b9a8fa) border-box;
+  box-shadow: 0 5px 17px rgba(102, 89, 207, 0.12);
+  cursor: not-allowed;
+}
+
+.course-detail-generated-item.is-pending::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 14%,
+    rgba(204, 232, 255, 0.46) 42%,
+    rgba(235, 220, 255, 0.62) 55%,
+    transparent 82%
+  );
+  content: "";
+  pointer-events: none;
+  transform: translateX(-125%);
+  animation: course-detail-generation-sweep 2.1s ease-in-out infinite;
+}
+
+.course-detail-generated-copy,
+.course-detail-generation-state {
+  position: relative;
+  z-index: 1;
+}
+
+.course-detail-generation-state {
+  flex: 0 0 auto;
+  color: #5f54c7;
+}
+
+.course-detail-generation-spinner {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(104, 88, 204, 0.2);
+  border-top-color: #6758cc;
+  border-radius: 50%;
+  animation: course-detail-generation-spin 0.9s linear infinite;
+}
+
+@keyframes course-detail-generation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes course-detail-generation-sweep {
+  0% {
+    transform: translateX(-125%);
+  }
+
+  62%,
+  100% {
+    transform: translateX(125%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .course-detail-generated-item.is-pending::before,
+  .course-detail-generation-spinner {
+    animation: none;
+  }
 }
 
 .course-detail-workspace-error {
