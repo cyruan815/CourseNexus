@@ -1,70 +1,38 @@
-# Course Detail Resource Panel Design QA
+# Design QA：入口页放射粒子动效
 
-- Source visual truth: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-1d876f74-3017-4480-867e-f152f4bfaff6.png`
-- Compact-header reference: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-61655666-40d1-4598-a11d-754a615bced8.png`
-- Action-size follow-up: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-b2d99c1b-628a-45b4-89a1-41322b6fbe8f.png`
-- File-row density reference: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-d32a08f3-9cbe-4e25-8f0f-daad3e9e0e74.png`
-- Browser-rendered full view: `.artifacts/product-design/course-detail-compact-v1.png`
-- Browser-rendered focused view: `.artifacts/product-design/course-material-folder-rows-compact-v5.png`
-- Dark-theme regression view: `.artifacts/product-design/course-material-compact-dark-v1.png`
-- Side-by-side focused comparison: `.artifacts/product-design/comparison-file-rows-compact-v4.png`
-- Browser metrics: `.artifacts/product-design/browser-check-folder-rows-compact-v5.json`
-- Viewport: 1600 × 1000 CSS pixels, device scale factor 1
-- State: light theme; `02 物理层` expanded; no explicit material selection
+- Source visual truth: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-1d9ee9ee-984e-4086-86cc-16e4fe7712f5.png`
+- Implementation screenshot: `C:\Users\ruanchengyun\.codex\visualizations\2026\07\15\019f6787-fdaf-7a12-9ad7-d5ee6cb2c3d6\welcome-particles-spring-still.png`
+- Full-view comparison: `C:\Users\ruanchengyun\.codex\visualizations\2026\07\15\019f6787-fdaf-7a12-9ad7-d5ee6cb2c3d6\welcome-particles-reference-comparison.png`
+- Motion evidence: `C:\Users\ruanchengyun\.codex\visualizations\2026\07\15\019f6787-fdaf-7a12-9ad7-d5ee6cb2c3d6\welcome-particles-spring-preview.gif`
+- Viewport: 2048 × 1086 for the still comparison; 1280 × 720 for motion capture.
+- State: `/welcome`, light theme, pointer moved from the viewport center toward the right and then around a slow ellipse.
 
-**Findings**
+## Findings
 
-- No actionable P0, P1, or P2 mismatch remains.
-- Fonts and typography: the product font stack and existing Chinese hierarchy are preserved. The 20 px title remains dominant while the 13 px selection summary and compact labels stay readable.
-- Spacing and layout rhythm: the three 40 × 40 px actions sit beside the title, the search control remains 36 px high, and the fixed-height panel still prioritizes the resource list. Folder rows are reduced to 48 px with 30 px folder tiles; file rows are 40 px with 20 px type badges and 22 px parse-status controls.
-- Colors and visual tokens: the compact actions reuse the existing border, hover-blue, surface, focus, dark-theme, and disabled tokens. The former filled upload action is intentionally normalized to match the three equal icon controls in the selected reference; the dark-theme regression capture retains readable icons, text, separators, and status states.
-- Image quality and asset fidelity: the reference contains only interface icons. The implementation uses the existing Tabler icon set and Mantine tooltip; no placeholder, text glyph, custom SVG, or CSS-drawn icon was introduced.
-- Copy and content: visible button copy is removed exactly as requested. Accessible names remain on all three buttons, hover tooltips expose “新建文件夹”, “上传资料”, and “添加链接”, and file-size metadata is no longer rendered in resource rows.
+- No actionable P0/P1/P2 mismatch remains for the requested particle behavior.
+- Particle layout now follows the reference's radial spokes rather than visible concentric rings. Particle density is intentionally lower than the earlier CourseNexus iteration and remains subordinate to the hero content.
+- Each particle has an independent spring-follow center, radial breathing phase, lateral drift phase, damping, and speed cap. The field therefore trails the pointer asynchronously instead of translating as one rigid object.
+- Fonts and typography: unchanged from the existing CourseNexus welcome page; this task did not ask to clone Google's typography.
+- Spacing and layout rhythm: existing CourseNexus navigation, hero alignment, CTA, and responsive structure are unchanged.
+- Colors and visual tokens: particles retain CourseNexus blue, teal, indigo, and purple instead of copying Google's red/blue palette; opacity remains low enough to preserve text contrast.
+- Image quality and asset fidelity: the supplied CourseNexus logo assets remain unchanged; the particle field is correctly rendered as a high-DPI Canvas effect rather than a raster placeholder.
+- Copy and content: unchanged from the current product page.
 
-**Full-view comparison evidence**
+## Comparison history
 
-- The full course-detail capture confirms the existing three-column widths and the center/right content remain unchanged.
-- The compact material header reduces non-list vertical space without clipping the page header, plan card, selection control, search field, or resource rows.
-- The local scrolling list shows all six fixture file rows with extra space remaining; each row is 16 px shorter than the previous pass.
+1. Earlier implementation used shared-center motion and tangent-aligned dashes. This produced synchronized movement and obvious circular rings (P2).
+2. Independent anchors, spring/damping variation, large per-particle radial breathing, and lateral drift were added. Pointer following was slowed with per-particle speed caps.
+3. Full-view comparison showed the remaining ring impression came primarily from dash orientation (P2). Dashes were changed to radial orientation and distributed across lightly jittered spokes, matching the reference's visual grammar.
+4. Particle count was reduced from a 2300 maximum to 1100, and the final browser capture confirmed a lighter field with the hero content unobscured.
 
-**Focused region comparison evidence**
+## Browser verification
 
-- `.artifacts/product-design/comparison-file-rows-compact-v4.png` places the supplied file-list reference and the browser-rendered implementation in one image.
-- Both use unseparated, single-line file rows whose type marker is visually close to the filename scale.
-- The implementation retains the product-required selection, parse status, and action controls while keeping them visually secondary.
+- Primary interaction tested: continuous pointer movement across the particle canvas for 64 captured frames; the Canvas remained non-interactive and did not block page controls.
+- Console checked: no page exceptions. The only console entry is a non-functional `favicon.ico` 404 from the existing Vite page.
+- Focused-region comparison was not needed because the requested change is a full-screen background motion system; the foreground UI and supplied assets were intentionally preserved.
 
-**Primary interactions tested**
+## Follow-up polish
 
-- All three icon buttons retain accessible names and existing click handlers.
-- Hovering the folder action displays the “新建文件夹” tooltip.
-- Upload still opens only after clicking the upload action.
-- Search, clear-search, folder expansion, and material selection remain covered by the component test suite.
-- Browser console and page error collection returned no errors.
-- The compact panel was recaptured in dark theme with no clipping or contrast regression.
-
-**Comparison history**
-
-1. The previous implementation used a second 44 px-high row of text actions and a 46 px search control. The supplied follow-up screenshot showed that this consumed too much of the fixed-height card and limited visible resources to two or three.
-2. The actions were converted to equal 36 px icon-only controls beside the title, hover labels and accessible names were added, and the header/body/search spacing was compressed.
-3. The post-fix browser capture measured an 82 px header, 36 px search control, 572 px list viewport, and six visible file rows. The side-by-side comparison found no remaining actionable P0/P1/P2 mismatch.
-4. The follow-up density pass removed file-size metadata, reduced the file badge to 28 px, and reduced each file row from 66 px to 50 px. The browser recapture confirmed no filename/status clipping and no console errors.
-5. The three title actions were increased from 36 px to 40 px with 21 px icons. They remain in the same single-row title layout and do not reintroduce the former text-action row.
-6. The supplied file-list reference prompted a final density pass: file separators were removed, file rows were reduced from 50 px to 40 px, type badges from 28 px to 20 px, and parse-status controls from 30 px to 22 px. Browser metrics confirmed a `0px` row divider and no console errors.
-7. Folder rows were reduced from 60 px to 48 px, folder tiles from 38 px to 30 px, and count badges from 27 px to 23 px, without changing folder interactions. The browser recapture confirmed those dimensions and no console errors.
-
-**Implementation Checklist**
-
-- [x] Align three icon-only actions with the resource title.
-- [x] Preserve labels through hover tooltips and accessible names.
-- [x] Reduce search and surrounding vertical spacing.
-- [x] Reduce file badges and file-row height, and remove file-size metadata.
-- [x] Remove file separators and reduce parse-status controls.
-- [x] Reduce folder-row, folder-tile, and count-badge dimensions.
-- [x] Keep all existing APIs and action handlers.
-- [x] Verify the fixed-width three-column page and list capacity in a browser.
-
-**Follow-up Polish**
-
-- No additional P3 polish is required for the requested compact-header pass.
+- P3: color-sector boundaries could be tuned further if a closer Google palette match is desired, but the current CourseNexus palette is an intentional brand constraint.
 
 final result: passed
