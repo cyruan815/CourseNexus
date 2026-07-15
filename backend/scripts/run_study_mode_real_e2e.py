@@ -17,7 +17,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 
-GOAL_TEXT = "我要两天内深度学习计算机网络物理层的知识点，今天是2026年7月13日；最后安排 10 道选择题和 3 道计算题检验 Nyquist/Shannon 公式、编码和调制。"
+DEFAULT_GOAL_TEXT = "我要两天内深度学习计算机网络物理层的知识点，今天是2026年7月13日；最后安排 10 道选择题和 3 道计算题检验 Nyquist/Shannon 公式、编码和调制。"
 SOURCE_PDF_LABEL = "<local validation PDF>"
 
 
@@ -283,9 +283,7 @@ def _validate_pdf(path: Path) -> dict[str, object]:
         "path": str(path),
         "bytes": path.stat().st_size,
         "starts_with_pdf_header": payload.startswith(b"%PDF"),
-        "uses_helvetica_font_resource": b"/F2" in payload,
-        "uses_helvetica_text_runs": b"/F2 " in payload and b" Tf" in payload,
-        "uses_stsong_text_runs": b"/F1 " in payload and b" Tf" in payload,
+        "has_eof_marker": b"%%EOF" in payload[-2048:],
     }
     try:
         from pypdf import PdfReader
@@ -317,7 +315,7 @@ def _write_report(
         f"- 开始时间：{started_at.isoformat()}",
         f"- 总耗时：{elapsed}",
         f"- 资料：`{context.get('source_pdf', SOURCE_PDF_LABEL)}`",
-        f"- 自然语言目标：{GOAL_TEXT}",
+        f"- 自然语言目标：{context.get('goal_text', '')}",
         f"- 运行日志：`{logger.log_path.name}`",
         f"- 应用日志目录：`app-logs/`",
         "",
@@ -336,6 +334,7 @@ def _write_report(
         "## 产物",
         "",
         f"- 讲义 PDF：`{context.get('handout_pdf', '')}`",
+        f"- 讲义 Markdown：`{context.get('handout_markdown', '')}`",
         f"- 测试题 Markdown：`{context.get('task_test_markdown', '')}`",
         f"- QA 回答 JSON：`{context.get('qa_answer_json', '')}`",
         f"- API 摘要 JSON：`{context.get('summary_json', '')}`",
@@ -400,7 +399,8 @@ def run(args: argparse.Namespace) -> int:
     run_dir = ROOT / "docs" / "domains" / "study-mode" / "validation" / f"real-e2e-physical-layer-{run_stamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
     logger = RunLogger(run_dir)
-    context: dict[str, object] = {"source_pdf": args.pdf.name}
+    goal_text = args.goal
+    context: dict[str, object] = {"source_pdf": args.pdf.name, "goal_text": goal_text}
     try:
         _configure_isolated_runtime(run_dir)
         app = _setup_app()
@@ -469,7 +469,7 @@ def run(args: argparse.Namespace) -> int:
             path=f"/api/v1/courses/{course_id}/study-plan-config-parses",
             step="parse natural language config with model",
             headers=headers,
-            json={"goal_text": GOAL_TEXT, "material_scope": material_scope},
+            json={"goal_text": goal_text, "material_scope": material_scope},
         )
         _write_json(run_dir / "config_parse.json", config)
 
@@ -480,7 +480,7 @@ def run(args: argparse.Namespace) -> int:
             path=f"/api/v1/courses/{course_id}/study-plan-diagnostic-questions",
             step="build diagnostic questions",
             headers=headers,
-            json={"goal_text": GOAL_TEXT, "material_scope": material_scope},
+            json={"goal_text": goal_text, "material_scope": material_scope},
         )
         diagnostic_answers = _diagnostic_answers(questions)
         context["diagnostic_answers"] = diagnostic_answers
@@ -499,6 +499,21 @@ def run(args: argparse.Namespace) -> int:
         diagnostic_profile = profile["data"]
         _write_json(run_dir / "diagnostic_profile.json", profile)
 
+        config_data = config.get("data", {}) if isinstance(config, dict) else {}
+        preview_request = {
+            "goal_text": goal_text,
+            "start_date": config_data.get("start_date") or datetime.now().date().isoformat(),
+            "duration_days": config_data.get("duration_days") or 2,
+            "preference": config_data.get("preference") or "mastery",
+            "diagnostic_profile": diagnostic_profile,
+            "material_scope": material_scope,
+        }
+        if config_data.get("end_date") and not config_data.get("duration_days"):
+            preview_request["end_date"] = config_data["end_date"]
+        if config_data.get("daily_available_minutes") is not None:
+            preview_request["daily_available_minutes"] = config_data["daily_available_minutes"]
+        context["preview_request"] = preview_request
+
         preview = _api_json(
             client,
             logger,
@@ -506,14 +521,7 @@ def run(args: argparse.Namespace) -> int:
             path=f"/api/v1/courses/{course_id}/study-plans/preview",
             step="generate study plan preview with model",
             headers=headers,
-            json={
-                "goal_text": GOAL_TEXT,
-                "start_date": "2026-07-13",
-                "duration_days": 2,
-                "preference": "mastery",
-                "diagnostic_profile": diagnostic_profile,
-                "material_scope": material_scope,
-            },
+            json=preview_request,
         )
         _write_json(run_dir / "plan_preview.json", preview)
         preview_data = preview["data"]
@@ -595,12 +603,16 @@ def run(args: argparse.Namespace) -> int:
         _write_json(run_dir / "task_test_content.json", task_test)
         handout_id = handout["data"]["id"]
         task_test_id = task_test["data"]["id"]
+        handout_markdown = str(handout["data"].get("content") or "")
+        handout_md = run_dir / f"handout-{handout_id}.md"
+        handout_md.write_text(handout_markdown.rstrip() + "\n", encoding="utf-8")
         context["handout_content_id"] = handout_id
         context["task_test_content_id"] = task_test_id
+        context["handout_markdown"] = handout_md.name
         context["content_summary"] = {
             "handout_title": handout["data"].get("title"),
             "handout_status": handout["data"].get("generation_status"),
-            "handout_sections": len(handout["data"].get("content_json", {}).get("sections", [])),
+            "handout_markdown_bytes": len(handout_markdown.encode("utf-8")),
             "task_test_title": task_test["data"].get("title"),
             "task_test_status": task_test["data"].get("generation_status"),
             "task_test_questions": len(task_test["data"].get("content_json", {}).get("questions", [])),
@@ -639,33 +651,29 @@ def run(args: argparse.Namespace) -> int:
         context["pdf_validation"] = _validate_pdf(handout_pdf)
         markdown_text = task_test_md.read_text(encoding="utf-8")
         context["markdown_validation"] = {
+            "handout_bytes": len(handout_markdown.encode("utf-8")),
+            "handout_contains_callout": any(marker in handout_markdown for marker in ("[!NOTE]", "[!EXAMPLE]", "[!SUMMARY]", "[!WARNING]", "[!TIP]")),
+            "handout_contains_sources_unavailable": "Sources: unavailable" in handout_markdown,
+            "handout_contains_formula_not_decoded": "formula-not-decoded" in handout_markdown,
             "bytes": task_test_md.stat().st_size,
             "contains_sources_unavailable": "Sources: unavailable" in markdown_text,
         }
         pdf_validation = context["pdf_validation"]
-        if (
-            not pdf_validation.get("starts_with_pdf_header")
-            or not pdf_validation.get("uses_helvetica_text_runs")
-            or not pdf_validation.get("uses_stsong_text_runs")
-        ):
-            raise RuntimeError(f"handout pdf font validation failed: {_json(pdf_validation)}")
+        if not pdf_validation.get("starts_with_pdf_header") or not pdf_validation.get("has_eof_marker"):
+            raise RuntimeError(f"handout pdf validation failed: {_json(pdf_validation)}")
+        if not context["markdown_validation"]["handout_contains_callout"]:
+            raise RuntimeError("handout markdown does not contain supported callout syntax")
+        if context["markdown_validation"]["handout_contains_sources_unavailable"]:
+            raise RuntimeError("handout markdown contains Sources: unavailable")
+        if context["markdown_validation"]["handout_contains_formula_not_decoded"]:
+            raise RuntimeError("handout markdown contains formula-not-decoded")
         if context["markdown_validation"]["contains_sources_unavailable"]:
             raise RuntimeError("task-test markdown contains Sources: unavailable")
 
-        first_section = (handout["data"].get("content_json", {}).get("sections") or [{}])[0]
         context["pdf_issue_evidence"] = {
-            "issue": "PDF export previously routed CJK, ASCII, numbers, and formulas through STSong-Light, which made Overview and Nyquist/Shannon-style ASCII render with abnormal spacing.",
             "source_pdf": str(args.pdf),
             "fixed_export_pdf": handout_pdf.name,
-            "handout_content_fragment": {
-                "title": first_section.get("title"),
-                "body_excerpt": str(first_section.get("body", ""))[:500],
-                "source_citation_ids": first_section.get("source_citation_ids", []),
-            },
-            "content_stream_evidence": {
-                "uses_helvetica_text_runs": context["pdf_validation"].get("uses_helvetica_text_runs"),
-                "uses_stsong_text_runs": context["pdf_validation"].get("uses_stsong_text_runs"),
-            },
+            "handout_markdown_excerpt": handout_markdown[:800],
         }
         context["warnings"] = _run_warnings(context)
 
@@ -704,6 +712,7 @@ def run(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a real Study Mode E2E flow with configured model providers.")
     parser.add_argument("--pdf", type=Path, required=True, help="PDF material to upload for the E2E run")
+    parser.add_argument("--goal", default=DEFAULT_GOAL_TEXT, help="Natural language study goal for config parsing and plan preview")
     args = parser.parse_args()
     if not args.pdf.exists():
         raise SystemExit(f"PDF not found: {args.pdf}")
