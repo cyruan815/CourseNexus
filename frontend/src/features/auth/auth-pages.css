@@ -105,7 +105,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 34px;
+  gap: 42px;
   color: #111827;
   font-size: clamp(52px, 7vw, 104px);
   line-height: 0.95;
@@ -114,7 +114,7 @@
 }
 
 .auth-hero-logo {
-  width: clamp(360px, 43vw, 680px);
+  width: clamp(430px, 50vw, 780px);
   height: auto;
   display: block;
   object-fit: contain;
@@ -122,7 +122,7 @@
 
 .auth-welcome__main h1 > span {
   color: #111827;
-  font-size: clamp(48px, 6vw, 90px);
+  font-size: clamp(60px, 7vw, 108px);
   font-weight: 900;
 }
 
@@ -330,7 +330,7 @@
   }
 
   .auth-hero-logo {
-    width: min(54vw, 420px);
+    width: min(58vw, 500px);
   }
 
   .auth-welcome__main h2 {
@@ -358,14 +358,14 @@
 
   .auth-welcome__main h1 {
     flex-direction: column;
-    gap: 18px;
+    gap: 20px;
   }
 
   .auth-hero-logo {
-    width: min(78vw, 360px);
+    width: min(82vw, 400px);
   }
 
   .auth-welcome__main h1 > span {
-    font-size: 48px;
+    font-size: 56px;
   }
 }
