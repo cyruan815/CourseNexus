@@ -697,7 +697,7 @@ export function MaterialWorkspace({
               onClick={openCreateFolderModal}
               type="button"
             >
-              <IconFolderPlus aria-hidden size={19} stroke={1.8} />
+              <IconFolderPlus aria-hidden size={21} stroke={1.8} />
             </button>
           </Tooltip>
           <Tooltip label="上传资料" openDelay={250} position="bottom" withArrow>
@@ -708,7 +708,7 @@ export function MaterialWorkspace({
               onClick={() => openUploadDialog(null)}
               type="button"
             >
-              <IconUpload aria-hidden size={19} stroke={1.8} />
+              <IconUpload aria-hidden size={21} stroke={1.8} />
             </button>
           </Tooltip>
           <Tooltip label="添加链接" openDelay={250} position="bottom" withArrow>
@@ -719,7 +719,7 @@ export function MaterialWorkspace({
               onClick={openCreateLinkModal}
               type="button"
             >
-              <IconLink aria-hidden size={19} stroke={1.8} />
+              <IconLink aria-hidden size={21} stroke={1.8} />
             </button>
           </Tooltip>
         </div>
