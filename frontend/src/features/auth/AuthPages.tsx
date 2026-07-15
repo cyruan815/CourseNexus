@@ -161,8 +161,8 @@ export function WelcomeAuthPage() {
   return (
     <main className="auth-welcome">
       <header className="auth-welcome__nav">
-        <Anchor className="auth-wordmark" component={Link} to="/welcome">
-          Course<span>Nexus</span>
+        <Anchor aria-label="CourseNexus 首页" className="auth-wordmark" component={Link} to="/welcome">
+          <img alt="" src="/brand/coursenexus-logo.png" />
         </Anchor>
         <nav aria-label="入口导航">
           <Anchor className="active" component={Link} to="/welcome">
@@ -183,7 +183,8 @@ export function WelcomeAuthPage() {
       <section className="auth-welcome__main" aria-labelledby="welcome-title">
         <Box>
           <Title id="welcome-title" order={1}>
-            课枢 <span>CourseNexus</span>
+            <img alt="" className="auth-hero-logo" src="/brand/coursenexus-logo.png" />
+            <span>课枢</span>
           </Title>
           <Title order={2}>你的多课程 AI 学习工作台</Title>
           <Text>

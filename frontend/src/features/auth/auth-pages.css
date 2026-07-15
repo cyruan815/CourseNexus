@@ -31,10 +31,10 @@
 }
 
 .auth-wordmark {
-  color: #111827;
-  font-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   line-height: 1;
-  font-weight: 850;
   text-decoration: none;
 }
 
@@ -43,8 +43,11 @@
   text-decoration: none;
 }
 
-.auth-wordmark span {
-  color: #2f80ed;
+.auth-wordmark img {
+  width: 174px;
+  height: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .auth-welcome__nav nav {
@@ -99,6 +102,10 @@
 }
 
 .auth-welcome__main h1 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
   color: #111827;
   font-size: clamp(52px, 7vw, 104px);
   line-height: 0.95;
@@ -106,8 +113,17 @@
   letter-spacing: 0;
 }
 
-.auth-welcome__main h1 span {
-  color: #2f80ed;
+.auth-hero-logo {
+  width: clamp(360px, 43vw, 680px);
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+.auth-welcome__main h1 > span {
+  color: #111827;
+  font-size: clamp(48px, 6vw, 90px);
+  font-weight: 900;
 }
 
 .auth-welcome__main h2 {
@@ -313,6 +329,10 @@
     font-size: 48px;
   }
 
+  .auth-hero-logo {
+    width: min(54vw, 420px);
+  }
+
   .auth-welcome__main h2 {
     font-size: 22px;
   }
@@ -328,5 +348,24 @@
   .auth-form-area {
     min-height: 58vh;
     padding: 32px 22px;
+  }
+}
+
+@media (max-width: 700px) {
+  .auth-wordmark img {
+    width: 142px;
+  }
+
+  .auth-welcome__main h1 {
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .auth-hero-logo {
+    width: min(78vw, 360px);
+  }
+
+  .auth-welcome__main h1 > span {
+    font-size: 48px;
   }
 }
