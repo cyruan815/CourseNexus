@@ -127,6 +127,9 @@ const questionnaireAnimationDurationMs = 60_000;
 const planAnimationDurationMs = 600_000;
 const completionFlushMs = 520;
 const completionStepStaggerMs = 110;
+const loadingRowBaseProgress = 40;
+const loadingRowCompleteProgress = 100;
+const loadingRowProgressTickMs = 1_000;
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -326,43 +329,64 @@ function AnimatedStatusRows({
   rows: string[];
   totalDurationMs: number;
 }) {
-  const [visibleCount, setVisibleCount] = useState(1);
+  const [rowProgress, setRowProgress] = useState(() => rows.map(() => loadingRowBaseProgress));
 
   useEffect(() => {
-    setVisibleCount(1);
+    setRowProgress(rows.map(() => loadingRowBaseProgress));
   }, [rows]);
 
   useEffect(() => {
     if (isComplete) {
       const timers = rows.map((_, index) => (
         window.setTimeout(() => {
-          setVisibleCount((current) => Math.max(current, index + 1));
+          setRowProgress((current) => current.map((progress, rowIndex) => (
+            rowIndex <= index ? loadingRowCompleteProgress : progress
+          )));
         }, index * completionStepStaggerMs)
       ));
       return () => timers.forEach((timer) => window.clearTimeout(timer));
     }
 
-    const intervalMs = Math.max(650, Math.floor(totalDurationMs / Math.max(rows.length, 1)));
+    const secondsPerRow = totalDurationMs / Math.max(rows.length, 1) / loadingRowProgressTickMs;
+    const progressIncrement = (loadingRowCompleteProgress - loadingRowBaseProgress) / Math.max(secondsPerRow, 1);
     const timer = window.setInterval(() => {
-      setVisibleCount((current) => {
-        if (current >= rows.length) {
+      setRowProgress((current) => {
+        const activeIndex = current.findIndex((progress) => progress < loadingRowCompleteProgress);
+        if (activeIndex === -1) {
           window.clearInterval(timer);
           return current;
         }
-        return current + 1;
+        return current.map((progress, index) => (
+          index === activeIndex
+            ? Math.min(loadingRowCompleteProgress, progress + progressIncrement)
+            : progress
+        ));
       });
-    }, intervalMs);
+    }, loadingRowProgressTickMs);
     return () => window.clearInterval(timer);
   }, [isComplete, rows, totalDurationMs]);
 
+  const currentIndex = isComplete ? -1 : rowProgress.findIndex((progress) => progress < loadingRowCompleteProgress);
+
   return (
     <Stack className="study-plan-loading-rows" gap={8}>
-      {rows.slice(0, visibleCount).map((row) => (
-        <Group className="study-plan-loading-row" gap="xs" key={row} wrap="nowrap">
-          <Box aria-hidden="true" className="study-plan-loading-row-dot" />
-          <Text size="sm">{row}</Text>
-        </Group>
-      ))}
+      {rows.map((row, index) => {
+        const isRowComplete = rowProgress[index] >= loadingRowCompleteProgress;
+        const isRowCurrent = index === currentIndex;
+        return (
+          <Group
+            className={`study-plan-loading-row${isRowComplete ? " is-active" : ""}${isRowCurrent ? " is-current" : ""}`}
+            data-testid="study-plan-loading-row"
+            gap="xs"
+            key={row}
+            style={{ opacity: rowProgress[index] / 100 }}
+            wrap="nowrap"
+          >
+            <Box aria-hidden="true" className="study-plan-loading-row-dot" />
+            <Text size="sm">{row}</Text>
+          </Group>
+        );
+      })}
     </Stack>
   );
 }
