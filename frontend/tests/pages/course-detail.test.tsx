@@ -359,8 +359,8 @@ describe("CourseDetailPage", () => {
 
     renderDetailPage();
 
-    expect(await screen.findByText("期末复习提纲")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "查看生成内容 期末复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
+    expect(await screen.findByText("复习提纲")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看生成内容 复习提纲" })).toHaveAttribute("href", "/generated-contents/gen_1");
     expect(screen.getByRole("link", { name: "查看学习计划 高等数学期末计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/plan_1");
 
     fireEvent.change(screen.getByLabelText("输入你的问题"), {
@@ -767,13 +767,21 @@ describe("CourseDetailPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("课程不存在");
   });
 
-  it("generates content from the whole tool card", async () => {
+  it("shows independent disabled rows while generated contents run concurrently", async () => {
     const generatedQuiz = {
       ...generatedContent,
       id: "gen_quiz",
       content_type: "quiz",
-      title: "Quiz",
+      title: "Quiz（共 10 道）",
     };
+    const generatedMindmap = {
+      ...generatedContent,
+      id: "gen_mindmap",
+      content_type: "mindmap",
+      title: "思维导图（共 42 个节点）",
+    };
+    const pendingQuiz = deferred<Response>();
+    const pendingMindmap = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/material-folders") || url.endsWith("/materials")) {
@@ -789,7 +797,8 @@ describe("CourseDetailPage", () => {
         return Promise.resolve(successResponse([], "req_conversations"));
       }
       if (url.endsWith("/generations") && init?.method === "POST") {
-        return Promise.resolve(successResponse(generatedQuiz, "req_generation"));
+        const body = JSON.parse(String(init.body));
+        return body.content_type === "quiz" ? pendingQuiz.promise : pendingMindmap.promise;
       }
 
       return Promise.resolve(successResponse(course));
@@ -798,23 +807,37 @@ describe("CourseDetailPage", () => {
 
     renderDetailPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "生成 Quiz" }));
+    const quizButton = await screen.findByRole("button", { name: "生成 Quiz" });
+    fireEvent.click(quizButton);
+    fireEvent.click(screen.getByRole("button", { name: "生成 Mind Map" }));
+
+    expect(quizButton).toBeEnabled();
+    expect(screen.getByLabelText("正在生成 Quiz")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByLabelText("正在生成 思维导图")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("link", { name: "正在生成 Quiz" })).not.toBeInTheDocument();
+    expect(screen.getByText("正在生成题目与逐项解析")).toBeInTheDocument();
+    expect(screen.getByText("正在梳理概念关系")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/v1/courses/crs_123/generations",
-        expect.objectContaining({
-          body: JSON.stringify({
-            content_type: "quiz",
-            material_scope: { include_all_parsed_materials: true, material_ids: [] },
-            parameters: {},
-          }),
-          method: "POST",
-        }),
-      );
+      expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/generations"))).toHaveLength(2);
     });
-    expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+
+    pendingQuiz.resolve(successResponse(generatedQuiz, "req_quiz"));
     expect(await screen.findByRole("link", { name: "查看生成内容 Quiz" })).toHaveAttribute("href", "/generated-contents/gen_quiz");
+    expect(screen.queryByText("Quiz（共 10 道）")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("正在生成 思维导图")).toBeInTheDocument();
+
+    pendingMindmap.resolve(successResponse(generatedMindmap, "req_mindmap"));
+    expect(await screen.findByRole("link", { name: "查看生成内容 思维导图" })).toHaveAttribute("href", "/generated-contents/gen_mindmap");
+    expect(screen.queryByText("思维导图（共 42 个节点）")).not.toBeInTheDocument();
+    expect(screen.queryByText("已完成")).not.toBeInTheDocument();
+    expect(screen.queryByText("success")).not.toBeInTheDocument();
+  });
+
+  it("mounts the approved disabled loading and spinner hooks", () => {
+    expect(courseDetailSource).toContain('className="course-detail-generated-item is-pending"');
+    expect(courseDetailSource).toContain('className="course-detail-generation-spinner"');
+    expect(courseDetailSource).toContain('aria-disabled="true"');
   });
 
   it("does not show study plan handouts in course generated contents", async () => {
