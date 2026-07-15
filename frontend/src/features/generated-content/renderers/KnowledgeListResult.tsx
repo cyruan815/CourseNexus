@@ -1,5 +1,4 @@
-import { ActionIcon, Alert, Select, Switch, Text, TextInput } from "@mantine/core";
-import { IconCheck } from "@tabler/icons-react";
+import { Alert, Select, Text, TextInput } from "@mantine/core";
 import { useMemo, useState } from "react";
 import { updateKnowledgeItemLearningState } from "../../course-workspace/api";
 import { knowledgeItems } from "../guards";
@@ -109,12 +108,14 @@ export function KnowledgeListResult({
           onChange={setImportance}
           value={importance}
         />
-        <Switch
+        <button
+          aria-pressed={showUnlearnedOnly}
           className={`gc-knowledge-unlearned-filter${showUnlearnedOnly ? " is-active" : ""}`}
-          checked={showUnlearnedOnly}
-          label="未学习"
-          onChange={(event) => setShowUnlearnedOnly(event.currentTarget.checked)}
-        />
+          onClick={() => setShowUnlearnedOnly((current) => !current)}
+          type="button"
+        >
+          未学习
+        </button>
       </div>
 
       {filtered.length ? (
@@ -124,17 +125,17 @@ export function KnowledgeListResult({
             const saving = savingItemId === item.id;
             return (
               <article className={learned ? "is-learned" : undefined} key={item.id}>
-                <ActionIcon
+                <button
                   aria-label={learned ? `取消${item.name}的已学习状态` : `标记${item.name}为已学习`}
                   className="gc-knowledge-learned-toggle"
                   disabled={savingItemId !== null}
-                  loading={saving}
                   onClick={() => void toggleLearned(item)}
-                  radius="xl"
-                  variant={learned ? "filled" : "default"}
+                  type="button"
                 >
-                  {learned ? <IconCheck size={16} stroke={2.2} /> : null}
-                </ActionIcon>
+                  <span aria-hidden="true" className={saving ? "is-saving" : undefined}>
+                    {saving ? "" : learned ? "✓" : ""}
+                  </span>
+                </button>
                 <h3>{item.name}</h3>
                 <p>{item.definition}</p>
                 <span

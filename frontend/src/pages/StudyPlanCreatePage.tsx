@@ -7,7 +7,6 @@ import {
   Button,
   Divider,
   Group,
-  NumberInput,
   Paper,
   Radio,
   Skeleton,
@@ -17,7 +16,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { DateInput } from "@mantine/dates";
 import { IconArrowLeft, IconCalendarStats, IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -1141,13 +1139,13 @@ export function StudyPlanCreatePage() {
                       </Stack>
                     </Radio.Group>
                     {isCustomStartDateOpen ? (
-                      <DateInput
+                      <TextInput
                         className="study-plan-date-custom-input"
                         label="自定义开始日期"
                         mt="sm"
-                        onChange={(value) => updateStartDate(value ?? "")}
-                        value={startDate || null}
-                        valueFormat="YYYY-MM-DD"
+                        onChange={(event) => updateStartDate(event.currentTarget.value)}
+                        type="date"
+                        value={startDate}
                       />
                     ) : null}
 
@@ -1172,15 +1170,20 @@ export function StudyPlanCreatePage() {
                       </Stack>
                     </Radio.Group>
                     {isCustomDurationDaysOpen ? (
-                      <NumberInput
-                        className="study-plan-date-input study-plan-date-custom-input"
-                        data-testid="study-plan-duration-days"
-                        label="自定义学习天数"
-                        min={1}
-                        onChange={(value) => updateDurationDays(value === "" ? "" : String(value))}
-                        placeholder="例如：5"
-                        value={durationDaysText === "" ? "" : Number(durationDaysText)}
-                      />
+                      <Box className="study-plan-date-input study-plan-date-custom-input">
+                        <Text component="label" htmlFor="study-plan-duration-days" size="sm">
+                          自定义学习天数
+                        </Text>
+                        <input
+                          data-testid="study-plan-duration-days"
+                          id="study-plan-duration-days"
+                          min={1}
+                          onChange={(event) => updateDurationDays(event.currentTarget.value)}
+                          placeholder="例如：5"
+                          type="number"
+                          value={durationDaysText}
+                        />
+                      </Box>
                     ) : null}
                   </Box>
                 ) : null}

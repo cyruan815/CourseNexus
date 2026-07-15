@@ -1,5 +1,4 @@
-import { ActionIcon, Alert, Button, Group, Menu, Modal, Stack, TextInput, Textarea } from "@mantine/core";
-import { IconDotsVertical } from "@tabler/icons-react";
+import { Alert, Button, Group, Menu, Modal, Stack, TextInput, Textarea } from "@mantine/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Flashcard } from "../types";
 import { updateFlashcards } from "../../course-workspace/api";
@@ -101,11 +100,7 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
         <Group gap="xs">
           <Button aria-label="打乱卡片" className="gc-flashcard-shuffle" onClick={() => reset([...deck].sort(() => Math.random() - 0.5))} variant="default">打乱</Button>
           <Menu position="bottom-end" shadow="md" width={180}>
-            <Menu.Target>
-              <ActionIcon aria-label="更多操作" className="gc-flashcard-more" variant="default">
-                <IconDotsVertical size={18} stroke={1.8} />
-              </ActionIcon>
-            </Menu.Target>
+            <Menu.Target><button aria-label="更多操作" className="gc-flashcard-more" type="button">⋯</button></Menu.Target>
             <Menu.Dropdown><Menu.Item onClick={() => setAddOpen(true)}>添加卡片</Menu.Item><Menu.Item color="red" disabled={savedCards.length <= 1} onClick={() => setDeleteOpen(true)}>删除当前卡片</Menu.Item></Menu.Dropdown>
           </Menu>
         </Group>

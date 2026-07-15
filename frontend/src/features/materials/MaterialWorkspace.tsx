@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ActionIcon, Alert, Button, Checkbox, FileInput, Group, Menu, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Group, Menu, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   IconAlertCircle,
   IconCheck,
@@ -416,6 +416,10 @@ export function MaterialWorkspace({
       setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
       setIsUploadPromptOpen(false);
       setUploadFile(null);
+      const input = document.getElementById("material-upload-input") as HTMLInputElement | null;
+      if (input) {
+        input.value = "";
+      }
       if (material.parse_status === "uploaded") {
         try {
           updateMaterial(await retryParseMaterial(material.id));
@@ -425,6 +429,14 @@ export function MaterialWorkspace({
         }
       }
     });
+  }
+
+  function handleUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (file) {
+      setUploadFile(file);
+    }
   }
 
   function handleMove(material: Material, folderId: string | null) {
@@ -485,14 +497,14 @@ export function MaterialWorkspace({
     return (
       <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={168} withinPortal>
         <Menu.Target>
-          <ActionIcon
+          <button
             aria-label={`${material.name} 更多操作`}
             className="material-workspace__file-actions"
             disabled={isMutating}
-            variant="subtle"
+            type="button"
           >
             <IconDotsVertical size={18} stroke={1.8} />
-          </ActionIcon>
+          </button>
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameMaterialModal(material)}>
@@ -515,14 +527,14 @@ export function MaterialWorkspace({
     return (
       <Menu position="bottom-end" shadow="md" transitionProps={{ duration: 0 }} width={168} withinPortal>
         <Menu.Target>
-          <ActionIcon
+          <button
             aria-label={`${folder.name} 更多操作`}
             className="material-workspace__folder-actions"
             disabled={isMutating}
-            variant="subtle"
+            type="button"
           >
             <IconDotsVertical size={18} stroke={1.8} />
-          </ActionIcon>
+          </button>
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameFolderModal(folder)}>
@@ -566,12 +578,13 @@ export function MaterialWorkspace({
             }
           }}
         >
-          <Checkbox
+          <input
             aria-label={`选择资料 ${material.name}`}
             checked={checked}
             disabled={!isParsed}
             onChange={() => toggleMaterial(material.id)}
             title={isParsed ? "选择资料" : "资料需解析成功后才能选择"}
+            type="checkbox"
           />
           <span
             className={`material-workspace__file-icon${material.source_type === "url" ? " material-workspace__file-icon--link" : ""}`}
@@ -680,37 +693,37 @@ export function MaterialWorkspace({
         </div>
         <div className="material-workspace__header-actions">
           <Tooltip label="新建文件夹" openDelay={250} position="bottom" withArrow>
-            <ActionIcon
+            <button
               aria-label="新建文件夹"
               className="material-workspace__action-button"
               disabled={isMutating}
               onClick={openCreateFolderModal}
-              variant="default"
+              type="button"
             >
               <IconFolderPlus aria-hidden size={21} stroke={1.8} />
-            </ActionIcon>
+            </button>
           </Tooltip>
           <Tooltip label="上传资料" openDelay={250} position="bottom" withArrow>
-            <ActionIcon
+            <button
               aria-label="上传资料"
               className="material-workspace__action-button"
               disabled={isMutating}
               onClick={() => openUploadDialog(null)}
-              variant="default"
+              type="button"
             >
               <IconUpload aria-hidden size={21} stroke={1.8} />
-            </ActionIcon>
+            </button>
           </Tooltip>
           <Tooltip label="添加链接" openDelay={250} position="bottom" withArrow>
-            <ActionIcon
+            <button
               aria-label="添加链接"
               className="material-workspace__action-button"
               disabled={isMutating}
               onClick={openCreateLinkModal}
-              variant="default"
+              type="button"
             >
               <IconLink aria-hidden size={21} stroke={1.8} />
-            </ActionIcon>
+            </button>
           </Tooltip>
         </div>
       </header>
@@ -718,48 +731,63 @@ export function MaterialWorkspace({
       {error ? <p role="alert">{error}</p> : null}
       {isLoading ? <p role="status">正在加载资料...</p> : null}
 
-      <Modal
-        centered
-        closeButtonProps={{ "aria-label": "关闭上传资料弹窗", disabled: isMutating }}
-        onClose={closeUploadDialog}
-        opened={isUploadPromptOpen}
-        title="上传课程资料"
-        transitionProps={{ duration: 0 }}
-      >
-        <form className="material-workspace__upload" onSubmit={handleUpload}>
-          <Stack gap="md">
-            <Text className="material-workspace__upload-target" size="sm">
-              <span>上传到：</span>
-              <strong>{uploadTargetName}</strong>
-            </Text>
-            <Text c="dimmed" size="sm">
-              上传后会自动进入解析流程，解析完成后可用于问答、生成内容和学习计划。
-            </Text>
-            <FileInput
-              clearable
-              leftSection={<IconUpload size={18} stroke={1.7} />}
-              onChange={setUploadFile}
-              placeholder="选择资料文件"
-              value={uploadFile}
-            />
-            <Group justify="flex-end">
-              <Button disabled={isMutating} onClick={closeUploadDialog} variant="default">
-                取消
-              </Button>
-              <Button disabled={!uploadFile} leftSection={<IconUpload size={16} />} loading={isMutating} type="submit">
+      {isUploadPromptOpen ? (
+        <div aria-labelledby="material-upload-dialog-title" className="material-workspace__upload-dialog" role="dialog">
+          <div className="material-workspace__upload-dialog-panel">
+            <div className="material-workspace__upload-dialog-head">
+              <div>
+                <h3 id="material-upload-dialog-title">上传课程资料</h3>
+                <p className="material-workspace__upload-target">
+                  <span>上传到：</span>
+                  <strong>{uploadTargetName}</strong>
+                </p>
+                <p>上传后会自动进入解析流程，解析完成后可用于问答、生成内容和学习计划。</p>
+              </div>
+              <button
+                aria-label="关闭上传资料弹窗"
+                className="material-workspace__upload-close"
+                disabled={isMutating}
+                onClick={closeUploadDialog}
+                type="button"
+              >
+                <IconX size={18} stroke={1.8} />
+              </button>
+            </div>
+            <form className="material-workspace__upload" onSubmit={handleUpload}>
+              <label
+                aria-label="拖拽上传课程资料"
+                className="material-workspace__dropzone"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleUploadDrop}
+              >
+                <IconUpload size={28} stroke={1.6} />
+                <span className="material-workspace__dropzone-title">拖拽文件到这里，或点击选择文件</span>
+                <span className="material-workspace__dropzone-hint">支持 PDF、Markdown、文本和常见课程资料文件</span>
+                <input
+                  id="material-upload-input"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+              </label>
+              {uploadFile ? (
+                <Text c="dimmed" size="sm">
+                  已选择：{uploadFile.name}
+                </Text>
+              ) : null}
+              <button className="material-workspace__upload-submit" disabled={isMutating || !uploadFile} type="submit">
                 上传资料
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {!isLoading ? (
         <div className="material-workspace__body">
           <div className="material-workspace__selection-bar">
             <span>资料选择</span>
             <label className="material-workspace__scope-all">
-              <Checkbox
+              <input
                 aria-label="全部已解析资料"
                 checked={isExplicitAllParsedScope}
                 onChange={() =>
@@ -768,25 +796,28 @@ export function MaterialWorkspace({
                     material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
                   })
                 }
+                type="checkbox"
               />
               全部
             </label>
           </div>
           <div className="material-workspace__explorer">
           <div className="material-workspace__toolbar">
-            <TextInput
-              aria-label="搜索资料"
-              className="material-workspace__search"
-              leftSection={<IconSearch aria-hidden size={21} stroke={1.8} />}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              placeholder="搜索资料"
-              rightSection={searchQuery ? (
-                <ActionIcon aria-label="清空搜索" onClick={() => setSearchQuery("")} size="sm" variant="subtle">
+            <label className="material-workspace__search">
+              <span className="material-workspace__sr-only">搜索资料</span>
+              <IconSearch aria-hidden size={21} stroke={1.8} />
+              <input
+                aria-label="搜索资料"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="搜索资料"
+                value={searchQuery}
+              />
+              {searchQuery ? (
+                <button aria-label="清空搜索" onClick={() => setSearchQuery("")} type="button">
                   <IconX size={17} stroke={1.8} />
-                </ActionIcon>
+                </button>
               ) : null}
-              value={searchQuery}
-            />
+            </label>
           </div>
 
           <div aria-label="资料列表区域" className="material-workspace__content">
