@@ -468,4 +468,3 @@ def invalid_generation_message(error: CourseNexusError) -> str | None:
 
 def _invalid_generation(message: str) -> CourseNexusError:
     return CourseNexusError(code="GENERATION_SCHEMA_INVALID", message=message, status_code=500)
-
