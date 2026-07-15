@@ -189,8 +189,16 @@ describe("CalendarPage", () => {
     fireEvent.click(screen.getByRole("gridcell", { name: "查看 2026-07-14 的课程任务" }));
 
     expect(await screen.findByRole("heading", { name: "2026-07-14 任务" })).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(screen.queryByText("1/2 个二级任务完成")).not.toBeInTheDocument();
     expect(screen.getByText("学习: 物理层功能")).toBeInTheDocument();
     expect(screen.getByText("测试: 物理层小测")).toBeInTheDocument();
+    expect(screen.getByText("学习")).toBeInTheDocument();
+    expect(screen.getByText("小测")).toBeInTheDocument();
+    expect(screen.queryByText("阅读资料并整理概念", { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByText("完成自测题", { exact: false })).not.toBeInTheDocument();
+    expect(container.querySelector(".calendar-subtask-list")).toBeInTheDocument();
+    expect(container.querySelectorAll(".calendar-subtask-row")).toHaveLength(2);
     const taskActions = screen.getByRole("group", { name: "物理层复习操作" });
     expect(taskActions).toHaveClass("calendar-task-actions");
     expect(within(taskActions).getByRole("link", { name: "查看计划详情 物理层复习" })).toHaveAttribute(
