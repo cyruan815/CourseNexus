@@ -25,11 +25,13 @@ import type { Material, MaterialScope } from "../features/materials/types";
 import {
   createDiagnosticProfile,
   fetchDiagnosticQuestions,
+  fetchCourseStudyCalendar,
   parseStudyPlanConfig,
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
 import type {
+  CourseStudyCalendarMonth,
   MasteryLevel,
   PlanPreference,
   StudyPlanDiagnosticQuestion,
@@ -121,6 +123,9 @@ const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
 const questionnairePreparationSteps = ["理解目标", "匹配资料", "准备问题"];
 const planGenerationSteps = ["汇总问卷答案", "生成学习诊断", "拆分每日任务", "保存学习计划"];
 const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const questionnaireAnimationDurationMs = 90_000;
+const planAnimationDurationMs = 600_000;
+const completionFlushMs = 180;
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -307,11 +312,36 @@ function sortDiagnosticQuestions(questions: StudyPlanDiagnosticQuestion[]) {
   return [...questions].sort((left, right) => left.sort_order - right.sort_order);
 }
 
-function AnimatedStatusRows({ rows }: { rows: string[] }) {
+function monthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function AnimatedStatusRows({
+  isComplete = false,
+  rows,
+  totalDurationMs,
+}: {
+  isComplete?: boolean;
+  rows: string[];
+  totalDurationMs: number;
+}) {
   const [visibleCount, setVisibleCount] = useState(1);
 
   useEffect(() => {
     setVisibleCount(1);
+  }, [rows]);
+
+  useEffect(() => {
+    if (isComplete) {
+      const timers = rows.map((_, index) => (
+        window.setTimeout(() => {
+          setVisibleCount(index + 1);
+        }, index * 45)
+      ));
+      return () => timers.forEach((timer) => window.clearTimeout(timer));
+    }
+
+    const intervalMs = Math.max(650, Math.floor(totalDurationMs / Math.max(rows.length, 1)));
     const timer = window.setInterval(() => {
       setVisibleCount((current) => {
         if (current >= rows.length) {
@@ -320,9 +350,9 @@ function AnimatedStatusRows({ rows }: { rows: string[] }) {
         }
         return current + 1;
       });
-    }, 420);
+    }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [rows]);
+  }, [isComplete, rows, totalDurationMs]);
 
   return (
     <Stack className="study-plan-loading-rows" gap={8}>
@@ -336,9 +366,9 @@ function AnimatedStatusRows({ rows }: { rows: string[] }) {
   );
 }
 
-function StudyPlanQuestionnairePreparing() {
+function StudyPlanQuestionnairePreparing({ isComplete = false }: { isComplete?: boolean }) {
   return (
-    <Paper className="study-plan-preparing-card" radius="md" role="status" withBorder>
+    <Box className="study-plan-preparing-card" role="status">
       <Stack gap="lg">
         <Stack gap={4}>
           <Text c="teal" fw={800} size="sm">正在整理问卷</Text>
@@ -352,15 +382,31 @@ function StudyPlanQuestionnairePreparing() {
             </Box>
           ))}
         </Group>
-        <AnimatedStatusRows rows={questionnairePreparationSteps} />
+        <AnimatedStatusRows
+          isComplete={isComplete}
+          rows={questionnairePreparationSteps}
+          totalDurationMs={questionnaireAnimationDurationMs}
+        />
       </Stack>
-    </Paper>
+    </Box>
   );
 }
 
-function StudyPlanCalendarGeneration({ endDate, startDate }: { endDate: string; startDate: string }) {
+function StudyPlanCalendarGeneration({
+  courseId,
+  endDate,
+  isComplete,
+  startDate,
+}: {
+  courseId: string | undefined;
+  endDate: string;
+  isComplete: boolean;
+  startDate: string;
+}) {
   const [referenceDate, setReferenceDate] = useState(() => dateFromDateKey(startDate));
+  const [calendarMonth, setCalendarMonth] = useState<CourseStudyCalendarMonth | null>(null);
   const monthCells = useMemo(() => buildMonthCells(referenceDate), [referenceDate]);
+  const currentMonthKey = monthKey(referenceDate);
   const plannedDates = useMemo(() => {
     const dates = new Set<string>();
     const durationDays = resolveDurationDays(startDate, endDate) ?? 1;
@@ -370,9 +416,43 @@ function StudyPlanCalendarGeneration({ endDate, startDate }: { endDate: string; 
     });
     return dates;
   }, [endDate, startDate]);
+  const existingDateSummaries = useMemo(() => {
+    const summaries = new Map<string, number>();
+    for (const day of calendarMonth?.days ?? []) {
+      if (day.task_count > 0) {
+        summaries.set(day.date, day.task_count);
+      }
+    }
+    return summaries;
+  }, [calendarMonth]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (!courseId) {
+      setCalendarMonth(null);
+      return;
+    }
+
+    fetchCourseStudyCalendar(courseId, currentMonthKey)
+      .then((nextMonth) => {
+        if (!ignore) {
+          setCalendarMonth(nextMonth);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setCalendarMonth(null);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [courseId, currentMonthKey]);
 
   return (
-    <Paper className="study-plan-calendar-generation" radius="md" role="status" withBorder>
+    <Box className="study-plan-calendar-generation" role="status">
       <Stack gap="md">
         <Group align="flex-start" justify="space-between" wrap="nowrap">
           <Stack gap={4}>
@@ -383,7 +463,13 @@ function StudyPlanCalendarGeneration({ endDate, startDate }: { endDate: string; 
           <IconCalendarStats className="study-plan-calendar-generation-icon" size={34} stroke={1.7} />
         </Group>
 
-        <Paper className="study-plan-calendar-card" radius="md" withBorder>
+        <Box className="study-plan-calendar-legend" aria-label="日历标注说明">
+          <span><i className="is-existing" />已有计划</span>
+          <span><i className="is-planned" />本次计划</span>
+          <span><i className="is-conflict" />日期冲突</span>
+        </Box>
+
+        <Box className="study-plan-calendar-card">
           <Group className="study-plan-calendar-card-header" justify="space-between" wrap="nowrap">
             <Text fw={800}>{monthTitle(referenceDate)}</Text>
             <Group gap={4} wrap="nowrap">
@@ -414,24 +500,37 @@ function StudyPlanCalendarGeneration({ endDate, startDate }: { endDate: string; 
           </Box>
           <Box aria-label="生成中的计划日历" className="study-plan-calendar-grid" role="grid">
             {monthCells.map((cell, index) => (
-              <Box
-                className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${cell.dateKey && plannedDates.has(cell.dateKey) ? " is-planned" : ""}`}
-                key={`${cell.dateKey ?? "muted"}-${cell.day}-${index}`}
-                role="gridcell"
-                style={{ animationDelay: `${index * 24}ms` }}
-              >
-                <span className="study-plan-calendar-day">{cell.day}</span>
-                {cell.dateKey && plannedDates.has(cell.dateKey) ? (
-                  <span className="study-plan-calendar-task">任务生成中</span>
-                ) : null}
-              </Box>
+              (() => {
+                const existingCount = cell.dateKey ? existingDateSummaries.get(cell.dateKey) ?? 0 : 0;
+                const isPlanned = Boolean(cell.dateKey && plannedDates.has(cell.dateKey));
+                const isConflict = existingCount > 0 && isPlanned;
+                return (
+                  <Box
+                    className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${existingCount > 0 ? " has-existing" : ""}${isPlanned ? " is-planned" : ""}${isConflict ? " is-conflict" : ""}`}
+                    key={`${cell.dateKey ?? "muted"}-${cell.day}-${index}`}
+                    role="gridcell"
+                    style={{ animationDelay: `${index * 24}ms` }}
+                  >
+                    <span className="study-plan-calendar-day">{cell.day}</span>
+                    <span className="study-plan-calendar-tags">
+                      {existingCount > 0 ? <span className="study-plan-calendar-task is-existing">已有计划</span> : null}
+                      {isPlanned ? <span className="study-plan-calendar-task is-planned">本次计划</span> : null}
+                      {isConflict ? <span className="study-plan-calendar-task is-conflict">日期冲突</span> : null}
+                    </span>
+                  </Box>
+                );
+              })()
             ))}
           </Box>
-        </Paper>
+        </Box>
 
-        <AnimatedStatusRows rows={planGenerationSteps} />
+        <AnimatedStatusRows
+          isComplete={isComplete}
+          rows={planGenerationSteps}
+          totalDurationMs={planAnimationDurationMs}
+        />
       </Stack>
-    </Paper>
+    </Box>
   );
 }
 
@@ -496,6 +595,8 @@ export function StudyPlanCreatePage() {
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false);
+  const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
   const startDateRef = useRef("");
   const startDateOptions = useMemo(() => buildStartDateOptions(), []);
 
@@ -599,6 +700,18 @@ export function StudyPlanCreatePage() {
       ignore = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId || !isGenerationComplete || !savedPlanId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      clearCreateDraft(courseId);
+      navigate(`/courses/${courseId}/study-plans/${savedPlanId}`, { replace: true });
+    }, completionFlushMs);
+    return () => window.clearTimeout(timer);
+  }, [courseId, isGenerationComplete, navigate, savedPlanId]);
 
   useEffect(() => {
     let ignore = false;
@@ -879,6 +992,8 @@ export function StudyPlanCreatePage() {
 
     setPhase("generating");
     setError(null);
+    setIsGenerationComplete(false);
+    setSavedPlanId(null);
 
     try {
       const nextProfile = await createDiagnosticProfile(courseId, {
@@ -899,11 +1014,13 @@ export function StudyPlanCreatePage() {
         client_flow: "wizard_v1",
         tasks: nextPreview.tasks,
       }, createStudyPlanIdempotencyKey(courseId));
-      clearCreateDraft(courseId);
-      navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
+      setSavedPlanId(result.plan.id);
+      setIsGenerationComplete(true);
     } catch (nextError) {
       setError(studyPlanActionErrorMessage(nextError, "生成学习计划失败"));
       setPhase("questionnaire");
+      setIsGenerationComplete(false);
+      setSavedPlanId(null);
     }
   }
 
@@ -915,6 +1032,8 @@ export function StudyPlanCreatePage() {
       setDiagnosticAnswers({});
       setDiagnosticNote("");
       setError(null);
+      setIsGenerationComplete(false);
+      setSavedPlanId(null);
     }
   }
 
@@ -937,7 +1056,7 @@ export function StudyPlanCreatePage() {
 
   return (
     <Box className="study-plan-page workbench-page">
-      <Box className="study-plan-shell study-plan-create-shell" component="main" data-workbench-scroll="locked">
+      <Box className="study-plan-shell study-plan-create-shell is-centered-flow" component="main" data-workbench-scroll="locked">
         <StudyPlanCreateNav
           courseId={courseId}
           courseName={course?.name ?? "课程"}
@@ -945,21 +1064,20 @@ export function StudyPlanCreatePage() {
           onBack={handleStepBack}
         />
         <Box className="study-plan-create-flow">
-          <Paper className="study-plan-panel" radius="md" withBorder>
+          <Paper className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}`} radius="md" withBorder>
             {phase === "goal" ? (
-              <Stack gap="md">
-                <Group justify="space-between" wrap="nowrap">
-                  <Stack gap={2}>
-                    <Title order={2}>想生成什么学习计划？</Title>
-                    <Text c="dimmed" size="sm">
-                      用一句话告诉我目标，后面会自动生成问卷和学习计划。
-                    </Text>
-                  </Stack>
-                  <Badge color="teal" variant="outline">目标输入</Badge>
-                </Group>
+              <Stack className="study-plan-goal-content" gap="lg">
+                <Stack align="center" gap={6}>
+                  <Text c="teal" fw={800} size="sm">目标输入</Text>
+                  <Title order={2} ta="center">想生成什么学习计划？</Title>
+                  <Text c="dimmed" maw={520} size="sm" ta="center">
+                    用一句话告诉我目标，后面会自动生成问卷和学习计划。
+                  </Text>
+                </Stack>
                 <Textarea
+                  className="study-plan-goal-input"
                   label="学习目标"
-                  minRows={7}
+                  minRows={8}
                   onChange={(event) => updateGoalText(event.currentTarget.value)}
                   placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
                   value={goalText}
@@ -967,7 +1085,7 @@ export function StudyPlanCreatePage() {
                 {materialsError ? (
                   <Alert color="red" role="alert" variant="light">{materialsError}</Alert>
                 ) : null}
-                <Group justify="space-between" wrap="nowrap">
+                <Group className="study-plan-goal-actions" justify="space-between" wrap="nowrap">
                   <Text c="dimmed" size="sm">
                     将使用本课程已解析资料生成问卷和计划。
                   </Text>
@@ -1124,7 +1242,12 @@ export function StudyPlanCreatePage() {
             ) : null}
 
             {phase === "generating" ? (
-              <StudyPlanCalendarGeneration endDate={endDate} startDate={startDate} />
+              <StudyPlanCalendarGeneration
+                courseId={courseId}
+                endDate={endDate}
+                isComplete={isGenerationComplete}
+                startDate={startDate}
+              />
             ) : null}
 
             {error ? (

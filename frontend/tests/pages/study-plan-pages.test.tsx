@@ -448,6 +448,45 @@ const diagnosticProfile = {
   diagnostic_note: "希望先补基础",
 };
 
+const courseStudyCalendarMonth = {
+  course_id: "crs_123",
+  course_name: "高等数学",
+  month: "2026-07",
+  days: [
+    {
+      date: "2026-07-13",
+      course_count: 1,
+      task_count: 2,
+      subtask_count: 4,
+      completed_subtask_count: 1,
+      status: "in_progress",
+      task_summaries: [
+        {
+          task_id: "task_existing_1",
+          plan_id: "plan_existing_1",
+          course_id: "crs_123",
+          course_name: "高等数学",
+          title: "已有复习任务",
+          status: "in_progress",
+          derived_status: "in_progress",
+          sort_order: 1,
+        },
+      ],
+      hidden_task_count: 0,
+    },
+    {
+      date: "2026-07-16",
+      course_count: 1,
+      task_count: 1,
+      subtask_count: 2,
+      completed_subtask_count: 0,
+      status: "not_started",
+      task_summaries: [],
+      hidden_task_count: 0,
+    },
+  ],
+};
+
 function successResponse(data: unknown, requestId = "req_1") {
   return new Response(JSON.stringify({ data, meta: { request_id: requestId } }), {
     status: 200,
@@ -524,6 +563,9 @@ describe("study plan pages", () => {
     expect(container.querySelector(".workbench-topbar")).not.toBeInTheDocument();
     expect(container.querySelector(".study-plan-create-nav")).toBeInTheDocument();
     expect(container.querySelector(".study-plan-shell")).toHaveAttribute("data-workbench-scroll", "locked");
+    expect(container.querySelector(".study-plan-create-shell")).toHaveClass("is-centered-flow");
+    expect(container.querySelector(".study-plan-goal-card")).toBeInTheDocument();
+    expect(container.querySelector(".study-plan-goal-input")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "返回上一步" })).toBeDisabled();
     expect(screen.getByRole("link", { name: "回到课程详情" })).toHaveAttribute("href", "/courses/crs_123");
     expect(screen.getByText("创建学习计划 / 高等数学")).toBeInTheDocument();
@@ -897,6 +939,9 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-plan-diagnostic-profiles")) {
         return profileDeferred.promise;
       }
+      if (url.endsWith("/courses/crs_123/study-calendar?month=2026-07")) {
+        return Promise.resolve(successResponse(courseStudyCalendarMonth, "req_course_calendar"));
+      }
       if (url.endsWith("/study-plans/preview")) {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
@@ -935,8 +980,15 @@ describe("study plan pages", () => {
     expect(screen.queryByRole("button", { name: /选择年月|Today|应用/ })).not.toBeInTheDocument();
     expect(screen.getByText("July 2026")).toBeInTheDocument();
     expect(screen.getByText("生成学习计划")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
+    });
+    expect((await screen.findAllByText("已有计划")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("本次计划").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("日期冲突").length).toBeGreaterThan(0);
 
     profileDeferred.resolve();
+    expect(await screen.findByText("保存学习计划")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
   });
 
