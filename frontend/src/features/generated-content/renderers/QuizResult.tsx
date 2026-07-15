@@ -1,4 +1,4 @@
-import { Alert, Button, Radio } from "@mantine/core";
+import { Alert, Button } from "@mantine/core";
 import { useState } from "react";
 import type { ChoiceId, QuizQuestion } from "../types";
 
@@ -16,24 +16,22 @@ function QuizOptions({
   selected: ChoiceId | undefined;
 }) {
   return (
-    <Radio.Group
-      className={`gc-quiz-options ${selected ? "gc-quiz-answered" : ""}`}
-      onChange={(value) => onChoose?.(value as ChoiceId)}
-      value={selected ?? ""}
-    >
+    <div className={`gc-quiz-options ${selected ? "gc-quiz-answered" : ""}`} role="radiogroup">
       {question.options.map((option) => {
         const isCorrect = option.id === question.correct_answer;
         const isWrongSelected = selected === option.id && !isCorrect;
         const reason = selected ? option.explanation ?? (isCorrect ? question.explanation : null) : null;
 
         return (
-          <Radio.Card
+          <button
+            aria-checked={selected === option.id}
             aria-label={`${option.id}. ${option.text}`}
-            checked={selected === option.id}
             className={`gc-quiz-option ${selected && isCorrect ? "gc-quiz-option-correct" : ""} ${isWrongSelected ? "gc-quiz-option-wrong" : ""}`}
             disabled={readOnly || Boolean(selected)}
             key={option.id}
-            value={option.id}
+            onClick={() => onChoose?.(option.id)}
+            role="radio"
+            type="button"
           >
             <span className="gc-quiz-option-head">
               <span className="gc-quiz-letter">{option.id}</span>
@@ -42,10 +40,10 @@ function QuizOptions({
               {isWrongSelected ? <span className="gc-quiz-mark">×</span> : null}
             </span>
             {reason ? <span className="gc-quiz-reason">{reason}</span> : null}
-          </Radio.Card>
+          </button>
         );
       })}
-    </Radio.Group>
+    </div>
   );
 }
 
@@ -106,7 +104,7 @@ export function QuizResult({ questions }: { questions: QuizQuestion[] }) {
       <div className="gc-quiz-meta"><span>第 {index + 1} / {ordered.length} 题</span><span className="gc-quiz-level">{difficultyLabel[question.difficulty] ?? question.difficulty}</span></div>
       <div className="gc-quiz-progress"><span style={{ width: `${((index + 1) / ordered.length) * 100}%` }} /></div>
       <h2 className="gc-quiz-question">{question.question_text}</h2>
-      {question.hint && !selected ? <><Button className="gc-quiz-hint-button" onClick={() => setShowHint((value) => !value)} size="compact-sm" variant="subtle">{showHint ? "收起提示" : "查看提示"}</Button>{showHint ? <div className="gc-quiz-hint">{question.hint}</div> : null}</> : null}
+      {question.hint && !selected ? <><button className="gc-quiz-hint-button" onClick={() => setShowHint((value) => !value)} type="button">{showHint ? "收起提示" : "查看提示"}</button>{showHint ? <div className="gc-quiz-hint">{question.hint}</div> : null}</> : null}
       <QuizOptions onChoose={choose} question={question} readOnly={false} selected={selected} />
       <div className="gc-quiz-navigation"><Button disabled={index === 0} onClick={() => { setIndex(index - 1); setShowHint(false); }} variant="default">上一题</Button><Button disabled={!selected} onClick={() => { if (index === ordered.length - 1) setFinished(true); else setIndex(index + 1); setShowHint(false); }}>{index === ordered.length - 1 ? "完成测验" : "下一题"}</Button></div>
     </section>
