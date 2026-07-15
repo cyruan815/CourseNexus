@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  ActionIcon,
   Badge,
   Box,
   Button,
@@ -384,10 +385,6 @@ function StudyPlanCalendarGeneration({
           </Stack>
           <IconCalendarStats className="study-plan-calendar-generation-icon" size={34} stroke={1.7} />
         </Group>
-
-        <Box className="study-plan-calendar-legend" aria-label="日历标注说明">
-          <span><i className="is-planned" />本次生成计划</span>
-        </Box>
 
         <Box className="study-plan-calendar-card">
           <Group className="study-plan-calendar-card-header" justify="space-between" wrap="nowrap">
@@ -1079,7 +1076,6 @@ export function StudyPlanCreatePage() {
                 </Stack>
                 <Textarea
                   className="study-plan-goal-input"
-                  label={<span className="study-plan-goal-input-label">学习目标</span>}
                   minRows={8}
                   onChange={(event) => updateGoalText(event.currentTarget.value)}
                   placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
@@ -1088,18 +1084,19 @@ export function StudyPlanCreatePage() {
                 {materialsError ? (
                   <Alert color="red" role="alert" variant="light">{materialsError}</Alert>
                 ) : null}
-                <Group className="study-plan-goal-actions" justify="space-between" wrap="nowrap">
-                  <Text c="dimmed" size="sm">
-                    将使用本课程已解析资料生成问卷和计划。
-                  </Text>
-                  <Button
+                <Group className="study-plan-goal-actions" justify="flex-end" wrap="nowrap">
+                  <ActionIcon
+                    aria-label="提交"
+                    className="study-plan-goal-submit-button"
                     data-testid="study-plan-goal-submit"
                     disabled={isLoadingMaterials}
-                    leftSection={<IconSend size={16} />}
                     onClick={handleGoalSubmit}
+                    radius="md"
+                    size={38}
+                    variant="filled"
                   >
-                    提交
-                  </Button>
+                    <IconSend size={17} />
+                  </ActionIcon>
                 </Group>
               </Stack>
             ) : null}
@@ -1117,7 +1114,6 @@ export function StudyPlanCreatePage() {
                       这些问题会一起用于生成你的正式学习计划。
                     </Text>
                   </Stack>
-                  <Badge color="blue" variant="light">问卷</Badge>
                 </Group>
 
                 {shouldShowDateFollowups ? (
