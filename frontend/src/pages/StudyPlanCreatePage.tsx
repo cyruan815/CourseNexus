@@ -97,13 +97,6 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-const preferenceLabels: Record<PlanPreference, string> = {
-  fast_track: "快速通关",
-  balanced: "均衡学习",
-  mastery: "深入掌握",
-  sprint: "冲刺强化",
-};
-
 const durationDayOptions = [
   { label: "A. 2 天", value: "2" },
   { label: "B. 3 天", value: "3" },
@@ -488,6 +481,7 @@ export function StudyPlanCreatePage() {
   const [diagnosticAnswers, setDiagnosticAnswers] = useState<Record<string, string>>({});
   const [diagnosticNote, setDiagnosticNote] = useState("");
   const [unresolvedFields, setUnresolvedFields] = useState<string[]>([]);
+  const [shouldShowDateFollowups, setShouldShowDateFollowups] = useState(false);
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [hasLoadedMaterials, setHasLoadedMaterials] = useState(false);
@@ -528,6 +522,7 @@ export function StudyPlanCreatePage() {
     setDiagnosticAnswers({});
     setDiagnosticNote("");
     setUnresolvedFields([]);
+    setShouldShowDateFollowups(false);
     setIsDraftHydrated(true);
   }, [courseId]);
 
@@ -659,6 +654,7 @@ export function StudyPlanCreatePage() {
         : defaultScope,
     );
     setUnresolvedFields([]);
+    setShouldShowDateFollowups(false);
   }, [hasLoadedMaterials, isLoadingMaterials, materialScope, materials]);
 
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
@@ -746,6 +742,7 @@ export function StudyPlanCreatePage() {
         setDurationDaysText("");
         setDailyMinutes("");
         setPreference(defaultPreference);
+        setShouldShowDateFollowups(false);
       }
       setGoalText(nextGoalText);
     }, "goal_text");
@@ -841,6 +838,9 @@ export function StudyPlanCreatePage() {
         preference: nextPreference,
       });
       setUnresolvedFields(nextUnresolvedFields);
+      setShouldShowDateFollowups(nextUnresolvedFields.some((fieldName) => (
+        fieldName === "start_date" || fieldName === "duration_days" || fieldName === "end_date"
+      )));
 
       const nextConfirmedConfig = {
         start_date: nextStartDate || null,
@@ -959,6 +959,7 @@ export function StudyPlanCreatePage() {
       setDiagnosticQuestions([]);
       setDiagnosticAnswers({});
       setDiagnosticNote("");
+      setShouldShowDateFollowups(false);
       setError(null);
       setIsGenerationComplete(false);
       setSavedPlanId(null);
@@ -1001,7 +1002,6 @@ export function StudyPlanCreatePage() {
             {phase === "goal" ? (
               <Stack className="study-plan-goal-content" gap="lg">
                 <Stack align="center" gap={6}>
-                  <Text c="teal" fw={800} size="sm">目标输入</Text>
                   <Title order={2} ta="center">想生成什么学习计划？</Title>
                   <Text c="dimmed" maw={520} size="sm" ta="center">
                     用一句话告诉我目标，后面会自动生成问卷和学习计划。
@@ -1050,20 +1050,10 @@ export function StudyPlanCreatePage() {
                   <Badge color="blue" variant="light">问卷</Badge>
                 </Group>
 
-                {startDate || endDate || dailyMinutes || preference !== defaultPreference ? (
-                  <Paper className="study-plan-config-summary" radius="md" withBorder>
-                    <Text c="dimmed" size="sm">
-                      {startDate && endDate ? `${startDate} - ${endDate}` : "时间待确认"}
-                      {" / "}
-                      学习方式：{preferenceLabels[preference]}
-                      {dailyMinutes ? ` / 每日 ${dailyMinutes} 分钟` : " / 每日时长由后端估算"}
-                    </Text>
-                  </Paper>
-                ) : null}
-
-                {!startDate || !endDate ? (
+                {shouldShowDateFollowups ? (
                   <Box className="study-plan-date-question">
                     <Radio.Group
+                      className="study-plan-question-group"
                       label="你想从哪天开始学习？"
                       onChange={(value) => {
                         if (value === "custom") {
@@ -1094,6 +1084,7 @@ export function StudyPlanCreatePage() {
                     ) : null}
 
                     <Radio.Group
+                      className="study-plan-question-group"
                       label="这次计划准备学几天？"
                       onChange={(value) => {
                         if (value === "custom") {
@@ -1134,6 +1125,7 @@ export function StudyPlanCreatePage() {
                 {orderedDiagnosticQuestions.map((question) => (
                   question.question_type === "diagnostic_note" ? (
                     <Textarea
+                      className="study-plan-question-note"
                       key={question.question_id}
                       label={question.question_text}
                       minRows={3}
@@ -1143,6 +1135,7 @@ export function StudyPlanCreatePage() {
                     />
                   ) : (
                     <Radio.Group
+                      className="study-plan-question-group"
                       key={question.question_id}
                       label={question.question_text}
                       onChange={(value) => setDiagnosticAnswers((current) => ({

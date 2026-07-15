@@ -11,7 +11,7 @@
 当前前端创建页已按“目标输入 + 自动生成问卷 + 混合问卷 + 自动生成并保存计划”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示，也不再让用户手动打开 preview Modal 或点击保存。由于后端 preview/save 契约仍要求日期范围，2026-07-15 起创建页在自然语言解析后若缺少完整日期，会在问卷中用轻量题目补问开始日期和学习天数，并由前端派生 `end_date` 后自动进入 preview/save 链路。
 
 - 自然语言解析出的 `start_date`、`duration_days` / `end_date`、`daily_available_minutes` 和 `preference` 会作为确认配置进入诊断题请求。
-- 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，前端当前只补问最小必要日期信息：开始日期和学习天数。只要解析后日期范围不完整，开始日期和学习天数会在问卷顶部同时展示，每题提供 A/B/C 合理选项和 D 自定义，不恢复旧的大配置表单；`daily_available_minutes` 仍可省略并交由后端估算。
+- 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，前端当前只补问最小必要日期信息：开始日期和学习天数。只要解析后日期范围不完整，开始日期和学习天数会在问卷顶部同时展示，选完后仍保留在问卷中供用户确认或改选；每题提供 A/B/C 合理选项和 D 自定义，不恢复旧的大配置表单；`daily_available_minutes` 仍可省略并交由后端估算。
 - 学情诊断在创建页为必填；没有 `diagnostic_profile` 时不生成 preview。
 - `daily_available_minutes` 不必填；只有自然语言明确解析出有效分钟数时才提交，否则由后端估算。
 - 创建页提交问卷后自动调用诊断 profile、preview 和 save；保存仍提交 `client_flow = "wizard_v1"` 与 preview exact tasks，保存成功后先把本次 preview tasks 回填到日历格子供用户预览，再由用户点击“进入计划”跳转详情。

@@ -831,7 +831,9 @@ describe("study plan pages", () => {
 
     fireEvent.click(screen.getByLabelText(/B\. 明天/));
     fireEvent.click(screen.getByLabelText(/A\. 2 天/));
-    expect(await screen.findByText(/2026-07-13 - 2026-07-14/)).toBeInTheDocument();
+    expect(screen.getByText("你想从哪天开始学习？")).toBeInTheDocument();
+    expect(screen.getByText("这次计划准备学几天？")).toBeInTheDocument();
+    expect(screen.queryByText(/2026-07-13 - 2026-07-14/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
     fireEvent.click(screen.getByLabelText("概念理解"));
