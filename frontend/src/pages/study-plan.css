@@ -981,8 +981,8 @@
 }
 
 .study-plan-execution-step.is-current {
-  border-color: #9dd6ce;
-  background: #f3fffc;
+  border-color: #ECE8E2;
+  background: #FEFDFC;
 }
 
 .study-plan-execution-step.is-complete {
