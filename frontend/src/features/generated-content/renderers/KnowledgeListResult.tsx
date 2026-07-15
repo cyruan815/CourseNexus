@@ -1,4 +1,5 @@
-import { Alert, Select, Text, TextInput } from "@mantine/core";
+import { ActionIcon, Alert, Select, Switch, Text, TextInput } from "@mantine/core";
+import { IconCheck } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { updateKnowledgeItemLearningState } from "../../course-workspace/api";
 import { knowledgeItems } from "../guards";
@@ -108,14 +109,12 @@ export function KnowledgeListResult({
           onChange={setImportance}
           value={importance}
         />
-        <button
-          aria-pressed={showUnlearnedOnly}
+        <Switch
           className={`gc-knowledge-unlearned-filter${showUnlearnedOnly ? " is-active" : ""}`}
-          onClick={() => setShowUnlearnedOnly((current) => !current)}
-          type="button"
-        >
-          未学习
-        </button>
+          checked={showUnlearnedOnly}
+          label="未学习"
+          onChange={(event) => setShowUnlearnedOnly(event.currentTarget.checked)}
+        />
       </div>
 
       {filtered.length ? (
@@ -125,17 +124,17 @@ export function KnowledgeListResult({
             const saving = savingItemId === item.id;
             return (
               <article className={learned ? "is-learned" : undefined} key={item.id}>
-                <button
+                <ActionIcon
                   aria-label={learned ? `取消${item.name}的已学习状态` : `标记${item.name}为已学习`}
                   className="gc-knowledge-learned-toggle"
                   disabled={savingItemId !== null}
+                  loading={saving}
                   onClick={() => void toggleLearned(item)}
-                  type="button"
+                  radius="xl"
+                  variant={learned ? "filled" : "default"}
                 >
-                  <span aria-hidden="true" className={saving ? "is-saving" : undefined}>
-                    {saving ? "" : learned ? "✓" : ""}
-                  </span>
-                </button>
+                  {learned ? <IconCheck size={16} stroke={2.2} /> : null}
+                </ActionIcon>
                 <h3>{item.name}</h3>
                 <p>{item.definition}</p>
                 <span
