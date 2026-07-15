@@ -214,6 +214,28 @@
   background: #eef1f6;
 }
 
+.material-workspace__search {
+  background: transparent;
+  border: 0;
+  display: block;
+  height: auto;
+  padding: 0;
+}
+
+.material-workspace__search .mantine-Input-input {
+  background: var(--resource-soft);
+  border-color: var(--resource-line-strong);
+  border-radius: 12px;
+  color: var(--resource-text);
+  height: 36px;
+}
+
+.material-workspace__search .mantine-Input-input:focus {
+  background: #ffffff;
+  border-color: #86a9ff;
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 10%);
+}
+
 .material-workspace__content {
   background: #ffffff;
   border: 1px solid var(--resource-line);
