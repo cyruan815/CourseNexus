@@ -32,6 +32,7 @@ from app.modules.study_plans.planner import (
     map_material_batch,
     make_coverage,
     reduce_plan_batches,
+    repair_daily_assessment_coverage,
     validate_preview,
 )
 from app.modules.study_plans.repository import StudyPlanBundle
@@ -361,6 +362,7 @@ def preview_study_plan(
         task_previews,
         meta_chunk_ids=_meta_citation_chunk_ids_from_batches(batches),
     )
+    task_previews = repair_daily_assessment_coverage(task_previews)
     estimated_total_minutes = _task_previews_total_minutes(task_previews)
     daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
     recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
@@ -2437,3 +2439,4 @@ def _date_range(start_date: date, end_date: date) -> list[date]:
 
 def _subtask_label(subtask_type: str) -> str:
     return {"learn": "学习", "review": "复习", "quiz": "自测"}[subtask_type]
+
