@@ -122,7 +122,7 @@
 
 .auth-welcome__main h1 > span {
   color: #111827;
-  font-size: clamp(60px, 7vw, 108px);
+  font-size: clamp(46px, 5vw, 78px);
   font-weight: 900;
 }
 
@@ -366,6 +366,6 @@
   }
 
   .auth-welcome__main h1 > span {
-    font-size: 56px;
+    font-size: 44px;
   }
 }
