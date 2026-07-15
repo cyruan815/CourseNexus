@@ -152,9 +152,14 @@ describe("generated content renderers", () => {
     ]} />);
     expect(screen.queryByText("Back 1")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看答案" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "翻转查看答案" }));
+    const questionFace = screen.getByRole("button", { name: "翻转查看答案" });
+    fireEvent.click(questionFace);
+    const answerFace = screen.getByRole("button", { name: "翻转回问题" });
+    expect(answerFace).not.toBe(questionFace);
     expect(screen.getByText("Back 1")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "翻转回问题" }));
+    fireEvent.click(answerFace);
+    const restoredQuestionFace = screen.getByRole("button", { name: "翻转查看答案" });
+    expect(restoredQuestionFace).not.toBe(answerFace);
     expect(screen.getByText("Front 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "答错 0" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "答对 0" })).toBeInTheDocument();
