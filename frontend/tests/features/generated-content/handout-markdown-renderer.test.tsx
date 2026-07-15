@@ -80,4 +80,29 @@ describe("HandoutMarkdownRenderer", () => {
     expect(screen.getByRole("columnheader", { name: "符号" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "信道容量" })).toBeInTheDocument();
   });
+
+  it("preserves inline Markdown and math in numbered third-level headings", () => {
+    render(<HandoutMarkdownRenderer markdown={"### 1.1 **码元速率** $R_B$"} />);
+
+    const heading = screen.getByRole("heading", { level: 3 });
+    expect(within(heading).getByText("码元速率").tagName).toBe("STRONG");
+    expect(heading.querySelector(".handout-heading-number")).toHaveTextContent("1.1");
+    expect(heading.querySelector(".katex")).not.toBeNull();
+  });
+
+  it("keeps callout-looking examples inside fenced code blocks", () => {
+    render(
+      <HandoutMarkdownRenderer
+        markdown={[
+          "```md",
+          "> [!NOTE] 示例",
+          "> 这只是语法示例。",
+          "```",
+        ].join("\n")}
+      />,
+    );
+
+    expect(screen.queryByTestId("handout-callout-note")).not.toBeInTheDocument();
+    expect(screen.getByText(/\[!NOTE\] 示例/).closest("code")).toBeInTheDocument();
+  });
 });
