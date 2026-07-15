@@ -186,7 +186,7 @@
   border-radius: 14px;
   background:
     linear-gradient(135deg, rgba(232, 242, 255, 0.78), rgba(230, 255, 250, 0.54)),
-    #FDFBF9;
+    #FEFDFC;
   color: #2563eb;
   padding: 28px;
   text-align: center;
@@ -202,7 +202,7 @@
   overflow: auto;
   border: 1px solid #ECE8E2;
   border-radius: 14px;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 18px;
 }
 
@@ -212,7 +212,7 @@
   overflow: auto;
   border: 1px solid #ECE8E2;
   border-radius: 14px;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 20px;
 }
 
@@ -381,7 +381,7 @@
 
 .course-detail-tool-card:hover:not(:disabled) {
   border-color: #2f80ed;
-  background: #FDFBF9;
+  background: #FEFDFC;
   transform: translateY(-1px);
 }
 

@@ -164,7 +164,7 @@
 
 .home-todo-item {
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   color: #1f2937;
   padding: 12px;
   text-decoration: none;
@@ -539,7 +539,7 @@
   display: flex;
   align-items: center;
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 24px;
 }
 
@@ -681,7 +681,7 @@
 
 .calendar-task-card {
   border-color: #ECE8E2;
-  background: #FDFBF9;
+  background: #FEFDFC;
   padding: 18px 20px;
 }
 
