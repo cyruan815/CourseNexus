@@ -14,6 +14,7 @@
 | [0004-frontend-ui-foundation.md](0004-frontend-ui-foundation.md) | Accepted；前端 UI 基础设施采用 Mantine、Tabler Icons、TanStack Query 和 dayjs。 | 2026-07-10 |
 | [0005-simplified-generation-poc.md](0005-simplified-generation-poc.md) | Accepted；五类独立 POC 使用完整材料上下文单次生成，不保存逐条引用。 | 2026-07-13 |
 | [0006-handout-pdf-rendering.md](0006-handout-pdf-rendering.md) | Accepted；今日讲义 PDF 导出采用 Markdown/HTML/Playwright Chromium 打印链路。 | 2026-07-13 |
+| [0007-frontend-handout-mermaid-svg.md](0007-frontend-handout-mermaid-svg.md) | Accepted；可信本地 POC 的前端讲义使用 Mermaid 和 rehype-raw 渲染 Mermaid 图表与原始 SVG。 | 2026-07-15 |
 
 ## 相关链接
 

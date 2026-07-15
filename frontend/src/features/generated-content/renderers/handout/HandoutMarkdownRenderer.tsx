@@ -1,10 +1,12 @@
-import { Children, type ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import "./handout-markdown.css";
+import { MermaidDiagram } from "./MermaidDiagram";
 import { remarkHandoutCallouts } from "./remarkHandoutCallouts";
 
 export function HandoutMarkdownRenderer({ markdown }: { markdown: string }) {
@@ -21,14 +23,31 @@ function MarkdownContent({ children }: { children: string }) {
       components={{
         blockquote: HandoutBlockquote,
         h3: HandoutH3,
+        pre: HandoutPre,
         table: HandoutTable,
       }}
-      rehypePlugins={[rehypeKatex]}
+      rehypePlugins={[rehypeRaw, rehypeKatex]}
       remarkPlugins={[remarkGfm, remarkMath, remarkHandoutCallouts]}
     >
       {children}
     </ReactMarkdown>
   );
+}
+
+function HandoutPre({ children }: { children?: ReactNode }) {
+  const nodes = Children.toArray(children);
+  const child = nodes[0];
+
+  if (nodes.length === 1 && isValidElement(child)) {
+    const props = child.props as { className?: string; children?: ReactNode };
+    const languages = props.className?.split(/\s+/) ?? [];
+    if (languages.includes("language-mermaid")) {
+      const chart = String(props.children ?? "").replace(/\n$/, "");
+      return <MermaidDiagram chart={chart} />;
+    }
+  }
+
+  return <pre>{children}</pre>;
 }
 
 function HandoutBlockquote({ children }: { children?: ReactNode }) {

@@ -1,8 +1,24 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HandoutMarkdownRenderer } from "../../../src/features/generated-content/renderers/handout/HandoutMarkdownRenderer";
 
+const mermaidMocks = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  render: vi.fn(),
+}));
+
+vi.mock("mermaid", () => ({
+  default: mermaidMocks,
+}));
+
 describe("HandoutMarkdownRenderer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mermaidMocks.render.mockResolvedValue({
+      svg: '<svg data-testid="mermaid-svg" viewBox="0 0 100 40"><text>Flow</text></svg>',
+    });
+  });
+
   it("renders supported handout callouts as rounded color blocks", () => {
     render(
       <HandoutMarkdownRenderer
@@ -104,5 +120,82 @@ describe("HandoutMarkdownRenderer", () => {
 
     expect(screen.queryByTestId("handout-callout-note")).not.toBeInTheDocument();
     expect(screen.getByText(/\[!NOTE\] 示例/).closest("code")).toBeInTheDocument();
+  });
+
+  it("renders fenced Mermaid code as an SVG diagram", async () => {
+    render(
+      <HandoutMarkdownRenderer
+        markdown={["```mermaid", "flowchart LR", "  A[Input] --> B[Output]", "```"].join("\n")}
+      />,
+    );
+
+    expect(await screen.findByTestId("mermaid-svg")).toBeInTheDocument();
+    expect(document.querySelector(".handout-mermaid-diagram")).not.toBeNull();
+    expect(mermaidMocks.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({ startOnLoad: false, securityLevel: "loose" }),
+    );
+    expect(mermaidMocks.render).toHaveBeenCalledWith(
+      expect.stringMatching(/^handout-mermaid-/),
+      "flowchart LR\n  A[Input] --> B[Output]",
+    );
+  });
+
+  it("renders trusted inline SVG from handout Markdown", () => {
+    render(
+      <HandoutMarkdownRenderer
+        markdown={'<svg data-testid="inline-handout-svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" /></svg>'}
+      />,
+    );
+
+    expect(screen.getByTestId("inline-handout-svg")).toBeInTheDocument();
+  });
+
+  it("keeps non-Mermaid fenced code as a normal code block", () => {
+    render(<HandoutMarkdownRenderer markdown={["```ts", "const answer = 42;", "```"].join("\n")} />);
+
+    const code = screen.getByText("const answer = 42;").closest("code");
+    expect(code).toHaveClass("language-ts");
+    expect(code?.closest("pre")).not.toBeNull();
+  });
+
+  it("shows Mermaid source when diagram rendering fails", async () => {
+    mermaidMocks.render.mockRejectedValueOnce(new Error("Parse error"));
+
+    render(
+      <HandoutMarkdownRenderer
+        markdown={["```mermaid", "flowchart LR", "  A -->", "```"].join("\n")}
+      />,
+    );
+
+    const fallback = await screen.findByRole("alert");
+    expect(fallback).toHaveTextContent("Mermaid \u56fe\u8868\u6e32\u67d3\u5931\u8d25");
+    expect(within(fallback).getByText(/flowchart LR/).closest("code")).toBeInTheDocument();
+  });
+
+  it("uses a unique Mermaid render ID for overlapping renders", async () => {
+    let resolveFirst: ((value: { svg: string }) => void) | undefined;
+    const firstRender = new Promise<{ svg: string }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    mermaidMocks.render
+      .mockImplementationOnce(() => firstRender)
+      .mockResolvedValueOnce({ svg: '<svg data-testid="latest-mermaid-svg" />' });
+
+    const { rerender } = render(
+      <HandoutMarkdownRenderer markdown={["```mermaid", "flowchart LR", "A --> B", "```"].join("\n")} />,
+    );
+    await waitFor(() => expect(mermaidMocks.render).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <HandoutMarkdownRenderer markdown={["```mermaid", "flowchart LR", "B --> C", "```"].join("\n")} />,
+    );
+    await waitFor(() => expect(mermaidMocks.render).toHaveBeenCalledTimes(2));
+
+    const firstRenderId = mermaidMocks.render.mock.calls[0]?.[0];
+    const secondRenderId = mermaidMocks.render.mock.calls[1]?.[0];
+    expect(firstRenderId).not.toBe(secondRenderId);
+
+    resolveFirst?.({ svg: '<svg data-testid="stale-mermaid-svg" />' });
+    expect(await screen.findByTestId("latest-mermaid-svg")).toBeInTheDocument();
   });
 });
