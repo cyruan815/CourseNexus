@@ -123,9 +123,10 @@ const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
 const questionnairePreparationSteps = ["理解目标", "匹配资料", "准备问题"];
 const planGenerationSteps = ["汇总问卷答案", "生成学习诊断", "拆分每日任务", "保存学习计划"];
 const weekDayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const questionnaireAnimationDurationMs = 90_000;
+const questionnaireAnimationDurationMs = 60_000;
 const planAnimationDurationMs = 600_000;
-const completionFlushMs = 180;
+const completionFlushMs = 520;
+const completionStepStaggerMs = 110;
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -335,8 +336,8 @@ function AnimatedStatusRows({
     if (isComplete) {
       const timers = rows.map((_, index) => (
         window.setTimeout(() => {
-          setVisibleCount(index + 1);
-        }, index * 45)
+          setVisibleCount((current) => Math.max(current, index + 1));
+        }, index * completionStepStaggerMs)
       ));
       return () => timers.forEach((timer) => window.clearTimeout(timer));
     }
@@ -375,13 +376,6 @@ function StudyPlanQuestionnairePreparing({ isComplete = false }: { isComplete?: 
           <Title order={2}>把你的目标变成几个关键问题</Title>
           <Text c="dimmed" size="sm">正在读取课程资料和目标语义，很快进入问卷。</Text>
         </Stack>
-        <Group className="study-plan-preparing-steps" gap="sm" wrap="nowrap">
-          {questionnairePreparationSteps.map((step, index) => (
-            <Box className="study-plan-preparing-step" key={step} style={{ animationDelay: `${index * 180}ms` }}>
-              <Text fw={750} size="sm">{step}</Text>
-            </Box>
-          ))}
-        </Group>
         <AnimatedStatusRows
           isComplete={isComplete}
           rows={questionnairePreparationSteps}
@@ -417,10 +411,13 @@ function StudyPlanCalendarGeneration({
     return dates;
   }, [endDate, startDate]);
   const existingDateSummaries = useMemo(() => {
-    const summaries = new Map<string, number>();
+    const summaries = new Map<string, { count: number; title: string }>();
     for (const day of calendarMonth?.days ?? []) {
       if (day.task_count > 0) {
-        summaries.set(day.date, day.task_count);
+        summaries.set(day.date, {
+          count: day.task_count,
+          title: day.task_summaries[0]?.title ?? `${day.task_count} 个任务`,
+        });
       }
     }
     return summaries;
@@ -465,8 +462,7 @@ function StudyPlanCalendarGeneration({
 
         <Box className="study-plan-calendar-legend" aria-label="日历标注说明">
           <span><i className="is-existing" />已有计划</span>
-          <span><i className="is-planned" />本次计划</span>
-          <span><i className="is-conflict" />日期冲突</span>
+          <span><i className="is-planned" />本次计划日期</span>
         </Box>
 
         <Box className="study-plan-calendar-card">
@@ -501,21 +497,23 @@ function StudyPlanCalendarGeneration({
           <Box aria-label="生成中的计划日历" className="study-plan-calendar-grid" role="grid">
             {monthCells.map((cell, index) => (
               (() => {
-                const existingCount = cell.dateKey ? existingDateSummaries.get(cell.dateKey) ?? 0 : 0;
+                const existingSummary = cell.dateKey ? existingDateSummaries.get(cell.dateKey) : undefined;
                 const isPlanned = Boolean(cell.dateKey && plannedDates.has(cell.dateKey));
-                const isConflict = existingCount > 0 && isPlanned;
                 return (
                   <Box
-                    className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${existingCount > 0 ? " has-existing" : ""}${isPlanned ? " is-planned" : ""}${isConflict ? " is-conflict" : ""}`}
+                    className={`study-plan-calendar-cell${cell.isCurrentMonth ? "" : " is-muted"}${existingSummary ? " has-existing" : ""}${isPlanned ? " is-planned" : ""}`}
                     key={`${cell.dateKey ?? "muted"}-${cell.day}-${index}`}
                     role="gridcell"
                     style={{ animationDelay: `${index * 24}ms` }}
                   >
                     <span className="study-plan-calendar-day">{cell.day}</span>
                     <span className="study-plan-calendar-tags">
-                      {existingCount > 0 ? <span className="study-plan-calendar-task is-existing">已有计划</span> : null}
-                      {isPlanned ? <span className="study-plan-calendar-task is-planned">本次计划</span> : null}
-                      {isConflict ? <span className="study-plan-calendar-task is-conflict">日期冲突</span> : null}
+                      {existingSummary ? (
+                        <span className="study-plan-calendar-task is-existing">
+                          {existingSummary.title}
+                          {existingSummary.count > 1 ? ` +${existingSummary.count - 1}` : ""}
+                        </span>
+                      ) : null}
                     </span>
                   </Box>
                 );
@@ -595,6 +593,7 @@ export function StudyPlanCreatePage() {
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
+  const [isQuestionnairePreparationComplete, setIsQuestionnairePreparationComplete] = useState(false);
   const [isGenerationComplete, setIsGenerationComplete] = useState(false);
   const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
   const startDateRef = useRef("");
@@ -883,6 +882,7 @@ export function StudyPlanCreatePage() {
 
     setPhase("preparing");
     setError(null);
+    setIsQuestionnairePreparationComplete(false);
 
     try {
       const parsedConfig = await parseStudyPlanConfig(courseId, {
@@ -950,10 +950,15 @@ export function StudyPlanCreatePage() {
       setDiagnosticQuestions(questionsResponse.questions);
       setDiagnosticAnswers({});
       setDiagnosticNote("");
-      setPhase("questionnaire");
+      setIsQuestionnairePreparationComplete(true);
+      window.setTimeout(() => {
+        setPhase("questionnaire");
+        setIsQuestionnairePreparationComplete(false);
+      }, completionFlushMs);
     } catch (nextError) {
       setError(studyPlanActionErrorMessage(nextError, "生成问卷失败"));
       setPhase("goal");
+      setIsQuestionnairePreparationComplete(false);
     }
   }
 
@@ -1032,6 +1037,7 @@ export function StudyPlanCreatePage() {
       setDiagnosticAnswers({});
       setDiagnosticNote("");
       setError(null);
+      setIsQuestionnairePreparationComplete(false);
       setIsGenerationComplete(false);
       setSavedPlanId(null);
     }
@@ -1064,7 +1070,11 @@ export function StudyPlanCreatePage() {
           onBack={handleStepBack}
         />
         <Box className="study-plan-create-flow">
-          <Paper className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}`} radius="md" withBorder>
+          <Paper
+            className={`study-plan-panel${phase === "goal" ? " study-plan-goal-card" : ""}${phase === "preparing" || phase === "generating" ? " study-plan-process-panel" : ""}`}
+            radius="md"
+            withBorder
+          >
             {phase === "goal" ? (
               <Stack className="study-plan-goal-content" gap="lg">
                 <Stack align="center" gap={6}>
@@ -1102,7 +1112,7 @@ export function StudyPlanCreatePage() {
             ) : null}
 
             {phase === "preparing" ? (
-              <StudyPlanQuestionnairePreparing />
+              <StudyPlanQuestionnairePreparing isComplete={isQuestionnairePreparationComplete} />
             ) : null}
 
             {phase === "questionnaire" ? (
