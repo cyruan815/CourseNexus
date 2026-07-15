@@ -620,11 +620,12 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("正在整理问卷")).toBeInTheDocument();
     expect(screen.getAllByText("理解目标").length).toBeGreaterThan(0);
-    expect(screen.getByText("匹配资料")).toBeInTheDocument();
-    expect(screen.getByText("准备问题")).toBeInTheDocument();
+    expect(screen.queryByText("准备问题")).not.toBeInTheDocument();
     expect(screen.queryByText("+00.018")).not.toBeInTheDocument();
 
     parseDeferred.resolve();
+    expect(await screen.findByText("匹配资料")).toBeInTheDocument();
+    expect(await screen.findByText("准备问题")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
   });
 
@@ -983,9 +984,9 @@ describe("study plan pages", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
     });
-    expect((await screen.findAllByText("已有计划")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("本次计划").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("日期冲突").length).toBeGreaterThan(0);
+    expect(await screen.findByText(/已有复习任务/)).toBeInTheDocument();
+    expect(screen.getByText("本次计划日期")).toBeInTheDocument();
+    expect(screen.queryByText("日期冲突")).not.toBeInTheDocument();
 
     profileDeferred.resolve();
     expect(await screen.findByText("保存学习计划")).toBeInTheDocument();
