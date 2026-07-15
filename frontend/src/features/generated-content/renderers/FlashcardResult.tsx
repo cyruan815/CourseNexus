@@ -32,7 +32,8 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
   const card = deck[index];
   const correctCount = Object.values(ratings).filter(Boolean).length;
   const incorrectCount = Object.values(ratings).filter((value) => value === false).length;
-  const roundComplete = deck.every((item) => Object.hasOwn(ratings, item.id));
+  const isLastCard = index === deck.length - 1;
+  const missedCards = deck.filter((item) => ratings[item.id] !== true);
 
   const moveTo = (nextIndex: number) => {
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
@@ -138,11 +139,11 @@ export function FlashcardResult({ cards, generatedContentId = "test-generated-co
         <button aria-label="下一张" className="gc-flashcard-nav" disabled={index === deck.length - 1} onClick={() => moveTo(index + 1)} type="button">→</button>
       </div>
 
-      {roundComplete ? (
+      {isLastCard ? (
         <Stack align="center" className="gc-flashcard-retry" gap="sm">
           <Group justify="center">
             <Button onClick={() => reset(savedCards)} variant="default">练习全部</Button>
-            <Button disabled={!deck.some((item) => ratings[item.id] === false)} onClick={() => reset(deck.filter((item) => ratings[item.id] === false))}>只练未掌握</Button>
+            <Button disabled={!missedCards.length} onClick={() => reset(missedCards)}>只练未掌握</Button>
           </Group>
         </Stack>
       ) : null}
