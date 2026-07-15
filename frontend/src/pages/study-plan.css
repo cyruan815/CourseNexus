@@ -221,6 +221,19 @@
   gap: 5px;
 }
 
+.study-plan-date-question {
+  display: grid;
+  gap: 6px;
+}
+
+.study-plan-date-question .mantine-Button-root {
+  min-height: 36px;
+}
+
+.study-plan-date-custom-input {
+  max-width: 320px;
+}
+
 .study-plan-date-input label {
   color: #212529;
   font-weight: 500;
