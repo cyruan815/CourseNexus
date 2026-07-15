@@ -39,4 +39,5 @@
 - `frontend/package.json` 和 `pnpm-lock.yaml` 增加 `mermaid`、`rehype-raw` 与 `rehype-sanitize` 及其传递依赖。
 - 原始 HTML 和 Mermaid SVG 都受白名单限制；新增 SVG 元素、属性或 URL 能力时必须先评估安全边界并补回归测试。
 - Mermaid 图表只在浏览器前端渲染；当前 PDF renderer 不会因为本 ADR 自动获得 Mermaid 支持。
+- 2026-07-16 起，任务讲义后端生成器不再要求或允许新生成 handout 输出 Mermaid，改为只输出安全内联 SVG；前端 Mermaid 渲染能力仅作为历史内容或手写 Markdown 兜底保留。
 - 测试覆盖 Mermaid 严格模式、原生 SVG 文本标签、异步成功/失败、原始 HTML 注入、危险链接、事件属性和普通代码块回归行为。

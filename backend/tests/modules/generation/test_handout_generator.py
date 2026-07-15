@@ -135,6 +135,7 @@ def test_handout_generator_prompt_requests_complete_markdown_not_json_or_html() 
     assert "不要使用连续 ASCII 下划线 ______" in prompt
     assert "不要输出 JSON" in prompt
     assert "不要输出 HTML" in prompt
+    assert "不要输出 Mermaid" in prompt
     assert "不要写 citation marker" in prompt
     assert "只输出符合 HandoutContent schema 的 JSON 对象" not in prompt
     assert "每个 section 必须填写 source_citation_ids" not in prompt
@@ -253,12 +254,13 @@ def test_handout_generator_prompt_requires_a_visual_diagram() -> None:
     )
 
     prompt = provider.prompts[0]
-    assert "at least one visual diagram" in prompt
-    assert "Mermaid mindmap" in prompt
-    assert "Mermaid flowchart" in prompt
+    assert "safe inline SVG visual diagram" in prompt
+    assert "Never output fenced ```mermaid code blocks" in prompt
     assert "safe SVG" in prompt
     assert "foreignObject" in prompt
     assert "javascript:" in prompt
+    assert "Mermaid mindmap" not in prompt
+    assert "Mermaid flowchart" not in prompt
 
 
 def test_handout_generator_retries_once_when_model_omits_visual_diagram() -> None:
@@ -280,18 +282,21 @@ def test_handout_generator_retries_once_when_model_omits_visual_diagram() -> Non
     assert "<svg" in output.content
 
 
-def test_handout_generator_accepts_mermaid_mindmap_as_required_visual() -> None:
+def test_handout_generator_rejects_mermaid_mindmap_as_required_visual() -> None:
     provider = PromptCapturingTextProvider(_mermaid_mindmap_handout())
 
-    output = HandoutGenerator(model_provider=provider).generate(
-        batches=(_batch(),),
-        expected_material_ids=frozenset({"mat_1"}),
-        parameters={"handout_title": "Visual Handout"},
-    )
+    try:
+        HandoutGenerator(model_provider=provider).generate(
+            batches=(_batch(),),
+            expected_material_ids=frozenset({"mat_1"}),
+            parameters={"handout_title": "Visual Handout"},
+        )
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "GENERATION_SCHEMA_INVALID"
+    else:  # pragma: no cover - assertion clarity
+        raise AssertionError("Mermaid handout should be rejected")
 
     assert len(provider.prompts) == 1
-    assert "```mermaid" in output.content
-    assert "mindmap" in output.content
 
 
 def test_mermaid_block_schema_accepts_mindmap_diagram_type() -> None:
