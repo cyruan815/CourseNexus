@@ -104,7 +104,8 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByText("已选择 0 份资料，共 1 份可用")).toBeInTheDocument();
     expect(screen.getByText("资料选择")).toBeInTheDocument();
     expect(screen.getByText("PDF")).toBeInTheDocument();
-    expect(screen.getByText("100 B")).toBeInTheDocument();
+    expect(screen.queryByText("100 B")).not.toBeInTheDocument();
+    expect(screen.queryByText("大小未知")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
 
     const createFolderButton = screen.getByRole("button", { name: "新建文件夹" });

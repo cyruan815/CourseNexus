@@ -81,19 +81,6 @@ function materialMatchesSearch(material: Material, query: string): boolean {
   return material.name.toLowerCase().includes(query.toLowerCase());
 }
 
-function formatFileSize(size: number | null): string {
-  if (size === null) {
-    return "大小未知";
-  }
-  if (size < 1024) {
-    return `${size} B`;
-  }
-  if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function materialKind(material: Material): string {
   if (material.source_type === "url") {
     return "URL";
@@ -600,9 +587,6 @@ export function MaterialWorkspace({
             ) : (
               <span className="material-workspace__file-name">{material.name}</span>
             )}
-            <span className="material-workspace__file-sub">
-              {material.source_type === "url" ? "网页链接" : formatFileSize(material.file_size)}
-            </span>
           </span>
         </div>
         <span

@@ -3,10 +3,10 @@
 - Source visual truth: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-1d876f74-3017-4480-867e-f152f4bfaff6.png`
 - Compact-header reference: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-61655666-40d1-4598-a11d-754a615bced8.png`
 - Browser-rendered full view: `.artifacts/product-design/course-detail-compact-v1.png`
-- Browser-rendered focused view: `.artifacts/product-design/course-material-compact-tooltip-v1.png`
+- Browser-rendered focused view: `.artifacts/product-design/course-material-dense-rows-v2.png`
 - Dark-theme regression view: `.artifacts/product-design/course-material-compact-dark-v1.png`
 - Side-by-side focused comparison: `.artifacts/product-design/comparison-compact-v1.png`
-- Browser metrics: `.artifacts/product-design/browser-check-compact-v1.json`
+- Browser metrics: `.artifacts/product-design/browser-check-dense-rows-v2.json`
 - Viewport: 1600 × 1000 CSS pixels, device scale factor 1
 - State: light theme; `02 物理层` expanded; “新建文件夹” hover tooltip visible in the focused capture
 
@@ -14,16 +14,16 @@
 
 - No actionable P0, P1, or P2 mismatch remains.
 - Fonts and typography: the product font stack and existing Chinese hierarchy are preserved. The 20 px title remains dominant while the 13 px selection summary and compact labels stay readable.
-- Spacing and layout rhythm: the three 36 × 36 px actions sit beside the title, the header is 82 px high, the search control is 36 px high, and the resource list receives 572 px of the 755 px panel. Six file rows are visible in the expanded preview state.
+- Spacing and layout rhythm: the three 36 × 36 px actions sit beside the title, the header is 82 px high, the search control is 36 px high, and the resource list receives 572 px of the 755 px panel. File rows are reduced from 66 px to 50 px and their type badges from 38 px to 28 px.
 - Colors and visual tokens: the compact actions reuse the existing border, hover-blue, surface, focus, dark-theme, and disabled tokens. The former filled upload action is intentionally normalized to match the three equal icon controls in the selected reference; the dark-theme regression capture retains readable icons, text, separators, and status states.
 - Image quality and asset fidelity: the reference contains only interface icons. The implementation uses the existing Tabler icon set and Mantine tooltip; no placeholder, text glyph, custom SVG, or CSS-drawn icon was introduced.
-- Copy and content: visible button copy is removed exactly as requested. Accessible names remain on all three buttons, and hover tooltips expose “新建文件夹”, “上传资料”, and “添加链接”.
+- Copy and content: visible button copy is removed exactly as requested. Accessible names remain on all three buttons, hover tooltips expose “新建文件夹”, “上传资料”, and “添加链接”, and file-size metadata is no longer rendered in resource rows.
 
 **Full-view comparison evidence**
 
 - The full course-detail capture confirms the existing three-column widths and the center/right content remain unchanged.
 - The compact material header reduces non-list vertical space without clipping the page header, plan card, selection control, search field, or resource rows.
-- The local scrolling list shows six file rows at the tested viewport instead of only two or three.
+- The local scrolling list shows all six fixture file rows with extra space remaining; each row is 16 px shorter than the previous pass.
 
 **Focused region comparison evidence**
 
@@ -45,12 +45,14 @@
 1. The previous implementation used a second 44 px-high row of text actions and a 46 px search control. The supplied follow-up screenshot showed that this consumed too much of the fixed-height card and limited visible resources to two or three.
 2. The actions were converted to equal 36 px icon-only controls beside the title, hover labels and accessible names were added, and the header/body/search spacing was compressed.
 3. The post-fix browser capture measured an 82 px header, 36 px search control, 572 px list viewport, and six visible file rows. The side-by-side comparison found no remaining actionable P0/P1/P2 mismatch.
+4. The follow-up density pass removed file-size metadata, reduced the file badge to 28 px, and reduced each file row from 66 px to 50 px. The browser recapture confirmed no filename/status clipping and no console errors.
 
 **Implementation Checklist**
 
 - [x] Align three icon-only actions with the resource title.
 - [x] Preserve labels through hover tooltips and accessible names.
 - [x] Reduce search and surrounding vertical spacing.
+- [x] Reduce file badges and file-row height, and remove file-size metadata.
 - [x] Keep all existing APIs and action handlers.
 - [x] Verify the fixed-width three-column page and list capacity in a browser.
 
