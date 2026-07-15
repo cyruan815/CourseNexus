@@ -32,6 +32,7 @@
 - 用户确认替换时调用 `PUT /api/v1/study-plans/{plan_id}`，提交新 preview 的 `title`、exact `tasks`、`material_scope`、`client_flow = "wizard_v1"` 和当前详情的 `expected_updated_at`。后端若返回 `STATE_CONFLICT`，前端只提示刷新或新建计划，不强行覆盖。
 - 删除计划已接入二次确认；确认后调用 `DELETE /api/v1/study-plans/{plan_id}`，成功回到课程详情页。删除是软删除，不删除课程资料或已有生成内容。
 - 导出计划仍保持 disabled / 后续接入；学习计划自身没有前端伪造导出。C11 只在执行页为已有成功 `handout` 提供 PDF 导出、为已有成功 `task_test` 提供 Markdown 导出。
+- 2026-07-15 执行页三栏布局支持用户拖拽两条竖向分隔条调整任务列表、主内容和 AI 助教宽度。前端只在浏览器 `localStorage` 保存 `course-nexus:study-plan-execution-columns` 本地偏好，不写后端；列宽有最小值保护，窄屏仍按既有 `900px` 以下单列布局降级。
 
 ## 测试入口
 

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type {
+  CSSProperties,
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Alert,
   Badge,
@@ -69,6 +75,35 @@ interface ContentSourceSummary {
   key: string;
   text: string;
 }
+
+interface ExecutionColumnWidths {
+  left: number;
+  main: number;
+  right: number;
+}
+
+type ExecutionResizeHandle = "left" | "right";
+
+interface ExecutionResizeDrag {
+  handle: ExecutionResizeHandle;
+  startX: number;
+  startWidths: ExecutionColumnWidths;
+}
+
+const EXECUTION_COLUMN_STORAGE_KEY = "course-nexus:study-plan-execution-columns";
+const EXECUTION_COLUMN_MIN_WIDTHS: ExecutionColumnWidths = {
+  left: 230,
+  main: 440,
+  right: 280,
+};
+const EXECUTION_COLUMN_DEFAULT_RATIOS: ExecutionColumnWidths = {
+  left: 0.72,
+  main: 1.45,
+  right: 0.85,
+};
+const EXECUTION_COLUMN_FALLBACK_GRID_WIDTH = 1280;
+const EXECUTION_RESIZE_GUTTER_WIDTH = 10;
+const EXECUTION_RESIZE_KEYBOARD_STEP = 32;
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError || error instanceof Error) {
@@ -380,6 +415,110 @@ function saveDownloadedFile(blob: Blob, filename: string): void {
   window.URL.revokeObjectURL(url);
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function normalizeExecutionColumnWidths(widths: ExecutionColumnWidths): ExecutionColumnWidths {
+  return {
+    left: Math.round(widths.left),
+    main: Math.round(widths.main),
+    right: Math.round(widths.right),
+  };
+}
+
+function isExecutionColumnWidths(value: unknown): value is ExecutionColumnWidths {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.left === "number"
+    && typeof candidate.main === "number"
+    && typeof candidate.right === "number"
+    && candidate.left >= EXECUTION_COLUMN_MIN_WIDTHS.left
+    && candidate.main >= EXECUTION_COLUMN_MIN_WIDTHS.main
+    && candidate.right >= EXECUTION_COLUMN_MIN_WIDTHS.right
+  );
+}
+
+function readStoredExecutionColumnWidths(): ExecutionColumnWidths | null {
+  try {
+    const stored = window.localStorage.getItem(EXECUTION_COLUMN_STORAGE_KEY);
+    if (!stored) {
+      return null;
+    }
+
+    const parsed = JSON.parse(stored) as unknown;
+    return isExecutionColumnWidths(parsed) ? normalizeExecutionColumnWidths(parsed) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistExecutionColumnWidths(widths: ExecutionColumnWidths): void {
+  try {
+    window.localStorage.setItem(EXECUTION_COLUMN_STORAGE_KEY, JSON.stringify(normalizeExecutionColumnWidths(widths)));
+  } catch {
+    // Column resizing is a local preference; storage failures should not block the study task.
+  }
+}
+
+function defaultExecutionColumnWidths(gridWidth: number): ExecutionColumnWidths {
+  const availableWidth = Math.max(
+    gridWidth - EXECUTION_RESIZE_GUTTER_WIDTH * 2,
+    EXECUTION_COLUMN_MIN_WIDTHS.left + EXECUTION_COLUMN_MIN_WIDTHS.main + EXECUTION_COLUMN_MIN_WIDTHS.right,
+  );
+  const ratioTotal = (
+    EXECUTION_COLUMN_DEFAULT_RATIOS.left
+    + EXECUTION_COLUMN_DEFAULT_RATIOS.main
+    + EXECUTION_COLUMN_DEFAULT_RATIOS.right
+  );
+  const left = Math.round(availableWidth * (EXECUTION_COLUMN_DEFAULT_RATIOS.left / ratioTotal));
+  const right = Math.round(availableWidth * (EXECUTION_COLUMN_DEFAULT_RATIOS.right / ratioTotal));
+
+  return normalizeExecutionColumnWidths({
+    left,
+    main: availableWidth - left - right,
+    right,
+  });
+}
+
+function resizeExecutionColumns(
+  widths: ExecutionColumnWidths,
+  handle: ExecutionResizeHandle,
+  deltaX: number,
+): ExecutionColumnWidths {
+  if (handle === "left") {
+    const pairTotal = widths.left + widths.main;
+    const left = clampNumber(
+      widths.left + deltaX,
+      EXECUTION_COLUMN_MIN_WIDTHS.left,
+      pairTotal - EXECUTION_COLUMN_MIN_WIDTHS.main,
+    );
+
+    return normalizeExecutionColumnWidths({
+      left,
+      main: pairTotal - left,
+      right: widths.right,
+    });
+  }
+
+  const pairTotal = widths.main + widths.right;
+  const main = clampNumber(
+    widths.main + deltaX,
+    EXECUTION_COLUMN_MIN_WIDTHS.main,
+    pairTotal - EXECUTION_COLUMN_MIN_WIDTHS.right,
+  );
+
+  return normalizeExecutionColumnWidths({
+    left: widths.left,
+    main,
+    right: pairTotal - main,
+  });
+}
+
 export function StudyTaskExecutionPage() {
   const { subtaskId } = useParams();
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(subtaskId ?? null);
@@ -404,6 +543,89 @@ export function StudyTaskExecutionPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
+  const [executionColumnWidths, setExecutionColumnWidths] = useState<ExecutionColumnWidths | null>(() => (
+    readStoredExecutionColumnWidths()
+  ));
+  const executionGridRef = useRef<HTMLDivElement | null>(null);
+  const executionResizeDragRef = useRef<ExecutionResizeDrag | null>(null);
+
+  const resolveExecutionColumnWidths = (): ExecutionColumnWidths => {
+    if (executionColumnWidths) {
+      return executionColumnWidths;
+    }
+
+    const gridWidth = executionGridRef.current?.getBoundingClientRect().width ?? 0;
+    return defaultExecutionColumnWidths(gridWidth > 0 ? gridWidth : EXECUTION_COLUMN_FALLBACK_GRID_WIDTH);
+  };
+
+  const applyExecutionColumnWidths = (nextWidths: ExecutionColumnWidths): void => {
+    const normalizedWidths = normalizeExecutionColumnWidths(nextWidths);
+    setExecutionColumnWidths(normalizedWidths);
+    persistExecutionColumnWidths(normalizedWidths);
+  };
+
+  const updateExecutionColumnResize = (clientX: number): void => {
+    const drag = executionResizeDragRef.current;
+    if (!drag || !Number.isFinite(clientX)) {
+      return;
+    }
+
+    applyExecutionColumnWidths(resizeExecutionColumns(drag.startWidths, drag.handle, clientX - drag.startX));
+  };
+
+  const stopExecutionColumnResize = (): void => {
+    executionResizeDragRef.current = null;
+  };
+
+  const startExecutionColumnResize = (
+    handle: ExecutionResizeHandle,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    executionResizeDragRef.current = {
+      handle,
+      startX: event.clientX,
+      startWidths: resolveExecutionColumnWidths(),
+    };
+  };
+
+  const startExecutionColumnMouseResize = (
+    handle: ExecutionResizeHandle,
+    event: ReactMouseEvent<HTMLDivElement>,
+  ): void => {
+    event.preventDefault();
+    executionResizeDragRef.current = {
+      handle,
+      startX: event.clientX,
+      startWidths: resolveExecutionColumnWidths(),
+    };
+  };
+
+  const handleExecutionResizeKeyDown = (
+    handle: ExecutionResizeHandle,
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ): void => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    event.preventDefault();
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    applyExecutionColumnWidths(resizeExecutionColumns(
+      resolveExecutionColumnWidths(),
+      handle,
+      direction * EXECUTION_RESIZE_KEYBOARD_STEP,
+    ));
+  };
+
+  const executionGridStyle = executionColumnWidths
+    ? ({
+        "--study-plan-execution-left": `${executionColumnWidths.left}px`,
+        "--study-plan-execution-main": `${executionColumnWidths.main}px`,
+        "--study-plan-execution-right": `${executionColumnWidths.right}px`,
+      } as CSSProperties)
+    : undefined;
 
   useEffect(() => {
     setSelectedSubtaskId(subtaskId ?? null);
@@ -412,6 +634,32 @@ export function StudyTaskExecutionPage() {
   useEffect(() => {
     selectedSubtaskIdRef.current = selectedSubtaskId;
   }, [selectedSubtaskId]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      updateExecutionColumnResize(event.clientX);
+    };
+    const handlePointerUp = () => {
+      stopExecutionColumnResize();
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      updateExecutionColumnResize(event.clientX);
+    };
+    const handleMouseUp = () => {
+      stopExecutionColumnResize();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [executionColumnWidths]);
 
   useEffect(() => {
     if (!generationNotice) {
@@ -742,7 +990,7 @@ export function StudyTaskExecutionPage() {
           </Group>
         </Group>
 
-        <Box className="study-plan-execution-grid">
+        <Box className="study-plan-execution-grid" ref={executionGridRef} style={executionGridStyle}>
           <Paper className="study-plan-execution-sidebar" radius="md" withBorder>
             <Stack gap="md">
               <Group align="flex-start" className="study-plan-execution-sidebar-header" justify="space-between" wrap="nowrap">
@@ -811,6 +1059,19 @@ export function StudyTaskExecutionPage() {
               </Stack>
             </Stack>
           </Paper>
+
+          <Box
+            aria-label="调整任务列表宽度"
+            aria-orientation="vertical"
+            className="study-plan-execution-resizer"
+            onKeyDown={(event) => handleExecutionResizeKeyDown("left", event)}
+            onMouseDown={(event) => startExecutionColumnMouseResize("left", event)}
+            onPointerDown={(event) => startExecutionColumnResize("left", event)}
+            onPointerMove={(event) => updateExecutionColumnResize(event.clientX)}
+            onPointerUp={stopExecutionColumnResize}
+            role="separator"
+            tabIndex={0}
+          />
 
           <Paper
             aria-busy={isSwitchingSubtask || undefined}
@@ -1004,6 +1265,19 @@ export function StudyTaskExecutionPage() {
               </Group>
             </Stack>
           </Paper>
+
+          <Box
+            aria-label="调整 AI 助教宽度"
+            aria-orientation="vertical"
+            className="study-plan-execution-resizer"
+            onKeyDown={(event) => handleExecutionResizeKeyDown("right", event)}
+            onMouseDown={(event) => startExecutionColumnMouseResize("right", event)}
+            onPointerDown={(event) => startExecutionColumnResize("right", event)}
+            onPointerMove={(event) => updateExecutionColumnResize(event.clientX)}
+            onPointerUp={stopExecutionColumnResize}
+            role="separator"
+            tabIndex={0}
+          />
 
           <Paper className="study-plan-execution-aside" radius="md" withBorder>
             <Stack className="study-plan-execution-aside-layout" gap="md">

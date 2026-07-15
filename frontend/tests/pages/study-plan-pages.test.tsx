@@ -764,6 +764,37 @@ describe("study plan pages", () => {
     expect(container.querySelector(".study-plan-task-qa-composer")).toBeInTheDocument();
   });
 
+  it("lets learners drag execution page gutters to resize the three columns", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+          return Promise.resolve(successResponse(executionContext, "req_execution"));
+        }
+
+        return Promise.resolve(successResponse({}));
+      }),
+    );
+
+    const { container } = renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    const grid = await waitFor(() => {
+      const executionGrid = container.querySelector(".study-plan-execution-grid") as HTMLElement | null;
+      expect(executionGrid).toBeInTheDocument();
+      return executionGrid as HTMLElement;
+    });
+    const leftGutter = screen.getByRole("separator", { name: "调整任务列表宽度" });
+
+    fireEvent.mouseDown(leftGutter, { clientX: 300 });
+    fireEvent.mouseMove(window, { clientX: 360 });
+    fireEvent.mouseUp(window, { clientX: 360 });
+
+    expect(grid.style.getPropertyValue("--study-plan-execution-left")).toBe("360px");
+    expect(grid.style.getPropertyValue("--study-plan-execution-main")).toBe("545px");
+    expect(window.localStorage.getItem("course-nexus:study-plan-execution-columns")).toContain("\"left\":360");
+  });
+
   it("turns a natural language goal into a mixed questionnaire, auto-saves, and enters detail after calendar preview", async () => {
     freezeStudyPlanDate();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
