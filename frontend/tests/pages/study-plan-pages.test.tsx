@@ -607,6 +607,63 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
   });
 
+  it("asks date follow-up questions when a new goal does not parse dates even if an old draft had dates", async () => {
+    freezeStudyPlanDate();
+    window.localStorage.setItem("course-nexus:study-plan-create:crs_123", JSON.stringify({
+      goalText: "旧目标三天完成",
+      startDate: "2026-07-15",
+      endDate: "2026-07-17",
+      durationDays: "3",
+      preference: "balanced",
+      materialScope: {
+        include_all_parsed_materials: true,
+        material_ids: [],
+      },
+    }));
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          goal_text: "学习LAN",
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: null,
+          preference: "balanced",
+          material_scope: {
+            include_all_parsed_materials: true,
+            material_ids: [],
+          },
+          unresolved_fields: ["start_date", "duration_days"],
+        }, "req_config_parse"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_diagnostic_questions"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), {
+      target: { value: "学习LAN" },
+    });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+
+    expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+    expect(screen.getByText("你想从哪天开始学习？")).toBeInTheDocument();
+    expect(screen.queryByText(/2026-07-15 - 2026-07-17/)).not.toBeInTheDocument();
+  });
+
   it("renders the detail page inside the fixed workbench layout", async () => {
     const otherPlan = {
       ...savedDetail.plan,
