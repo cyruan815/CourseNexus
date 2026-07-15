@@ -107,7 +107,17 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByText("100 B")).toBeInTheDocument();
     expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "上传资料" }));
+    const createFolderButton = screen.getByRole("button", { name: "新建文件夹" });
+    const uploadButton = screen.getByRole("button", { name: "上传资料" });
+    const createLinkButton = screen.getByRole("button", { name: "添加链接" });
+    expect(createFolderButton).toHaveTextContent("");
+    expect(uploadButton).toHaveTextContent("");
+    expect(createLinkButton).toHaveTextContent("");
+
+    fireEvent.mouseEnter(createFolderButton);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("新建文件夹");
+
+    fireEvent.click(uploadButton);
 
     expect(screen.getByRole("dialog", { name: "上传课程资料" })).toBeInTheDocument();
     expect(screen.getByLabelText("拖拽上传课程资料")).toBeInTheDocument();

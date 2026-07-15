@@ -1,59 +1,61 @@
 # Course Detail Resource Panel Design QA
 
-- Source visual truth: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-1016c878-a738-4ffe-acbd-676935c17db5.png`
-- Supporting source implementation: `D:\ruanchengyun\Downloads\course_resources_redesign_v6_fixed_scroll.html`
-- Browser-rendered full view: `.artifacts/product-design/course-detail-full-final.png`
-- Browser-rendered focused view: `.artifacts/product-design/course-material-card-final.png`
-- Side-by-side focused comparison: `.artifacts/product-design/comparison-final.png`
-- Dark-theme regression view: `.artifacts/product-design/course-detail-dark-final.png`
+- Source visual truth: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-1d876f74-3017-4480-867e-f152f4bfaff6.png`
+- Compact-header reference: `C:\Users\RUANCH~1\AppData\Local\Temp\codex-clipboard-61655666-40d1-4598-a11d-754a615bced8.png`
+- Browser-rendered full view: `.artifacts/product-design/course-detail-compact-v1.png`
+- Browser-rendered focused view: `.artifacts/product-design/course-material-compact-tooltip-v1.png`
+- Dark-theme regression view: `.artifacts/product-design/course-material-compact-dark-v1.png`
+- Side-by-side focused comparison: `.artifacts/product-design/comparison-compact-v1.png`
+- Browser metrics: `.artifacts/product-design/browser-check-compact-v1.json`
 - Viewport: 1600 × 1000 CSS pixels, device scale factor 1
-- State: light theme for source comparison; unfiled and `01 基础概念` collapsed; `02 物理层` expanded; no explicit material selection
+- State: light theme; `02 物理层` expanded; “新建文件夹” hover tooltip visible in the focused capture
 
 **Findings**
 
 - No actionable P0, P1, or P2 mismatch remains.
-- Fonts and typography: the implementation retains the product's existing system-font stack while matching the source hierarchy, weights, truncation, and compact column scale.
-- Spacing and layout rhythm: the title, summary, three actions, selection row, search field, rounded scrolling list, folders, and files follow the source rhythm within the existing 416 px course-detail column. The source's persistent bottom dropzone is intentionally omitted per the confirmed product requirement.
-- Colors and visual tokens: primary blue, muted slate, pale folder blue, file-type red, parsed green, borders, and soft surfaces match the source direction. Dark-theme material text and separators remain readable.
-- Image quality and asset fidelity: the source contains no raster content that needs recreation. All interface icons use the project's existing Tabler icon library; no placeholder, emoji, handcrafted SVG, or CSS-drawn icon was introduced.
-- Copy and content: resource labels follow the selected design while keeping the project's established terms and actual parsing/scope semantics.
+- Fonts and typography: the product font stack and existing Chinese hierarchy are preserved. The 20 px title remains dominant while the 13 px selection summary and compact labels stay readable.
+- Spacing and layout rhythm: the three 36 × 36 px actions sit beside the title, the header is 82 px high, the search control is 36 px high, and the resource list receives 572 px of the 755 px panel. Six file rows are visible in the expanded preview state.
+- Colors and visual tokens: the compact actions reuse the existing border, hover-blue, surface, focus, dark-theme, and disabled tokens. The former filled upload action is intentionally normalized to match the three equal icon controls in the selected reference; the dark-theme regression capture retains readable icons, text, separators, and status states.
+- Image quality and asset fidelity: the reference contains only interface icons. The implementation uses the existing Tabler icon set and Mantine tooltip; no placeholder, text glyph, custom SVG, or CSS-drawn icon was introduced.
+- Copy and content: visible button copy is removed exactly as requested. Accessible names remain on all three buttons, and hover tooltips expose “新建文件夹”, “上传资料”, and “添加链接”.
 
 **Full-view comparison evidence**
 
-- The complete course-detail screenshot confirms the original three-column proportions remain unchanged.
-- The center Q&A and right learning-tool content, layout, and behavior are unchanged; only shared card and inner-component radii, borders, and subtle elevation were normalized.
-- No page-level clipping or misplaced persistent control is visible at the tested desktop viewport.
+- The full course-detail capture confirms the existing three-column widths and the center/right content remain unchanged.
+- The compact material header reduces non-list vertical space without clipping the page header, plan card, selection control, search field, or resource rows.
+- The local scrolling list shows six file rows at the tested viewport instead of only two or three.
 
 **Focused region comparison evidence**
 
-- `.artifacts/product-design/comparison-final.png` places the source panel and browser-rendered implementation in one image.
-- The focused comparison verifies title hierarchy, action treatment, selection affordance, search shape, folder metadata, count badges, file-type badges, parse status, list clipping, and outer/inner radii.
-- Density differs only where required by the narrower existing column and the removal of the persistent dropzone.
+- `.artifacts/product-design/comparison-compact-v1.png` places the supplied compact-header reference and the browser-rendered implementation in one image.
+- Both use a title-left/actions-right header, three equal outlined icon buttons, and a short search control beneath the header.
+- The implementation retains the product-required selection row and resource metadata below the reference pattern.
 
 **Primary interactions tested**
 
-- Search filtering and clear-search action.
-- Upload button opens the existing upload dialog; dialog closes without mutation.
-- Parsed-material selection updates the selected-count summary and can be cleared.
-- Folder rows collapse and expand.
-- Light and dark theme render without browser console errors.
+- All three icon buttons retain accessible names and existing click handlers.
+- Hovering the folder action displays the “新建文件夹” tooltip.
+- Upload still opens only after clicking the upload action.
+- Search, clear-search, folder expansion, and material selection remain covered by the component test suite.
+- Browser console and page error collection returned no errors.
+- The compact panel was recaptured in dark theme with no clipping or contrast regression.
 
 **Comparison history**
 
-1. Initial comparison found a P2 rhythm mismatch: folder metadata wrapped below folder names in the 416 px column while the source kept it inline. The folder copy layout was changed to a truncating inline flex row and recaptured.
-2. Dark-theme regression found a P2 readability issue: non-PDF material names and hard-coded row separators did not follow dark tokens. The file-name color and separators were moved to resource tokens, dark button-background overrides were added, and the page was recaptured.
-3. Final comparison found no actionable P0/P1/P2 mismatch. The intentionally absent persistent dropzone and existing-product responsive density are accepted constraints.
+1. The previous implementation used a second 44 px-high row of text actions and a 46 px search control. The supplied follow-up screenshot showed that this consumed too much of the fixed-height card and limited visible resources to two or three.
+2. The actions were converted to equal 36 px icon-only controls beside the title, hover labels and accessible names were added, and the header/body/search spacing was compressed.
+3. The post-fix browser capture measured an 82 px header, 36 px search control, 572 px list viewport, and six visible file rows. The side-by-side comparison found no remaining actionable P0/P1/P2 mismatch.
 
 **Implementation Checklist**
 
-- [x] Match the selected source within the existing left-column width.
-- [x] Preserve real material APIs and interaction semantics.
-- [x] Keep upload entry points behind explicit upload actions.
-- [x] Normalize course-detail card and inner-component radii.
-- [x] Verify light theme, dark theme, primary interactions, and browser console.
+- [x] Align three icon-only actions with the resource title.
+- [x] Preserve labels through hover tooltips and accessible names.
+- [x] Reduce search and surrounding vertical spacing.
+- [x] Keep all existing APIs and action handlers.
+- [x] Verify the fixed-width three-column page and list capacity in a browser.
 
 **Follow-up Polish**
 
-- P3: a future design pass may define a dedicated dark palette for the Q&A empty surface and learning-tool cards. Their existing colors were deliberately left unchanged because this task only authorized radius-level changes outside the material panel.
+- No additional P3 polish is required for the requested compact-header pass.
 
 final result: passed

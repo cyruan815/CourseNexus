@@ -1,5 +1,5 @@
 import { type DragEvent, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   IconAlertCircle,
   IconCheck,
@@ -705,18 +705,39 @@ export function MaterialWorkspace({
           <p>已选择 {checkedParsedMaterialIds.length} 份资料，共 {parsedMaterialIds.length} 份可用</p>
         </div>
         <div className="material-workspace__header-actions">
-          <button className="material-workspace__action-button" disabled={isMutating} onClick={openCreateFolderModal} type="button">
-            <IconFolderPlus size={19} stroke={1.8} />
-            新建文件夹
-          </button>
-          <button className="material-workspace__action-button is-primary" disabled={isMutating} onClick={() => openUploadDialog(null)} type="button">
-            <IconUpload size={19} stroke={1.8} />
-            上传资料
-          </button>
-          <button className="material-workspace__action-button" disabled={isMutating} onClick={openCreateLinkModal} type="button">
-            <IconLink size={19} stroke={1.8} />
-            添加链接
-          </button>
+          <Tooltip label="新建文件夹" openDelay={250} position="bottom" withArrow>
+            <button
+              aria-label="新建文件夹"
+              className="material-workspace__action-button"
+              disabled={isMutating}
+              onClick={openCreateFolderModal}
+              type="button"
+            >
+              <IconFolderPlus aria-hidden size={19} stroke={1.8} />
+            </button>
+          </Tooltip>
+          <Tooltip label="上传资料" openDelay={250} position="bottom" withArrow>
+            <button
+              aria-label="上传资料"
+              className="material-workspace__action-button"
+              disabled={isMutating}
+              onClick={() => openUploadDialog(null)}
+              type="button"
+            >
+              <IconUpload aria-hidden size={19} stroke={1.8} />
+            </button>
+          </Tooltip>
+          <Tooltip label="添加链接" openDelay={250} position="bottom" withArrow>
+            <button
+              aria-label="添加链接"
+              className="material-workspace__action-button"
+              disabled={isMutating}
+              onClick={openCreateLinkModal}
+              type="button"
+            >
+              <IconLink aria-hidden size={19} stroke={1.8} />
+            </button>
+          </Tooltip>
         </div>
       </header>
 
