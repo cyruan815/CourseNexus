@@ -616,43 +616,6 @@
   min-height: 42px;
 }
 
-.material-workspace__context-menu {
-  background: #ffffff;
-  border: 1px solid #e1e7ef;
-  border-radius: 10px;
-  box-shadow: 0 8px 22px rgb(15 23 42 / 12%);
-  display: grid;
-  min-width: 168px;
-  padding: 8px;
-  position: fixed;
-  z-index: 240;
-}
-
-.material-workspace__context-menu button {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: #111827;
-  cursor: pointer;
-  display: grid;
-  font-size: 14px;
-  font-weight: 500;
-  gap: 12px;
-  grid-template-columns: 18px minmax(0, 1fr);
-  min-height: 40px;
-  padding: 0 12px;
-  text-align: left;
-}
-
-.material-workspace__context-menu button:hover {
-  background: #f1f5fb;
-}
-
-.material-workspace__context-menu button.is-danger {
-  color: #ef4444;
-}
-
 .material-workspace__sr-only {
   clip: rect(0, 0, 0, 0);
   clip-path: inset(50%);
