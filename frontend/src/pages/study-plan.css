@@ -795,6 +795,68 @@
   border-top: 1px solid #e5edf5;
 }
 
+.study-plan-handout-preview {
+  border-color: rgba(42, 57, 82, 0.12);
+  background: #ffffff;
+  padding: 16px 18px;
+}
+
+.study-plan-handout-preview h1,
+.study-plan-handout-preview h2,
+.study-plan-handout-preview h3 {
+  margin: 0 0 8px;
+  color: #102a43;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.study-plan-handout-preview h1 {
+  font-size: 22px;
+}
+
+.study-plan-handout-preview h2 {
+  margin-top: 16px;
+  font-size: 18px;
+}
+
+.study-plan-handout-preview h3 {
+  margin-top: 14px;
+  font-size: 16px;
+}
+
+.study-plan-handout-preview p,
+.study-plan-handout-preview li {
+  color: #26364d;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.study-plan-handout-preview p,
+.study-plan-handout-preview ul,
+.study-plan-handout-preview ol {
+  margin: 8px 0;
+}
+
+.study-plan-handout-preview ul,
+.study-plan-handout-preview ol {
+  padding-left: 22px;
+}
+
+.study-plan-handout-preview code {
+  border-radius: 4px;
+  background: #eef5ff;
+  padding: 1px 4px;
+  font-size: 13px;
+}
+
+.study-plan-handout-preview pre {
+  overflow: auto;
+  border-radius: 8px;
+  background: #102a43;
+  color: #f8fbff;
+  padding: 12px;
+}
+
 .study-plan-task-qa {
   min-height: 0;
   display: flex;

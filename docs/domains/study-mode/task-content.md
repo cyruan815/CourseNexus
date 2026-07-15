@@ -50,6 +50,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
 - C9 不接入测试题作答、判分、attempt 历史或反馈闭环；这些保留给后续上下文。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
+- 2026-07-15 执行页已在“任务讲义”内容区内直接渲染成功 `handout` 的 Markdown 正文：页面通过 `GET /api/v1/generated-contents/{generated_content_id}` 读取 `GeneratedContentRead.content`，使用 `react-markdown` 安全展示标题、段落、列表、加粗和代码块；不读取旧 `content_json.sections`，不展示空引用面板，也不伪造逐条来源。已有成功讲义和本次生成成功讲义都复用同一渲染路径。
 
 任务测试题 Markdown 导出接口返回文件流，不包成功 envelope。它复用 `GeneratedContentRead` 的用户归属校验，只支持当前用户自己的成功 `task_test`；非 `task_test` 返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，非 success 返回 `EXPORT_CONTENT_NOT_READY`，畸形 `content_json` 返回 `EXPORT_CONTENT_INVALID`。renderer 会把题目、选项、答案、解析和引用来源写入 Markdown；`source_citation_ids` 只和 `source_citations[].id` 匹配，缺失时写 `Sources: unavailable`，不伪造来源。
 
