@@ -18,7 +18,6 @@ import {
   IconArrowLeft,
   IconCheck,
   IconTrash,
-  IconDownload,
   IconPlayerPlay,
   IconRotateClockwise,
 } from "@tabler/icons-react";
@@ -450,9 +449,6 @@ export function StudyPlanDetailPage() {
             <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
               删除计划
             </Button>
-            <Button disabled leftSection={<IconDownload size={16} />} variant="light">
-              导出计划（待接入）
-            </Button>
           </Group>
         </Group>
 
@@ -519,7 +515,7 @@ export function StudyPlanDetailPage() {
               </Group>
             </Stack>
             {firstRunnableSubtask ? (
-              <Stack align="flex-end" gap="sm">
+              <Stack align="flex-end" className="study-plan-detail-actions" gap="sm">
                 <Group gap="xs" justify="flex-end" wrap="nowrap">
                   <Button
                     leftSection={<IconRotateClockwise size={16} />}
@@ -531,20 +527,17 @@ export function StudyPlanDetailPage() {
                   <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
                     删除计划
                   </Button>
-                  <Button disabled leftSection={<IconDownload size={16} />} variant="light">
-                    导出计划（待接入）
-                  </Button>
                 </Group>
-                <Button
-                  component={Link}
-                  leftSection={<IconPlayerPlay size={16} />}
-                  to={`/study-subtasks/${firstRunnableSubtask.id}`}
-                >
-                  开始学习
-                </Button>
+                  <Button
+                    component={Link}
+                    leftSection={<IconPlayerPlay size={16} />}
+                    to={`/study-subtasks/${firstRunnableSubtask.id}`}
+                  >
+                    开始学习
+                  </Button>
               </Stack>
             ) : (
-              <Stack align="flex-end" gap="sm">
+              <Stack align="flex-end" className="study-plan-detail-actions" gap="sm">
                 <Group gap="xs" justify="flex-end" wrap="nowrap">
                   <Button
                     leftSection={<IconRotateClockwise size={16} />}
@@ -556,13 +549,10 @@ export function StudyPlanDetailPage() {
                   <Button color="red" leftSection={<IconTrash size={16} />} onClick={() => setIsDeleteConfirmOpen(true)} variant="light">
                     删除计划
                   </Button>
-                  <Button disabled leftSection={<IconDownload size={16} />} variant="light">
-                    导出计划（待接入）
-                  </Button>
                 </Group>
-                <Button disabled leftSection={<IconPlayerPlay size={16} />}>
-                  暂无任务
-                </Button>
+                  <Button disabled leftSection={<IconPlayerPlay size={16} />}>
+                    暂无任务
+                  </Button>
               </Stack>
             )}
           </Group>

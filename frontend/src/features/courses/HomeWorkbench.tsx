@@ -532,13 +532,6 @@ function CalendarPanel() {
     <>
       <Paper className="home-calendar-panel" radius="md" withBorder>
         <Stack gap="md" h="100%">
-          <Group justify="space-between">
-            <Title order={2}>日历</Title>
-            <Badge color="blue" variant="light">
-              {monthLabel}
-            </Badge>
-          </Group>
-
           <Paper className="home-calendar-card" radius="md" withBorder>
             <Group justify="space-between">
               <ActionIcon aria-label="上个月" onClick={() => moveMonth(-1)} variant="subtle">
@@ -979,10 +972,12 @@ function CourseOverview({
     <Paper className="home-main-panel" radius="md" withBorder>
       <Group align="flex-start" justify="space-between">
         <Stack gap={4}>
-          <Title order={2}>课程概览</Title>
-          <Text c="dimmed" size="sm">
-            {termSummary} {filteredCourses.length} 门课程 · 资料统计待接入
-          </Text>
+          <Group align="baseline" gap="sm" wrap="wrap">
+            <Title order={2}>我的课程</Title>
+            <Text c="dimmed" size="sm">
+              {termSummary} {filteredCourses.length} 门课程
+            </Text>
+          </Group>
         </Stack>
         <Select
           aria-label="选择学期"

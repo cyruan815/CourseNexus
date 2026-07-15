@@ -278,7 +278,6 @@ function QaWorkspace({
           <Title order={2}>{"问答交互"}</Title>
           <Text c="dimmed" size="sm">{"基于左侧已解析资料范围提问"}</Text>
         </Stack>
-        <Badge color="teal" variant="light">{"默认资料范围"}</Badge>
       </Group>
       <Stack className="course-detail-conversation" gap="sm">
         {messages.length > 0 || isPending ? messages.map((message) => (

@@ -64,11 +64,6 @@ import type {
 import "../features/generated-content/generated-content.css";
 import "./study-plan.css";
 
-interface ContentSourceSummary {
-  key: string;
-  text: string;
-}
-
 interface ExecutionColumnWidths {
   left: number;
   main: number;
@@ -190,6 +185,10 @@ function statusColor(status: string): string {
   return colors[status] ?? "gray";
 }
 
+function displayStatusForGeneratedContent(status: string, hasGeneratedContent: boolean): string {
+  return status === "not_started" && hasGeneratedContent ? "in_progress" : status;
+}
+
 function subtaskTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     learn: "学习",
@@ -212,57 +211,6 @@ function taskContentType(type: string): TaskContentType | null {
 
 function taskContentLabel(contentType: TaskContentType): string {
   return contentType === "handout" ? "任务讲义" : "任务测试题";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function toText(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function formatGeneratedContentSource(citation: unknown, index: number): ContentSourceSummary | null {
-  if (!isRecord(citation)) {
-    return null;
-  }
-
-  const materialName = toText(citation.material_name);
-  if (!materialName) {
-    return null;
-  }
-
-  const page = toText(citation.page);
-  const pageIndex = typeof citation.page_index === "number" ? citation.page_index : null;
-  const pageLabel = page
-    ? `第 ${page} 页`
-    : pageIndex !== null && pageIndex >= 0
-      ? `第 ${pageIndex + 1} 页`
-      : null;
-  const key = toText(citation.id) ?? `${toText(citation.material_id) ?? "source"}-${index}`;
-
-  return {
-    key,
-    text: pageLabel ? `${materialName} · ${pageLabel}` : materialName,
-  };
-}
-
-function generatedContentSourceSummary(content: GeneratedContentRead | null): {
-  sources: ContentSourceSummary[];
-  total: number;
-} {
-  if (!content) {
-    return { sources: [], total: 0 };
-  }
-
-  const allSources = content.source_citations
-    .map((citation, index) => formatGeneratedContentSource(citation, index))
-    .filter((source): source is ContentSourceSummary => Boolean(source));
-
-  return {
-    sources: allSources.slice(0, 2),
-    total: allSources.length,
-  };
 }
 
 function handoutMarkdown(content: GeneratedContentRead | null): string | null {
@@ -773,6 +721,9 @@ export function StudyTaskExecutionPage() {
     : null;
   const activeContentId = generationError ? null : currentGeneratedContent?.id ?? existingContentId ?? null;
   const activeContentTitle = currentGeneratedContent?.title ?? null;
+  const currentDisplayStatus = currentSubtask
+    ? displayStatusForGeneratedContent(currentSubtask.status, Boolean(activeContentId))
+    : null;
   const isGeneratingCurrentSubtask = Boolean(currentSubtask && generatingSubtaskId === currentSubtask.subtask_id);
   const isGeneratingOtherSubtask = Boolean(currentSubtask && generatingSubtaskId && generatingSubtaskId !== currentSubtask.subtask_id);
   const readonlyHandoutMarkdown = useMemo(() => handoutMarkdown(currentGeneratedContent), [currentGeneratedContent]);
@@ -781,10 +732,6 @@ export function StudyTaskExecutionPage() {
     [currentGeneratedContent?.content_json],
   );
   const taskTestAttemptKey = currentGeneratedContent?.id ?? activeContentId ?? currentSubtask?.subtask_id ?? null;
-  const contentSourceSummary = useMemo(
-    () => generatedContentSourceSummary(currentGeneratedContent),
-    [currentGeneratedContent],
-  );
   const completedCount = sortedTasks.reduce(
     (total, task) => total + task.subtasks.filter((subtask) => subtask.status === "completed").length,
     0,
@@ -1085,9 +1032,15 @@ export function StudyTaskExecutionPage() {
                             )}
                             <Stack gap={2}>
                               <Text fw={isCurrent ? 750 : 650} size="sm">{subtask.title}</Text>
-                              <Badge color={statusColor(subtask.status)} size="xs" variant="light">
-                                {statusLabel(subtask.status)}
-                              </Badge>
+                              {subtask.subtask_id === currentSubtask?.subtask_id ? (
+                                <Badge color={statusColor(currentDisplayStatus ?? subtask.status)} size="xs" variant="light">
+                                  {statusLabel(currentDisplayStatus ?? subtask.status)}
+                                </Badge>
+                              ) : (
+                                <Badge color={statusColor(subtask.status)} size="xs" variant="light">
+                                  {statusLabel(subtask.status)}
+                                </Badge>
+                              )}
                             </Stack>
                           </Group>
                         </Paper>
@@ -1120,12 +1073,6 @@ export function StudyTaskExecutionPage() {
           >
             <Stack className="study-plan-execution-main-stack" gap="lg">
               <Stack gap={8}>
-                <Group gap="xs">
-                  <Badge color="violet" variant="light">{subtaskTypeLabel(currentSubtask.subtask_type)}</Badge>
-                  <Badge color={statusColor(currentSubtask.status)} variant="light">
-                    {statusLabel(currentSubtask.status)}
-                  </Badge>
-                </Group>
                 <Title order={1}>{currentSubtask.title}</Title>
                 {currentSubtask.description ? (
                   <Text className="study-plan-goal">{currentSubtask.description}</Text>
@@ -1148,11 +1095,6 @@ export function StudyTaskExecutionPage() {
                   </Group>
                   {contentType ? (
                     <>
-                      <Text c="dimmed" size="sm">
-                        {contentType === "handout"
-                          ? "为当前学习 / 复习任务按需生成讲义。默认复用最近一次成功内容。"
-                          : "为当前练习 / 测试任务按需生成测试题。默认复用最近一次成功内容。"}
-                      </Text>
                       {generationError ? (
                         <Alert color="red" role="alert" title="内容生成失败" variant="light">
                           {generationError}
@@ -1209,14 +1151,6 @@ export function StudyTaskExecutionPage() {
                                 </Button>
                               </Group>
                             </Group>
-                            {contentSourceSummary.sources.length > 0 ? (
-                              <Text c="dimmed" className="study-plan-generated-sources" size="xs">
-                                来源：{contentSourceSummary.sources.map((source) => source.text).join("、")}
-                                {contentSourceSummary.total > contentSourceSummary.sources.length
-                                  ? `，等 ${contentSourceSummary.total} 处来源`
-                                  : ""}
-                              </Text>
-                            ) : null}
                           </Paper>
                           {contentType === "handout" && readonlyHandoutMarkdown ? (
                             <Paper className="study-plan-handout-preview" radius="md" withBorder>
@@ -1358,13 +1292,6 @@ export function StudyTaskExecutionPage() {
                   <Badge color="blue" variant="light">{context.related_materials.length} 份资料</Badge>
                 </Group>
 
-                <Paper className="study-plan-checkin-card" radius="md" withBorder>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Text c="dimmed" size="sm">打卡进度</Text>
-                    <Text fw={750}>{completionResult?.checkin.completed_subtask_count ?? completedCount}/{completionResult?.checkin.planned_subtask_count ?? totalCount}</Text>
-                  </Group>
-                </Paper>
-
                 <Stack className="study-plan-material-summary-list" gap={6}>
                   {context.related_materials.length > 0 ? (
                     context.related_materials.map((material) => (
@@ -1384,7 +1311,7 @@ export function StudyTaskExecutionPage() {
                             </Badge>
                           </Group>
                           <Text c="dimmed" className="study-plan-material-meta" size="xs">
-                            {material.material_type ?? "未知类型"} · {material.material_id}
+                            {material.material_type ?? "未知类型"}
                           </Text>
                         </Stack>
                       </Paper>

@@ -61,13 +61,13 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  padding: 10px;
+  padding: 16px;
 }
 
 .course-detail-layout {
   display: grid;
   grid-template-columns: minmax(320px, 26vw) minmax(420px, 1fr) minmax(320px, 26vw);
-  gap: 10px;
+  gap: 16px;
   height: 100%;
   min-height: 0;
 }
@@ -94,7 +94,7 @@
 }
 
 .course-detail-card {
-  padding: 16px;
+  padding: 20px;
 }
 
 .course-detail-card h2 {
@@ -174,7 +174,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
 .course-detail-qa-empty {
@@ -213,7 +213,7 @@
   border: 1px solid #d6e0eb;
   border-radius: 14px;
   background: #fbfdff;
-  padding: 16px;
+  padding: 20px;
 }
 
 .course-detail-message {
@@ -338,7 +338,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
 .course-detail-tools {

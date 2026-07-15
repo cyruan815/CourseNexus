@@ -83,6 +83,9 @@
 .home-calendar-panel {
   display: flex;
   flex-direction: column;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
 }
 
 .home-main-panel {
@@ -248,8 +251,19 @@
 }
 
 .home-calendar-cell.is-today {
-  box-shadow: inset 0 0 0 1px #2563eb;
+  box-shadow: inset 0 0 0 2px #2563eb;
   background: #f8fbff;
+}
+
+.home-calendar-cell.is-selected {
+  box-shadow: inset 0 0 0 2px #14b8a6;
+  background: #f0fdfa;
+}
+
+.home-calendar-cell.is-today.is-selected {
+  box-shadow:
+    inset 0 0 0 2px #14b8a6,
+    inset 0 0 0 4px rgba(37, 99, 235, 0.28);
 }
 
 .home-calendar-cell.has-tasks {
@@ -339,10 +353,10 @@
 }
 
 .calendar-filter-row {
-  border: 1px solid #d6e0eb;
-  border-radius: 8px;
-  background: #f8fbff;
-  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .calendar-course-filter {
@@ -636,10 +650,61 @@
   font-size: 11px;
 }
 
+.calendar-course-name {
+  width: fit-content;
+  max-width: 100%;
+  font-size: 24px;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+  color: #2f80ed;
+}
+
+.calendar-course-name-0 {
+  color: #2f80ed;
+}
+
+.calendar-course-name-1 {
+  color: #14b8a6;
+}
+
+.calendar-course-name-2 {
+  color: #4f46e5;
+}
+
+.calendar-course-name-3 {
+  color: #7c3aed;
+}
+
+.calendar-course-name-4 {
+  color: #f97316;
+}
+
 .calendar-task-card {
   border-color: #dbeafe;
   background: #fbfdff;
-  padding: 14px;
+  padding: 18px 20px;
+}
+
+.calendar-primary-task-title {
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.calendar-subtask-title {
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.calendar-task-card .mantine-Badge-root {
+  flex: 0 0 auto;
+  max-width: 86px;
+}
+
+.calendar-task-card .mantine-Badge-label {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .calendar-task-progress-count {
@@ -653,7 +718,7 @@
 
 .calendar-subtask-row {
   background: transparent;
-  padding: 12px 0;
+  padding: 16px 0;
 }
 
 .calendar-subtask-row + .calendar-subtask-row {

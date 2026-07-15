@@ -40,8 +40,16 @@ function formatDateKey(year: number, month: number, day: number): string {
   return `${year}-${padDatePart(month + 1)}-${padDatePart(day)}`;
 }
 
+function isDateKey(value: string | null): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function todayDateKey(today = new Date()): string {
+  return formatDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+}
+
 function monthFromDateQuery(dateQuery: string | null): Date {
-  if (dateQuery && /^\d{4}-\d{2}-\d{2}$/.test(dateQuery)) {
+  if (isDateKey(dateQuery)) {
     const [year, month] = dateQuery.split("-").map(Number);
     return new Date(year, month - 1, 1);
   }
@@ -253,7 +261,7 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
       <Stack gap="sm">
         <Group justify="space-between" wrap="nowrap">
           <Stack gap={2}>
-            <Text fw={750}>{task.title}</Text>
+            <Text className="calendar-primary-task-title" fw={750}>{task.title}</Text>
             <Text className="calendar-task-progress-count" c="dimmed" size="sm">
               {task.completed_subtask_count}/{task.total_subtask_count}
             </Text>
@@ -267,7 +275,7 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
             <Box className="calendar-subtask-row" key={subtask.subtask_id}>
               <Group justify="space-between" wrap="nowrap">
                 <Stack gap={2}>
-                  <Text fw={650} size="sm">{subtask.title}</Text>
+                  <Text className="calendar-subtask-title" fw={650} size="sm">{subtask.title}</Text>
                   <Text c="dimmed" size="xs">{subtaskTypeLabel(subtask.subtask_type)}</Text>
                 </Stack>
                 <Badge color={statusColor(subtask.status)} size="xs" variant="light">
@@ -304,11 +312,12 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
 
 function CourseCalendarPage({ courseId }: { courseId: string }) {
   const [searchParams] = useSearchParams();
-  const [referenceDate, setReferenceDate] = useState(() => monthFromDateQuery(searchParams.get("date")));
+  const initialDate = searchParams.get("date");
+  const [referenceDate, setReferenceDate] = useState(() => monthFromDateQuery(initialDate));
   const [monthData, setMonthData] = useState<CourseStudyCalendarMonth | null>(null);
   const [monthError, setMonthError] = useState<string | null>(null);
   const [isMonthLoading, setIsMonthLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => (isDateKey(initialDate) ? initialDate : todayDateKey()));
   const [dayTodos, setDayTodos] = useState<CourseStudyCalendarDay | null>(null);
   const [dayError, setDayError] = useState<string | null>(null);
   const [isDayLoading, setIsDayLoading] = useState(false);
@@ -349,6 +358,38 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
     };
   }, [courseId, month]);
 
+  useEffect(() => {
+    if (!selectedDate) {
+      return undefined;
+    }
+
+    let ignore = false;
+    setIsDayLoading(true);
+    setDayError(null);
+    setDayTodos(null);
+
+    fetchCourseStudyCalendarDay(courseId, selectedDate)
+      .then((nextDayTodos) => {
+        if (!ignore) {
+          setDayTodos(nextDayTodos);
+        }
+      })
+      .catch((nextError: unknown) => {
+        if (!ignore) {
+          setDayError(errorMessage(nextError));
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setIsDayLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [courseId, selectedDate]);
+
   function moveMonth(offset: number) {
     setReferenceDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
     setSelectedDate(null);
@@ -358,18 +399,6 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
 
   function loadDay(dateKey: string) {
     setSelectedDate(dateKey);
-    setIsDayLoading(true);
-    setDayError(null);
-    setDayTodos(null);
-
-    fetchCourseStudyCalendarDay(courseId, dateKey)
-      .then(setDayTodos)
-      .catch((nextError: unknown) => {
-        setDayError(errorMessage(nextError));
-      })
-      .finally(() => {
-        setIsDayLoading(false);
-      });
   }
 
   const courseName = monthData?.course_name ?? "课程";
@@ -421,7 +450,7 @@ function CourseCalendarPage({ courseId }: { courseId: string }) {
                     return (
                       <Box
                         aria-label={cell.dateKey ? `查看 ${cell.dateKey} 的课程任务` : "空白日期"}
-                        className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${summary ? " has-tasks" : ""}`}
+                        className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${cell.dateKey && cell.dateKey === selectedDate ? " is-selected" : ""}${summary ? " has-tasks" : ""}`}
                         component={cell.dateKey ? "button" : "div"}
                         key={`${cell.dateKey ?? "empty"}-${index}`}
                         onClick={cell.dateKey ? () => loadDay(cell.dateKey as string) : undefined}
@@ -509,9 +538,11 @@ function GlobalCalendarDayPanel({
         ) : null}
         {!isLoading && !error && dayTodos && dayTodos.courses.length > 0 ? (
           <Stack gap="md">
-            {dayTodos.courses.map((course) => (
+            {dayTodos.courses.map((course, courseIndex) => (
               <Stack gap="sm" key={course.course_id}>
-                <Title order={3}>{course.course_name}</Title>
+                <Title className={`calendar-course-name calendar-course-name-${courseIndex % 5}`} order={3}>
+                  {course.course_name}
+                </Title>
                 {course.tasks.map((task) => (
                   <CourseCalendarTaskCard courseId={course.course_id} key={task.task_id} task={task} />
                 ))}
@@ -535,9 +566,7 @@ function GlobalCalendarPage() {
   const [monthDays, setMonthDays] = useState<StudyCalendarDaySummary[]>([]);
   const [monthError, setMonthError] = useState<string | null>(null);
   const [isMonthLoading, setIsMonthLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string | null>(() =>
-    initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : null,
-  );
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => (isDateKey(initialDate) ? initialDate : todayDateKey()));
   const [dayTodos, setDayTodos] = useState<GlobalDayTodos | null>(null);
   const [dayError, setDayError] = useState<string | null>(null);
   const [isDayLoading, setIsDayLoading] = useState(false);
@@ -689,7 +718,6 @@ function GlobalCalendarPage() {
                 aria-label="课程筛选"
                 className="calendar-course-filter"
                 data={courseOptions}
-                label="课程筛选"
                 onChange={handleCourseFilterChange}
                 value={selectedCourseId ?? "__all__"}
               />
@@ -734,7 +762,7 @@ function GlobalCalendarPage() {
                     return (
                       <Box
                         aria-label={cell.dateKey ? `查看 ${cell.dateKey} 的${selectedCourseId ? "课程任务" : "全局待办"}` : "空白日期"}
-                        className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${summary ? " has-tasks" : ""}`}
+                        className={`home-calendar-cell calendar-course-cell${cell.isToday ? " is-today" : ""}${cell.dateKey && cell.dateKey === selectedDate ? " is-selected" : ""}${summary ? " has-tasks" : ""}`}
                         component={cell.dateKey ? "button" : "div"}
                         key={`${cell.dateKey ?? "empty"}-${index}`}
                         onClick={cell.dateKey ? () => setSelectedDate(cell.dateKey as string) : undefined}
