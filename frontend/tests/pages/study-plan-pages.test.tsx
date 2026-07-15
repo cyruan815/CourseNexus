@@ -811,6 +811,13 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "提交诊断" }));
 
     expect(await screen.findByText("诊断已完成")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("开始日期"), {
+      target: { value: "2026-07-13" },
+    });
+    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
+      target: { value: "3" },
+    });
+    expect(await screen.findByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("study-plan-preview"));
 
     await waitFor(() => {
@@ -824,12 +831,165 @@ describe("study plan pages", () => {
               include_all_parsed_materials: true,
               material_ids: [],
             },
+            start_date: "2026-07-13",
+            end_date: "2026-07-15",
             diagnostic_profile: diagnosticProfile,
           }),
           method: "POST",
         }),
       );
     });
+  });
+
+  it("asks for a missing study date range after parsing before previewing", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: "复习线性代数第一章",
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          goal_text: "复习线性代数第一章",
+          start_date: null,
+          end_date: null,
+          duration_days: null,
+          daily_available_minutes: null,
+          preference: "balanced",
+          material_scope: {
+            include_all_parsed_materials: true,
+            material_ids: [],
+          },
+          unresolved_fields: ["start_date", "duration_days"],
+        }, "req_config_parse"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+
+    expect(await screen.findByRole("heading", { name: "创建学习计划" })).toBeInTheDocument();
+    await waitForMaterialsLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "发送目标" }));
+    expect(await screen.findByRole("heading", { name: "补齐学习时间" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    expect(await screen.findByText("请先补齐学习时间。")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/v1/courses/crs_123/study-plans/preview",
+      expect.anything(),
+    );
+
+    fireEvent.change(screen.getByLabelText("开始日期"), {
+      target: { value: "2026-07-13" },
+    });
+    await waitFor(() => expect(screen.getByLabelText("开始日期")).toHaveValue("2026-07-13"));
+    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
+      target: { value: "2" },
+    });
+    expect(await screen.findByText(/2026-07-13 - 2026-07-14/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/courses/crs_123/study-plans/preview",
+        expect.objectContaining({
+          body: JSON.stringify({
+            goal_text: "复习线性代数第一章",
+            preference: "balanced",
+            material_scope: {
+              include_all_parsed_materials: true,
+              material_ids: [],
+            },
+            start_date: "2026-07-13",
+            end_date: "2026-07-14",
+            diagnostic_profile: diagnosticProfile,
+          }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("shows recoverable messages for study plan preview and save error codes", async () => {
+    seedCompletedDiagnosticDraft({
+      goalText: preview.goal_text,
+      startDate: "2026-07-13",
+      endDate: "2026-07-15",
+    });
+    let previewAttempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plans/preview")) {
+        previewAttempts += 1;
+        if (previewAttempts === 1) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: "NO_PARSED_MATERIAL",
+                  message: "backend raw no material",
+                  details: {},
+                },
+                meta: { request_id: "req_no_material" },
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            ),
+          );
+        }
+        return Promise.resolve(successResponse(preview, "req_preview"));
+      }
+      if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "IDEMPOTENCY_CONFLICT",
+                message: "backend raw idempotency conflict",
+                details: {},
+              },
+              meta: { request_id: "req_conflict" },
+            }),
+            { status: 409, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes();
+    await screen.findByRole("heading", { level: 1 });
+    await waitForMaterialsLoaded();
+
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    expect(await screen.findByText("当前资料还没有可用解析结果，请先上传或等待至少一份资料解析完成。")).toBeInTheDocument();
+    expect(screen.queryByText("backend raw no material")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("study-plan-preview"));
+    await waitFor(() => expect(screen.getByTestId("study-plan-save")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("study-plan-save"));
+
+    expect(await screen.findByText("本次保存请求与之前的预览不一致，请重新生成预览后再保存。")).toBeInTheDocument();
+    expect(screen.queryByText("backend raw idempotency conflict")).not.toBeInTheDocument();
   });
 
   it("keeps the plan draft after refreshing the create page", async () => {
@@ -881,6 +1041,13 @@ describe("study plan pages", () => {
     fireEvent.change(screen.getByLabelText("学习目标"), {
       target: { value: "三天完成线性代数第一章复习" },
     });
+    fireEvent.change(screen.getByLabelText("开始日期"), {
+      target: { value: "2026-07-13" },
+    });
+    fireEvent.change(screen.getByTestId("study-plan-duration-days"), {
+      target: { value: "3" },
+    });
+    expect(await screen.findByText(/2026-07-13 - 2026-07-15/)).toBeInTheDocument();
 
     const previewButton = screen.getByTestId("study-plan-preview");
     fireEvent.click(previewButton);
