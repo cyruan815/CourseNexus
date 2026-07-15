@@ -119,8 +119,17 @@
   border: 1px solid #bfdbfe;
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(232, 242, 255, 0.9), rgba(230, 255, 250, 0.72)),
-    #f8fbff;
+    radial-gradient(
+      circle at top left,
+      #EEF6FF 0%,
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      #ECFBF4 0%,
+      transparent 38%
+    ),
+    #FFFDFC;
   padding: 22px;
 }
 
