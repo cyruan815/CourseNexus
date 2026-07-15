@@ -78,6 +78,11 @@
   padding: 24px;
 }
 
+.home-calendar-panel {
+  display: flex;
+  flex-direction: column;
+}
+
 .home-main-panel {
   min-height: 0;
   display: flex;
@@ -168,6 +173,8 @@
 .home-calendar-card {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   border-color: #d6e0eb;
   background: #fbfdff;
   overflow: hidden;
@@ -203,13 +210,15 @@
 }
 
 .home-calendar-weekdays {
+  flex: 0 0 auto;
   padding: 8px 0;
 }
 
 .home-calendar-grid {
   position: relative;
+  flex: 1 1 0;
   grid-template-rows: repeat(5, minmax(0, 1fr));
-  height: clamp(248px, 38vh, 320px);
+  height: auto;
   min-height: 0;
   border-left: 1px solid #e5e7eb;
   border-top: 1px solid #e5e7eb;
@@ -314,7 +323,7 @@
 }
 
 .home-calendar-roomy-grid {
-  height: clamp(300px, 48vh, 410px);
+  height: auto;
   min-height: 0;
 }
 
@@ -552,7 +561,14 @@
 }
 
 .calendar-month-panel {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.calendar-month-panel > .mantine-Stack-root {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .calendar-day-panel {
@@ -560,7 +576,8 @@
 }
 
 .calendar-course-grid {
-  height: min(58vh, 560px);
+  flex: 1 1 0;
+  height: auto;
   min-height: 0;
 }
 
