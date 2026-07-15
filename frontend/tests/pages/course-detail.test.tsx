@@ -858,7 +858,7 @@ describe("CourseDetailPage", () => {
 
     renderDetailPage();
 
-    expect(await screen.findByText(generatedContent.title)).toBeInTheDocument();
+    expect(await screen.findByText("复习提纲 · 第七章 物理层")).toBeInTheDocument();
     expect(screen.queryByText(studyPlanHandout.title)).not.toBeInTheDocument();
   });
 
@@ -894,7 +894,7 @@ describe("CourseDetailPage", () => {
 
     renderDetailPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "期末复习提纲 更多操作" }));
+    fireEvent.click(await screen.findByRole("button", { name: "复习提纲 · 第七章 物理层 更多操作" }));
     const renameItemLabel = await screen.findByText("重命名");
     const deleteItemLabel = screen.getByText("删除");
     expect(renameItemLabel.closest('[role="menuitem"]')).toBeInTheDocument();
@@ -905,7 +905,7 @@ describe("CourseDetailPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
-    expect(await screen.findByRole("link", { name: "查看生成内容 自定义期末提纲" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "查看生成内容 复习提纲 · 自定义期末提纲" })).toHaveAttribute(
       "href",
       "/generated-contents/gen_1",
     );
@@ -917,7 +917,7 @@ describe("CourseDetailPage", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "自定义期末提纲 更多操作" }));
+    fireEvent.click(screen.getByRole("button", { name: "复习提纲 · 自定义期末提纲 更多操作" }));
     fireEvent.click(await screen.findByText("删除"));
     expect(screen.getByRole("dialog", { name: "删除生成内容" })).toHaveTextContent("自定义期末提纲");
     expect(screen.getByRole("dialog", { name: "删除生成内容" })).toHaveTextContent(
@@ -926,7 +926,7 @@ describe("CourseDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
-      expect(screen.queryByRole("link", { name: "查看生成内容 自定义期末提纲" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "查看生成内容 复习提纲 · 自定义期末提纲" })).not.toBeInTheDocument();
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/generated-contents/gen_1",

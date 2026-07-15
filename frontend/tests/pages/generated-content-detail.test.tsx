@@ -76,7 +76,7 @@ describe("GeneratedContentDetailPage", () => {
 
     renderDetailPage();
 
-    expect(await screen.findByRole("heading", { name: "期末复习提纲" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "复习提纲 · 期末" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "复习提纲" })).toBeInTheDocument();
     expect(screen.getByText("函数与极限")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "函数与极限" }));
@@ -118,7 +118,7 @@ describe("GeneratedContentDetailPage", () => {
 
     renderDetailPage("/generated-contents/gen_failed");
 
-    expect(await screen.findByRole("heading", { name: "课程自测" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Quiz" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("GENERATION_SCHEMA_INVALID");
     expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });

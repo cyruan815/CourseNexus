@@ -303,18 +303,16 @@ function QaWorkspace({
 }
 
 function ToolCard({
-  isGenerating,
   item,
   onGenerate,
 }: {
-  isGenerating: boolean;
   item: (typeof toolItems)[number];
   onGenerate: (contentType: string) => void;
 }) {
   const ToolIcon = item.icon;
   const canGenerate = Boolean(item.type);
   return (
-    <Card aria-label={canGenerate ? `生成 ${item.label}` : `${item.label} 暂未接入`} className={`course-detail-tool-card course-detail-tool-card-${item.tone}${item.type === "knowledge_list" ? " is-wide" : ""}`} component="button" disabled={!canGenerate || isGenerating} onClick={() => item.type && onGenerate(item.type)} padding="md" radius="md" type="button" withBorder>
+    <Card aria-label={canGenerate ? `生成 ${item.label}` : `${item.label} 暂未接入`} className={`course-detail-tool-card course-detail-tool-card-${item.tone}${item.type === "knowledge_list" ? " is-wide" : ""}`} component="button" disabled={!canGenerate} onClick={() => item.type && onGenerate(item.type)} padding="md" radius="md" type="button" withBorder>
       <Group className="course-detail-tool-head" justify="space-between" wrap="nowrap">
         <Box className="course-detail-tool-icon"><ToolIcon size={30} stroke={1.65} /></Box>
         <Stack gap={3}><Text fw={750}>{item.label}</Text><Text c="dimmed" size="sm">{item.description}</Text></Stack>
@@ -323,11 +321,11 @@ function ToolCard({
   );
 }
 
-function ToolsPanel({ pendingGenerations, onGenerate }: { pendingGenerations: PendingGeneration[]; onGenerate: (contentType: string) => void }) {
+function ToolsPanel({ onGenerate }: { onGenerate: (contentType: string) => void }) {
   return (
     <Box aria-label="学习工具区" className="course-detail-tools" component="section">
       <Title order={2}>{"学习工具"}</Title>
-      <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard isGenerating={pendingGenerations.some((pending) => pending.content_type === item.type)} item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
+      <Box className="course-detail-tool-grid">{toolItems.map((item) => <ToolCard item={item} key={item.label} onGenerate={onGenerate} />)}</Box>
     </Box>
   );
 }
@@ -566,7 +564,7 @@ export function CourseDetailWorkbench({
 
           <Stack className="course-detail-right" gap="sm">
             <Paper aria-label="学习工具与 AI 生成内容" className="course-detail-card course-detail-studio" component="section" radius="md" withBorder>
-              <ToolsPanel onGenerate={onGenerate} pendingGenerations={pendingGenerations} />
+              <ToolsPanel onGenerate={onGenerate} />
               <Divider aria-label="学习工具与 AI 生成内容分隔线" className="course-detail-studio-divider" />
               <GeneratedContentPanel contents={generatedContents} onDelete={onDeleteGeneratedContent} onRename={onRenameGeneratedContent} pendingGenerations={pendingGenerations} />
             </Paper>
