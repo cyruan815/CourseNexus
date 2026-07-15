@@ -28,7 +28,11 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { Link, useParams } from "react-router-dom";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
@@ -920,7 +924,12 @@ export function StudyTaskExecutionPage() {
                           </Paper>
                           {contentType === "handout" && readonlyHandoutMarkdown ? (
                             <Paper className="study-plan-handout-preview" radius="md" withBorder>
-                              <ReactMarkdown>{readonlyHandoutMarkdown}</ReactMarkdown>
+                              <ReactMarkdown
+                                rehypePlugins={[rehypeKatex]}
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                              >
+                                {readonlyHandoutMarkdown}
+                              </ReactMarkdown>
                             </Paper>
                           ) : null}
                           {contentType === "task_test" && readonlyTaskTestQuestions.length > 0 ? (

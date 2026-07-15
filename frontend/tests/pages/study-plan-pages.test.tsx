@@ -372,6 +372,14 @@ const generatedMarkdownHandout = {
     "## 学习目标",
     "",
     "- 理解 **向量空间** 的封闭性。",
+    "",
+    "## 延迟对比",
+    "",
+    "| 类型 | 计算方法 |",
+    "| --- | --- |",
+    "| 发送时延 | $d_{\\text{trans}} = \\frac{L}{R}$ |",
+    "",
+    "$$ d_{\\text{total}} = d_{\\text{proc}} + d_{\\text{queue}} + d_{\\text{trans}} + d_{\\text{prop}} $$",
   ].join("\n"),
   content_json: {
     format: "markdown",
@@ -1455,6 +1463,12 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "向量空间讲义" })).toBeInTheDocument();
     expect(screen.getByText("向量空间")).toBeInTheDocument();
     expect(screen.getByText("的封闭性。", { exact: false })).toBeInTheDocument();
+    const renderedTable = document.querySelector(".study-plan-handout-preview table");
+    expect(renderedTable).not.toBeNull();
+    expect(renderedTable?.querySelector("th")?.textContent).toBe("类型");
+    expect(renderedTable?.textContent).toContain("发送时延");
+    expect(document.querySelector(".study-plan-handout-preview .katex")).not.toBeNull();
+    expect(screen.queryByText("$$", { exact: false })).not.toBeInTheDocument();
     expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });
 
