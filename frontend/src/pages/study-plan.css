@@ -975,19 +975,14 @@
   transition: border-color 160ms ease, background-color 160ms ease;
 }
 
-.study-plan-execution-step:hover {
-  border-color: #bfdbfe;
-  background: #f8fbff;
-}
-
 .study-plan-execution-step:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
 .study-plan-execution-step.is-current {
-  border-color: #2f80ed;
-  background: #f8fbff;
+  border-color: #9dd6ce;
+  background: #f3fffc;
 }
 
 .study-plan-execution-step.is-complete {
@@ -995,9 +990,9 @@
   background: #f3fffc;
 }
 
-.study-plan-execution-step.is-complete:hover {
-  border-color: #9dd6ce;
-  background: #f3fffc;
+.study-plan-execution-step:hover {
+  border-color: #2f80ed;
+  background: #f8fbff;
 }
 
 .study-plan-step-icon {
@@ -1007,7 +1002,7 @@
 }
 
 .study-plan-step-icon.is-current {
-  color: #2f80ed;
+  color: #0f766e;
 }
 
 .study-plan-step-icon.is-complete {
