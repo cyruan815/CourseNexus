@@ -401,7 +401,6 @@ function GeneratedContentPanel({
   return (
     <>
       <Box aria-label="AI 生成内容区" className="course-detail-generated" component="section">
-        <Title order={2}>{"AI 生成内容"}</Title>
         {contents.length > 0 ? (
           <Stack className="course-detail-generated-list" gap="xs">
             {contents.map((content) => (

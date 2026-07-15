@@ -176,6 +176,7 @@ describe("CourseDetailPage", () => {
     expect(within(studio).getByRole("region", { name: "学习工具区" })).toBeInTheDocument();
     expect(within(studio).getByRole("separator", { name: "学习工具与 AI 生成内容分隔线" })).toBeInTheDocument();
     expect(within(studio).getByRole("region", { name: "AI 生成内容区" })).toBeInTheDocument();
+    expect(within(studio).queryByRole("heading", { name: "AI 生成内容" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "制定学习计划" })).toHaveAttribute("href", "/courses/crs_123/study-plans/new");
     expect(screen.queryByRole("button", { name: "查看今日待办（待接入）" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "查看全部（待接入）" })).not.toBeInTheDocument();
