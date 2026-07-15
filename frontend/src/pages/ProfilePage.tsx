@@ -24,17 +24,14 @@ import type { CheckinRangeRead, CheckinRead } from "../features/profile/api";
 import "./profile.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const weekdayLabels = ["", "Mon", "", "Wed", "", "Fri", ""];
+const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function dateDaysAgo(days: number): Date {
-  const today = new Date();
-  return new Date(today.getFullYear(), today.getMonth(), today.getDate() - days);
 }
 
 function buildDateRange(startDate: string, endDate: string): string[] {
@@ -47,6 +44,47 @@ function buildDateRange(startDate: string, endDate: string): string[] {
   }
 
   return dates;
+}
+
+function buildYearBounds(date: Date): { startDate: string; endDate: string; year: number } {
+  const year = date.getFullYear();
+  return {
+    endDate: formatDate(new Date(year, 11, 31)),
+    startDate: formatDate(new Date(year, 0, 1)),
+    year,
+  };
+}
+
+function dateKeyToDate(date: string): Date {
+  return new Date(`${date}T00:00:00`);
+}
+
+function buildHeatmapWeeks(dates: string[]): Array<Array<string | null>> {
+  const weeks: Array<Array<string | null>> = [];
+  let week: Array<string | null> = Array(7).fill(null);
+
+  for (const date of dates) {
+    const day = dateKeyToDate(date).getDay();
+    if (day === 0 && week.some(Boolean)) {
+      weeks.push(week);
+      week = Array(7).fill(null);
+    }
+    week[day] = date;
+  }
+
+  if (week.some(Boolean)) {
+    weeks.push(week);
+  }
+
+  return weeks;
+}
+
+function buildMonthMarkers(weeks: Array<Array<string | null>>): Array<{ label: string; weekIndex: number }> {
+  return monthLabels.map((label, monthIndex) => {
+    const monthPrefix = `-${String(monthIndex + 1).padStart(2, "0")}-`;
+    const weekIndex = weeks.findIndex((week) => week.some((date) => date?.includes(monthPrefix)));
+    return { label, weekIndex: Math.max(0, weekIndex) };
+  });
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -82,9 +120,12 @@ export function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const endDate = useMemo(() => formatDate(dateDaysAgo(0)), []);
-  const startDate = useMemo(() => formatDate(dateDaysAgo(13)), []);
+  const todayDate = useMemo(() => new Date(), []);
+  const todayDateKey = useMemo(() => formatDate(todayDate), [todayDate]);
+  const { endDate, startDate, year } = useMemo(() => buildYearBounds(todayDate), [todayDate]);
   const rangeDates = useMemo(() => buildDateRange(startDate, endDate), [endDate, startDate]);
+  const heatmapWeeks = useMemo(() => buildHeatmapWeeks(rangeDates), [rangeDates]);
+  const monthMarkers = useMemo(() => buildMonthMarkers(heatmapWeeks), [heatmapWeeks]);
   const checkinsByDate = useMemo(() => {
     const map = new Map<string, CheckinRead>();
     for (const item of rangeCheckins?.items ?? []) {
@@ -101,7 +142,7 @@ export function ProfilePage() {
 
     Promise.all([
       fetchCurrentUser(),
-      fetchCheckinDay(endDate),
+      fetchCheckinDay(todayDateKey),
       fetchCheckinRange(startDate, endDate),
     ])
       .then(([nextUser, nextTodayCheckin, nextRangeCheckins]) => {
@@ -125,7 +166,7 @@ export function ProfilePage() {
     return () => {
       ignore = true;
     };
-  }, [endDate, startDate]);
+  }, [endDate, startDate, todayDateKey]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -204,7 +245,7 @@ export function ProfilePage() {
               <Group justify="space-between">
                 <Stack gap={2}>
                   <Title order={2}>今日打卡</Title>
-                  <Text c="dimmed" size="sm">{endDate}</Text>
+                  <Text c="dimmed" size="sm">{todayDateKey}</Text>
                 </Stack>
                 <Badge color={todayCheckin?.has_tasks ? "blue" : "gray"} variant="light">
                   {colorLevelLabel(todayCheckin?.color_level ?? 0)}
@@ -248,24 +289,66 @@ export function ProfilePage() {
         <Paper className="profile-card" radius="md" withBorder>
           <Stack gap="md">
             <Group justify="space-between">
-              <Title order={2}>近 14 天打卡颜色</Title>
+              <Title order={2}>{year} 年打卡颜色</Title>
               <Text c="dimmed" size="sm">{startDate} 至 {endDate}</Text>
             </Group>
-            <Box className="profile-checkin-strip">
-              {rangeDates.map((date) => {
-                const checkin = checkinsByDate.get(date);
-                const level = checkin?.color_level ?? 0;
-                return (
-                  <Box
-                    aria-label={`${date} 打卡颜色等级 ${level}`}
-                    className={`profile-checkin-cell level-${level}`}
-                    key={date}
-                    title={`${date} · ${colorLevelLabel(level)}`}
-                  >
-                    <span>{date.slice(8)}</span>
-                  </Box>
-                );
-              })}
+            <Box className="profile-year-heatmap">
+              <Box
+                className="profile-heatmap-months"
+                style={{ gridTemplateColumns: `32px repeat(${heatmapWeeks.length}, 12px)` }}
+              >
+                <span aria-hidden="true" />
+                {monthMarkers.map((marker) => (
+                  <span key={marker.label} style={{ gridColumn: marker.weekIndex + 2 }}>
+                    {marker.label}
+                  </span>
+                ))}
+              </Box>
+              <Box className="profile-heatmap-body">
+                <Box className="profile-heatmap-weekdays" aria-hidden="true">
+                  {weekdayLabels.map((label, index) => (
+                    <span key={`${label}-${index}`}>{label}</span>
+                  ))}
+                </Box>
+                <Box
+                  className="profile-heatmap-grid"
+                  style={{ gridTemplateColumns: `repeat(${heatmapWeeks.length}, 12px)` }}
+                >
+                  {heatmapWeeks.flatMap((week, weekIndex) =>
+                    week.map((date, dayIndex) => {
+                      if (!date) {
+                        return (
+                          <span
+                            aria-hidden="true"
+                            className="profile-checkin-cell is-empty"
+                            key={`empty-${weekIndex}-${dayIndex}`}
+                            style={{ gridColumn: weekIndex + 1, gridRow: dayIndex + 1 }}
+                          />
+                        );
+                      }
+
+                      const checkin = checkinsByDate.get(date);
+                      const level = checkin?.color_level ?? 0;
+                      return (
+                        <Box
+                          aria-label={`${date} 打卡颜色等级 ${level}`}
+                          className={`profile-checkin-cell level-${level}`}
+                          key={date}
+                          style={{ gridColumn: weekIndex + 1, gridRow: dayIndex + 1 }}
+                          title={`${date} · ${colorLevelLabel(level)}`}
+                        />
+                      );
+                    }),
+                  )}
+                </Box>
+              </Box>
+              <Group className="profile-heatmap-legend" gap={6} justify="flex-end">
+                <Text c="dimmed" size="xs">Less</Text>
+                {[0, 2, 3, 4, 5].map((level) => (
+                  <span className={`profile-checkin-cell level-${level}`} key={level} />
+                ))}
+                <Text c="dimmed" size="xs">More</Text>
+              </Group>
             </Box>
           </Stack>
         </Paper>
