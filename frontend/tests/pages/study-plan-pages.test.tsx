@@ -812,17 +812,17 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
 
     expect(screen.getByText("你想从哪天开始学习？")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /A\. 今天/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /B\. 明天/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /C\. 下周一/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /D\. 自定义开始日期/ })).toBeInTheDocument();
+    expect(screen.getByLabelText(/A\. 今天/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/B\. 明天/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/C\. 下周一/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/D\. 自定义开始日期/)).toBeInTheDocument();
+    expect(screen.getByText("这次计划准备学几天？")).toBeInTheDocument();
+    expect(screen.getByLabelText(/A\. 2 天/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/D\. 自定义学习天数/)).toBeInTheDocument();
     expect(screen.getByText("你对「向量空间」了解多少？")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
-    expect(screen.getByText("这次计划准备学几天？")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /A\. 2 天/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /D\. 自定义学习天数/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /A\. 2 天/ }));
+    fireEvent.click(screen.getByLabelText(/B\. 明天/));
+    fireEvent.click(screen.getByLabelText(/A\. 2 天/));
     expect(await screen.findByText(/2026-07-13 - 2026-07-14/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
@@ -1002,8 +1002,8 @@ describe("study plan pages", () => {
     });
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
-    fireEvent.click(screen.getByRole("button", { name: /A\. 2 天/ }));
+    fireEvent.click(screen.getByLabelText(/B\. 明天/));
+    fireEvent.click(screen.getByLabelText(/A\. 2 天/));
     fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
     fireEvent.click(screen.getByLabelText("概念理解"));
 
@@ -1090,8 +1090,8 @@ describe("study plan pages", () => {
     });
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
     expect(await screen.findByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /B\. 明天/ }));
-    fireEvent.click(screen.getByRole("button", { name: /A\. 2 天/ }));
+    fireEvent.click(screen.getByLabelText(/B\. 明天/));
+    fireEvent.click(screen.getByLabelText(/A\. 2 天/));
     fireEvent.click(screen.getByLabelText("听说过，但不清楚"));
     fireEvent.click(screen.getByLabelText("概念理解"));
 

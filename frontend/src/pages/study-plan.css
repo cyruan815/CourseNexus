@@ -60,15 +60,15 @@
   display: grid;
   grid-template-columns: minmax(0, 820px);
   justify-content: center;
-  align-content: start;
+  align-content: center;
   flex: 1 1 auto;
-  overflow: visible;
+  overflow: hidden;
   min-height: 0;
   padding-block: clamp(18px, 6vh, 72px);
 }
 
 .study-plan-create-shell {
-  overflow: auto;
+  overflow: hidden;
   padding: 14px 20px 32px;
 }
 
@@ -84,7 +84,7 @@
   border-color: #d6e0eb;
   background: #ffffff;
   padding: 26px;
-  overflow: visible;
+  overflow: hidden;
   box-shadow: 0 18px 42px rgba(31, 41, 55, 0.08);
 }
 
@@ -92,15 +92,28 @@
   max-width: 700px;
   width: 100%;
   justify-self: center;
-  padding: 30px;
+  padding: 28px;
 }
 
 .study-plan-create-flow > .study-plan-process-panel {
+  align-self: center;
+  justify-self: center;
+  max-width: 860px;
+  width: 100%;
   border-color: #cfe5e4;
   background:
     linear-gradient(135deg, rgba(248, 253, 255, 0.95), rgba(241, 255, 250, 0.92)),
     #f6fffc;
   padding: 30px;
+}
+
+.study-plan-create-flow > .study-plan-questionnaire-card {
+  align-self: center;
+  width: 100%;
+  max-height: min(760px, calc(100vh - 152px));
+  overflow: auto;
+  padding: 28px 34px;
+  scrollbar-gutter: stable;
 }
 
 .study-plan-panel,
@@ -260,13 +273,44 @@
   width: 100%;
 }
 
+.study-plan-goal-input {
+  width: 100%;
+}
+
+.study-plan-goal-input-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  color: #0f172a;
+  font-weight: 750;
+}
+
 .study-plan-goal-input .mantine-Textarea-input {
-  min-height: 190px;
+  min-height: 184px;
+  border-color: #bde7df;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 250, 0.62), rgba(255, 255, 255, 0.96)),
+    #ffffff;
+  color: #0f172a;
+  line-height: 1.7;
+  padding: 18px;
   resize: vertical;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.study-plan-goal-input .mantine-Textarea-input:focus {
+  border-color: #66c8d5;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+  outline: none;
+}
+
+.study-plan-goal-input .mantine-Textarea-input::placeholder {
+  color: #64748b;
 }
 
 .study-plan-goal-actions {
   align-items: flex-end;
+  gap: 16px;
 }
 
 .study-plan-preparing-card,
@@ -464,11 +508,66 @@
 
 .study-plan-date-question {
   display: grid;
-  gap: 6px;
+  gap: 18px;
+  border: 1px solid #d7eee9;
+  border-radius: 10px;
+  background: #f8fffd;
+  padding: 16px;
 }
 
-.study-plan-date-question .mantine-Button-root {
-  min-height: 36px;
+.study-plan-date-question .mantine-RadioGroup-label,
+.study-plan-questionnaire-card .mantine-RadioGroup-label,
+.study-plan-questionnaire-card .mantine-Textarea-label {
+  margin-bottom: 0;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1.45;
+}
+
+.study-plan-option-list,
+.study-plan-questionnaire-card .mantine-RadioGroup-root .mantine-Stack-root {
+  max-width: 560px;
+}
+
+.study-plan-option-list .mantine-Radio-root,
+.study-plan-questionnaire-card .mantine-RadioGroup-root .mantine-Radio-root {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.study-plan-option-list .mantine-Radio-root:hover,
+.study-plan-questionnaire-card .mantine-RadioGroup-root .mantine-Radio-root:hover {
+  border-color: #dbeafe;
+  background: #f8fbff;
+}
+
+.study-plan-option-list .mantine-Radio-body,
+.study-plan-questionnaire-card .mantine-Radio-body {
+  align-items: flex-start;
+}
+
+.study-plan-option-list .mantine-Radio-label,
+.study-plan-questionnaire-card .mantine-Radio-label {
+  color: #1f2937;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.study-plan-questionnaire-actions {
+  gap: 14px 18px;
+}
+
+.study-plan-questionnaire-actions > .mantine-Text-root {
+  min-width: min(100%, 280px);
+  flex: 1 1 280px;
+}
+
+.study-plan-questionnaire-actions > .mantine-Button-root {
+  flex: 0 0 auto;
 }
 
 .study-plan-date-custom-input {
@@ -485,7 +584,7 @@
   min-height: 36px;
   width: 100%;
   border: 1px solid #ced4da;
-  border-radius: 4px;
+  border-radius: 8px;
   background: #ffffff;
   color: #1f2937;
   font: inherit;
@@ -951,10 +1050,19 @@
   }
 
   .study-plan-grid,
-  .study-plan-create-flow,
   .study-plan-detail-layout,
   .study-plan-execution-grid {
     overflow: auto;
+  }
+
+  .study-plan-create-flow {
+    overflow: hidden;
+    padding-block: 16px;
+  }
+
+  .study-plan-create-flow > .study-plan-questionnaire-card {
+    max-height: calc(100vh - 138px);
+    padding: 22px;
   }
 }
 
@@ -963,5 +1071,15 @@
   .study-plan-detail-hero > .mantine-Group-root {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .study-plan-create-nav,
+  .study-plan-goal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .study-plan-goal-actions .mantine-Button-root {
+    align-self: flex-end;
   }
 }

@@ -16,7 +16,7 @@
 
 - 用户先填写自然语言 `goal_text`，点击“提交”。当前创建页不再展示资料范围选择器、开始日期、结束日期、每日时长和学习方式的大表单；资料范围默认使用本课程全部已解析资料，仍会在进入流程前校验至少有一份 parsed 资料。
 - 提交目标后，前端用当前 `goal_text` 和当前 `material_scope` 请求配置解析，再用解析后的配置请求学情诊断题。等待期间中间卡片展示轻量问卷准备动画，只保留标题、说明和沿卡片边框持续流动的等待动效，不显示伪日志或步骤文字，不提供伪造后端能力。
-- 问卷阶段把前端补问和后端诊断题合并展示。当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。因此自然语言解析后若仍缺少完整日期范围，前端只按缺失项补问：缺 `start_date` 时展示 A 今天 / B 明天 / C 下周一 / D 自定义开始日期，缺 `duration_days` 或 `end_date` 时展示 A 2 天 / B 3 天 / C 7 天 / D 自定义学习天数。前端用日历日期运算派生 `end_date`，并把最终 `start_date + end_date` 放入 preview / save 请求。每日学习时长仍不作为必填项。
+- 问卷阶段把前端补问和后端诊断题合并展示。当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。因此自然语言解析后若仍缺少完整日期范围，前端在问卷顶部同时展示开始日期和学习天数补问：开始日期提供 A 今天 / B 明天 / C 下周一 / D 自定义开始日期，学习天数提供 A 2 天 / B 3 天 / C 7 天 / D 自定义学习天数。前端用日历日期运算派生 `end_date`，并把最终 `start_date + end_date` 放入 preview / save 请求。每日学习时长仍不作为必填项。
 - `daily_available_minutes` 不作为创建页必填项；只有自然语言解析出有效每日时长时才随 preview 请求提交，否则省略，让后端按资料量估算。`preference` 未解析时使用默认 `balanced`。
 - 提交问卷前必须回答所有必填诊断题，并补齐完整学习日期范围；否则不调用 profile、preview 或 save。
 - 点击“提交问卷”后前端自动依次调用 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles`、`POST /api/v1/courses/{course_id}/study-plans/preview` 和 `POST /api/v1/courses/{course_id}/study-plans`；用户不再看到手动预览 Modal、重新生成按钮或保存按钮。
@@ -124,6 +124,6 @@ C13 的“预览确认 Modal”已被当前创建页自动流程取代，代码�
 - 等待配置解析 / 诊断题生成时，中间卡片展示轻量问卷准备动画，只保留标题、说明和沿卡片边框持续流动的等待动效；等待 profile / preview / save 链路时，中间卡片展示日历拆分动画，保留月份左右切换用于预览计划落点，不提供年月浮层或伪造后端进度日志。
 - 计划生成等待页不再读取当前课程已有计划日历摘要，也不展示已有计划占用。保存完成前日历保持空格子；保存完成后前端把本次 preview tasks 回填到对应日期小格，并显示“进入计划”按钮，由用户确认预览后手动跳转计划详情页。
 - 创建页不再挂载工作台顶栏；页面内只保留“返回上一步”和“回到课程详情”。“返回上一步”用于从问卷阶段回到目标输入阶段，并清空已生成问卷和当前错误。
-- 解析后缺少日期范围时，补问作为问卷题目展示，不恢复旧大表单：开始日期为 A 今天 / B 明天 / C 下周一 / D 自定义；学习天数为 A 2 天 / B 3 天 / C 7 天 / D 自定义。缺什么问什么，前端派生 `end_date`。
+- 解析后缺少日期范围时，补问作为问卷题目展示，不恢复旧大表单：开始日期为 A 今天 / B 明天 / C 下周一 / D 自定义；学习天数为 A 2 天 / B 3 天 / C 7 天 / D 自定义。只要日期范围不完整，这两组轻量单选题会一起出现在问卷顶部，前端派生 `end_date`。
 - 后端返回的学情诊断题和前端日期补问在同一张问卷中展示；用户点击“提交问卷”后，前端自动生成诊断 profile、生成 preview、保存计划并跳转详情页。
 - 当前创建页不再挂载 `DiagnosticWizard`、`StudyPlanMaterialScopeSelector`、预览 Modal、重新生成按钮或手动保存按钮；页面测试入口仍为 `frontend/tests/pages/study-plan-pages.test.tsx`。
