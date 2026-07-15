@@ -212,7 +212,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 | `POST /api/v1/courses/{course_id}/study-plan-config-parses` | 已实现 | 自然语言配置回填；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` | 已实现 | 基于目标、确认配置和当前 parsed 资料范围生成固定 3 个 topic 掌握问题、1 个薄弱方向问题和 1 个可选补充输入；模型失败或输出不足时 fallback 补足；不写数据库。 |
 | `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` | 已实现 | 校验 topic 仍属于当前资料范围，并归纳 `prior_knowledge_level`、`foundation_needed`、`weak_topics`、`weak_area` 和 `explanation_style`；不写数据库。 |
-| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于当前 `material_scope`、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，但当前 schema 仍要求 `start_date` 且要求 `end_date` 或 `duration_days` 至少一个。响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy`、当前资料范围的 `generation_metadata.material_quality` 和基于最终任务树统计的 `capacity`。当前前端创建页把学情诊断作为生成 preview 的必填前置条件，并且不再为缺失日期展示前端补问表单；若自然语言解析和诊断链路未补齐日期，短期内可能收到后端校验错误，后续应由诊断题或 build 契约承接缺失日期。 |
+| `POST /api/v1/courses/{course_id}/study-plans/preview` | 已实现 | 基于当前 `material_scope`、英文 `preference` 和可选 `diagnostic_profile` 生成 preview；请求可省略 `daily_available_minutes`，但当前 schema 仍要求 `start_date` 且要求 `end_date` 或 `duration_days` 至少一个。响应返回最终 `daily_available_minutes`、新的 `recommended_daily_minutes`、`daily_minutes_source`、`coverage`、派生后的 `generation_metadata.planner_strategy`、当前资料范围的 `generation_metadata.material_quality` 和基于最终任务树统计的 `capacity`。当前前端创建页把学情诊断作为生成 preview 的必填前置条件；若自然语言解析缺少日期范围，前端会在混合问卷中按缺失项补问开始日期和学习天数，并派生 `end_date` 后再调用 preview。 |
 | `POST /api/v1/courses/{course_id}/study-plans` | 已实现 | 保存用户确认的任务树；请求体 `client_flow` 默认为 `legacy`。新向导必须传 `client_flow = "wizard_v1"` 和 preview 中确认后的非空 `tasks`；旧客户端省略 `tasks` 时仍先生成 preview。 |
 | `POST /api/v1/study-plans/{plan_id}/regeneration-previews` | 已实现 | 基于已保存配置生成新 preview，不写数据库；请求覆盖项优先，未传 `diagnostic_profile` 时继承保存值。 |
 | `PUT /api/v1/study-plans/{plan_id}` | 已实现 | 基于 `expected_updated_at` 原子替换配置和任务树。 |
@@ -221,7 +221,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 
 学前诊断接口统一使用 `question_version = "study_plan_diagnostic_v2"`。掌握程度枚举为 `none`、`heard`、`some`、`familiar`；薄弱方向枚举为 `concept`、`calculation`、`application`、`memorization`、`other`。诊断问题的 `topic_mastery` 固定为 3 道，topic 必须来自当前 `material_scope` 解析后的资料上下文；正常路径使用 `study_plan_diagnostic` 模型选择 topic 候选，模型失败、输出不足、重复或无法映射到资料时由后端 fallback 补足，并在 `generation_metadata.diagnostic_questions` 记录 `source` 和 `fallback_reason`。
 
-前端创建页的 `StudyPlanPreviewRequest` 类型允许 `start_date`、`end_date` 和 `duration_days` 为空或省略，以表达“自然语言尚未解析出日期，等待诊断 / 后端补齐”的流程语义。后端 schema 在完成对应契约升级前仍可拒绝缺日期 preview，前端只展示后端错误，不新增日期补问表单。
+前端创建页的 `StudyPlanPreviewRequest` 类型允许 `start_date`、`end_date` 和 `duration_days` 为空或省略，以表达“自然语言解析阶段尚未得到日期”的中间状态；但当前创建页在真正调用 preview 前会通过混合问卷补齐日期范围。后端 schema 在完成对应契约升级前仍可拒绝缺日期 preview，前端不得在日期缺失时直接提交 preview。
 
 `study-plan-diagnostic-profiles` 会重新基于当前 `material_scope` 计算合法 topic 集。若请求中的 `question_version` 过期，或 `topic_mastery[].topic_id` 不属于当前资料范围，返回 `409 DIAGNOSTIC_STALE`，`details.invalid_topic_ids` 列出失效 topic。无可用 parsed 资料返回 `400 NO_PARSED_MATERIAL`。归纳出的 `diagnostic_profile` 可直接传给 `POST /api/v1/courses/{course_id}/study-plans/preview` 的 `diagnostic_profile` 字段；preview 会把英文 `preference` 派生为 `planner_strategy` 并与该 profile 一起写入 planner reduce prompt，用于影响 `content_depth`、例题强度、测评强度、review 强度、补基础、薄弱主题顺序和颗粒度、薄弱方向强化以及 description 解释风格；保存时继续追溯 `diagnostic_profile` 和 `planner_strategy`，不在本接口层提前生成讲义或任务测试题。
 

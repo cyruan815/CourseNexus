@@ -3,19 +3,19 @@
 ## 状态
 
 - 日期：2026-07-14
-- 状态：设计已确认；后端每日学习时间自动估算、配置补问字段、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。前端完整自然语言向导尚未接入，当前主页面仍是手动配置 + preview 的契约稳定版。
+- 状态：设计已确认；后端每日学习时间自动估算、配置补问字段、学前诊断接口、diagnostic_profile 影响 planner 策略、preference 派生 `planner_strategy` 和诊断后 capacity 闭环已实施。前端创建页已接入自然语言目标 -> 混合问卷 -> 自动 preview/save -> 计划详情的最小闭环。
 - 范围：从用户点进学习计划生成开始，到自然语言配置解析、开始前设置中的配置补问与学前诊断、计划 preview、确认保存和进入计划详情为止的前端页面流、配置字段、学前诊断、后端契约和状态失效规则。
 
 ## 2026-07-14 前端 C13 落地说明
 
-当前前端创建页已按“目标输入 + 资料范围 + 必选学情诊断 + 预览确认”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示。由于后端 preview/save 契约仍要求日期范围，2026-07-15 起创建页在自然语言解析后若缺少完整日期，会用轻量题目补问开始日期和学习天数，并由前端派生 `end_date` 后继续诊断与预览。
+当前前端创建页已按“目标输入 + 自动生成问卷 + 混合问卷 + 自动生成并保存计划”落地，不再把开始日期、结束日期、每日时长和学习方式作为首屏大表单展示，也不再让用户手动打开 preview Modal 或点击保存。由于后端 preview/save 契约仍要求日期范围，2026-07-15 起创建页在自然语言解析后若缺少完整日期，会在问卷中用轻量题目补问开始日期和学习天数，并由前端派生 `end_date` 后自动进入 preview/save 链路。
 
 - 自然语言解析出的 `start_date`、`duration_days` / `end_date`、`daily_available_minutes` 和 `preference` 会作为确认配置进入诊断题请求。
 - 由于后端 `StudyPlanBuildRequest` 当前仍强制要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个，而诊断 profile 还不补回日期或天数，前端当前只补问最小必要日期信息：开始日期和学习天数。补问按缺失项逐题展示，每题提供 A/B/C 合理选项和 D 自定义，不恢复旧的大配置表单；`daily_available_minutes` 仍可省略并交由后端估算。
 - 学情诊断在创建页为必填；没有 `diagnostic_profile` 时不生成 preview。
 - `daily_available_minutes` 不必填；只有自然语言明确解析出有效分钟数时才提交，否则由后端估算。
-- 计划 preview 使用大 Modal 展示，Modal 内完成重新生成和保存；保存仍提交 `client_flow = "wizard_v1"` 与用户看到的 exact preview tasks。
-- “指定资料”模式从 0 份已选开始，未勾选任何 parsed 资料时前端提示必须选择至少一份资料。
+- 创建页提交问卷后自动调用诊断 profile、preview 和 save；保存仍提交 `client_flow = "wizard_v1"` 与 preview exact tasks，保存成功后直接跳转计划详情。
+- 当前创建页默认使用全部已解析资料，不在首屏展示资料选择器；若资料范围内没有 parsed 资料，前端在进入流程前提示先上传或等待解析。
 - 预览和详情页的任务说明改为用户阅读结构：按 `含义 / 条件 / 步骤 / 练习检查` 等片段分行；详情页隐藏内部 `mat_xxx` 资料 ID。
 
 ## 已实施入口：每日学习时间规则
@@ -789,7 +789,7 @@ else:
 
 ## 2026-07-13 前端 C2 诊断向导落地
 
-`/courses/:courseId/study-plans/new` 已接入 Step 3 的最小闭环：创建页内嵌 `DiagnosticWizard`，先请求后端诊断题，再提交答案生成 `diagnostic_profile`，最后把该 profile 合入 preview 请求。诊断是可跳过的可选增强项；未生成 profile 时，preview 请求只携带基础配置和资料范围。当前第一版仍固定 `material_scope = { include_all_parsed_materials: true, material_ids: [] }`，不提供资料范围选择；因此前端在 `goal_text` 变化或重新获取诊断题时主动清空诊断结果，日期和每日时长变化只标记 preview 过期。
+历史阶段：`/courses/:courseId/study-plans/new` 曾以内嵌 `DiagnosticWizard` 接入 Step 3 最小闭环。2026-07-15 后当前创建页已改为混合问卷，学情诊断为必填，诊断题和日期补问在同一张卡片中提交；问卷提交后自动生成 profile、preview 和正式计划。
 
 前端不会在本地推导 `prior_knowledge_level`、`foundation_needed`、`weak_topics` 或 `explanation_style`，这些字段必须来自 `POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 的响应。若后端返回 `NO_PARSED_MATERIAL` 或 `DIAGNOSTIC_STALE`，向导停留在诊断区域并提示用户上传/等待解析或重新获取题目。
 
@@ -813,7 +813,7 @@ else:
 
 ## 2026-07-14 前端 C4 资料范围选择落地
 
-`/courses/:courseId/study-plans/new` 已接入资料范围选择。创建页通过 `listMaterials(courseId)` 获取课程资料，`StudyPlanMaterialScopeSelector` 只允许选择 `parse_status = "parsed"` 的资料；解析中、待解析和解析失败资料不可勾选。用户可以选择“全部已解析资料”，也可以选择具体资料 ID，前端始终提交 `MaterialScope`，不提交文件夹 ID。
+历史阶段：`/courses/:courseId/study-plans/new` 曾接入资料范围选择，`StudyPlanMaterialScopeSelector` 只允许选择 `parse_status = "parsed"` 的资料。2026-07-15 自动闭环版本暂不在首屏展示资料范围选择器，当前默认提交全部已解析资料的 `MaterialScope`。
 
 C4 后，`POST /study-plan-config-parses`、`POST /study-plan-diagnostic-questions`、`POST /study-plan-diagnostic-profiles`、`POST /study-plans/preview` 和保存请求都复用创建页当前 `materialScope`。资料范围变化会清空配置解析未补齐提示、清空已有 `diagnostic_profile`，并把现有 preview 标记为过期以禁用保存。创建页草稿同时持久化 `materialScope`，刷新后恢复。
 

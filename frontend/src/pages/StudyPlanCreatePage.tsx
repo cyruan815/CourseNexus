@@ -6,8 +6,8 @@ import {
   Button,
   Divider,
   Group,
-  Modal,
   Paper,
+  Radio,
   Skeleton,
   Stack,
   Text,
@@ -15,13 +15,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import {
-  IconCalendarStats,
-  IconClipboardCheck,
-  IconRefresh,
-  IconRotateClockwise,
-  IconSend,
-} from "@tabler/icons-react";
+import { IconSend } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
@@ -29,20 +23,20 @@ import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
 import type { Material, MaterialScope } from "../features/materials/types";
-import { StudyPlanTaskDescription } from "../features/study-plans/components/StudyPlanTaskDescription";
 import {
+  createDiagnosticProfile,
+  fetchDiagnosticQuestions,
   parseStudyPlanConfig,
   previewStudyPlan,
   saveStudyPlan,
 } from "../features/study-plans/api";
-import { DiagnosticWizard } from "../features/study-plans/components/DiagnosticWizard";
-import { StudyPlanMaterialScopeSelector } from "../features/study-plans/components/StudyPlanMaterialScopeSelector";
 import type {
+  MasteryLevel,
   PlanPreference,
-  StudyPlanDiagnosticProfile,
-  StudyPlanPreview,
+  StudyPlanDiagnosticQuestion,
   StudyPlanPreviewRequest,
-  StudyPlanPreviewSubtask,
+  StudyPlanTopicMasteryAnswer,
+  WeakArea,
 } from "../features/study-plans/types";
 import type { Course } from "../types/course";
 import "./study-plan.css";
@@ -53,6 +47,7 @@ const defaultScope: MaterialScope = {
 };
 const defaultPreference = "balanced" as const;
 const minimumDailyMinutes = 30;
+type StudyPlanCreatePhase = "goal" | "preparing" | "questionnaire" | "generating";
 
 interface StudyPlanCreateDraftStorage {
   goalText?: string;
@@ -62,7 +57,6 @@ interface StudyPlanCreateDraftStorage {
   dailyMinutes?: string;
   preference?: PlanPreference;
   materialScope?: MaterialScope;
-  diagnosticProfile?: StudyPlanDiagnosticProfile | null;
 }
 
 function createStudyPlanIdempotencyKey(courseId: string): string {
@@ -103,13 +97,6 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-const preferenceOptions: Array<{ value: PlanPreference; label: string }> = [
-  { value: "fast_track", label: "快速通关" },
-  { value: "balanced", label: "均衡学习" },
-  { value: "mastery", label: "深入掌握" },
-  { value: "sprint", label: "冲刺强化" },
-];
-
 const preferenceLabels: Record<PlanPreference, string> = {
   fast_track: "快速通关",
   balanced: "均衡学习",
@@ -131,6 +118,20 @@ const unresolvedFieldLabels: Record<string, string> = {
 };
 
 const userEditableParseFields = new Set(Object.keys(unresolvedFieldLabels));
+
+const questionnaireLoadingLogs = [
+  ["+00.018", "INFO", "parser", "解析学习目标..."],
+  ["+00.204", "INFO", "material", "检查可用课程资料..."],
+  ["+00.389", "INFO", "diagnostic", "生成学情诊断题..."],
+  ["+01.142", "OK", "wizard", "整理问卷..."],
+];
+
+const planGeneratingLogs = [
+  ["+00.018", "INFO", "profile", "汇总问卷答案..."],
+  ["+00.204", "INFO", "diagnostic", "生成学习诊断..."],
+  ["+01.142", "INFO", "planner", "规划每日任务..."],
+  ["+02.841", "OK", "save", "保存学习计划..."],
+];
 
 function resolveEndDate(startDate: string | null | undefined, durationDays: number | null | undefined): string | null {
   if (!startDate || !durationDays) {
@@ -258,88 +259,46 @@ function visibleUnresolvedFields(fields: string[], values: {
   ));
 }
 
-function subtaskTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    learn: "学习",
-    quiz: "练习",
-    review: "复习",
-    test: "测试",
-  };
-  return labels[type] ?? type;
+function isMasteryLevel(value: string): value is MasteryLevel {
+  return ["none", "heard", "some", "familiar"].includes(value);
 }
 
-function subtaskTone(type: string): string {
-  const tones: Record<string, string> = {
-    learn: "violet",
-    quiz: "blue",
-    review: "grape",
-    test: "orange",
-  };
-  return tones[type] ?? "gray";
+function isWeakArea(value: string): value is WeakArea {
+  return ["concept", "calculation", "application", "memorization", "other"].includes(value);
 }
 
-function StudyPlanPreviewSubtaskItem({ subtask }: { subtask: StudyPlanPreviewSubtask }) {
+function sortDiagnosticQuestions(questions: StudyPlanDiagnosticQuestion[]) {
+  return [...questions].sort((left, right) => left.sort_order - right.sort_order);
+}
+
+function StudyPlanGenerationLog({
+  logs,
+  title,
+}: {
+  logs: string[][];
+  title: string;
+}) {
   return (
-    <Paper className="study-plan-subtask" radius="md" withBorder>
-      <Stack gap={8}>
-        <Group align="flex-start" className="study-plan-subtask-header" justify="space-between" wrap="nowrap">
-          <Text fw={700}>{subtask.title}</Text>
-          <Badge className="study-plan-type-badge" color={subtaskTone(subtask.subtask_type)} variant="light">
-            {subtaskTypeLabel(subtask.subtask_type)}
-          </Badge>
+    <Paper className="study-plan-generation-log" radius="md" role="status" withBorder>
+      <Group className="study-plan-generation-log-header" justify="space-between" wrap="nowrap">
+        <Text fw={800}>{title}</Text>
+        <Group className="study-plan-generation-dots" gap={6}>
+          {Array.from({ length: 7 }).map((_, index) => (
+            <Box aria-hidden="true" key={index} />
+          ))}
         </Group>
-        <StudyPlanTaskDescription description={subtask.description} />
-      </Stack>
-    </Paper>
-  );
-}
-
-function StudyPlanPreviewPanel({ preview }: { preview: StudyPlanPreview | null }) {
-  if (!preview) {
-    return (
-      <Paper className="study-plan-preview-empty" radius="md" withBorder>
-        <IconCalendarStats size={44} stroke={1.6} />
-        <Stack gap={4}>
-          <Text fw={750}>等待生成预览</Text>
-          <Text c="dimmed" size="sm">
-            输入目标、选择资料并完成诊断后，再生成可确认的学习任务安排。
-          </Text>
-        </Stack>
-      </Paper>
-    );
-  }
-
-  return (
-    <Stack gap="sm">
-      <Group justify="space-between" wrap="nowrap">
-        <Stack gap={2}>
-          <Text fw={750}>{preview.title}</Text>
-          <Text c="dimmed" size="sm">
-            {preview.start_date} - {preview.end_date} / 每日建议 {preview.daily_available_minutes} 分钟
-          </Text>
-        </Stack>
-        <Badge color="teal" variant="light">预览已生成</Badge>
       </Group>
-      {preview.tasks.map((task) => (
-        <Paper className="study-plan-task" key={`${task.task_date}-${task.sort_order}`} radius="md" withBorder>
-          <Group justify="space-between" wrap="nowrap">
-            <Stack gap={2}>
-              <Text fw={750}>{task.title}</Text>
-              <Text c="dimmed" size="sm">{task.task_date}</Text>
-            </Stack>
-            <Badge color="blue" variant="light">未开始</Badge>
-          </Group>
-          <Stack gap="xs" mt="sm">
-            {task.subtasks.map((subtask) => (
-              <StudyPlanPreviewSubtaskItem
-                key={`${task.task_date}-${subtask.sort_order}-${subtask.title}`}
-                subtask={subtask}
-              />
-            ))}
-          </Stack>
-        </Paper>
-      ))}
-    </Stack>
+      <Box className="study-plan-generation-log-body">
+        {logs.concat(logs).map(([time, level, scope, message], index) => (
+          <Box className="study-plan-generation-log-row" key={`${time}-${scope}-${index}`}>
+            <Text component="span">{time}</Text>
+            <Text component="span" data-level={level}>{level}</Text>
+            <Text component="span">{scope}</Text>
+            <Text component="span">{message}</Text>
+          </Box>
+        ))}
+      </Box>
+    </Paper>
   );
 }
 
@@ -357,19 +316,15 @@ export function StudyPlanCreatePage() {
   const [isCustomStartDateOpen, setIsCustomStartDateOpen] = useState(false);
   const [isCustomDurationDaysOpen, setIsCustomDurationDaysOpen] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [diagnosticProfile, setDiagnosticProfile] = useState<StudyPlanDiagnosticProfile | null>(null);
-  const [preview, setPreview] = useState<StudyPlanPreview | null>(null);
-  const [previewSnapshot, setPreviewSnapshot] = useState<StudyPlanPreviewRequest | null>(null);
-  const [previewSaveIdempotencyKey, setPreviewSaveIdempotencyKey] = useState<string | null>(null);
+  const [phase, setPhase] = useState<StudyPlanCreatePhase>("goal");
+  const [questionVersion, setQuestionVersion] = useState<"study_plan_diagnostic_v2" | null>(null);
+  const [diagnosticQuestions, setDiagnosticQuestions] = useState<StudyPlanDiagnosticQuestion[]>([]);
+  const [diagnosticAnswers, setDiagnosticAnswers] = useState<Record<string, string>>({});
+  const [diagnosticNote, setDiagnosticNote] = useState("");
   const [unresolvedFields, setUnresolvedFields] = useState<string[]>([]);
-  const [isParsingConfig, setIsParsingConfig] = useState(false);
-  const [isPreviewStale, setIsPreviewStale] = useState(false);
   const [isLoadingCourse, setIsLoadingCourse] = useState(true);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
   const [hasLoadedMaterials, setHasLoadedMaterials] = useState(false);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
@@ -398,12 +353,12 @@ export function StudyPlanCreatePage() {
     setDailyMinutes(storedDraft?.dailyMinutes ?? "");
     setPreference(storedDraft?.preference ?? defaultPreference);
     setMaterialScope(storedDraft?.materialScope ?? defaultScope);
-    setDiagnosticProfile(storedDraft?.diagnosticProfile ?? null);
-    setPreview(null);
-    setPreviewSnapshot(null);
-    setPreviewSaveIdempotencyKey(null);
+    setPhase("goal");
+    setQuestionVersion(null);
+    setDiagnosticQuestions([]);
+    setDiagnosticAnswers({});
+    setDiagnosticNote("");
     setUnresolvedFields([]);
-    setIsPreviewStale(false);
     setIsDraftHydrated(true);
   }, [courseId]);
 
@@ -420,12 +375,10 @@ export function StudyPlanCreatePage() {
       dailyMinutes,
       preference,
       materialScope,
-      diagnosticProfile,
     });
   }, [
     courseId,
     dailyMinutes,
-    diagnosticProfile,
     durationDaysText,
     endDate,
     goalText,
@@ -537,11 +490,7 @@ export function StudyPlanCreatePage() {
         : defaultScope,
     );
     setUnresolvedFields([]);
-    setDiagnosticProfile(null);
-    if (preview) {
-      setIsPreviewStale(true);
-    }
-  }, [hasLoadedMaterials, isLoadingMaterials, materialScope, materials, preview]);
+  }, [hasLoadedMaterials, isLoadingMaterials, materialScope, materials]);
 
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
@@ -566,54 +515,29 @@ export function StudyPlanCreatePage() {
       baseDraft.daily_minutes_source = "user_text";
     }
 
-    if (diagnosticProfile) {
-      return {
-        ...baseDraft,
-        diagnostic_profile: diagnosticProfile,
-      };
-    }
-
     return baseDraft;
-  }, [dailyMinutes, diagnosticProfile, endDate, goalText, materialScope, preference, startDate]);
-
-  const confirmedConfig = useMemo(() => {
-    const durationDays = resolveDurationDays(startDate, endDate);
-    const minutes = Number.parseInt(dailyMinutes, 10);
-
-    return {
-      start_date: startDate || null,
-      duration_days: durationDays && durationDays > 0 ? durationDays : null,
-      preference,
-      daily_available_minutes: !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? minutes : null,
-      daily_minutes_source: !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? "user_text" as const : null,
-    };
-  }, [dailyMinutes, endDate, preference, startDate]);
+  }, [dailyMinutes, endDate, goalText, materialScope, preference, startDate]);
 
   const parsedMaterialCount = materials.filter((material) => material.parse_status === "parsed").length;
   const hasUsableMaterialScope = materialScope.include_all_parsed_materials
     ? parsedMaterialCount > 0
     : materialScope.material_ids.length > 0;
+  const orderedDiagnosticQuestions = useMemo(
+    () => sortDiagnosticQuestions(diagnosticQuestions),
+    [diagnosticQuestions],
+  );
+  const canSubmitQuestionnaire = useMemo(() => {
+    if (!questionVersion || orderedDiagnosticQuestions.length === 0 || !startDate || !endDate) {
+      return false;
+    }
 
-  function validationMessage(): string | null {
-    if (!goalText.trim()) {
-      return "请先填写学习目标。";
-    }
-    if (!hasUsableMaterialScope) {
-      return materialScope.include_all_parsed_materials
-        ? "资料范围内没有可解析资料，请先上传或解析至少一份资料。"
-        : "请选择至少一份已解析资料。";
-    }
-    if (!startDate || !endDate) {
-      return "请先补齐学习时间。";
-    }
-    if (startDate > endDate) {
-      return "结束日期不能早于开始日期。";
-    }
-    if (!diagnosticProfile) {
-      return "请先完成学情诊断。";
-    }
-    return null;
-  }
+    return orderedDiagnosticQuestions.every((question) => {
+      if (!question.required || question.question_type === "diagnostic_note") {
+        return true;
+      }
+      return Boolean(diagnosticAnswers[question.question_id]);
+    });
+  }, [diagnosticAnswers, endDate, orderedDiagnosticQuestions, questionVersion, startDate]);
 
   function markFieldResolved(fieldName: string) {
     setUnresolvedFields((currentFields) => currentFields.filter((field) => field !== fieldName));
@@ -624,15 +548,11 @@ export function StudyPlanCreatePage() {
     if (resolvedField) {
       markFieldResolved(resolvedField);
     }
-    if (preview) {
-      setIsPreviewStale(true);
-    }
   }
 
   function updateGoalText(nextGoalText: string) {
     updateField(() => {
       setGoalText(nextGoalText);
-      setDiagnosticProfile(null);
     }, "goal_text");
   }
 
@@ -661,18 +581,26 @@ export function StudyPlanCreatePage() {
     }, "duration_days");
   }
 
-  async function handleParseConfig() {
+  async function handleGoalSubmit() {
     if (!courseId) {
       return;
     }
 
     const trimmedGoalText = goalText.trim();
     if (!trimmedGoalText) {
-      setError("请先输入一句学习目标，再解析配置。");
+      setError("请先输入一句学习目标。");
+      return;
+    }
+    if (!hasUsableMaterialScope) {
+      setError(
+        materialScope.include_all_parsed_materials
+          ? "资料范围内没有可解析资料，请先上传或解析至少一份资料。"
+          : "请选择至少一份已解析资料。",
+      );
       return;
     }
 
-    setIsParsingConfig(true);
+    setPhase("preparing");
     setError(null);
 
     try {
@@ -695,9 +623,6 @@ export function StudyPlanCreatePage() {
 
       if (parsedConfig.goal_text) {
         setGoalText(parsedConfig.goal_text);
-        if (parsedConfig.goal_text.trim() !== goalText.trim()) {
-          setDiagnosticProfile(null);
-        }
       }
       if (parsedConfig.start_date) {
         startDateRef.current = parsedConfig.start_date;
@@ -713,99 +638,104 @@ export function StudyPlanCreatePage() {
       if (parsedConfig.preference) {
         setPreference(parsedConfig.preference);
       }
-      setUnresolvedFields(visibleUnresolvedFields(parsedConfig.unresolved_fields, {
+      const nextUnresolvedFields = visibleUnresolvedFields(parsedConfig.unresolved_fields, {
         goalText: nextGoalText,
         startDate: nextStartDate,
         endDate: nextEndDateValue,
         dailyMinutes: nextDailyMinutes,
         preference: nextPreference,
-      }));
-      if (preview) {
-        setIsPreviewStale(true);
-      }
+      });
+      setUnresolvedFields(nextUnresolvedFields);
+
+      const nextConfirmedConfig = {
+        start_date: nextStartDate || null,
+        duration_days: nextDurationDays && nextDurationDays > 0 ? nextDurationDays : null,
+        preference: nextPreference,
+        daily_available_minutes: (() => {
+          const minutes = Number.parseInt(nextDailyMinutes, 10);
+          return !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? minutes : null;
+        })(),
+        daily_minutes_source: (() => {
+          const minutes = Number.parseInt(nextDailyMinutes, 10);
+          return !Number.isNaN(minutes) && minutes >= minimumDailyMinutes ? "user_text" as const : null;
+        })(),
+      };
+      const questionsResponse = await fetchDiagnosticQuestions(courseId, {
+        goal_text: (parsedConfig.goal_text ?? trimmedGoalText).trim(),
+        material_scope: materialScope,
+        confirmed_config: nextConfirmedConfig,
+      });
+      setQuestionVersion(questionsResponse.question_version);
+      setDiagnosticQuestions(questionsResponse.questions);
+      setDiagnosticAnswers({});
+      setDiagnosticNote("");
+      setPhase("questionnaire");
     } catch (nextError) {
-      setError(errorMessage(nextError, "解析配置失败"));
-    } finally {
-      setIsParsingConfig(false);
+      setError(studyPlanActionErrorMessage(nextError, "生成问卷失败"));
+      setPhase("goal");
     }
   }
 
-  function handleMaterialScopeChange(nextScope: MaterialScope) {
-    setMaterialScope(nextScope);
-    setUnresolvedFields([]);
-    setDiagnosticProfile(null);
-    if (preview) {
-      setIsPreviewStale(true);
-    }
-  }
-
-  function handleDiagnosticProfileReady(nextProfile: StudyPlanDiagnosticProfile) {
-    setDiagnosticProfile(nextProfile);
-    if (preview) {
-      setIsPreviewStale(true);
-    }
-  }
-
-  function handleDiagnosticProfileCleared() {
-    setDiagnosticProfile(null);
-    if (preview) {
-      setIsPreviewStale(true);
-    }
-  }
-
-  async function handlePreview() {
-    if (!courseId) {
+  async function handleQuestionnaireSubmit() {
+    if (!courseId || !questionVersion || !canSubmitQuestionnaire) {
       return;
     }
 
-    const message = validationMessage();
-    if (message || !draft) {
-      setError(message ?? "计划配置不完整");
+    const topicMastery: StudyPlanTopicMasteryAnswer[] = orderedDiagnosticQuestions
+      .filter((question) => question.question_type === "topic_mastery")
+      .flatMap((question) => {
+        const answer = diagnosticAnswers[question.question_id];
+        if (!question.topic_id || !question.topic_title || !answer || !isMasteryLevel(answer)) {
+          return [];
+        }
+        return [{
+          topic_id: question.topic_id,
+          topic_title: question.topic_title,
+          mastery_level: answer,
+        }];
+      });
+    const weakAreaAnswer = orderedDiagnosticQuestions
+      .filter((question) => question.question_type === "weak_area")
+      .map((question) => diagnosticAnswers[question.question_id])
+      .find((answer): answer is WeakArea => Boolean(answer) && isWeakArea(answer));
+
+    if (!weakAreaAnswer) {
+      setError("请选择最担心的学习薄弱点。");
       return;
     }
 
-    setIsPreviewing(true);
+    if (!draft || !goalText.trim() || !hasUsableMaterialScope || !startDate || !endDate || startDate > endDate) {
+      setError("问卷信息不完整，请补齐后再提交。");
+      return;
+    }
+
+    setPhase("generating");
     setError(null);
 
     try {
-      const nextPreview = await previewStudyPlan(courseId, draft);
-      setPreview(nextPreview);
-      setPreviewSnapshot(draft);
-      setPreviewSaveIdempotencyKey(createStudyPlanIdempotencyKey(courseId));
-      setIsPreviewStale(false);
-      setIsPreviewModalOpen(true);
-    } catch (nextError) {
-      setError(studyPlanActionErrorMessage(nextError, "生成预览失败"));
-    } finally {
-      setIsPreviewing(false);
-    }
-  }
-
-  async function handleSave() {
-    if (!courseId || !previewSnapshot || !preview || !previewSaveIdempotencyKey || isPreviewStale) {
-      return;
-    }
-
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      const result = await saveStudyPlan(
-        courseId,
-        {
-          ...previewSnapshot,
-          title: preview.title,
-          client_flow: "wizard_v1",
-          tasks: preview.tasks,
-        },
-        previewSaveIdempotencyKey,
-      );
+      const nextProfile = await createDiagnosticProfile(courseId, {
+        question_version: questionVersion,
+        topic_mastery: topicMastery,
+        weak_area: weakAreaAnswer,
+        diagnostic_note: diagnosticNote.trim() || null,
+        material_scope: materialScope,
+      });
+      const previewRequest: StudyPlanPreviewRequest = {
+        ...draft,
+        diagnostic_profile: nextProfile,
+      };
+      const nextPreview = await previewStudyPlan(courseId, previewRequest);
+      const result = await saveStudyPlan(courseId, {
+        ...previewRequest,
+        title: nextPreview.title,
+        client_flow: "wizard_v1",
+        tasks: nextPreview.tasks,
+      }, createStudyPlanIdempotencyKey(courseId));
       clearCreateDraft(courseId);
       navigate(`/courses/${courseId}/study-plans/${result.plan.id}`, { replace: true });
     } catch (nextError) {
-      setError(studyPlanActionErrorMessage(nextError, "保存计划失败"));
-    } finally {
-      setIsSaving(false);
+      setError(studyPlanActionErrorMessage(nextError, "生成学习计划失败"));
+      setPhase("questionnaire");
     }
   }
 
@@ -831,191 +761,188 @@ export function StudyPlanCreatePage() {
       />
 
       <Box className="study-plan-shell study-plan-create-shell" component="main" data-workbench-scroll="locked">
-        {isPreviewStale ? (
-          <Alert color="yellow" role="status" title="预览已过期" variant="light">
-            配置已修改，请重新生成预览后保存。
-          </Alert>
-        ) : null}
-
         <Box className="study-plan-create-flow">
           <Paper className="study-plan-panel" radius="md" withBorder>
-            <Group justify="space-between" wrap="nowrap">
-              <Stack gap={2}>
-                <Title order={2}>目标与资料</Title>
-                <Text c="dimmed" size="sm">
-                  写下你想完成的学习目标，再选择本次计划要参考的资料。
-                </Text>
-              </Stack>
-              <Badge color="teal" variant="outline">目标输入</Badge>
-            </Group>
-
-            <Textarea
-              label="学习目标"
-              minRows={5}
-              onChange={(event) => updateGoalText(event.currentTarget.value)}
-              placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
-              value={goalText}
-            />
-            <Group justify="space-between" wrap="nowrap">
-              <Text c="dimmed" size="sm">发送后会先识别目标信息，接着完成学情诊断。</Text>
-              <Button
-                data-testid="study-plan-parse-config"
-                leftSection={<IconSend size={16} />}
-                loading={isParsingConfig}
-                onClick={handleParseConfig}
-                variant="light"
-              >
-                发送目标
-              </Button>
-            </Group>
-
-            {startDate || endDate || dailyMinutes || preference !== defaultPreference ? (
-              <Paper className="study-plan-config-summary" radius="md" withBorder>
+            {phase === "goal" ? (
+              <Stack gap="md">
                 <Group justify="space-between" wrap="nowrap">
                   <Stack gap={2}>
-                    <Text fw={750}>已识别目标信息</Text>
+                    <Title order={2}>想生成什么学习计划？</Title>
                     <Text c="dimmed" size="sm">
-                      {startDate && endDate ? `${startDate} - ${endDate}` : "时间将通过诊断继续确认"}
+                      用一句话告诉我目标，后面会自动生成问卷和学习计划。
+                    </Text>
+                  </Stack>
+                  <Badge color="teal" variant="outline">目标输入</Badge>
+                </Group>
+                <Textarea
+                  label="学习目标"
+                  minRows={7}
+                  onChange={(event) => updateGoalText(event.currentTarget.value)}
+                  placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
+                  value={goalText}
+                />
+                {materialsError ? (
+                  <Alert color="red" role="alert" variant="light">{materialsError}</Alert>
+                ) : null}
+                <Group justify="space-between" wrap="nowrap">
+                  <Text c="dimmed" size="sm">
+                    将使用本课程已解析资料生成问卷和计划。
+                  </Text>
+                  <Button
+                    data-testid="study-plan-goal-submit"
+                    disabled={isLoadingMaterials}
+                    leftSection={<IconSend size={16} />}
+                    onClick={handleGoalSubmit}
+                  >
+                    提交
+                  </Button>
+                </Group>
+              </Stack>
+            ) : null}
+
+            {phase === "preparing" ? (
+              <StudyPlanGenerationLog logs={questionnaireLoadingLogs} title="问卷生成中..." />
+            ) : null}
+
+            {phase === "questionnaire" ? (
+              <Stack gap="md">
+                <Group justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Title order={2}>开始前确认一下</Title>
+                    <Text c="dimmed" size="sm">
+                      这些问题会一起用于生成你的正式学习计划。
+                    </Text>
+                  </Stack>
+                  <Badge color="blue" variant="light">问卷</Badge>
+                </Group>
+
+                {startDate || endDate || dailyMinutes || preference !== defaultPreference ? (
+                  <Paper className="study-plan-config-summary" radius="md" withBorder>
+                    <Text c="dimmed" size="sm">
+                      {startDate && endDate ? `${startDate} - ${endDate}` : "时间待确认"}
                       {" / "}
                       学习方式：{preferenceLabels[preference]}
                       {dailyMinutes ? ` / 每日 ${dailyMinutes} 分钟` : " / 每日时长由后端估算"}
                     </Text>
-                  </Stack>
-                </Group>
-              </Paper>
-            ) : null}
+                  </Paper>
+                ) : null}
 
-            {goalText.trim() && (!startDate || !endDate) ? (
-              <Paper className="study-plan-config-summary" radius="md" withBorder>
-                <Stack gap="sm">
-                  <Stack gap={2}>
-                    <Title order={3}>补齐学习时间</Title>
-                    <Text c="dimmed" size="sm">
-                      自然语言里没有识别出完整日期时，请按问题补齐缺失项，再生成计划预览。
-                    </Text>
-                  </Stack>
-                  {!startDate ? (
-                    <Box className="study-plan-date-question">
-                      <Text fw={700}>你想从哪天开始学习？</Text>
-                      <Group gap="xs" mt="xs">
-                        {startDateOptions.map((option) => (
-                          <Button
-                            key={option.value}
-                            onClick={() => updateStartDate(option.value)}
-                            variant="light"
-                          >
-                            {option.label}
-                          </Button>
-                        ))}
-                        <Button
-                          onClick={() => setIsCustomStartDateOpen(true)}
-                          variant={isCustomStartDateOpen ? "filled" : "light"}
-                        >
-                          D. 自定义开始日期
+                {!startDate ? (
+                  <Box className="study-plan-date-question">
+                    <Text fw={700}>你想从哪天开始学习？</Text>
+                    <Group gap="xs" mt="xs">
+                      {startDateOptions.map((option) => (
+                        <Button key={option.value} onClick={() => updateStartDate(option.value)} variant="light">
+                          {option.label}
                         </Button>
-                      </Group>
-                      {isCustomStartDateOpen ? (
-                        <TextInput
-                          className="study-plan-date-custom-input"
-                          label="自定义开始日期"
-                          mt="sm"
-                          onChange={(event) => updateStartDate(event.currentTarget.value)}
-                          type="date"
-                          value={startDate}
+                      ))}
+                      <Button
+                        onClick={() => setIsCustomStartDateOpen(true)}
+                        variant={isCustomStartDateOpen ? "filled" : "light"}
+                      >
+                        D. 自定义开始日期
+                      </Button>
+                    </Group>
+                    {isCustomStartDateOpen ? (
+                      <TextInput
+                        className="study-plan-date-custom-input"
+                        label="自定义开始日期"
+                        mt="sm"
+                        onChange={(event) => updateStartDate(event.currentTarget.value)}
+                        type="date"
+                        value={startDate}
+                      />
+                    ) : null}
+                  </Box>
+                ) : null}
+
+                {startDate && !endDate ? (
+                  <Box className="study-plan-date-question">
+                    <Text fw={700}>这次计划准备学几天？</Text>
+                    <Group gap="xs" mt="xs">
+                      {durationDayOptions.map((option) => (
+                        <Button key={option.value} onClick={() => updateDurationDays(option.value)} variant="light">
+                          {option.label}
+                        </Button>
+                      ))}
+                      <Button
+                        onClick={() => setIsCustomDurationDaysOpen(true)}
+                        variant={isCustomDurationDaysOpen ? "filled" : "light"}
+                      >
+                        D. 自定义学习天数
+                      </Button>
+                    </Group>
+                    {isCustomDurationDaysOpen ? (
+                      <Box className="study-plan-date-input study-plan-date-custom-input">
+                        <Text component="label" htmlFor="study-plan-duration-days" size="sm">
+                          自定义学习天数
+                        </Text>
+                        <input
+                          data-testid="study-plan-duration-days"
+                          id="study-plan-duration-days"
+                          min={1}
+                          onChange={(event) => updateDurationDays(event.currentTarget.value)}
+                          placeholder="例如：5"
+                          type="number"
+                          value={durationDaysText}
                         />
-                      ) : null}
-                    </Box>
-                  ) : null}
-                  {startDate && !endDate ? (
-                    <Box className="study-plan-date-question">
-                      <Text fw={700}>这次计划准备学几天？</Text>
-                      <Group gap="xs" mt="xs">
-                        {durationDayOptions.map((option) => (
-                          <Button
-                            key={option.value}
-                            onClick={() => updateDurationDays(option.value)}
-                            variant="light"
-                          >
-                            {option.label}
-                          </Button>
+                      </Box>
+                    ) : null}
+                  </Box>
+                ) : null}
+
+                {orderedDiagnosticQuestions.map((question) => (
+                  question.question_type === "diagnostic_note" ? (
+                    <Textarea
+                      key={question.question_id}
+                      label={question.question_text}
+                      minRows={3}
+                      onChange={(event) => setDiagnosticNote(event.currentTarget.value)}
+                      placeholder={question.placeholder ?? undefined}
+                      value={diagnosticNote}
+                    />
+                  ) : (
+                    <Radio.Group
+                      key={question.question_id}
+                      label={question.question_text}
+                      onChange={(value) => setDiagnosticAnswers((current) => ({
+                        ...current,
+                        [question.question_id]: value,
+                      }))}
+                      value={diagnosticAnswers[question.question_id] ?? ""}
+                    >
+                      <Stack gap={6} mt={6}>
+                        {question.options.map((option) => (
+                          <Radio key={option.value} label={option.label} value={option.value} />
                         ))}
-                        <Button
-                          onClick={() => setIsCustomDurationDaysOpen(true)}
-                          variant={isCustomDurationDaysOpen ? "filled" : "light"}
-                        >
-                          D. 自定义学习天数
-                        </Button>
-                      </Group>
-                      {isCustomDurationDaysOpen ? (
-                        <Box className="study-plan-date-input study-plan-date-custom-input">
-                          <Text component="label" htmlFor="study-plan-duration-days" size="sm">
-                            自定义学习天数
-                          </Text>
-                          <input
-                            data-testid="study-plan-duration-days"
-                            id="study-plan-duration-days"
-                            min={1}
-                            onChange={(event) => updateDurationDays(event.currentTarget.value)}
-                            placeholder="例如：5"
-                            type="number"
-                            value={durationDaysText}
-                          />
-                        </Box>
-                      ) : null}
-                    </Box>
-                  ) : null}
-                  {startDate && endDate ? (
-                    <Text c="dimmed" size="sm">
-                      已确认：{startDate} - {endDate}
-                    </Text>
-                  ) : null}
-                </Stack>
-              </Paper>
+                      </Stack>
+                    </Radio.Group>
+                  )
+                ))}
+
+                {unresolvedFields.length > 0 ? (
+                  <Alert color="yellow" role="status" variant="light">
+                    还有问题需要回答后才能生成计划。
+                  </Alert>
+                ) : null}
+
+                <Divider />
+                <Group justify="space-between" wrap="nowrap">
+                  <Text c="dimmed" size="sm">提交后会自动生成并保存学习计划。</Text>
+                  <Button
+                    data-testid="study-plan-questionnaire-submit"
+                    disabled={!canSubmitQuestionnaire}
+                    onClick={handleQuestionnaireSubmit}
+                  >
+                    提交问卷
+                  </Button>
+                </Group>
+              </Stack>
             ) : null}
 
-            {unresolvedFields.length > 0 ? (
-              <Alert color="yellow" role="status" title="仍需手动补齐" variant="light">
-                <Stack gap={4}>
-                  {unresolvedFields.map((fieldName) => (
-                    <Text key={fieldName} size="sm">
-                      {(unresolvedFieldLabels[fieldName] ?? fieldName)}：需手动补齐
-                    </Text>
-                  ))}
-                </Stack>
-              </Alert>
+            {phase === "generating" ? (
+              <StudyPlanGenerationLog logs={planGeneratingLogs} title="课程生成中..." />
             ) : null}
-
-            <StudyPlanMaterialScopeSelector
-              error={materialsError}
-              isLoading={isLoadingMaterials}
-              materialScope={materialScope}
-              materials={materials}
-              onMaterialScopeChange={handleMaterialScopeChange}
-            />
-
-            <DiagnosticWizard
-              confirmedConfig={confirmedConfig}
-              courseId={courseId}
-              goalText={goalText}
-              materialScope={materialScope}
-              onProfileCleared={handleDiagnosticProfileCleared}
-              onProfileReady={handleDiagnosticProfileReady}
-              profile={diagnosticProfile}
-            />
-
-            <Divider />
-
-            <Group justify="space-between">
-              <Button
-                data-testid="study-plan-preview"
-                leftSection={<IconRefresh size={16} />}
-                loading={isPreviewing}
-                onClick={handlePreview}
-                variant="light"
-              >
-                生成计划预览
-              </Button>
-            </Group>
 
             {error ? (
               <Alert color="red" role="alert" title="学习计划处理失败" variant="light">
@@ -1024,45 +951,6 @@ export function StudyPlanCreatePage() {
             ) : null}
           </Paper>
         </Box>
-
-        <Modal
-          centered
-          className="study-plan-preview-modal"
-          opened={isPreviewModalOpen}
-          onClose={() => setIsPreviewModalOpen(false)}
-          size="min(1080px, 94vw)"
-          title="计划预览"
-        >
-          <Stack gap="md">
-            {isPreviewStale ? (
-              <Alert color="yellow" role="status" title="预览已过期" variant="light">
-                配置已修改，请重新生成预览后保存。
-              </Alert>
-            ) : null}
-            <StudyPlanPreviewPanel preview={preview} />
-            <Divider />
-            <Group justify="space-between">
-              <Button
-                data-testid="study-plan-regenerate-preview"
-                leftSection={<IconRotateClockwise size={16} />}
-                loading={isPreviewing}
-                onClick={handlePreview}
-                variant="light"
-              >
-                重新生成
-              </Button>
-              <Button
-                data-testid="study-plan-save"
-                disabled={!previewSnapshot || !previewSaveIdempotencyKey || isPreviewStale}
-                leftSection={<IconClipboardCheck size={16} />}
-                loading={isSaving}
-                onClick={handleSave}
-              >
-                保存计划
-              </Button>
-            </Group>
-          </Stack>
-        </Modal>
       </Box>
     </Box>
   );
