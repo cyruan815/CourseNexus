@@ -417,6 +417,29 @@ const generatedTaskTest = {
   },
 };
 
+const regeneratedTaskTest = {
+  ...generatedTaskTest,
+  id: "gen_task_test_2",
+  title: "基础题任务测试题（重生成）",
+  content_json: {
+    instructions: "只读查看题目与解析，作答记录暂不保存。",
+    questions: [
+      {
+        id: "q_001",
+        question_type: "single_choice",
+        question_text: "线性相关说明什么？",
+        options: [
+          { id: "A", text: "存在非零系数使线性组合为零" },
+          { id: "B", text: "所有向量都为零" },
+        ],
+        correct_answer: "A",
+        explanation: "线性相关表示存在不全为零的系数组合得到零向量。",
+        source_citation_ids: [],
+        sort_order: 1,
+      },
+    ],
+  },
+};
 const diagnosticQuestions = {
   question_version: "study_plan_diagnostic_v2",
   questions: [
@@ -1753,7 +1776,8 @@ describe("study plan pages", () => {
         return Promise.resolve(successResponse(quizExecutionContext, "req_execution"));
       }
       if (url.endsWith("/study-subtasks/subtask_2/task-tests") && init?.method === "POST") {
-        return Promise.resolve(successResponse(generatedTaskTest, "req_task_test"));
+        const body = JSON.parse(String(init.body)) as { force_regenerate: boolean };
+        return Promise.resolve(successResponse(body.force_regenerate ? regeneratedTaskTest : generatedTaskTest, "req_task_test"));
       }
 
       return Promise.resolve(successResponse({}));
@@ -1775,6 +1799,14 @@ describe("study plan pages", () => {
     fireEvent.click(within(generatedTaskTestCard).getByRole("button", { name: "提交答案" }));
     expect(within(generatedTaskTestCard).getByText("回答正确")).toBeInTheDocument();
     expect(within(generatedTaskTestCard).getByText("正确答案：A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    expect(await screen.findByText("基础题任务测试题（重生成）")).toBeInTheDocument();
+    const regeneratedTaskTestCard = screen.getByLabelText("第 1 题：线性相关说明什么？");
+    expect(within(regeneratedTaskTestCard).getByRole("button", { name: "A. 存在非零系数使线性组合为零" })).not.toBeDisabled();
+    expect(within(regeneratedTaskTestCard).getByRole("button", { name: "B. 所有向量都为零" })).not.toBeDisabled();
+    expect(within(regeneratedTaskTestCard).getByRole("button", { name: "提交答案" })).toBeDisabled();
+    expect(within(regeneratedTaskTestCard).queryByText("正确答案：A")).not.toBeInTheDocument();
+    expect(within(regeneratedTaskTestCard).queryByText("解析：线性相关表示存在不全为零的系数组合得到零向量。")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
