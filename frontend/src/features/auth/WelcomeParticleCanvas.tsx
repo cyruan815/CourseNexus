@@ -6,17 +6,11 @@ const TAU = Math.PI * 2;
 
 interface RingParticle {
   alpha: number;
-  anchorDamping: number;
-  anchorMaxSpeed: number;
-  anchorSpring: number;
-  anchorVx: number;
-  anchorVy: number;
-  anchorX: number;
-  anchorY: number;
   angularVelocity: number;
   baseAngle: number;
   baseRadius: number;
   breathAmplitude: number;
+  centerFollow: number;
   color: string;
   damping: number;
   flutter: number;
@@ -27,6 +21,7 @@ interface RingParticle {
   lateralSpeed: number;
   length: number;
   lineWidth: number;
+  maximumSpeed: number;
   orientationOffset: number;
   radialDrift: number;
   radialPhase: number;
@@ -68,32 +63,27 @@ function createRingParticles(
 
     return {
       alpha: 0.2 + Math.random() * 0.4 + (1 - radialProgress) * 0.1,
-      anchorDamping: 0.92 + Math.random() * 0.045,
-      anchorMaxSpeed: 0.35 + Math.random() * 0.5,
-      anchorSpring: 0.00006 + Math.random() * 0.0001,
-      anchorVx: 0,
-      anchorVy: 0,
-      anchorX: originX,
-      anchorY: originY,
       angularVelocity: (Math.random() - 0.5) * 0.0000012,
       baseAngle,
       baseRadius,
-      breathAmplitude: 0.09 + Math.random() * 0.14,
+      breathAmplitude: 0.025 + Math.random() * 0.04,
+      centerFollow: 0.2 + Math.random() * 0.15,
       color: PARTICLE_COLORS[colorIndex],
       damping: 0.955 + Math.random() * 0.025,
       flutter: 0.004 + Math.random() * 0.012,
       flutterPhase: Math.random() * TAU,
       flutterSpeed: 0.00022 + Math.random() * 0.00034,
-      lateralAmplitude: 14 + Math.random() * (32 + radialProgress * 38),
+      lateralAmplitude: 8 + Math.random() * (14 + radialProgress * 22),
       lateralPhase: Math.random() * TAU,
       lateralSpeed: 0.000045 + Math.random() * 0.00011,
       length: 2.8 + Math.random() * 5 + (1 - radialProgress) * 1.4,
       lineWidth: 0.8 + Math.random() * 1.05 + (1 - radialProgress) * 0.16,
+      maximumSpeed: 2.2 + Math.random() * 1.5,
       orientationOffset: (Math.random() - 0.5) * 0.34,
-      radialDrift: 7 + Math.random() * 24,
+      radialDrift: 4 + Math.random() * 10,
       radialPhase: Math.random() * TAU,
-      radialSpeed: 0.00007 + Math.random() * 0.00009,
-      spring: 0.00065 + Math.random() * 0.0012,
+      radialSpeed: 0.00011 + Math.random() * 0.0001,
+      spring: 0.0014 + Math.random() * 0.0022,
       vx: 0,
       vy: 0,
       x: originX + Math.cos(baseAngle) * baseRadius,
@@ -120,6 +110,7 @@ export function WelcomeParticleCanvas() {
 
     const canvas: HTMLCanvasElement = canvasElement;
     const context: CanvasRenderingContext2D = drawingContext;
+    const center = { x: 0, y: 0 };
     const pointer = { x: 0, y: 0 };
     const reducedMotion = window.matchMedia(REDUCED_MOTION_QUERY);
     let animationFrame: number | null = null;
@@ -143,34 +134,24 @@ export function WelcomeParticleCanvas() {
       if (pointer.x === 0 && pointer.y === 0) {
         pointer.x = width / 2;
         pointer.y = height / 2;
+        center.x = pointer.x;
+        center.y = pointer.y;
       }
 
-      particles = createRingParticles(width, height, pointer.x, pointer.y);
+      particles = createRingParticles(width, height, center.x, center.y);
     }
 
-    function updateAnchor(particle: RingParticle, delta: number) {
-      particle.anchorVx += (pointer.x - particle.anchorX) * particle.anchorSpring * delta;
-      particle.anchorVy += (pointer.y - particle.anchorY) * particle.anchorSpring * delta;
+    function updateParticle(
+      particle: RingParticle,
+      time: number,
+      delta: number,
+      centerDeltaX: number,
+      centerDeltaY: number,
+    ) {
+      particle.x += centerDeltaX * particle.centerFollow;
+      particle.y += centerDeltaY * particle.centerFollow;
 
-      const damping = Math.pow(particle.anchorDamping, delta);
-      particle.anchorVx *= damping;
-      particle.anchorVy *= damping;
-
-      const speed = Math.hypot(particle.anchorVx, particle.anchorVy);
-
-      if (speed > particle.anchorMaxSpeed) {
-        particle.anchorVx = (particle.anchorVx / speed) * particle.anchorMaxSpeed;
-        particle.anchorVy = (particle.anchorVy / speed) * particle.anchorMaxSpeed;
-      }
-
-      particle.anchorX += particle.anchorVx * delta;
-      particle.anchorY += particle.anchorVy * delta;
-    }
-
-    function updateParticle(particle: RingParticle, time: number, delta: number) {
-      updateAnchor(particle, delta);
-
-      const globalBreath = Math.sin(time * 0.00022) * 0.035;
+      const globalBreath = Math.sin(time * 0.0007) * 0.16;
       const independentBreath = Math.sin(time * particle.radialSpeed + particle.radialPhase)
         * particle.breathAmplitude;
       const radius = particle.baseRadius * (1 + globalBreath + independentBreath)
@@ -184,8 +165,8 @@ export function WelcomeParticleCanvas() {
       const radialY = Math.sin(angle);
       const tangentX = -radialY;
       const tangentY = radialX;
-      const targetX = particle.anchorX + radialX * radius + tangentX * lateralOffset;
-      const targetY = particle.anchorY + radialY * radius + tangentY * lateralOffset;
+      const targetX = center.x + radialX * radius + tangentX * lateralOffset;
+      const targetY = center.y + radialY * radius + tangentY * lateralOffset;
       const flutterX = Math.sin(time * particle.flutterSpeed + particle.flutterPhase) * particle.flutter;
       const flutterY = Math.cos(time * particle.flutterSpeed * 0.79 + particle.flutterPhase * 1.7) * particle.flutter;
 
@@ -197,31 +178,36 @@ export function WelcomeParticleCanvas() {
       particle.vy *= damping;
 
       const speed = Math.hypot(particle.vx, particle.vy);
-      const maximumSpeed = 2;
 
-      if (speed > maximumSpeed) {
-        particle.vx = (particle.vx / speed) * maximumSpeed;
-        particle.vy = (particle.vy / speed) * maximumSpeed;
+      if (speed > particle.maximumSpeed) {
+        particle.vx = (particle.vx / speed) * particle.maximumSpeed;
+        particle.vy = (particle.vy / speed) * particle.maximumSpeed;
       }
 
       particle.x += particle.vx * delta;
       particle.y += particle.vy * delta;
     }
 
-    function drawParticles(time: number, delta = 1, shouldUpdate = true) {
+    function drawParticles(
+      time: number,
+      delta = 1,
+      shouldUpdate = true,
+      centerDeltaX = 0,
+      centerDeltaY = 0,
+    ) {
       context.clearRect(0, 0, width, height);
       context.lineCap = "round";
 
       particles.forEach((particle) => {
         if (shouldUpdate) {
-          updateParticle(particle, time, delta);
+          updateParticle(particle, time, delta, centerDeltaX, centerDeltaY);
         }
 
         if (particle.x < -12 || particle.x > width + 12 || particle.y < -12 || particle.y > height + 12) {
           return;
         }
 
-        const radialAngle = Math.atan2(particle.y - particle.anchorY, particle.x - particle.anchorX);
+        const radialAngle = Math.atan2(particle.y - center.y, particle.x - center.x);
         const radialOrientation = radialAngle + particle.orientationOffset
           + Math.sin(time * particle.flutterSpeed * 0.71 + particle.flutterPhase) * 0.12;
         const speed = Math.hypot(particle.vx, particle.vy);
@@ -250,7 +236,12 @@ export function WelcomeParticleCanvas() {
     function animate(time: number) {
       const delta = lastTime === 0 ? 1 : clamp((time - lastTime) / (1000 / 60), 0.5, 2);
       lastTime = time;
-      drawParticles(time, delta);
+      const previousCenterX = center.x;
+      const previousCenterY = center.y;
+      const centerEase = 1 - Math.pow(0.968, delta);
+      center.x += (pointer.x - center.x) * centerEase;
+      center.y += (pointer.y - center.y) * centerEase;
+      drawParticles(time, delta, true, center.x - previousCenterX, center.y - previousCenterY);
       animationFrame = window.requestAnimationFrame(animate);
     }
 

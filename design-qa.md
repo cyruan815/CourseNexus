@@ -11,7 +11,7 @@
 
 - No actionable P0/P1/P2 mismatch remains for the requested particle behavior.
 - Particle layout now follows the reference's radial spokes rather than visible concentric rings. Particle density is intentionally lower than the earlier CourseNexus iteration and remains subordinate to the hero content.
-- Each particle has an independent spring-follow center, radial breathing phase, lateral drift phase, damping, and speed cap. The field therefore trails the pointer asynchronously instead of translating as one rigid object.
+- The field uses a shared smoothed center to retain a roughly circular silhouette. Each particle receives only part of the center displacement and still has independent spring, damping, speed, breathing phase, and lateral drift, so the motion remains elastic rather than rigid.
 - Fonts and typography: unchanged from the existing CourseNexus welcome page; this task did not ask to clone Google's typography.
 - Spacing and layout rhythm: existing CourseNexus navigation, hero alignment, CTA, and responsive structure are unchanged.
 - Colors and visual tokens: particles retain CourseNexus blue, teal, indigo, and purple instead of copying Google's red/blue palette; opacity remains low enough to preserve text contrast.
@@ -24,6 +24,7 @@
 2. Independent anchors, spring/damping variation, large per-particle radial breathing, and lateral drift were added. Pointer following was slowed with per-particle speed caps.
 3. Full-view comparison showed the remaining ring impression came primarily from dash orientation (P2). Dashes were changed to radial orientation and distributed across lightly jittered spokes, matching the reference's visual grammar.
 4. Particle count was reduced from a 2300 maximum to 1100, and the final browser capture confirmed a lighter field with the hero content unobscured.
+5. A later interaction pass restored a shared smoothed center, strengthened the coordinated global radial breath to 16%, and partially transferred center movement to each particle. The transfer ratio was finally reduced to 20–35% to preserve the preferred slower pointer-follow speed while retaining the circular silhouette.
 
 ## Browser verification
 
