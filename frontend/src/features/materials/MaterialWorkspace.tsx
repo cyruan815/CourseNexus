@@ -596,7 +596,7 @@ export function MaterialWorkspace({
         >
           <StatusIcon
             className={material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
-            size={17}
+            size={13}
             stroke={2}
           />
           <span className="material-workspace__sr-only">{status}</span>

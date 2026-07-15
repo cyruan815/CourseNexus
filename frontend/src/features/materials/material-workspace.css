@@ -354,17 +354,12 @@
 .material-workspace__file-row {
   align-items: center;
   background: #ffffff;
-  border-bottom: 1px solid var(--resource-line);
   display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr) 32px 36px;
-  min-height: 50px;
-  padding: 5px 8px 5px 14px;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 24px 32px;
+  min-height: 40px;
+  padding: 3px 8px 3px 14px;
   transition: background 140ms ease;
-}
-
-.material-workspace__file-row:last-child {
-  border-bottom: 0;
 }
 
 .material-workspace__file-row:hover {
@@ -374,8 +369,8 @@
 .material-workspace__material-select {
   align-items: center;
   display: grid;
-  gap: 8px;
-  grid-template-columns: 18px 28px minmax(0, 1fr);
+  gap: 7px;
+  grid-template-columns: 18px 20px minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -386,15 +381,15 @@
 .material-workspace__file-icon {
   align-items: center;
   background: #fff0f1;
-  border-radius: 8px;
+  border-radius: 5px;
   color: #df3f49;
   display: inline-flex;
-  font-size: 8px;
+  font-size: 6.5px;
   font-weight: 850;
-  height: 28px;
+  height: 20px;
   justify-content: center;
   letter-spacing: 0.03em;
-  width: 28px;
+  width: 20px;
 }
 
 .material-workspace__file-icon--link {
@@ -433,11 +428,11 @@
 
 .material-workspace__status {
   align-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   display: inline-flex;
-  height: 30px;
+  height: 22px;
   justify-content: center;
-  width: 30px;
+  width: 22px;
 }
 
 .material-workspace__status--parsed {
@@ -477,6 +472,11 @@
   justify-content: center;
   padding: 0;
   width: 36px;
+}
+
+.material-workspace button.material-workspace__file-actions {
+  height: 32px;
+  width: 32px;
 }
 
 .material-workspace button.material-workspace__file-actions:hover:not(:disabled),
