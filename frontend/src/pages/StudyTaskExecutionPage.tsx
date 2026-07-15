@@ -39,6 +39,8 @@ import { ApiError } from "../api/errors";
 import { WorkbenchTopbar } from "../components/WorkbenchTopbar";
 import { InlineCitationAnswer } from "../features/course-qa/InlineCitationAnswer";
 import { HandoutMarkdownRenderer } from "../features/generated-content/renderers/handout/HandoutMarkdownRenderer";
+import { taskTestQuestions } from "../features/generated-content/guards";
+import { TaskTestResult } from "../features/generated-content/renderers/TaskTestResult";
 import {
   askStudySubtaskQuestion,
   exportGeneratedContentMarkdown,
@@ -59,17 +61,8 @@ import type {
   SubtaskCompletionResult,
   TaskContentType,
 } from "../features/study-plans/types";
+import "../features/generated-content/generated-content.css";
 import "./study-plan.css";
-
-interface ReadonlyTaskTestQuestion {
-  id: string;
-  question_text: string;
-  question_type: string;
-  options: Array<{ id: string; text: string }>;
-  correct_answer: string | string[] | null;
-  explanation: string | null;
-  sort_order: number;
-}
 
 interface ContentSourceSummary {
   key: string;
@@ -227,65 +220,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function toText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function parseTaskTestQuestions(content: GeneratedContentRead | null): ReadonlyTaskTestQuestion[] {
-  if (!content || content.content_type !== "task_test" || !isRecord(content.content_json)) {
-    return [];
-  }
-
-  const questions = content.content_json.questions;
-  if (!Array.isArray(questions)) {
-    return [];
-  }
-
-  return questions
-    .map((question, index): ReadonlyTaskTestQuestion | null => {
-      if (!isRecord(question)) {
-        return null;
-      }
-
-      const questionText = toText(question.question_text) ?? toText(question.prompt) ?? toText(question.stem);
-      if (!questionText) {
-        return null;
-      }
-
-      const rawOptions = Array.isArray(question.options) ? question.options : [];
-      const options = rawOptions.flatMap((option, optionIndex) => {
-        if (!isRecord(option)) {
-          return [];
-        }
-
-        const id = toText(option.id) ?? toText(option.label) ?? String.fromCharCode(65 + optionIndex);
-        const text = toText(option.text) ?? toText(option.content);
-        return text ? [{ id, text }] : [];
-      });
-
-      const correctAnswer = question.correct_answer;
-      const normalizedAnswer = typeof correctAnswer === "string" || Array.isArray(correctAnswer)
-        ? correctAnswer
-        : null;
-
-      return {
-        id: toText(question.id) ?? `q_${index + 1}`,
-        question_text: questionText,
-        question_type: toText(question.question_type) ?? "question",
-        options,
-        correct_answer: normalizedAnswer,
-        explanation: toText(question.explanation) ?? toText(question.analysis),
-        sort_order: typeof question.sort_order === "number" ? question.sort_order : index + 1,
-      };
-    })
-    .filter((question): question is ReadonlyTaskTestQuestion => Boolean(question))
-    .sort((left, right) => left.sort_order - right.sort_order);
-}
-
-function answerLabel(answer: string | string[] | null): string {
-  if (!answer) {
-    return "未提供";
-  }
-
-  return Array.isArray(answer) ? answer.join("、") : answer;
 }
 
 function formatGeneratedContentSource(citation: unknown, index: number): ContentSourceSummary | null {
@@ -841,8 +775,11 @@ export function StudyTaskExecutionPage() {
   const activeContentTitle = currentGeneratedContent?.title ?? null;
   const isGeneratingCurrentSubtask = Boolean(currentSubtask && generatingSubtaskId === currentSubtask.subtask_id);
   const isGeneratingOtherSubtask = Boolean(currentSubtask && generatingSubtaskId && generatingSubtaskId !== currentSubtask.subtask_id);
-  const readonlyTaskTestQuestions = useMemo(() => parseTaskTestQuestions(currentGeneratedContent), [currentGeneratedContent]);
   const readonlyHandoutMarkdown = useMemo(() => handoutMarkdown(currentGeneratedContent), [currentGeneratedContent]);
+  const taskTestPreviewQuestions = useMemo(
+    () => taskTestQuestions(currentGeneratedContent?.content_json) ?? [],
+    [currentGeneratedContent?.content_json],
+  );
   const contentSourceSummary = useMemo(
     () => generatedContentSourceSummary(currentGeneratedContent),
     [currentGeneratedContent],
@@ -1285,37 +1222,10 @@ export function StudyTaskExecutionPage() {
                               <HandoutMarkdownRenderer markdown={readonlyHandoutMarkdown} />
                             </Paper>
                           ) : null}
-                          {contentType === "task_test" && readonlyTaskTestQuestions.length > 0 ? (
-                            <Stack className="study-plan-task-test-preview" gap="sm">
-                              <Group gap="xs">
-                                <Badge color="blue" variant="light">只读预览</Badge>
-                                <Text c="dimmed" size="sm">当前只展示题目、答案和解析，不保存作答。</Text>
-                              </Group>
-                              {readonlyTaskTestQuestions.map((question, index) => (
-                                <Paper className="study-plan-task-test-question" key={question.id} radius="md" withBorder>
-                                  <Stack gap="xs">
-                                    <Group gap="xs">
-                                      <Badge variant="light">第 {index + 1} 题</Badge>
-                                      <Badge color="gray" variant="light">{question.question_type}</Badge>
-                                    </Group>
-                                    <Text fw={750}>{question.question_text}</Text>
-                                    {question.options.length > 0 ? (
-                                      <Stack gap={4}>
-                                        {question.options.map((option) => (
-                                          <Text key={option.id} size="sm">
-                                            {option.id}. {option.text}
-                                          </Text>
-                                        ))}
-                                      </Stack>
-                                    ) : null}
-                                    <Text fw={700} size="sm">正确答案：{answerLabel(question.correct_answer)}</Text>
-                                    {question.explanation ? (
-                                      <Text c="dimmed" size="sm">解析：{question.explanation}</Text>
-                                    ) : null}
-                                  </Stack>
-                                </Paper>
-                              ))}
-                            </Stack>
+                          {contentType === "task_test" && taskTestPreviewQuestions.length > 0 ? (
+                            <Box className="study-plan-task-test-preview">
+                              <TaskTestResult questions={taskTestPreviewQuestions} />
+                            </Box>
                           ) : null}
                         </>
                       ) : (

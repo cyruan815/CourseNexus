@@ -1769,8 +1769,12 @@ describe("study plan pages", () => {
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
     expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "提交答案" })).not.toBeInTheDocument();
+    expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
+    const generatedTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
+    fireEvent.click(within(generatedTaskTestCard).getByRole("button", { name: "A. 加法和数乘封闭" }));
+    fireEvent.click(within(generatedTaskTestCard).getByRole("button", { name: "提交答案" }));
+    expect(within(generatedTaskTestCard).getByText("回答正确")).toBeInTheDocument();
+    expect(within(generatedTaskTestCard).getByText("正确答案：A")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1849,7 +1853,12 @@ describe("study plan pages", () => {
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
     expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
-    expect(screen.getByText("正确答案：A")).toBeInTheDocument();
+    expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
+    const existingTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
+    fireEvent.click(within(existingTaskTestCard).getByRole("button", { name: "A. 加法和数乘封闭" }));
+    fireEvent.click(within(existingTaskTestCard).getByRole("button", { name: "提交答案" }));
+    expect(within(existingTaskTestCard).getByText("回答正确")).toBeInTheDocument();
+    expect(within(existingTaskTestCard).getByText("正确答案：A")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/generated-contents/gen_task_test_1",
       expect.objectContaining({ method: "GET" }),
