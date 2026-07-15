@@ -9,7 +9,7 @@ const css = fs.readFileSync(
 
 describe("flashcard face colors", () => {
   it("uses the requested solid colors for question and answer faces", () => {
-    expect(css).toMatch(/\.gc-flashcard-question\s*\{[^}]*background:\s*#F2D9E7/i);
+    expect(css).toMatch(/\.gc-flashcard-question\s*\{[^}]*background:\s*#E5EDF5/i);
     expect(css).toMatch(/\.gc-flashcard-answer\s*\{[^}]*background:\s*#EFF2F5/i);
   });
 });
