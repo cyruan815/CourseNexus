@@ -139,6 +139,63 @@ def _mapped_batch() -> PlanBatchExtraction:
     )
 
 
+
+class _RecordingPlanProvider:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def generate_structured(self, *, prompt: str, output_schema: type[object]) -> object:
+        self.prompts.append(prompt)
+        return output_schema.model_validate(
+            {
+                "title": "计算机网络第七章学习计划",
+                "tasks": [
+                    {
+                        "title": "第 1 天",
+                        "task_date": "2026-07-12",
+                        "sort_order": 1,
+                        "subtasks": [
+                            {
+                                "title": "学习公式",
+                                "subtask_type": "learn",
+                                "description": "学习公式并做 10 道选择题",
+                                "related_material_ids": ["mat_net"],
+                                "citation_chunk_ids": ["chk_001"],
+                                "estimated_minutes": 60,
+                                "sort_order": 1,
+                            },
+                            {
+                                "title": "当日自测",
+                                "subtask_type": "quiz",
+                                "description": "完成当天自测",
+                                "related_material_ids": ["mat_net"],
+                                "citation_chunk_ids": ["chk_001"],
+                                "estimated_minutes": 60,
+                                "sort_order": 2,
+                            },
+                        ],
+                    }
+                ],
+                "citation_chunk_ids": ["chk_001"],
+            }
+        )
+
+
+def test_reduce_plan_batches_includes_retry_feedback_in_prompt() -> None:
+    provider = _RecordingPlanProvider()
+
+    planner.reduce_plan_batches(
+        mapped_batches=[_mapped_batch()],
+        payload=_build_request(),
+        expected_material_ids={"mat_net"},
+        model_provider=provider,
+        retry_feedback="学习或复习任务不能包含测试题量要求",
+        course_name="计算机网络",
+    )
+
+    assert "上次输出错误：学习或复习任务不能包含测试题量要求" in provider.prompts[0]
+    assert "请修正后重新返回完整计划 JSON" in provider.prompts[0]
+
 class _ConfigParseTestProvider:
     pass
 

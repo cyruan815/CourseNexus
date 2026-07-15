@@ -29,6 +29,7 @@ from app.modules.study_plans import repository as study_plan_repository
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.planner import (
     derive_planner_strategy,
+    invalid_generation_message,
     map_material_batch,
     make_coverage,
     reduce_plan_batches,
@@ -324,7 +325,11 @@ def preview_study_plan(
     resolved_payload: StudyPlanBuildRequest | None = None
     mapped_estimated_total_minutes = 0
 
-    def reduce_results(mapped_batches: list[PlanBatchExtraction]):
+    def reduce_results(
+        mapped_batches: list[PlanBatchExtraction],
+        *,
+        retry_feedback: str | None = None,
+    ):
         nonlocal mapped_estimated_total_minutes, resolved_payload
         mapped_estimated_total_minutes = _mapped_batches_total_minutes(mapped_batches)
         daily_available_minutes, recommended_daily_minutes, daily_minutes_source = _resolve_daily_minutes(
@@ -346,73 +351,102 @@ def preview_study_plan(
             expected_material_ids=expected_material_ids,
             model_provider=model_provider,
             course_name=course.name,
+            retry_feedback=retry_feedback,
         )
 
-    coverage_result = run_material_coverage(
-        batches=batches,
-        expected_material_ids=expected_material_ids,
-        map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
-        reduce_results=reduce_results,
-    )
-    if resolved_payload is None:
+    def build_preview(coverage_result) -> StudyPlanPreview:
+        if resolved_payload is None:
+            raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
+
+        task_previews = _normalize_task_sort_orders(_normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks))
+        task_previews = _strip_meta_citations_from_learn_subtasks(
+            task_previews,
+            meta_chunk_ids=_meta_citation_chunk_ids_from_batches(batches),
+        )
+        task_previews = repair_daily_assessment_coverage(task_previews)
+        estimated_total_minutes = _task_previews_total_minutes(task_previews)
+        daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
+        recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
+            estimated_total_minutes=mapped_estimated_total_minutes or estimated_total_minutes,
+            duration_days=duration_days,
+        )
+        daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"
+        available_total_minutes = daily_available_minutes * duration_days
+        material_snapshot = payload.material_snapshot or _build_material_snapshot(
+            material_scope=payload.material_scope,
+            expected_material_ids=expected_material_ids,
+        )
+        capacity = _build_capacity_summary(
+            estimated_total_minutes=estimated_total_minutes,
+            available_total_minutes=available_total_minutes,
+            daily_over_capacity=_has_daily_over_capacity(tasks_preview=task_previews, daily_available_minutes=daily_available_minutes),
+        )
+        planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, payload.preference_overrides)
+        generation_metadata = _with_material_quality(
+            _with_planner_strategy(
+                payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
+                planner_strategy=planner_strategy,
+            ),
+            material_quality=material_quality.model_dump(mode="json"),
+        )
+        return StudyPlanPreview(
+            course_id=course_id,
+            title=coverage_result.value.title,
+            goal_text=payload.goal_text,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            duration_days=duration_days,
+            daily_available_minutes=daily_available_minutes,
+            recommended_daily_minutes=recommended_daily_minutes,
+            daily_minutes_source=daily_minutes_source,
+            preference=payload.preference,
+            preference_overrides=payload.preference_overrides,
+            diagnostic_profile=payload.diagnostic_profile,
+            material_snapshot=material_snapshot,
+            material_scope=payload.material_scope,
+            coverage=make_coverage(
+                expected_material_ids=expected_material_ids,
+                processed_material_ids=coverage_result.processed_material_ids,
+                batch_count=len(batches),
+            ),
+            capacity=capacity,
+            generation_metadata=generation_metadata,
+            tasks=task_previews,
+        )
+
+    retry_feedback: str | None = None
+    last_error: CourseNexusError | None = None
+    preview: StudyPlanPreview | None = None
+    for attempt in range(2):
+        coverage_result = run_material_coverage(
+            batches=batches,
+            expected_material_ids=expected_material_ids,
+            map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
+            reduce_results=lambda mapped_batches: reduce_results(
+                mapped_batches,
+                retry_feedback=retry_feedback,
+            ),
+        )
+        preview = build_preview(coverage_result)
+        try:
+            validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
+        except CourseNexusError as exc:
+            message = invalid_generation_message(exc)
+            if attempt == 0 and message == "学习或复习任务不能包含测试题量要求":
+                retry_feedback = message
+                last_error = exc
+                resolved_payload = None
+                continue
+            raise
+        break
+    else:
+        if last_error is not None:
+            raise last_error
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
-    task_previews = _normalize_task_sort_orders(_normalize_quiz_subtasks_to_day_end(coverage_result.value.tasks))
-    task_previews = _strip_meta_citations_from_learn_subtasks(
-        task_previews,
-        meta_chunk_ids=_meta_citation_chunk_ids_from_batches(batches),
-    )
-    task_previews = repair_daily_assessment_coverage(task_previews)
-    estimated_total_minutes = _task_previews_total_minutes(task_previews)
-    daily_available_minutes = _require_resolved_daily_minutes(resolved_payload.daily_available_minutes)
-    recommended_daily_minutes = resolved_payload.recommended_daily_minutes or _recommended_daily_minutes(
-        estimated_total_minutes=mapped_estimated_total_minutes or estimated_total_minutes,
-        duration_days=duration_days,
-    )
-    daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"
-    available_total_minutes = daily_available_minutes * duration_days
-    material_snapshot = payload.material_snapshot or _build_material_snapshot(
-        material_scope=payload.material_scope,
-        expected_material_ids=expected_material_ids,
-    )
-    capacity = _build_capacity_summary(
-        estimated_total_minutes=estimated_total_minutes,
-        available_total_minutes=available_total_minutes,
-        daily_over_capacity=_has_daily_over_capacity(tasks_preview=task_previews, daily_available_minutes=daily_available_minutes),
-    )
-    planner_strategy = derive_planner_strategy(payload.preference, payload.diagnostic_profile, payload.preference_overrides)
-    generation_metadata = _with_material_quality(
-        _with_planner_strategy(
-            payload.generation_metadata or _build_generation_metadata(model_provider=model_provider),
-            planner_strategy=planner_strategy,
-        ),
-        material_quality=material_quality.model_dump(mode="json"),
-    )
-    preview = StudyPlanPreview(
-        course_id=course_id,
-        title=coverage_result.value.title,
-        goal_text=payload.goal_text,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        duration_days=duration_days,
-        daily_available_minutes=daily_available_minutes,
-        recommended_daily_minutes=recommended_daily_minutes,
-        daily_minutes_source=daily_minutes_source,
-        preference=payload.preference,
-        preference_overrides=payload.preference_overrides,
-        diagnostic_profile=payload.diagnostic_profile,
-        material_snapshot=material_snapshot,
-        material_scope=payload.material_scope,
-        coverage=make_coverage(
-            expected_material_ids=expected_material_ids,
-            processed_material_ids=coverage_result.processed_material_ids,
-            batch_count=len(batches),
-        ),
-        capacity=capacity,
-        generation_metadata=generation_metadata,
-        tasks=task_previews,
-    )
-    validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
+    if preview is None:
+        raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
+
     logger.info(
         "计划预览成功 | course=%s tasks=%d subtasks=%d cost_ms=%.2f",
         course_id,
@@ -421,7 +455,6 @@ def preview_study_plan(
         (perf_counter() - started_at) * 1000,
     )
     return preview
-
 
 def save_study_plan(
     db: Session,

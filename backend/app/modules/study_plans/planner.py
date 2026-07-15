@@ -237,6 +237,7 @@ def reduce_plan_batches(
     expected_material_ids: set[str],
     model_provider: ModelProvider,
     course_name: str | None = None,
+    retry_feedback: str | None = None,
 ) -> StudyPlanReduction:
     return model_provider.generate_structured(
         prompt=_build_reduce_prompt(
@@ -244,6 +245,7 @@ def reduce_plan_batches(
             payload=payload,
             expected_material_ids=expected_material_ids,
             course_name=course_name,
+            retry_feedback=retry_feedback,
         ),
         output_schema=StudyPlanReduction,
     )
@@ -387,6 +389,7 @@ def _build_reduce_prompt(
     payload: StudyPlanBuildRequest,
     expected_material_ids: set[str],
     course_name: str | None = None,
+    retry_feedback: str | None = None,
 ) -> str:
     mapped_json = [batch.model_dump(mode="json") for batch in mapped_batches]
     course_line = f"课程名称：{course_name}" if course_name else "课程名称：未提供，标题必须忠实使用 goal_text 中的课程名"
@@ -413,6 +416,15 @@ def _build_reduce_prompt(
             "最后一天 quiz/test 是全计划综合测试，related_material_ids 和 citation_chunk_ids 必须覆盖全计划所有 learn/review；最后一天不再额外安排当天测试。",
             "如果 goal_text、diagnostic_note 或任务描述要求具体测试题量，例如 10 道选择题和 3 道计算题，quiz/test subtask 必须在 description 保留题量文字，并填写 generation_parameters.task_test；选择题映射 single_choice，计算题映射 short_answer，question_count 为总题数。",
             "每个 subtask 的 citation_chunk_ids 必须来自 mapped units，不能留空。",
+            *(
+                [
+                    f"上次输出错误：{retry_feedback}",
+                    "请修正后重新返回完整计划 JSON；不要只返回补丁。",
+                    "如果 learn/review 出现明确测试题量，请把题量文字和 generation_parameters.task_test 移到当天最后一个 quiz/test。",
+                ]
+                if retry_feedback
+                else []
+            ),
             f"goal_text: {payload.goal_text}",
             f"date_range: {payload.start_date.isoformat()} to {payload.end_date.isoformat()}",
             f"daily_available_minutes: {payload.daily_available_minutes}",
@@ -446,6 +458,12 @@ def _requires_completion_quality(goal_text: str) -> bool:
 
 def _minimum_required_minutes(daily_available_minutes: int) -> int:
     return ceil(daily_available_minutes * 0.6)
+
+
+def invalid_generation_message(error: CourseNexusError) -> str | None:
+    if error.code != "GENERATION_SCHEMA_INVALID":
+        return None
+    return error.message
 
 
 def _invalid_generation(message: str) -> CourseNexusError:
