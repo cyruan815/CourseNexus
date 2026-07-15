@@ -640,8 +640,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   position: relative;
   overflow: hidden;
+  min-height: 64px;
   border-color: #d6e0eb;
   background: #fbfdff;
   padding: 4px 6px 4px 12px;
