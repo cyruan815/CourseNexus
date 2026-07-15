@@ -38,6 +38,22 @@ describe("HandoutMarkdownRenderer", () => {
     expect(screen.getByTestId("handout-callout-tip")).toHaveClass("handout-callout-tip");
   });
 
+  it("keeps bold terms inside callout body inline with formulas", () => {
+    render(
+      <HandoutMarkdownRenderer
+        markdown={[
+          "> [!SUMMARY] 核心结论",
+          "> - **码元速率** $= B_d$（Baud），**数据率** $= B_d \\log_2 L$ bps。",
+        ].join("\n")}
+      />,
+    );
+
+    const summary = screen.getByTestId("handout-callout-summary");
+    const bodyStrong = within(summary).getByText("码元速率");
+    expect(bodyStrong).not.toHaveClass("handout-callout-title");
+    expect(document.querySelectorAll(".handout-callout-summary .katex").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("keeps ordinary blockquotes and renders math and tables with the formal renderer", () => {
     render(
       <HandoutMarkdownRenderer
