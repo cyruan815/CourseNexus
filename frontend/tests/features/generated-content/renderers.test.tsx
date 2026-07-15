@@ -221,4 +221,28 @@ describe("generated content renderers", () => {
     expect(screen.getByText("奈奎斯特定理").closest("article")).not.toHaveClass("is-learned");
     vi.unstubAllGlobals();
   });
+
+  it("combines the unlearned button with the importance filter without changing progress", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    renderUi(<KnowledgeListResult generatedContentId="gen_knowledge" items={[
+      { id: "kp_001", sort_order: 1, name: "已学习高重点", definition: "A", importance: "high", related_section: "第一章", learned: true },
+      { id: "kp_002", sort_order: 2, name: "未学习高重点", definition: "B", importance: "high", related_section: "第一章" },
+      { id: "kp_003", sort_order: 3, name: "未学习低重点", definition: "C", importance: "low", related_section: "第二章" },
+    ]} />);
+
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByRole("option", { name: "高" }));
+    const unlearnedButton = screen.getByRole("button", { name: "未学习" });
+    fireEvent.click(unlearnedButton);
+
+    expect(unlearnedButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("已学习高重点")).not.toBeInTheDocument();
+    expect(screen.getByText("未学习高重点")).toBeInTheDocument();
+    expect(screen.queryByText("未学习低重点")).not.toBeInTheDocument();
+    expect(screen.getByText("已学习 1 / 3")).toBeInTheDocument();
+    expect(screen.getByText("33%")).toBeInTheDocument();
+  });
 });
