@@ -1,7 +1,7 @@
 # CourseNexus 课枢
 
 <p align="center">
-  <img src="frontend/public/brand/coursenexus-logo.png" alt="CourseNexus Logo" width="420" />
+  <img src="assets/coursenexus-logo.png" alt="CourseNexus Logo" width="420" />
 </p>
 
 <p align="center">
@@ -19,6 +19,7 @@
 <p align="center">
   <a href="#为什么是-coursenexus">产品理念</a> ·
   <a href="#核心能力">核心能力</a> ·
+  <a href="#产品截图">产品截图</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#项目路线">项目路线</a> ·
   <a href="#参与贡献">参与贡献</a>
@@ -49,14 +50,21 @@
 | 学习执行 | 提供今日待办、月历、任务执行、完成状态、打卡与连续学习统计 |
 | 内容导出 | 将支持的生成内容导出为 Markdown 或 PDF |
 
-## 产品原型
+## 产品截图
 
-下面展示的是产品交互原型，用于说明 CourseNexus 的产品方向；实际界面以当前代码运行结果为准。
+以下界面均来自 CourseNexus 的实际运行版本，覆盖课程资料管理、智能问答、内容生成和学习计划等核心场景。
 
-<p align="center">
-  <img src="docs/product/PRD/images/首页.png" alt="CourseNexus 首页产品原型" width="49%" />
-  <img src="docs/product/PRD/images/课程详情页2.png" alt="CourseNexus 课程详情页产品原型" width="49%" />
-</p>
+| 首页与课程管理 | 课程详情与资料管理 |
+| --- | --- |
+| ![CourseNexus 首页与课程管理](assets/product-home.png) | ![CourseNexus 课程详情与资料管理](assets/product-course-workspace.png) |
+| **课程智能问答与来源引用** | **Quiz 测验与解析** |
+| ![CourseNexus 课程智能问答与来源引用](assets/product-course-qa.png) | ![CourseNexus Quiz 测验与解析](assets/product-quiz.png) |
+| **知识闪卡** | **思维导图** |
+| ![CourseNexus 知识闪卡](assets/product-flashcards.png) | ![CourseNexus 思维导图](assets/product-mindmap.png) |
+| **知识点清单与学习进度** | **学习计划诊断** |
+| ![CourseNexus 知识点清单与学习进度](assets/product-knowledge-list.png) | ![CourseNexus 学习计划诊断](assets/product-study-plan-diagnostic.png) |
+| **学习计划日历** | **任务执行、讲义与 AI 助教** |
+| ![CourseNexus 学习计划日历](assets/product-study-plan-calendar.png) | ![CourseNexus 任务执行、讲义与 AI 助教](assets/product-task-execution.png) |
 
 ## 快速开始
 
