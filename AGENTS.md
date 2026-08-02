@@ -22,8 +22,8 @@ CourseNexus 课枢是一个面向大学生多课程学习场景的 Agent 学习�
 - 具体业务功能进入实现后，必须在 `docs/domains/` 对应领域同步沉淀实际代码入口、实现架构、状态流转、关键决策和测试入口；后端功能还必须记录核心算法、数据流、复杂度或资源预算以及失败与补偿策略。
 - 每完成一个可验证的小功能、小修复或小文档规范变更，都要单独提交一次 git；不要把多个小功能攒到一个完整大功能结束后再合并成一次提交。
 - git message 使用 Angular / Conventional Commits 结构；`feat`、`fix`、`docs`、`test` 等模板字段保持英文，说明性内容使用中文。
-- 第一阶段开发者只向各自固定分支 `feature/frontend`、`feature/generation`、`feature/study-mode` 推送，不得直接推送 `main`。
-- 开发者负责代码、测试、commit、push、提交 PR 和完成报告；项目负责人负责审查 PR，并使用 rebase merge 合并到 `main`。PR 合并后，开发者自行从最新 `main` 使用 rebase 更新本地 `main` 和自己的固定开发分支，再推送自己的固定远程分支；不要用普通 merge 产生 merge commit。数据库、公共 API/schema 或架构变更须项目负责人确认。
+- `main` 只保存稳定版本，`dev` 是日常开发集成分支；开发者的新功能分支必须从最新 `dev` 创建，并通过 PR 合并回 `dev`，不得直接向 `main` 或 `dev` 推送。
+- 开发者负责代码、测试、commit、push、提交 PR 和完成报告；项目负责人负责审查 PR。功能 PR 合并到 `dev` 后删除对应功能分支；准备稳定版本时由项目负责人发起 `dev` 到 `main` 的发布 PR。数据库、公共 API/schema 或架构变更须项目负责人确认。
 - 提交前必须运行与本次小改动匹配的验证命令；如果只是文档变更，应至少说明未运行测试的原因。
 - Agent 可以在完成一个可验证小改动并通过验证后自动 commit；commit 前必须检查 `git status`、`git diff` / `git diff --staged`、待提交文件范围、敏感文件和测试 / 验证结果。
 - `git push`、`git push --force-with-lease`、创建 PR 和合并 PR 都属于远程仓库操作，必须由开发者明确下达指令后才能执行；Agent 不得自动 push、强推、创建或合并 PR。
