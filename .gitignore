@@ -40,9 +40,6 @@ coverage/
 /docs/superpowers/
 /.worktrees/
 
-# One-off real-model validation reports kept local only
-/docs/planning/phase-1-validation/*real-model-preview*.md
-/docs/planning/phase-1-validation/*pdf-page-loss-analysis*.md
 # Local runtime artifacts from Study Mode real E2E validation
 /docs/domains/study-mode/validation/**/app-logs/
 /docs/domains/study-mode/validation/**/chroma/

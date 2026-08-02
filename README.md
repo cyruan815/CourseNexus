@@ -165,7 +165,7 @@ pnpm preview
 
 - [AGENTS.md](./AGENTS.md)：仓库协作和提交约束。
 - [docs/index.md](./docs/index.md)：产品、架构、API 和工程文档入口。
-- [第一阶段并行开发任务书](./docs/planning/phase-1-task-books/README.md)：当前任务清单、业务范围和三人并行规则。
+- [工程协作规范](./docs/engineering/collaboration.md)：分支策略、提交规范、PR 与 Review 规则。
 
 ## 环境准备
 

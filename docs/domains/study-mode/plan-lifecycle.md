@@ -72,7 +72,6 @@
 - `uv run python -m pytest tests/modules/study_mode/test_subsystem_schema_contract.py tests/modules/study_plans -q`：`68 passed in 18.11s`，覆盖 schema 契约、计划保存幂等、确认任务树校验和原子替换。
 - `uv run python -m pytest tests/modules/study_plans tests/modules/checkins tests/modules/learning_execution tests/modules/todos_calendar tests/integration -q`：`125 passed in 28.53s`，覆盖计划、执行、打卡、日历和集成链路。
 - `uv run python -m pytest -q`：`316 passed in 41.41s`。
-- 历史真实模型验收报告保留在 `docs/planning/phase-1-validation/`，但不属于本次幂等修复提交范围。
 
 ## 2026-07-14 前端 C10 计划重生成 / 替换 / 删除接入
 

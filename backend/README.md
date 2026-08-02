@@ -115,8 +115,7 @@ Select-String -Path logs/course-nexus.log -Pattern 'req_具体请求ID'
 
 ## 协作入口
 
-- [第一阶段后端任务书](../docs/planning/phase-1-task-books/README.md)
-- [共享协作契约](../docs/planning/phase-1-task-books/shared-contract.md)
+- [工程协作规范](../docs/engineering/collaboration.md)
 - [RAG 消费者接入指南](../docs/engineering/rag-consumer-guide.md)
 - [架构与模块边界](../docs/architecture/index.md)
 - [API 与数据契约](../docs/api-data/index.md)

@@ -66,7 +66,7 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## 协作入口
 
-- [第一阶段前端任务书](../docs/planning/phase-1-task-books/README.md)
+- [工程协作规范](../docs/engineering/collaboration.md)
 - [前端接入契约](../docs/api-data/frontend-integration.md)
 - [API 与数据契约](../docs/api-data/index.md)
 - [工程与协作规范](../docs/engineering/index.md)
