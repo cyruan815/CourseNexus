@@ -17,18 +17,36 @@
 </p>
 
 <p align="center">
-  <a href="#为什么是-coursenexus">产品理念</a> ·
-  <a href="#核心能力">核心能力</a> ·
-  <a href="#界面概览">界面概览</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#项目路线">项目路线</a> ·
-  <a href="#参与贡献">参与贡献</a>
+  <a href="#why-coursenexus">产品理念</a> ·
+  <a href="#features">核心能力</a> ·
+  <a href="#interface-overview">界面概览</a> ·
+  <a href="#quick-start">快速开始</a> ·
+  <a href="#roadmap">项目路线</a> ·
+  <a href="#contributing">参与贡献</a>
 </p>
 
 > [!IMPORTANT]
 > CourseNexus 当前处于 `v0.1.0` 本地 POC 阶段，适合学习、体验和共同开发，尚未面向生产环境部署。项目正在快速迭代，接口与数据结构可能继续调整。
 
-## 为什么是 CourseNexus
+<a id="contents"></a>
+
+## 📖 目录
+
+- [🎯 为什么是 CourseNexus](#why-coursenexus)
+- [✨ 核心能力](#features)
+- [📸 界面概览](#interface-overview)
+- [📁 项目结构](#project-structure)
+- [🚀 快速开始](#quick-start)
+- [🏗️ 系统架构](#architecture)
+- [🗺️ 项目路线](#roadmap)
+- [📚 项目文档](#documentation)
+- [🤝 参与贡献](#contributing)
+- [🏷️ 版本与反馈](#releases-and-feedback)
+- [📄 License](#license)
+
+<a id="why-coursenexus"></a>
+
+## 🎯 为什么是 CourseNexus
 
 一门课程的资料往往散落在 PDF、课件、笔记和图片中；问答、复习、计划和执行又分布在不同工具里。CourseNexus 希望把这些环节放回同一个以“课程”为中心的工作台：
 
@@ -38,7 +56,9 @@
 - **计划可以执行**：把学习目标拆成日期、任务和二级任务，并通过待办、日历和打卡持续推进。
 - **数据优先本地**：POC 默认使用 SQLite、本地文件存储和本地 Chroma，便于个人体验与二次开发。
 
-## 核心能力
+<a id="features"></a>
+
+## ✨ 核心能力
 
 | 能力 | 当前 POC 提供的体验 |
 | --- | --- |
@@ -50,7 +70,7 @@
 | 学习执行 | 提供今日待办、月历、任务执行、完成状态、打卡与连续学习统计 |
 | 内容导出 | 将支持的生成内容导出为 Markdown 或 PDF |
 
-<h2 id="界面概览" align="center">界面概览</h2>
+<h2 id="interface-overview" align="center">📸 界面概览</h2>
 
 <p align="center">以下界面均来自 CourseNexus 的实际运行版本，覆盖课程资料管理、智能问答、内容生成和学习计划等核心场景。</p>
 
@@ -66,7 +86,37 @@
 | **学习计划日历** | **任务执行、讲义与 AI 助教** |
 | ![CourseNexus 学习计划日历](assets/product-study-plan-calendar.png) | ![CourseNexus 任务执行、讲义与 AI 助教](assets/product-task-execution.png) |
 
-## 快速开始
+<a id="project-structure"></a>
+
+## 📁 项目结构
+
+以下仅展示理解和参与 CourseNexus 所需的核心目录：
+
+```text
+CourseNexus/
+├── assets/                    # README 品牌图片与产品截图
+├── frontend/                  # React + TypeScript 前端
+│   ├── src/
+│   │   ├── api/               # 后端 API 客户端
+│   │   ├── components/        # 通用界面组件
+│   │   └── features/          # 按业务领域组织的功能模块
+│   └── tests/                 # 前端测试
+├── backend/                   # FastAPI 后端
+│   ├── app/
+│   │   ├── api/               # HTTP 路由与接口入口
+│   │   ├── modules/           # 课程、资料、问答和学习计划等领域模块
+│   │   └── integrations/      # 模型、解析和外部能力集成
+│   ├── migrations/            # Alembic 数据库迁移
+│   └── tests/                 # 后端测试
+├── docs/                      # 产品、架构、工程和领域知识库
+├── .env.example               # 本地环境变量示例
+├── package.json               # 根目录开发脚本
+└── pnpm-workspace.yaml        # pnpm 工作区配置
+```
+
+<a id="quick-start"></a>
+
+## 🚀 快速开始
 
 ### 环境要求
 
@@ -139,7 +189,9 @@ pnpm frontend:dev
 - OpenAPI 文档：<http://localhost:8000/docs>
 - 健康检查：<http://localhost:8000/api/v1/health>
 
-## 系统架构
+<a id="architecture"></a>
+
+## 🏗️ 系统架构
 
 ```mermaid
 flowchart LR
@@ -162,7 +214,9 @@ flowchart LR
 - **内容渲染**：Markmap、Mermaid、KaTeX、Playwright
 - **本地存储**：SQLite、本地文件系统、Chroma PersistentClient
 
-## 项目路线
+<a id="roadmap"></a>
+
+## 🗺️ 项目路线
 
 已具备的 POC 链路：
 
@@ -178,7 +232,9 @@ flowchart LR
 
 更完整的产品规划见 [PRD](./docs/product/prd.md) 和 [实现路线图](./docs/planning/implementation-roadmap.md)。
 
-## 项目文档
+<a id="documentation"></a>
+
+## 📚 项目文档
 
 | 文档 | 适合谁阅读 |
 | --- | --- |
@@ -189,7 +245,9 @@ flowchart LR
 | [工程规范](./docs/engineering/index.md) | 准备提交代码或文档的贡献者 |
 | [领域实现文档](./docs/domains/index.md) | 希望深入具体业务模块的贡献者 |
 
-## 参与贡献
+<a id="contributing"></a>
+
+## 🤝 参与贡献
 
 欢迎提交 Issue、讨论想法或贡献代码。开始前请先阅读 [AGENTS.md](./AGENTS.md) 和 [协作规范](./docs/engineering/collaboration.md)。
 
@@ -202,11 +260,15 @@ flowchart LR
 
 涉及数据库、公共 API、共享 schema、架构边界或核心依赖的改动，请在实现前先发起讨论。
 
-## 版本与反馈
+<a id="releases-and-feedback"></a>
+
+## 🏷️ 版本与反馈
 
 - [Releases](https://github.com/cyruan815/CourseNexus/releases)：下载或查看已发布版本
 - [Issues](https://github.com/cyruan815/CourseNexus/issues)：报告缺陷或提出功能建议
 
-## License
+<a id="license"></a>
+
+## 📄 License
 
 CourseNexus 使用 [MIT License](./LICENSE) 开源。
