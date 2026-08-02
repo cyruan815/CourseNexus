@@ -19,7 +19,7 @@
 <p align="center">
   <a href="#为什么是-coursenexus">产品理念</a> ·
   <a href="#核心能力">核心能力</a> ·
-  <a href="#产品截图">产品截图</a> ·
+  <a href="#界面概览">界面概览</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#项目路线">项目路线</a> ·
   <a href="#参与贡献">参与贡献</a>
@@ -50,12 +50,12 @@
 | 学习执行 | 提供今日待办、月历、任务执行、完成状态、打卡与连续学习统计 |
 | 内容导出 | 将支持的生成内容导出为 Markdown 或 PDF |
 
-## 产品截图
+<h2 id="界面概览" align="center">界面概览</h2>
 
-以下界面均来自 CourseNexus 的实际运行版本，覆盖课程资料管理、智能问答、内容生成和学习计划等核心场景。
+<p align="center">以下界面均来自 CourseNexus 的实际运行版本，覆盖课程资料管理、智能问答、内容生成和学习计划等核心场景。</p>
 
 | 首页与课程管理 | 课程详情与资料管理 |
-| --- | --- |
+| :---: | :---: |
 | ![CourseNexus 首页与课程管理](assets/product-home.png) | ![CourseNexus 课程详情与资料管理](assets/product-course-workspace.png) |
 | **课程智能问答与来源引用** | **Quiz 测验与解析** |
 | ![CourseNexus 课程智能问答与来源引用](assets/product-course-qa.png) | ![CourseNexus Quiz 测验与解析](assets/product-quiz.png) |
