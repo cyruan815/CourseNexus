@@ -76,15 +76,15 @@
 
 | 首页与课程管理 | 课程详情与资料管理 |
 | :---: | :---: |
-| ![CourseNexus 首页与课程管理](assets/product-home.png) | ![CourseNexus 课程详情与资料管理](assets/product-course-workspace.png) |
+| ![](assets/1首页与课程管理.gif) | ![](assets/课程详情与资料管理.gif) |
 | **课程智能问答与来源引用** | **Quiz 测验与解析** |
-| ![CourseNexus 课程智能问答与来源引用](assets/product-course-qa.png) | ![CourseNexus Quiz 测验与解析](assets/product-quiz.png) |
+| ![](assets/课程智能问答与来源引用.gif) | ![](assets/Quiz 测验与解析.gif) |
 | **知识闪卡** | **思维导图** |
-| ![CourseNexus 知识闪卡](assets/product-flashcards.png) | ![CourseNexus 思维导图](assets/product-mindmap.png) |
+| ![](assets/知识闪卡.gif) | ![](assets/思维导图.gif) |
 | **知识点清单与学习进度** | **学习计划诊断** |
-| ![CourseNexus 知识点清单与学习进度](assets/product-knowledge-list.png) | ![CourseNexus 学习计划诊断](assets/product-study-plan-diagnostic.png) |
+| ![](assets/知识点清单与学习进度.gif) | ![](assets/学习计划诊断.gif) |
 | **学习计划日历** | **任务执行、讲义与 AI 助教** |
-| ![CourseNexus 学习计划日历](assets/product-study-plan-calendar.png) | ![CourseNexus 任务执行、讲义与 AI 助教](assets/product-task-execution.png) |
+| ![](assets/学习计划日历.gif) | ![](assets/任务执行、讲义与 AI 助教.gif) |
 
 <a id="project-structure"></a>
 
