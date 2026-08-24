@@ -78,13 +78,13 @@
 | :---: | :---: |
 | ![](assets/1首页与课程管理.gif) | ![](assets/课程详情与资料管理.gif) |
 | **课程智能问答与来源引用** | **Quiz 测验与解析** |
-| ![](assets/课程智能问答与来源引用.gif) | ![](assets/Quiz 测验与解析.gif) |
+| ![](assets/课程智能问答与来源引用.gif) | ![](<assets/Quiz 测验与解析.gif>) |
 | **知识闪卡** | **思维导图** |
 | ![](assets/知识闪卡.gif) | ![](assets/思维导图.gif) |
 | **知识点清单与学习进度** | **学习计划诊断** |
 | ![](assets/知识点清单与学习进度.gif) | ![](assets/学习计划诊断.gif) |
 | **学习计划日历** | **任务执行、讲义与 AI 助教** |
-| ![](assets/学习计划日历.gif) | ![](assets/任务执行、讲义与 AI 助教.gif) |
+| ![](assets/学习计划日历.gif) | ![](<assets/任务执行、讲义与 AI 助教.gif>) |
 
 <a id="project-structure"></a>
 
