@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 from pydantic import BaseModel
 
@@ -13,28 +15,30 @@ class ReferenceExtraction(BaseModel):
 
 
 class FakeResponses:
-    def __init__(self, *, parsed=None, error: Exception | None = None) -> None:
+    def __init__(self, *, parsed=None, error: Exception | None = None, usage=None) -> None:
         self.parsed = parsed
         self.error = error
+        self.usage = usage
         self.calls: list[dict[str, object]] = []
 
     def parse(self, **kwargs):
         self.calls.append(kwargs)
         if self.error is not None:
             raise self.error
-        return type("ParsedResponse", (), {"output_parsed": self.parsed})()
+        return type("ParsedResponse", (), {"output_parsed": self.parsed, "usage": self.usage})()
 
 
 class FakeChatCompletions:
-    def __init__(self, *, content: str) -> None:
+    def __init__(self, *, content: str, usage=None) -> None:
         self.content = content
+        self.usage = usage
         self.calls: list[dict[str, object]] = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         message = type("Message", (), {"content": self.content})()
         choice = type("Choice", (), {"message": message})()
-        return type("ChatCompletion", (), {"choices": [choice]})()
+        return type("ChatCompletion", (), {"choices": [choice], "usage": self.usage})()
 
 
 class FakeChat:
@@ -114,6 +118,53 @@ def test_deepseek_provider_uses_chat_completions_without_calling_responses_api()
     assert responses.calls == []
     assert chat_completions.calls[0]["model"] == "deepseek-v4-flash"
     assert "reference extraction" in chat_completions.calls[0]["messages"][1]["content"]
+
+
+def test_structured_generation_logs_chat_usage(caplog) -> None:
+    responses = FakeResponses(error=FakeResponsesApiNotFoundError("not found"))
+    chat_completions = FakeChatCompletions(
+        content='{"facts":["A"],"citation_chunk_ids":["c1"]}',
+        usage={"prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168},
+    )
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    with caplog.at_level(logging.INFO, logger="course_nexus.model.generate"):
+        provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
+
+    record = next(record for record in caplog.records if record.name.endswith("model.generate"))
+    message = record.getMessage()
+    assert "prompt_tokens=123" in message
+    assert "completion_tokens=45" in message
+    assert "total_tokens=168" in message
+    assert "usage_status=available" in message
+
+
+def test_structured_generation_normalizes_responses_usage(caplog) -> None:
+    parsed = ReferenceExtraction(facts=["A"], citation_chunk_ids=["c1"])
+    responses = FakeResponses(
+        parsed=parsed,
+        usage={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+    )
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="gpt-test",
+        client=FakeClient(responses),
+    )
+
+    with caplog.at_level(logging.INFO, logger="course_nexus.model.generate"):
+        provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction)
+
+    record = next(record for record in caplog.records if record.name.endswith("model.generate"))
+    message = record.getMessage()
+    assert "prompt_tokens=11" in message
+    assert "completion_tokens=7" in message
+    assert "total_tokens=18" in message
+    assert "usage_status=available" in message
 
 
 def test_openai_provider_maps_sdk_error_to_generation_failed() -> None:

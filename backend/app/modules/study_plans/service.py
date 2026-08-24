@@ -299,6 +299,8 @@ def preview_study_plan(
     payload: StudyPlanBuildRequest,
     model_provider: ModelProvider,
     max_tokens: int,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanPreview:
     started_at = perf_counter()
     course = assert_course_owner(db, user_id, course_id)
@@ -414,27 +416,61 @@ def preview_study_plan(
             tasks=task_previews,
         )
 
-    mapped_result = map_material_coverage_batches(
-        batches=batches,
-        expected_material_ids=expected_material_ids,
-        map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
-    )
+    map_started_at = perf_counter()
+    try:
+        mapped_result = map_material_coverage_batches(
+            batches=batches,
+            expected_material_ids=expected_material_ids,
+            map_batch=lambda batch: map_material_batch(
+                batch=batch,
+                payload=payload,
+                model_provider=map_model_provider or model_provider,
+            ),
+            map_concurrency=map_concurrency,
+        )
+    finally:
+        logger.info(
+            "计划预览阶段 | phase=map course=%s batch_count=%d concurrency=%d cost_ms=%.2f",
+            course_id,
+            len(batches),
+            map_concurrency,
+            (perf_counter() - map_started_at) * 1000,
+        )
 
     retry_feedback: str | None = None
     last_error: CourseNexusError | None = None
     preview: StudyPlanPreview | None = None
     for attempt in range(2):
-        coverage_result = reduce_material_coverage(
-            mapped_result=mapped_result,
-            reduce_results=lambda mapped_batches: reduce_results(
-                mapped_batches,
-                retry_feedback=retry_feedback,
-            ),
-        )
+        reduce_started_at = perf_counter()
+        try:
+            coverage_result = reduce_material_coverage(
+                mapped_result=mapped_result,
+                reduce_results=lambda mapped_batches: reduce_results(
+                    mapped_batches,
+                    retry_feedback=retry_feedback,
+                ),
+            )
+        finally:
+            logger.info(
+                "计划预览阶段 | phase=reduce course=%s batch_count=%d attempt=%d cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                (perf_counter() - reduce_started_at) * 1000,
+            )
         preview = build_preview(coverage_result)
+        validation_started_at = perf_counter()
         try:
             validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
         except CourseNexusError as exc:
+            logger.info(
+                "计划预览阶段 | phase=validation course=%s batch_count=%d attempt=%d status=failed error_code=%s cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                exc.code,
+                (perf_counter() - validation_started_at) * 1000,
+            )
             message = invalid_generation_message(exc)
             if attempt == 0 and message == "学习或复习任务不能包含测试题量要求":
                 retry_feedback = message
@@ -442,6 +478,14 @@ def preview_study_plan(
                 resolved_payload = None
                 continue
             raise
+        else:
+            logger.info(
+                "计划预览阶段 | phase=validation course=%s batch_count=%d attempt=%d status=success cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                (perf_counter() - validation_started_at) * 1000,
+            )
         break
     else:
         if last_error is not None:
@@ -469,6 +513,8 @@ def save_study_plan(
     model_provider: ModelProvider,
     max_tokens: int,
     idempotency_key: str | None = None,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanBundle:
     started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
@@ -504,6 +550,8 @@ def save_study_plan(
             payload=save_payload,
             model_provider=model_provider,
             max_tokens=max_tokens,
+            map_concurrency=map_concurrency,
+            map_model_provider=map_model_provider,
         )
         title = save_payload.title or preview.title
         tasks_preview = preview.tasks
@@ -619,6 +667,8 @@ def preview_study_plan_regeneration(
     payload: StudyPlanRegenerationPreviewRequest,
     model_provider: ModelProvider,
     max_tokens: int,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanPreview:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_replace_allowed(db, plan_id=plan_id)
@@ -682,6 +732,8 @@ def preview_study_plan_regeneration(
         payload=build_payload,
         model_provider=model_provider,
         max_tokens=max_tokens,
+        map_concurrency=map_concurrency,
+        map_model_provider=map_model_provider,
     )
     return preview
 

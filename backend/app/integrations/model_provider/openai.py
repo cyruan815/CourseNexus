@@ -103,10 +103,15 @@ class OpenAIModelProvider:
     ) -> StructuredOutputT:
         started_at = perf_counter()
         if self._uses_deepseek_chat_completions():
-            result = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
-            self._log_structured_generation(output_schema=output_schema, started_at=started_at)
+            result, response = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
+            self._log_structured_generation(
+                output_schema=output_schema,
+                started_at=started_at,
+                usage=_extract_usage(response),
+            )
             return result
 
+        response: object | None = None
         try:
             response = self.client.responses.parse(
                 model=self.model,
@@ -122,12 +127,16 @@ class OpenAIModelProvider:
         except Exception as exc:
             if not _is_not_found_error(exc):
                 raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
-            result = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
+            result, response = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
         else:
             parsed = getattr(response, "output_parsed", None)
             result = self._validate_structured_output(parsed=parsed, output_schema=output_schema)
 
-        self._log_structured_generation(output_schema=output_schema, started_at=started_at)
+        self._log_structured_generation(
+            output_schema=output_schema,
+            started_at=started_at,
+            usage=_extract_usage(response),
+        )
         return result
 
     def _uses_deepseek_chat_completions(self) -> bool:
@@ -138,11 +147,19 @@ class OpenAIModelProvider:
         *,
         output_schema: type[StructuredOutputT],
         started_at: float,
+        usage: dict[str, int] | None,
     ) -> None:
+        usage_fields = usage or {}
+        usage_status = "available" if usage else "unavailable"
         logger.info(
-            "模型调用成功 | operation=generate_structured model=%s schema=%s cost_ms=%.2f",
+            "模型调用成功 | operation=generate_structured model=%s schema=%s "
+            "prompt_tokens=%s completion_tokens=%s total_tokens=%s usage_status=%s cost_ms=%.2f",
             self.model,
             output_schema.__name__,
+            usage_fields.get("prompt_tokens", "-"),
+            usage_fields.get("completion_tokens", "-"),
+            usage_fields.get("total_tokens", "-"),
+            usage_status,
             (perf_counter() - started_at) * 1000,
         )
 
@@ -165,7 +182,7 @@ class OpenAIModelProvider:
         *,
         prompt: str,
         output_schema: type[StructuredOutputT],
-    ) -> StructuredOutputT:
+    ) -> tuple[StructuredOutputT, object]:
         schema_json = json.dumps(output_schema.model_json_schema(), ensure_ascii=False)
         fallback_prompt = "\n\n".join(
             [
@@ -194,7 +211,7 @@ class OpenAIModelProvider:
                 message="模型结构化输出不符合约定",
                 status_code=500,
             ) from exc
-        return self._validate_structured_output(parsed=parsed, output_schema=output_schema)
+        return self._validate_structured_output(parsed=parsed, output_schema=output_schema), response
 
     def _validate_structured_output(
         self,
@@ -257,3 +274,30 @@ def _first_chat_content(response: object) -> str:
     message = getattr(choices[0], "message", None)
     content = getattr(message, "content", None)
     return content if isinstance(content, str) else ""
+
+
+def _extract_usage(response: object | None) -> dict[str, int] | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+
+    prompt_tokens = _usage_int(usage, "prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = _usage_int(usage, "input_tokens")
+    completion_tokens = _usage_int(usage, "completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = _usage_int(usage, "output_tokens")
+    total_tokens = _usage_int(usage, "total_tokens")
+    values = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+    if all(value is None for value in values.values()):
+        return None
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def _usage_int(usage: object, field: str) -> int | None:
+    value = usage.get(field) if isinstance(usage, dict) else getattr(usage, field, None)
+    return value if isinstance(value, int) else None

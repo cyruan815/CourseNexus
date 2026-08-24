@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     study_plan_generator_base_url: str | None = None
     study_plan_generator_model: str = "gpt-5.4-mini"
 
+    study_plan_map_api_key: str | None = None
+    study_plan_map_base_url: str | None = None
+    study_plan_map_model: str | None = None
+
     handout_api_key: str | None = None
     handout_base_url: str | None = None
     handout_model: str = "gpt-5.4-mini"
@@ -111,6 +115,7 @@ class Settings(BaseSettings):
     rag_chunk_max_tokens: int = 800
     material_batch_max_tokens: int = 12_000
     material_context_max_tokens: int = 120_000
+    study_plan_map_concurrency: int = Field(default=1, ge=1, le=5)
     markmap_node_command: str = "node"
     markmap_transform_timeout_seconds: float = 15.0
 

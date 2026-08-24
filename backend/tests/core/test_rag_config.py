@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import MODEL_PURPOSES, Settings
 
 
@@ -11,6 +14,16 @@ def test_rag_settings_use_local_persistent_defaults() -> None:
     assert settings.rag_chunk_max_tokens == 800
     assert settings.material_batch_max_tokens == 12_000
     assert settings.material_context_max_tokens == 120_000
+
+
+def test_study_plan_map_concurrency_defaults_to_one_and_allows_up_to_five() -> None:
+    assert Settings(_env_file=None).study_plan_map_concurrency == 1
+    assert Settings(_env_file=None, study_plan_map_concurrency=5).study_plan_map_concurrency == 5
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, study_plan_map_concurrency=0)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, study_plan_map_concurrency=6)
 
 
 def test_every_model_purpose_has_an_independent_endpoint() -> None:
