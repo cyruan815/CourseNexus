@@ -78,6 +78,11 @@ interface ExecutionResizeDrag {
   startWidths: ExecutionColumnWidths;
 }
 
+type GenerationState = {
+  status: "generating" | "error";
+  error?: string;
+};
+
 const EXECUTION_COLUMN_STORAGE_KEY = "course-nexus:study-plan-execution-columns";
 const EXECUTION_COLUMN_MIN_WIDTHS: ExecutionColumnWidths = {
   left: 230,
@@ -471,7 +476,7 @@ export function StudyTaskExecutionPage() {
   const [completionResult, setCompletionResult] = useState<SubtaskCompletionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
-  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationStateBySubtask, setGenerationStateBySubtask] = useState<Record<string, GenerationState>>({});
   const [exportError, setExportError] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContentRead | null>(null);
@@ -482,7 +487,7 @@ export function StudyTaskExecutionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSwitchingSubtask, setIsSwitchingSubtask] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [generatingSubtaskId, setGeneratingSubtaskId] = useState<string | null>(null);
+  const generatingSubtaskIdsRef = useRef<Set<string>>(new Set());
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
@@ -676,7 +681,6 @@ export function StudyTaskExecutionPage() {
     }
     setError(null);
     setCompletionError(null);
-    setGenerationError(null);
     setExportError(null);
     setQaError(null);
     setCompletionResult(null);
@@ -719,13 +723,24 @@ export function StudyTaskExecutionPage() {
     ? generatedContentBySubtask[currentSubtask.subtask_id]
       ?? (generatedContent?.study_subtask_id === currentSubtask.subtask_id ? generatedContent : null)
     : null;
+  const currentGenerationState = currentSubtask
+    ? generationStateBySubtask[currentSubtask.subtask_id]
+    : undefined;
+  const generationError = currentGenerationState?.status === "error"
+    ? currentGenerationState.error ?? "内容生成失败"
+    : null;
   const activeContentId = generationError ? null : currentGeneratedContent?.id ?? existingContentId ?? null;
   const activeContentTitle = currentGeneratedContent?.title ?? null;
   const currentDisplayStatus = currentSubtask
     ? displayStatusForGeneratedContent(currentSubtask.status, Boolean(activeContentId))
     : null;
-  const isGeneratingCurrentSubtask = Boolean(currentSubtask && generatingSubtaskId === currentSubtask.subtask_id);
-  const isGeneratingOtherSubtask = Boolean(currentSubtask && generatingSubtaskId && generatingSubtaskId !== currentSubtask.subtask_id);
+  const isGeneratingCurrentSubtask = currentGenerationState?.status === "generating";
+  const isGeneratingOtherSubtask = Boolean(
+    currentSubtask
+      && Object.entries(generationStateBySubtask).some(
+        ([subtaskId, state]) => subtaskId !== currentSubtask.subtask_id && state.status === "generating",
+      ),
+  );
   const readonlyHandoutMarkdown = useMemo(() => handoutMarkdown(currentGeneratedContent), [currentGeneratedContent]);
   const taskTestPreviewQuestions = useMemo(
     () => taskTestQuestions(currentGeneratedContent?.content_json) ?? [],
@@ -766,12 +781,30 @@ export function StudyTaskExecutionPage() {
               [content.study_subtask_id as string]: content,
             }));
           }
-          setGenerationError(null);
+          if (content.study_subtask_id) {
+            setGenerationStateBySubtask((current) => {
+              if (!current[content.study_subtask_id as string]) {
+                return current;
+              }
+
+              const next = { ...current };
+              delete next[content.study_subtask_id as string];
+              return next;
+            });
+          }
         }
       })
       .catch((nextError: unknown) => {
         if (!ignore) {
-          setGenerationError(generationErrorMessage(nextError));
+          if (currentSubtask?.subtask_id) {
+            setGenerationStateBySubtask((current) => ({
+              ...current,
+              [currentSubtask.subtask_id]: {
+                status: "error",
+                error: generationErrorMessage(nextError),
+              },
+            }));
+          }
         }
       })
       .finally(() => {
@@ -819,14 +852,16 @@ export function StudyTaskExecutionPage() {
       return;
     }
 
-    if (generatingSubtaskId && generatingSubtaskId !== targetSubtaskId) {
-      setGenerationNotice("另一个任务的内容仍在后台生成中，完成前暂不能同时发起新的生成。");
+    if (generatingSubtaskIdsRef.current.has(targetSubtaskId)) {
       return;
     }
 
-    setGeneratingSubtaskId(targetSubtaskId);
+    generatingSubtaskIdsRef.current.add(targetSubtaskId);
+    setGenerationStateBySubtask((current) => ({
+      ...current,
+      [targetSubtaskId]: { status: "generating" },
+    }));
     setGenerationNotice(null);
-    setGenerationError(null);
 
     try {
       const content = targetContentType === "handout"
@@ -844,13 +879,26 @@ export function StudyTaskExecutionPage() {
       setExportError(null);
     } catch (nextError) {
       const message = generationErrorMessage(nextError);
+      setGenerationStateBySubtask((current) => ({
+        ...current,
+        [targetSubtaskId]: { status: "error", error: message },
+      }));
       if (selectedSubtaskIdRef.current === targetSubtaskId) {
-        setGenerationError(message);
+        setGenerationNotice(null);
       } else {
         setGenerationNotice(`刚才那个任务的内容生成失败：${message}`);
       }
     } finally {
-      setGeneratingSubtaskId((current) => (current === targetSubtaskId ? null : current));
+      generatingSubtaskIdsRef.current.delete(targetSubtaskId);
+      setGenerationStateBySubtask((current) => {
+        if (current[targetSubtaskId]?.status !== "generating") {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[targetSubtaskId];
+        return next;
+      });
       setGenerationNotice((current) => (
         current && (current.includes("已切换任务") || current.includes("后台生成"))
           ? null
@@ -911,7 +959,9 @@ export function StudyTaskExecutionPage() {
       return;
     }
 
-    if (generatingSubtaskId && generatingSubtaskId !== nextSubtaskId) {
+    if (Object.entries(generationStateBySubtask).some(
+      ([subtaskId, state]) => subtaskId !== nextSubtaskId && state.status === "generating",
+    )) {
       setGenerationNotice("已切换任务；原任务内容仍在后台生成，不会影响当前页面。");
     }
 
@@ -1107,7 +1157,7 @@ export function StudyTaskExecutionPage() {
                       ) : null}
                       {isGeneratingOtherSubtask ? (
                         <Alert color="yellow" role="status" title="后台生成中" variant="light">
-                          另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。
+                          其他任务的内容也在后台生成中，完成后会自动保存到对应任务。
                         </Alert>
                       ) : null}
                       {exportError ? (
@@ -1141,7 +1191,6 @@ export function StudyTaskExecutionPage() {
                                 </Button>
                                 <Button
                                   leftSection={<IconRefresh size={15} />}
-                                  disabled={isGeneratingOtherSubtask}
                                   loading={isGeneratingCurrentSubtask}
                                   onClick={() => void handleGenerateContent(true)}
                                   size="xs"
@@ -1167,7 +1216,6 @@ export function StudyTaskExecutionPage() {
                         <Group justify="space-between" wrap="nowrap">
                           <Badge color="gray" variant="light">{contentLabel}待生成</Badge>
                           <Button
-                            disabled={isGeneratingOtherSubtask}
                             leftSection={<IconBook2 size={16} />}
                             loading={isGeneratingCurrentSubtask}
                             onClick={() => void handleGenerateContent(false)}

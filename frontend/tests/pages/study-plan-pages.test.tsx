@@ -1819,10 +1819,14 @@ describe("study plan pages", () => {
     });
   });
 
-  it("keeps switched task content independent and clears the background generation notice", async () => {
+  it("generates switched task content concurrently and keeps results independent", async () => {
     let resolveHandout: ((value: Response) => void) | undefined;
+    let resolveTaskTest: ((value: Response) => void) | undefined;
     const pendingHandout = new Promise<Response>((resolve) => {
       resolveHandout = resolve;
+    });
+    const pendingTaskTest = new Promise<Response>((resolve) => {
+      resolveTaskTest = resolve;
     });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -1838,6 +1842,9 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
         return pendingHandout;
       }
+      if (url.endsWith("/study-subtasks/subtask_2/task-tests") && init?.method === "POST") {
+        return pendingTaskTest;
+      }
 
       return Promise.resolve(successResponse({}));
     });
@@ -1852,15 +1859,28 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "练习: 基础题" })).toBeInTheDocument();
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.getByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).toBeInTheDocument();
-    expect(screen.getByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).toBeInTheDocument();
+    expect(screen.getByText("其他任务的内容也在后台生成中，完成后会自动保存到对应任务。")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/handouts",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_2/task-tests",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
     resolveHandout?.(successResponse(generatedHandout, "req_handout"));
+    resolveTaskTest?.(successResponse(generatedTaskTest, "req_task_test"));
 
     await waitFor(() => {
       expect(screen.queryByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).not.toBeInTheDocument();
     });
-    expect(screen.queryByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).not.toBeInTheDocument();
+    expect(screen.queryByText("其他任务的内容也在后台生成中，完成后会自动保存到对应任务。")).not.toBeInTheDocument();
     expect(screen.getByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
   });
