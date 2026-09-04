@@ -1663,6 +1663,98 @@ describe("study plan pages", () => {
     expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
   });
 
+  it("keeps a regeneration failure after an older detail request resolves", async () => {
+    let resolveDetail: ((value: Response) => void) | undefined;
+    const pendingDetail = new Promise<Response>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return pendingDetail;
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({
+          error: { code: "GENERATION_FAILED", message: "生成失败" },
+        }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_handout_1",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+
+    expect(await screen.findByRole("alert", { name: "内容生成失败" })).toBeInTheDocument();
+    resolveDetail?.(successResponse(generatedHandout, "req_stale_detail"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert", { name: "内容生成失败" })).toBeInTheDocument();
+    });
+    expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
+  });
+
+  it("does not let an older detail request overwrite regenerated content", async () => {
+    let resolveDetail: ((value: Response) => void) | undefined;
+    const pendingDetail = new Promise<Response>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const regeneratedHandout = {
+      ...generatedHandout,
+      id: "gen_handout_2",
+      title: "向量空间新讲义",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return pendingDetail;
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return Promise.resolve(successResponse(regeneratedHandout, "req_regenerated"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_handout_1",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+
+    expect(await screen.findByText("向量空间新讲义")).toBeInTheDocument();
+    resolveDetail?.(successResponse(generatedHandout, "req_stale_detail"));
+
+    await waitFor(() => {
+      expect(screen.getByText("向量空间新讲义")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
+  });
+
   it("exports an existing handout as a PDF file", async () => {
     installDownloadMocks();
     const fetchMock = vi.fn((input: RequestInfo | URL) => {

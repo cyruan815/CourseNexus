@@ -488,6 +488,7 @@ export function StudyTaskExecutionPage() {
   const [isSwitchingSubtask, setIsSwitchingSubtask] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const generatingSubtaskIdsRef = useRef<Set<string>>(new Set());
+  const contentEpochBySubtaskRef = useRef<Record<string, number>>({});
   const [isContentLoading, setIsContentLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isAsking, setIsAsking] = useState(false);
@@ -497,6 +498,12 @@ export function StudyTaskExecutionPage() {
   ));
   const executionGridRef = useRef<HTMLDivElement | null>(null);
   const executionResizeDragRef = useRef<ExecutionResizeDrag | null>(null);
+
+  const bumpContentEpoch = (targetSubtaskId: string): number => {
+    const nextEpoch = (contentEpochBySubtaskRef.current[targetSubtaskId] ?? 0) + 1;
+    contentEpochBySubtaskRef.current[targetSubtaskId] = nextEpoch;
+    return nextEpoch;
+  };
 
   const resolveExecutionColumnWidths = (): ExecutionColumnWidths => {
     if (executionColumnWidths) {
@@ -756,16 +763,23 @@ export function StudyTaskExecutionPage() {
 
   useEffect(() => {
     let ignore = false;
+    const targetSubtaskId = currentSubtask?.subtask_id;
+    const requestEpoch = targetSubtaskId
+      ? (contentEpochBySubtaskRef.current[targetSubtaskId] ?? 0)
+      : 0;
 
-    if (!existingContentId || generationError) {
+    if (!targetSubtaskId || !existingContentId || generationError) {
       setIsContentLoading(false);
-      if (generatedContent && generatedContent.study_subtask_id !== currentSubtask?.subtask_id) {
+      if (generatedContent && generatedContent.study_subtask_id !== targetSubtaskId) {
         setGeneratedContent(null);
       }
       return;
     }
 
-    if (currentGeneratedContent?.id === existingContentId) {
+    if (
+      currentGeneratedContent?.study_subtask_id === targetSubtaskId
+      && currentGeneratedContent.id
+    ) {
       setIsContentLoading(false);
       return;
     }
@@ -773,7 +787,7 @@ export function StudyTaskExecutionPage() {
     setIsContentLoading(true);
     getGeneratedContentDetail(existingContentId)
       .then((content) => {
-        if (!ignore) {
+        if (!ignore && contentEpochBySubtaskRef.current[targetSubtaskId] === requestEpoch) {
           setGeneratedContent(content);
           if (content.study_subtask_id) {
             setGeneratedContentBySubtask((current) => ({
@@ -781,34 +795,21 @@ export function StudyTaskExecutionPage() {
               [content.study_subtask_id as string]: content,
             }));
           }
-          if (content.study_subtask_id) {
-            setGenerationStateBySubtask((current) => {
-              if (!current[content.study_subtask_id as string]) {
-                return current;
-              }
-
-              const next = { ...current };
-              delete next[content.study_subtask_id as string];
-              return next;
-            });
-          }
         }
       })
       .catch((nextError: unknown) => {
-        if (!ignore) {
-          if (currentSubtask?.subtask_id) {
-            setGenerationStateBySubtask((current) => ({
-              ...current,
-              [currentSubtask.subtask_id]: {
-                status: "error",
-                error: generationErrorMessage(nextError),
-              },
-            }));
-          }
+        if (!ignore && contentEpochBySubtaskRef.current[targetSubtaskId] === requestEpoch) {
+          setGenerationStateBySubtask((current) => ({
+            ...current,
+            [targetSubtaskId]: {
+              status: "error",
+              error: generationErrorMessage(nextError),
+            },
+          }));
         }
       })
       .finally(() => {
-        if (!ignore) {
+        if (!ignore && contentEpochBySubtaskRef.current[targetSubtaskId] === requestEpoch) {
           setIsContentLoading(false);
         }
       });
@@ -856,6 +857,7 @@ export function StudyTaskExecutionPage() {
       return;
     }
 
+    const generationEpoch = bumpContentEpoch(targetSubtaskId);
     generatingSubtaskIdsRef.current.add(targetSubtaskId);
     setGenerationStateBySubtask((current) => ({
       ...current,
@@ -867,38 +869,45 @@ export function StudyTaskExecutionPage() {
       const content = targetContentType === "handout"
         ? await generateSubtaskHandout(targetSubtaskId, { force_regenerate: forceRegenerate })
         : await generateSubtaskTaskTest(targetSubtaskId, { force_regenerate: forceRegenerate });
-      setGeneratedContentBySubtask((current) => ({
-        ...current,
-        [targetSubtaskId]: content,
-      }));
-      if (selectedSubtaskIdRef.current === targetSubtaskId) {
-        setGeneratedContent(content);
-      } else {
-        setGenerationNotice(null);
+      if (contentEpochBySubtaskRef.current[targetSubtaskId] === generationEpoch) {
+        setGeneratedContentBySubtask((current) => ({
+          ...current,
+          [targetSubtaskId]: content,
+        }));
+        if (selectedSubtaskIdRef.current === targetSubtaskId) {
+          setGeneratedContent(content);
+        } else {
+          setGenerationNotice(null);
+        }
+        setExportError(null);
       }
-      setExportError(null);
     } catch (nextError) {
       const message = generationErrorMessage(nextError);
-      setGenerationStateBySubtask((current) => ({
-        ...current,
-        [targetSubtaskId]: { status: "error", error: message },
-      }));
-      if (selectedSubtaskIdRef.current === targetSubtaskId) {
-        setGenerationNotice(null);
-      } else {
-        setGenerationNotice(`刚才那个任务的内容生成失败：${message}`);
+      if (contentEpochBySubtaskRef.current[targetSubtaskId] === generationEpoch) {
+        setGenerationStateBySubtask((current) => ({
+          ...current,
+          [targetSubtaskId]: { status: "error", error: message },
+        }));
+        if (selectedSubtaskIdRef.current === targetSubtaskId) {
+          setGenerationNotice(null);
+        } else {
+          setGenerationNotice(`刚才那个任务的内容生成失败：${message}`);
+        }
       }
     } finally {
       generatingSubtaskIdsRef.current.delete(targetSubtaskId);
-      setGenerationStateBySubtask((current) => {
-        if (current[targetSubtaskId]?.status !== "generating") {
-          return current;
-        }
+      if (contentEpochBySubtaskRef.current[targetSubtaskId] === generationEpoch) {
+        setGenerationStateBySubtask((current) => {
+          if (current[targetSubtaskId]?.status !== "generating") {
+            return current;
+          }
 
-        const next = { ...current };
-        delete next[targetSubtaskId];
-        return next;
-      });
+          const next = { ...current };
+          delete next[targetSubtaskId];
+          return next;
+        });
+        bumpContentEpoch(targetSubtaskId);
+      }
       setGenerationNotice((current) => (
         current && (current.includes("已切换任务") || current.includes("后台生成"))
           ? null
