@@ -120,6 +120,50 @@ def test_deepseek_provider_uses_chat_completions_without_calling_responses_api()
     assert "reference extraction" in chat_completions.calls[0]["messages"][1]["content"]
 
 
+def test_auto_style_uses_responses_for_openai_compatible_url() -> None:
+    parsed = ReferenceExtraction(facts=["A"], citation_chunk_ids=["c1"])
+    responses = FakeResponses(parsed=parsed)
+    chat_completions = FakeChatCompletions(content='{"facts":[],"citation_chunk_ids":[]}')
+    provider = OpenAIModelProvider(
+        api_key="test",
+        model="gpt-test",
+        base_url="https://api.openai.com/v1",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+
+    assert provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction) == parsed
+    assert len(responses.calls) == 1
+    assert chat_completions.calls == []
+
+
+def test_explicit_api_style_overrides_url_detection() -> None:
+    parsed = ReferenceExtraction(facts=["A"], citation_chunk_ids=["c1"])
+    chat_completions = FakeChatCompletions(content='{"facts":["A"],"citation_chunk_ids":["c1"]}')
+    responses_provider = OpenAIModelProvider(
+        api_key="test",
+        model="deepseek-v4-flash",
+        base_url="https://api.deepseek.com",
+        api_style="responses",
+        client=FakeClient(FakeResponses(parsed=parsed), chat=FakeChat(chat_completions)),
+    )
+    assert responses_provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction) == parsed
+    assert len(responses_provider.client.responses.calls) == 1
+    assert chat_completions.calls == []
+
+    responses = FakeResponses(error=AssertionError("Responses API must not be used"))
+    chat_completions = FakeChatCompletions(content='{"facts":["A"],"citation_chunk_ids":["c1"]}')
+    response_provider = OpenAIModelProvider(
+        api_key="test",
+        model="gpt-test",
+        base_url="https://api.openai.com/v1",
+        api_style="chat",
+        client=FakeClient(responses, chat=FakeChat(chat_completions)),
+    )
+    assert response_provider.generate_structured(prompt="reference extraction", output_schema=ReferenceExtraction) == parsed
+    assert responses.calls == []
+    assert len(chat_completions.calls) == 1
+
+
 def test_structured_generation_logs_chat_usage(caplog) -> None:
     responses = FakeResponses(error=FakeResponsesApiNotFoundError("not found"))
     chat_completions = FakeChatCompletions(

@@ -90,10 +90,12 @@ class Settings(BaseSettings):
     study_plan_generator_api_key: str | None = None
     study_plan_generator_base_url: str | None = None
     study_plan_generator_model: str = "gpt-5.4-mini"
+    study_plan_generator_api_style: Literal["auto", "responses", "chat"] = "auto"
 
     study_plan_map_api_key: str | None = None
     study_plan_map_base_url: str | None = None
     study_plan_map_model: str | None = None
+    study_plan_map_api_style: Literal["auto", "responses", "chat"] = "auto"
 
     handout_api_key: str | None = None
     handout_base_url: str | None = None

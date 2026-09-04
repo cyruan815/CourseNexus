@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
@@ -15,6 +15,8 @@ from app.modules.material_context.schemas import ContextChunk
 
 
 logger = get_logger("model.generate")
+
+ApiStyle = Literal["auto", "responses", "chat"]
 
 _MODEL_CITATION_PATTERN = re.compile(r"\[\[cite:(\d+)\]\]|\[cite:(\d+)\]")
 
@@ -28,6 +30,7 @@ class OpenAIModelProvider:
         base_url: str | None = None,
         client: Any | None = None,
         api_key_env_name: str = "MODEL_API_KEY",
+        api_style: ApiStyle = "auto",
     ) -> None:
         if not api_key:
             raise CourseNexusError(
@@ -38,6 +41,7 @@ class OpenAIModelProvider:
             )
         self.model = model
         self.base_url = base_url
+        self.api_style = api_style
         self.client = client or OpenAI(api_key=api_key, base_url=base_url)
 
     def answer_question(self, *, question: str, context_chunks: list[ContextChunk]) -> ModelAnswer:
@@ -64,13 +68,13 @@ class OpenAIModelProvider:
 
     def generate_text(self, *, prompt: str) -> str:
         started_at = perf_counter()
-        if self._uses_deepseek_chat_completions():
+        if self._uses_chat_completions():
             text = self._generate_text_with_chat(prompt=prompt)
         else:
             try:
                 response = self.client.responses.create(model=self.model, input=prompt)
             except Exception as exc:
-                if not _is_not_found_error(exc):
+                if self.api_style != "auto" or not _is_not_found_error(exc):
                     raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
                 text = self._generate_text_with_chat(prompt=prompt)
             else:
@@ -102,7 +106,7 @@ class OpenAIModelProvider:
         output_schema: type[StructuredOutputT],
     ) -> StructuredOutputT:
         started_at = perf_counter()
-        if self._uses_deepseek_chat_completions():
+        if self._uses_chat_completions():
             result, response = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
             self._log_structured_generation(
                 output_schema=output_schema,
@@ -125,7 +129,7 @@ class OpenAIModelProvider:
                 status_code=500,
             ) from exc
         except Exception as exc:
-            if not _is_not_found_error(exc):
+            if self.api_style != "auto" or not _is_not_found_error(exc):
                 raise CourseNexusError(code="GENERATION_FAILED", message="模型调用失败", status_code=502) from exc
             result, response = self._generate_structured_with_chat(prompt=prompt, output_schema=output_schema)
         else:
@@ -139,7 +143,11 @@ class OpenAIModelProvider:
         )
         return result
 
-    def _uses_deepseek_chat_completions(self) -> bool:
+    def _uses_chat_completions(self) -> bool:
+        if self.api_style == "chat":
+            return True
+        if self.api_style == "responses":
+            return False
         return bool(self.base_url and "api.deepseek.com" in self.base_url.casefold())
 
     def _log_structured_generation(

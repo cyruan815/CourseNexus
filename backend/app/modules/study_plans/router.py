@@ -46,7 +46,9 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["study_plans"])
 
 
-def _model_provider_for_purpose(*, purpose: str, api_key_env_name: str) -> ModelProvider:
+def _model_provider_for_purpose(
+    *, purpose: str, api_key_env_name: str, api_style: str = "auto"
+) -> ModelProvider:
     settings = get_settings()
     endpoint = settings.model_endpoint(purpose)
     if endpoint.api_key:
@@ -55,6 +57,7 @@ def _model_provider_for_purpose(*, purpose: str, api_key_env_name: str) -> Model
             model=endpoint.model,
             base_url=endpoint.base_url,
             api_key_env_name=api_key_env_name,
+            api_style=api_style,
         )
     return MockModelProvider()
 
@@ -70,6 +73,7 @@ def get_plan_generator_provider() -> ModelProvider:
     return _model_provider_for_purpose(
         purpose="study_plan_generator",
         api_key_env_name="STUDY_PLAN_GENERATOR_API_KEY",
+        api_style=get_settings().study_plan_generator_api_style,
     )
 
 
@@ -77,12 +81,15 @@ def get_plan_map_provider(
     model_provider: ModelProvider = Depends(get_plan_generator_provider),
 ) -> ModelProvider:
     settings = get_settings()
-    if not any(
-        (
-            settings.study_plan_map_api_key,
-            settings.study_plan_map_base_url,
-            settings.study_plan_map_model,
+    if (
+        not any(
+            (
+                settings.study_plan_map_api_key,
+                settings.study_plan_map_base_url,
+                settings.study_plan_map_model,
+            )
         )
+        and settings.study_plan_map_api_style == "auto"
     ):
         return model_provider
 
@@ -95,6 +102,7 @@ def get_plan_map_provider(
         model=settings.study_plan_map_model or generator_endpoint.model,
         base_url=settings.study_plan_map_base_url or generator_endpoint.base_url,
         api_key_env_name="STUDY_PLAN_MAP_API_KEY",
+        api_style=settings.study_plan_map_api_style,
     )
 
 

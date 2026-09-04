@@ -26,6 +26,20 @@ def test_study_plan_map_concurrency_defaults_to_one_and_allows_up_to_five() -> N
         Settings(_env_file=None, study_plan_map_concurrency=6)
 
 
+def test_study_plan_provider_api_styles_default_to_auto_and_are_independent() -> None:
+    defaults = Settings(_env_file=None)
+    assert defaults.study_plan_generator_api_style == "auto"
+    assert defaults.study_plan_map_api_style == "auto"
+
+    configured = Settings(
+        _env_file=None,
+        study_plan_generator_api_style="responses",
+        study_plan_map_api_style="chat",
+    )
+    assert configured.study_plan_generator_api_style == "responses"
+    assert configured.study_plan_map_api_style == "chat"
+
+
 def test_every_model_purpose_has_an_independent_endpoint() -> None:
     settings = Settings(
         _env_file=None,

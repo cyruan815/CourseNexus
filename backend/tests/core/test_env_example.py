@@ -25,3 +25,13 @@ def test_env_example_does_not_advertise_deprecated_shared_model_settings() -> No
     assert "MODEL_API_BASE_URL=" not in content
     assert "# ==================== Embedding 向量模型 ====================" in content
     assert "# ==================== 课程智能体问答模型 ====================" in content
+
+
+def test_env_example_documents_study_plan_api_styles_and_map_concurrency() -> None:
+    content = (ROOT_DIR / ".env.example").read_text(encoding="utf-8")
+
+    assert "STUDY_PLAN_GENERATOR_API_STYLE=auto" in content
+    assert "STUDY_PLAN_MAP_API_STYLE=auto" in content
+    assert "STUDY_PLAN_MAP_CONCURRENCY=1" in content
+    assert "STUDY_PLAN_GENERATOR_BASE_URL=https://api.deepseek.com" in content
+    assert "STUDY_PLAN_MAP_BASE_URL=https://api.deepseek.com" in content
