@@ -406,6 +406,7 @@ def _build_reduce_prompt(
             "学习任务时长不足时，用复习、练习、输出任务或自测补足，而不是留下大段空闲。",
             "所有 mapped units 都必须进入某个二级任务；可合并相近单元，但 description 里要说明覆盖内容。",
             "每天任务要具体可执行，包含可检查产出，例如公式默写、要点回顾、对比表、错题回顾或口头复述。",
+            "每个二级任务都必须完整输出 subtask_type、title、description 和 estimated_minutes；description 要写清具体学习/复习/测试内容，estimated_minutes 必须是该任务预计分钟数，不能省略或只写空泛标题。",
             "任务类型边界：learn 是学习讲义任务，用于学习新内容；review 是复习讲义任务，只能回顾此前已经安排学习过的内容，不能引入新知识点；quiz/test 是测试题任务。",
             "learn/review 不得填写 generation_parameters.task_test，也不得在 title 或 description 中写“几道选择题、几道计算题”等明确测试题量。",
             "目录页、主要内容页、版权页、感谢页、章节小结页不能作为普通 learn 任务的 citation_chunk_ids；小结页只可作为 review 或 quiz/test 的辅助引用。",

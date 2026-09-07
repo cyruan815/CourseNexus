@@ -425,3 +425,9 @@ PDF 导出同步支持相同 callout 契约。`render_markdown_pdf_html()` 会�
 当前前端讲义 renderer 仍保留 Mermaid 渲染能力，用于历史或手写 Markdown 兜底；新生成讲义的图示契约只依赖安全内联 SVG。PDF 中 Mermaid 的完整渲染仍属于独立能力，当前契约主要保证 Web 讲义详情页的新内容可视化展示。
 
 验证入口：`backend/tests/modules/generation/test_handout_generator.py` 覆盖 prompt 约束、SVG 通过、Mermaid 拒绝、缺图重试和 `MermaidBlock` schema 兼容。
+
+## 2026-08-25 任务之间并发生成（阶段一）
+
+执行页允许不同二级任务同时发起讲义或测试题生成。前端在 `StudyTaskExecutionPage.tsx` 中按 `subtask_id` 记录生成状态和错误，并使用任务级 in-flight 集合防止同一个二级任务重复点击；生成结果继续写入 `generatedContentBySubtask`，因此请求完成顺序不影响任务归属。
+
+本阶段不修改后端接口、数据库或生成服务。后端仍使用同步 HTTP 生成接口，但不同请求可并行执行；页面刷新、关闭页面后的任务恢复、持久化 job 状态、后端队列、重试和统一并发限流不属于本阶段，后续如需可靠后台任务应单独设计异步 job 方案。

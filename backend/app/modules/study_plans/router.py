@@ -46,7 +46,9 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["study_plans"])
 
 
-def _model_provider_for_purpose(*, purpose: str, api_key_env_name: str) -> ModelProvider:
+def _model_provider_for_purpose(
+    *, purpose: str, api_key_env_name: str, api_style: str = "auto"
+) -> ModelProvider:
     settings = get_settings()
     endpoint = settings.model_endpoint(purpose)
     if endpoint.api_key:
@@ -55,6 +57,7 @@ def _model_provider_for_purpose(*, purpose: str, api_key_env_name: str) -> Model
             model=endpoint.model,
             base_url=endpoint.base_url,
             api_key_env_name=api_key_env_name,
+            api_style=api_style,
         )
     return MockModelProvider()
 
@@ -70,6 +73,36 @@ def get_plan_generator_provider() -> ModelProvider:
     return _model_provider_for_purpose(
         purpose="study_plan_generator",
         api_key_env_name="STUDY_PLAN_GENERATOR_API_KEY",
+        api_style=get_settings().study_plan_generator_api_style,
+    )
+
+
+def get_plan_map_provider(
+    model_provider: ModelProvider = Depends(get_plan_generator_provider),
+) -> ModelProvider:
+    settings = get_settings()
+    if (
+        not any(
+            (
+                settings.study_plan_map_api_key,
+                settings.study_plan_map_base_url,
+                settings.study_plan_map_model,
+            )
+        )
+        and settings.study_plan_map_api_style == "auto"
+    ):
+        return model_provider
+
+    generator_endpoint = settings.model_endpoint("study_plan_generator")
+    api_key = settings.study_plan_map_api_key or generator_endpoint.api_key
+    if not api_key:
+        return MockModelProvider()
+    return OpenAIModelProvider(
+        api_key=api_key,
+        model=settings.study_plan_map_model or generator_endpoint.model,
+        base_url=settings.study_plan_map_base_url or generator_endpoint.base_url,
+        api_key_env_name="STUDY_PLAN_MAP_API_KEY",
+        api_style=settings.study_plan_map_api_style,
     )
 
 
@@ -160,6 +193,7 @@ def preview_study_plan_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     model_provider: ModelProvider = Depends(get_plan_generator_provider),
+    map_model_provider: ModelProvider = Depends(get_plan_map_provider),
 ) -> dict[str, object]:
     settings = get_settings()
     preview = preview_study_plan(
@@ -168,7 +202,9 @@ def preview_study_plan_endpoint(
         course_id=course_id,
         payload=payload,
         model_provider=model_provider,
+        map_model_provider=map_model_provider,
         max_tokens=settings.material_batch_max_tokens,
+        map_concurrency=settings.study_plan_map_concurrency,
     )
     return success_response(StudyPlanPreview.model_validate(preview).model_dump(mode="json"), request_id=get_request_id(request))
 
@@ -181,6 +217,7 @@ def save_study_plan_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     model_provider: ModelProvider = Depends(get_plan_generator_provider),
+    map_model_provider: ModelProvider = Depends(get_plan_map_provider),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> dict[str, object]:
     settings = get_settings()
@@ -190,8 +227,10 @@ def save_study_plan_endpoint(
         course_id=course_id,
         payload=payload,
         model_provider=model_provider,
+        map_model_provider=map_model_provider,
         max_tokens=settings.material_batch_max_tokens,
         idempotency_key=idempotency_key,
+        map_concurrency=settings.study_plan_map_concurrency,
     )
     return success_response(_bundle_data(bundle), request_id=get_request_id(request))
 
@@ -204,6 +243,7 @@ def regenerate_study_plan_preview_endpoint(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
     model_provider: ModelProvider = Depends(get_plan_generator_provider),
+    map_model_provider: ModelProvider = Depends(get_plan_map_provider),
 ) -> dict[str, object]:
     settings = get_settings()
     preview = preview_study_plan_regeneration(
@@ -212,7 +252,9 @@ def regenerate_study_plan_preview_endpoint(
         plan_id=plan_id,
         payload=payload,
         model_provider=model_provider,
+        map_model_provider=map_model_provider,
         max_tokens=settings.material_batch_max_tokens,
+        map_concurrency=settings.study_plan_map_concurrency,
     )
     data = StudyPlanPreview.model_validate(preview).model_dump(mode="json")
     return success_response(data, request_id=get_request_id(request))

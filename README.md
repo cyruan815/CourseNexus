@@ -160,10 +160,10 @@ notepad .env
 | 向量索引 | `EMBEDDING_*` |
 | 课程问答 | `COURSE_QA_*` |
 | 测验、闪卡、导图、提纲、知识点 | `QUIZ_*`、`FLASHCARD_*`、`MINDMAP_*`、`OUTLINE_*`、`KNOWLEDGE_LIST_*` |
-| 学习计划 | `STUDY_PLAN_PARSER_*`、`STUDY_PLAN_GENERATOR_*` |
+| 学习计划 | `STUDY_PLAN_PARSER_*`、`STUDY_PLAN_GENERATOR_*`、`STUDY_PLAN_MAP_*` |
 | 讲义与任务测试 | `HANDOUT_*`、`TASK_TEST_*` |
 
-每组配置包含 `API_KEY`、`BASE_URL` 和 `MODEL`。完整说明见 [.env.example](./.env.example)，真实密钥不要提交到 Git，也不要放入 `VITE_` 开头的变量。
+每组配置包含 `API_KEY`、`BASE_URL` 和 `MODEL`。学习计划 generator/map 还支持独立的 `API_STYLE`（`auto`、`responses`、`chat`）：`auto` 对 OpenAI 地址使用 Responses API，对 DeepSeek 地址使用 Chat Completions；显式值覆盖自动判断。map 未配置独立凭据时复用 generator 的凭据，`STUDY_PLAN_MAP_CONCURRENCY` 控制 map 阶段并发度（`1..5`，默认 `1`）。完整说明见 [.env.example](./.env.example)，真实密钥不要提交到 Git，也不要放入 `VITE_` 开头的变量。
 
 ### 4. 初始化数据库
 

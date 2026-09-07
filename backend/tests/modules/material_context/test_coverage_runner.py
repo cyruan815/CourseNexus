@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 
 import pytest
 
@@ -48,6 +49,36 @@ def test_coverage_runner_maps_multiple_batches_and_unions_citation_ids() -> None
     assert result.value == ["fact:m1", "fact:m2"]
     assert result.processed_material_ids == {"m1", "m2"}
     assert result.citation_chunk_ids == {"c1", "c2"}
+
+
+def test_coverage_runner_preserves_input_order_when_map_batches_finish_out_of_order() -> None:
+    first_started = Event()
+    second_finished = Event()
+    completion_order: list[str] = []
+
+    def map_batch(batch: MaterialContextBatch) -> MappedReference:
+        material_id = batch.material_ids[0]
+        if material_id == "m1":
+            first_started.set()
+            if not second_finished.wait(timeout=2):
+                raise AssertionError("second batch did not finish first")
+        else:
+            if not first_started.wait(timeout=2):
+                raise AssertionError("first batch did not start")
+            second_finished.set()
+        completion_order.append(material_id)
+        return MappedReference(facts=[material_id], citation_chunk_ids=[])
+
+    result = run_material_coverage(
+        batches=[_batch_for("m1", "c1"), _batch_for("m2", "c2")],
+        expected_material_ids={"m1", "m2"},
+        map_batch=map_batch,
+        reduce_results=lambda items: [fact for item in items for fact in item.facts],
+        map_concurrency=2,
+    )
+
+    assert completion_order == ["m2", "m1"]
+    assert result.value == ["m1", "m2"]
 
 
 def test_coverage_runner_unions_set_citation_ids() -> None:

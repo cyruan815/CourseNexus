@@ -272,7 +272,7 @@ sequenceDiagram
 | 课程智能体问答 | `COURSE_QA` |
 | Quiz / Flashcard / Mindmap | `QUIZ` / `FLASHCARD` / `MINDMAP` |
 | Outline / Knowledge List | `OUTLINE` / `KNOWLEDGE_LIST` |
-| 学习计划输入解析 / 计划生成 | `STUDY_PLAN_PARSER` / `STUDY_PLAN_GENERATOR` |
+| 学习计划输入解析 / 计划生成 | `STUDY_PLAN_PARSER` / `STUDY_PLAN_GENERATOR` / `STUDY_PLAN_MAP` |
 | 任务讲义 / 任务测试 | `HANDOUT` / `TASK_TEST` |
 
 RAG 相关示例配置：
@@ -290,6 +290,8 @@ RAG_SIMILARITY_TOP_K=8
 RAG_CHUNK_MAX_TOKENS=800
 MATERIAL_BATCH_MAX_TOKENS=12000
 ```
+
+学习计划 `generator` 和 `map` 还可分别配置 `STUDY_PLAN_GENERATOR_API_STYLE`、`STUDY_PLAN_MAP_API_STYLE`（`auto`、`responses` 或 `chat`）。`auto` 对 OpenAI 地址使用 Responses API，对 DeepSeek 地址使用 Chat Completions；显式配置只覆盖对应的学习计划 provider，不影响其他模型用途。
 
 本地运行方式：
 
