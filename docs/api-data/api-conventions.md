@@ -76,6 +76,7 @@
 | `CONFLICT` | 资源冲突。 |
 | `STATE_CONFLICT` | 当前状态不允许执行该操作。 |
 | `UNSUPPORTED_FILE_TYPE` | 文件类型不支持。 |
+| `MATERIAL_LINK_REMOVED` | 链接资料入口已停止支持：创建端点返回 410，历史 URL 资料解析重试返回 409。 |
 | `FILE_TOO_LARGE` | 文件超过限制。 |
 | `NO_PARSED_MATERIAL` | 当前范围没有已解析资料。 |
 | `PARSE_FAILED` | 资料解析失败。 |

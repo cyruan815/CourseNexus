@@ -323,7 +323,7 @@ erDiagram
 | `material_type` | enum | 是 | 资料类型 | `pdf`、`ppt`、`word`、`markdown`、`image`、`text`、`link` |
 | `source_type` | enum | 是 | 来源类型 | `file`、`url` |
 | `file_url` | string | 否 | 文件地址 | 文件资料必填 |
-| `source_url` | string | 否 | 原始链接 | 链接资料必填 |
+| `source_url` | string | 否 | 原始链接 | 仅历史 `url` 资料持有，链接资料入口已停止支持 |
 | `file_size` | int | 否 | 文件大小 | 单位 byte |
 | `mime_type` | string | 否 | MIME 类型 | 可为空 |
 | `parse_status` | enum | 是 | 解析状态 | `uploaded`、`parsing`、`parsed`、`parse_failed`、`deleted` |

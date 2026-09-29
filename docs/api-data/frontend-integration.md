@@ -324,23 +324,13 @@
 | `FILE_TOO_LARGE` | 文件大小超过 `MAX_UPLOAD_FILE_SIZE_BYTES`。 |
 | `NOT_FOUND` | 课程不存在或不属于当前用户。 |
 
-### 3.13 链接资料创建
+### 3.13 链接资料创建（已停止支持）
 
 `POST /api/v1/courses/{course_id}/material-links`
 
 要求：Bearer token。
 
-请求：
-
-```json
-{
-  "name": "Course Site",
-  "source_url": "https://example.com/course",
-  "folder_id": "fld_123"
-}
-```
-
-响应 `data`：`MaterialRead`，其中 `source_type = "url"`、`material_type = "link"`、`parse_status = "uploaded"`。
+该入口已于 2026-09-30 下线：URL 链接资料无法进入解析与学习上下文，为避免产生不可用记录而移除新增能力。兼容期内调用该端点返回 `410 Gone` 与错误码 `MATERIAL_LINK_REMOVED`，不创建任何记录；对历史 `source_type = "url"` 资料调用解析重试接口返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变。历史链接记录仍可在列表中查看、重命名和删除，但不会进入问答、生成内容和学习计划的资料范围。
 
 ### 3.14 资料详情
 
