@@ -104,7 +104,7 @@ opentelemetry-sdk==1.43.0
 opentelemetry-semantic-conventions==0.64b0
 orjson==3.11.9
 overrides==7.7.0
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
+### conda-installed package, pinned manually: packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
 pandas==3.0.3
 pillow==12.3.0
 platformdirs==4.10.0
@@ -182,4 +182,4 @@ wheel==0.47.0
 wrapt==2.2.2
 xlsxwriter==3.2.9
 yarl==1.24.2
-
+packaging==26.2

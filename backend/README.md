@@ -79,6 +79,8 @@ python -m playwright install chromium
 conda run -n course-nexus pip freeze | grep -v "^-e" > requirements.lock.txt
 ```
 
+注意：conda 自带的包（如 `packaging`）会被 `pip freeze` 输出成 `@ file://` 构建机路径，无法被 pip 安装；导出后需把这类行替换为固定版本号（用 `pip show <包名>` 查询当前版本），并移除指向本机路径的注释行。
+
 ## 开发命令
 
 推荐从仓库根目录运行：
