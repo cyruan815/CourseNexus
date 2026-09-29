@@ -60,6 +60,25 @@ python -m playwright install chromium
 
 Playwright 的 Python 包不会自动下载浏览器。首次创建环境或 Playwright 升级后必须执行 `python -m playwright install chromium`，否则讲义 PDF 导出和相关测试会因找不到 Chromium 而失败。
 
+### 锁定安装（可复现）
+
+`requirements.lock.txt` 固定当前通过全量测试的完整依赖闭包（由 conda 环境 `pip freeze` 导出，含 pytest/httpx2 等开发依赖）。全新环境可只用 pip 复现，CI 的后端任务即按此流程安装验证：
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.lock.txt
+python -m playwright install chromium
+```
+
+更新依赖时：先在开发环境调整 `pyproject.toml` 的版本范围并通过全量测试，再重新导出锁定文件：
+
+```powershell
+conda run -n course-nexus pip freeze | grep -v "^-e" > requirements.lock.txt
+```
+
 ## 开发命令
 
 推荐从仓库根目录运行：
