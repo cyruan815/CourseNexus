@@ -29,7 +29,7 @@ from app.modules.materials.repository import (
     save_material,
     save_material_folder,
 )
-from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate, MaterialUpdate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialUpdate
 
 
 parse_logger = get_logger("materials.parse")
@@ -85,29 +85,6 @@ def upload_file_material(
         file_url=stored_file.relative_path,
         file_size=stored_file.size,
         mime_type=stored_file.mime_type,
-        parse_status="uploaded",
-    )
-    return save_material(db, material)
-
-
-def create_link_material(
-    db: Session,
-    *,
-    user_id: str,
-    course_id: str,
-    payload: MaterialLinkCreate,
-) -> CourseMaterial:
-    assert_course_owner(db, user_id, course_id)
-    _assert_folder_in_course(db, user_id=user_id, course_id=course_id, folder_id=payload.folder_id)
-    material = CourseMaterial(
-        id=_new_material_id(),
-        course_id=course_id,
-        user_id=user_id,
-        folder_id=payload.folder_id,
-        name=payload.name,
-        material_type="link",
-        source_type="url",
-        source_url=payload.source_url,
         parse_status="uploaded",
     )
     return save_material(db, material)
@@ -306,6 +283,12 @@ def parse_material(
 ) -> CourseMaterial:
     started_at = perf_counter()
     material = get_material_detail(db, user_id, material_id)
+    if material.source_type == "url":
+        raise CourseNexusError(
+            code="MATERIAL_LINK_REMOVED",
+            message="链接资料入口已停止支持，无法解析；请上传文件资料",
+            status_code=409,
+        )
     material.parse_status = "parsing"
     material.parse_error = None
     material.parse_quality = "unknown"

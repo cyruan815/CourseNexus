@@ -14,6 +14,7 @@ from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
+from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
 import app.modules.materials.service as materials_service
@@ -21,17 +22,17 @@ from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.materials.schemas import MaterialFolderCreate, MaterialLinkCreate, MaterialUpdate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialUpdate
 from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
 from app.modules.materials.service import (
     create_material_folder,
-    create_link_material,
     delete_material_folder,
     delete_material,
     get_material_folder,
     get_material_detail,
     list_course_materials,
     move_material_to_folder,
+    parse_material,
     rename_material,
     upload_file_material,
 )
@@ -143,21 +144,37 @@ def test_upload_file_material_accepts_complex_formats(
     assert material.parse_status == "uploaded"
 
 
-def test_create_link_material_creates_url_material(db: Session) -> None:
+def test_parse_material_rejects_legacy_url_material_without_state_change(db: Session, tmp_path) -> None:
     user = register_user(db, UserCreate(username="alice", password="password123"))
     course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
-
-    material = create_link_material(
-        db,
-        user_id=user.id,
+    legacy_url = CourseMaterial(
+        id="mat_legacy_url",
         course_id=course.id,
-        payload=MaterialLinkCreate(name="Course Site", source_url="https://example.com/course"),
+        user_id=user.id,
+        name="Course Site",
+        material_type="link",
+        source_type="url",
+        source_url="https://example.com/course",
+        parse_status="uploaded",
     )
+    db.add(legacy_url)
+    db.commit()
 
-    assert material.material_type == "link"
-    assert material.source_type == "url"
-    assert material.source_url == "https://example.com/course"
-    assert material.parse_status == "uploaded"
+    with pytest.raises(CourseNexusError) as exc_info:
+        parse_material(
+            db,
+            user_id=user.id,
+            material_id=legacy_url.id,
+            parser=PlainTextParser(),
+            rag_index=FakeRagIndex(),
+            storage_root=tmp_path,
+        )
+
+    assert exc_info.value.code == "MATERIAL_LINK_REMOVED"
+    assert exc_info.value.status_code == 409
+    refreshed = db.get(CourseMaterial, legacy_url.id)
+    assert refreshed.parse_status == "uploaded"
+    assert refreshed.parse_error is None
 
 
 def test_rename_material_only_changes_display_name(db: Session, tmp_path) -> None:
@@ -269,16 +286,19 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         course_id=course.id,
         payload=MaterialFolderCreate(name="Week 1"),
     )
-    link_material = create_link_material(
-        db,
-        user_id=user.id,
+    legacy_url_material = CourseMaterial(
+        id="mat_legacy_url",
         course_id=course.id,
-        payload=MaterialLinkCreate(
-            name="reference",
-            source_url="https://example.com/reference",
-            folder_id=folder.id,
-        ),
+        user_id=user.id,
+        name="reference",
+        material_type="link",
+        source_type="url",
+        source_url="https://example.com/reference",
+        folder_id=folder.id,
+        parse_status="uploaded",
     )
+    db.add(legacy_url_material)
+    db.commit()
     rag_index = FakeRagIndex.from_chunks(
         [
             RagChunk(
@@ -346,7 +366,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     assert deleted_folder.deleted_at is not None
     assert db.get(MaterialFolder, folder.id) is None
     assert db.get(CourseMaterial, material.id) is None
-    assert db.get(CourseMaterial, link_material.id) is None
+    assert db.get(CourseMaterial, legacy_url_material.id) is None
     assert db.get(MaterialChunk, "chunk-1") is None
     preserved_citation = db.get(SourceCitation, citation.id)
     assert db.get(AIGeneratedContent, generated_content.id) is not None
