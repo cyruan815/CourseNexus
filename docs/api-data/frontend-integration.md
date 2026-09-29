@@ -101,6 +101,43 @@
 }
 ```
 
+### 3.4.1 修改密码
+
+`POST /api/v1/auth/change-password`
+
+要求：Bearer token。
+
+请求：
+
+```json
+{
+  "current_password": "password123",
+  "new_password": "new-password456"
+}
+```
+
+`new_password` 长度 8-255；确认密码由前端校验，后端不接收第三字段。
+
+响应 `data`：
+
+```json
+{
+  "password_changed": true,
+  "relogin_required": true
+}
+```
+
+错误：
+
+| 错误码 | HTTP | 场景 |
+| --- | --- | --- |
+| `CURRENT_PASSWORD_MISMATCH` | 403 | 当前密码不正确。注意不是 401：前端把 401 统一处理为清理 token 并跳转登录，输错当前密码不应被登出。 |
+| `VALIDATION_ERROR` | 400 | 新密码与当前密码相同。 |
+| `VALIDATION_ERROR` | 422 | 新密码长度不满足 8-255。 |
+| `UNAUTHORIZED` | 401 | 未登录或登录态已失效。 |
+
+修改成功后服务端递增该用户的 `token_epoch`，其全部存量 token（含本次请求所用 token）立即失效；前端应清理本地 token 并引导用户使用新密码重新登录。
+
 ### 3.5 课程列表
 
 `GET /api/v1/courses`

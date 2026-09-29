@@ -138,6 +138,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `nickname` | string | 是 | null |  | 用户昵称。 |
 | `avatar_url` | string | 是 | null |  | 头像地址。 |
 | `status` | enum `user_status` | 否 | `active` | INDEX | 用户状态。 |
+| `token_epoch` | integer | 否 | `0` |  | 登录态纪元：token 签发时写入 payload，`get_current_user` 比对不一致即判定失效；修改密码时递增以撤销该用户全部存量登录态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
 | `deleted_at` | datetime | 是 | null | INDEX | 删除时间。 |
@@ -147,6 +148,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 登录使用 `username` + 密码。
 - `password_hash` 只能保存哈希值，不允许保存明文或可逆加密结果。
 - `username` 全局唯一；如果后续支持账号恢复或硬删除，需要单独评审唯一约束策略。
+- 历史 token payload 不含 `epoch` 字段，解码兜底为 0，与列默认值一致：升级 `20260930_0006` 后存量登录态继续有效，直到该用户修改密码。
 
 ## courses
 
