@@ -3,3 +3,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+overrides:
+  undici: ^6.28.1
+  dompurify: ^3.4.13
+  markdown-it: ^14.3.1
