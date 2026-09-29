@@ -16,6 +16,7 @@ from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.model_provider.mock import MockModelProvider
+from tests.fixtures.study_mode_samples import SAFE_HANDOUT_SVG, handout_markdown
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
@@ -56,7 +57,9 @@ def api() -> Generator[ApiHarness, None, None]:
         yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(text_outputs=["# 主键讲义\n\n主键用于唯一标识表中的一行。"])
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
+        text_outputs=[handout_markdown(title="主键讲义", body="主键用于唯一标识表中的一行。")]
+    )
     app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             TaskTestContent: {
@@ -263,9 +266,12 @@ def _set_stored_task_test_generation_parameters(db: Session, *, parameters: dict
     db.commit()
 
 class CountingHandoutModelProvider:
-    def __init__(self, *, markdown: str = "# 任务知识点讲义\n\n根据任务范围生成讲义。") -> None:
+    def __init__(self, *, markdown: str | None = None) -> None:
         self.prompts: list[str] = []
-        self.markdown = markdown
+        # 讲义生成契约要求至少一张安全内联 SVG 图示，默认样本必须自带。
+        self.markdown = markdown if markdown is not None else handout_markdown(
+            title="任务知识点讲义", body="根据任务范围生成讲义。"
+        )
 
     def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
         raise AssertionError("answer_question should not be called")
@@ -392,7 +398,19 @@ def _successful_contents(db: Session, *, subtask_id: str, content_type: str) -> 
 
 
 def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
-    provider = CountingHandoutModelProvider(markdown="# 任务内容讲义\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。")
+    synthesized = handout_markdown(
+        title="任务内容讲义",
+        body="## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。",
+    )
+    # ensure_handout_header 会剥掉草稿 H1，并按参数重新写入标题与来源说明。
+    expected_reduced = handout_markdown(
+        title="任务内容讲义",
+        body=(
+            "本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。\n\n"
+            "## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。"
+        ),
+    )
+    provider = CountingHandoutModelProvider(markdown=synthesized)
 
     reduced = _reduce_task_content_outputs(
         content_type="handout",
@@ -420,7 +438,7 @@ def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
     assert "批次草稿 1" in provider.prompts[0]
     assert "批次草稿 2" in provider.prompts[0]
     assert reduced.title == "任务内容讲义"
-    assert reduced.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。"
+    assert reduced.content == expected_reduced
     assert reduced.content_json == {"format": "markdown", "schema_version": 1}
     assert reduced.item_citation_chunk_ids == {}
 
@@ -451,14 +469,19 @@ def test_generate_handout_for_learn_subtask_saves_markdown_content_without_citat
     assert data["study_subtask_id"] == subtask_id
     assert data["generation_status"] == "success"
     assert data["title"] == "任务内容讲义"
-    assert data["content"] == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    expected_content = (
+        "# 任务内容讲义\n\n"
+        "本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n"
+        "主键用于唯一标识表中的一行。\n\n" + SAFE_HANDOUT_SVG
+    )
+    assert data["content"] == expected_content
     assert data["content_json"] == {"format": "markdown", "schema_version": 1}
     assert data["source_citations"] == []
     content = api.db.get(AIGeneratedContent, data["id"])
     assert content is not None
     assert content.study_subtask_id == subtask_id
     assert content.title == "任务内容讲义"
-    assert content.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    assert content.content == expected_content
     assert content.content_json == {"format": "markdown", "schema_version": 1}
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == data["id"])).scalars().all()
     assert citations == []
@@ -540,15 +563,17 @@ def test_generate_handout_preserves_markdown_math_and_brackets_verbatim(api: Api
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
     provider = CountingHandoutModelProvider(
-        markdown=(
-            "# 信噪比讲义\n\n"
-            "从 dB 转换为线性比值：\n\n"
-            "[\n"
-            "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
-            "]\n\n"
-            "标准块级公式：\n\n"
-            "$$\nC = B \\log_2(1 + S/N)\n$$\n\n"
-            "行内公式 $C = B \\log_2(1 + S/N)$ 用来说明信道容量。"
+        markdown=handout_markdown(
+            title="信噪比讲义",
+            body=(
+                "从 dB 转换为线性比值：\n\n"
+                "[\n"
+                "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
+                "]\n\n"
+                "标准块级公式：\n\n"
+                "$$\nC = B \\log_2(1 + S/N)\n$$\n\n"
+                "行内公式 $C = B \\log_2(1 + S/N)$ 用来说明信道容量。"
+            ),
         )
     )
 

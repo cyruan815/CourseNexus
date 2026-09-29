@@ -14,6 +14,7 @@ from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.model_provider.mock import MockModelProvider
+from tests.fixtures.study_mode_samples import SAFE_HANDOUT_SVG
 from app.main import app
 from app.modules.checkins.models import CheckinRecord
 from app.modules.course_qa.models import SourceCitation
@@ -54,7 +55,7 @@ def api() -> Generator[ApiHarness, None, None]:
             "## 概览\n\n"
             "主键唯一标识一行，外键表达表之间的关系。\n\n"
             "## 总结\n\n"
-            "完成数据库约束学习。"
+            "完成数据库约束学习。\n\n" + SAFE_HANDOUT_SVG
         ]
     )
     app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
