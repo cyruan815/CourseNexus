@@ -81,6 +81,7 @@ describe("TaskTestResult", () => {
   it("requires exact option sets for multiple choice", () => {
     renderResult();
 
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     const secondCard = screen.getByLabelText("第 2 题：哪些协议是传输层协议？");
     fireEvent.click(within(secondCard).getByRole("checkbox", { name: "A. TCP" }));
     fireEvent.click(within(secondCard).getByRole("checkbox", { name: "B. UDP" }));
@@ -93,6 +94,8 @@ describe("TaskTestResult", () => {
   it("supports true/false questions", () => {
     renderResult();
 
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     const thirdCard = screen.getByLabelText("第 3 题：TCP 是面向连接的协议。");
     fireEvent.click(within(thirdCard).getByRole("button", { name: "正确" }));
     fireEvent.click(within(thirdCard).getByRole("button", { name: "提交答案" }));
@@ -104,6 +107,9 @@ describe("TaskTestResult", () => {
   it("reveals reference answer for short answer without auto-grading", () => {
     renderResult();
 
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     const fourthCard = screen.getByLabelText("第 4 题：简述 Nyquist 公式的用途。");
     fireEvent.change(within(fourthCard).getByRole("textbox", { name: "填写简答题答案" }), {
       target: { value: "估算信道最大传输能力" },

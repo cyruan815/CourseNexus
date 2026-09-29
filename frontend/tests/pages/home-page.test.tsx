@@ -165,8 +165,8 @@ describe("HomePage", () => {
 
     expect(screen.getByRole("heading", { name: "课枢 CourseNexus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "今日待办" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "日历" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "课程概览" })).toBeInTheDocument();
+    expect(screen.getByRole("grid", { name: "月历" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的课程" })).toBeInTheDocument();
     expect(screen.getByText("正在加载课程...")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "离散数学" })).toHaveAttribute(
       "href",
@@ -175,7 +175,7 @@ describe("HomePage", () => {
     expect(screen.getByRole("link", { name: "打开课程 离散数学" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "操作系统" })).toHaveAttribute("href", "/courses/crs_os");
     expect(screen.getByRole("link", { name: "算法设计" })).toHaveAttribute("href", "/courses/crs_algorithm");
-    expect(screen.getByText("全部学期 3 门课程 · 资料统计待接入")).toBeInTheDocument();
+    expect(screen.getByText("全部学期 3 门课程")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/courses",
       expect.objectContaining({
@@ -379,7 +379,7 @@ describe("HomePage", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "选择学期" }));
     fireEvent.click(await screen.findByRole("option", { name: "2025-2026 秋季", hidden: true }));
 
-    expect(screen.getByText("2025-2026 秋季 1 门课程 · 资料统计待接入")).toBeInTheDocument();
+    expect(screen.getByText("2025-2026 秋季 1 门课程")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "算法设计" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "离散数学" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "操作系统" })).not.toBeInTheDocument();
