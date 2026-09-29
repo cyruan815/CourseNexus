@@ -50,6 +50,7 @@ def build_auth_response(user: User) -> AuthResponse:
     access_token = create_access_token(
         user_id=user.id,
         secret_key=settings.secret_key,
+        token_epoch=user.token_epoch,
         expires_at=expires_at,
     )
     return AuthResponse(

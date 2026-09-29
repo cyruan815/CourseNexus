@@ -5,11 +5,18 @@ import hashlib
 import hmac
 import json
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 
 PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_HASH_ITERATIONS = 210_000
+
+
+@dataclass(frozen=True)
+class AccessTokenClaims:
+    user_id: str
+    token_epoch: int
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -63,6 +70,7 @@ def create_access_token(
     *,
     user_id: str,
     secret_key: str,
+    token_epoch: int = 0,
     expires_at: datetime | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
@@ -70,6 +78,7 @@ def create_access_token(
     expires_at = expires_at or now + (expires_delta or timedelta(minutes=1440))
     payload = {
         "sub": user_id,
+        "epoch": token_epoch,
         "exp": int(expires_at.timestamp()),
     }
     payload_text = json.dumps(payload, separators=(",", ":"), sort_keys=True)
@@ -83,7 +92,7 @@ def decode_access_token(
     *,
     secret_key: str,
     now: datetime | None = None,
-) -> str | None:
+) -> AccessTokenClaims | None:
     try:
         payload_part, signature_part = token.split(".", 1)
         expected_signature = hmac.new(
@@ -98,12 +107,13 @@ def decode_access_token(
         payload = json.loads(_base64url_decode(payload_part).decode("utf-8"))
         user_id = payload.get("sub")
         exp = payload.get("exp")
-        if not isinstance(user_id, str) or not isinstance(exp, int):
+        token_epoch = payload.get("epoch", 0)
+        if not isinstance(user_id, str) or not isinstance(exp, int) or not isinstance(token_epoch, int):
             return None
 
         current_time = now or datetime.now(timezone.utc)
         if current_time.timestamp() >= exp:
             return None
-        return user_id
+        return AccessTokenClaims(user_id=user_id, token_epoch=token_epoch)
     except (ValueError, TypeError, json.JSONDecodeError):
         return None

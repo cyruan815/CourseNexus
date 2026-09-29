@@ -25,12 +25,17 @@ def get_current_user(
         return None
 
     settings = get_settings()
-    user_id = decode_access_token(token, secret_key=settings.secret_key)
-    if user_id is None:
+    claims = decode_access_token(token, secret_key=settings.secret_key)
+    if claims is None:
         return None
 
-    user = get_user_by_id(db, user_id)
-    if user is None or user.status != "active" or user.deleted_at is not None:
+    user = get_user_by_id(db, claims.user_id)
+    if (
+        user is None
+        or user.status != "active"
+        or user.deleted_at is not None
+        or claims.token_epoch != user.token_epoch
+    ):
         return None
     return user
 
