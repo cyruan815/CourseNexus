@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createMaterialLink,
   createMaterialFolder,
   getMaterialPdf,
   listMaterialFolders,
@@ -79,28 +78,11 @@ describe("materials api", () => {
     expect(body.get("folder_id")).toBe("fld_1");
   });
 
-  it("creates link materials and renames materials", async () => {
-    await createMaterialLink("crs_1", {
-      name: "课程网站",
-      source_url: "https://example.com/course",
-      folder_id: "fld_1",
-    });
+  it("renames materials", async () => {
     await updateMaterial("mat_1", { name: "第一章重命名.pdf" });
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      "/api/v1/courses/crs_1/material-links",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          name: "课程网站",
-          source_url: "https://example.com/course",
-          folder_id: "fld_1",
-        }),
-      }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
       "/api/v1/materials/mat_1",
       expect.objectContaining({
         method: "PATCH",

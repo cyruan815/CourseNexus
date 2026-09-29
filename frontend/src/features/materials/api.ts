@@ -7,7 +7,6 @@ import type {
   MaterialFolder,
   MaterialFolderCreate,
   MaterialFolderUpdate,
-  MaterialLinkCreate,
   MaterialUpdate,
 } from "./types";
 
@@ -59,13 +58,6 @@ export function uploadMaterial(courseId: string, file: File, folderId: string | 
     body.append("folder_id", folderId);
   }
   return apiRequest<Material>(`/api/v1/courses/${courseId}/materials`, { method: "POST", body });
-}
-
-export function createMaterialLink(courseId: string, payload: MaterialLinkCreate): Promise<Material> {
-  return apiRequest<Material>(`/api/v1/courses/${courseId}/material-links`, {
-    method: "POST",
-    body: payload,
-  });
 }
 
 export function updateMaterial(materialId: string, payload: MaterialUpdate): Promise<Material> {

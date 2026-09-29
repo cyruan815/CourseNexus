@@ -44,12 +44,6 @@ export interface MaterialFolderUpdate {
   sort_order?: number;
 }
 
-export interface MaterialLinkCreate {
-  folder_id?: string | null;
-  name: string;
-  source_url: string;
-}
-
 export interface MaterialUpdate {
   name: string;
 }

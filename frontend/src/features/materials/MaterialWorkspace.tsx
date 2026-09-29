@@ -8,7 +8,6 @@ import {
   IconEdit,
   IconFolder,
   IconFolderPlus,
-  IconLink,
   IconLoader2,
   IconSearch,
   IconTrash,
@@ -19,7 +18,6 @@ import {
 import { ApiError } from "../../api/errors";
 import {
   createMaterialFolder,
-  createMaterialLink,
   deleteMaterial,
   deleteMaterialFolder,
   getMaterialPdf,
@@ -41,7 +39,6 @@ type DeleteTarget =
 type ActionTarget =
   | { kind: "createFolder" }
   | { folder: MaterialFolder; kind: "renameFolder" }
-  | { kind: "createLink" }
   | { kind: "renameMaterial"; material: Material }
   | null;
 
@@ -115,7 +112,6 @@ export function MaterialWorkspace({
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionTarget, setActionTarget] = useState<ActionTarget>(null);
   const [actionName, setActionName] = useState("");
-  const [actionUrl, setActionUrl] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
@@ -262,28 +258,18 @@ export function MaterialWorkspace({
   function openCreateFolderModal() {
     setActionTarget({ kind: "createFolder" });
     setActionName("");
-    setActionUrl("");
     setActionError(null);
   }
 
   function openRenameFolderModal(folder: MaterialFolder) {
     setActionTarget({ folder, kind: "renameFolder" });
     setActionName(folder.name);
-    setActionUrl("");
-    setActionError(null);
-  }
-
-  function openCreateLinkModal() {
-    setActionTarget({ kind: "createLink" });
-    setActionName("");
-    setActionUrl("");
     setActionError(null);
   }
 
   function openRenameMaterialModal(material: Material) {
     setActionTarget({ kind: "renameMaterial", material });
     setActionName(material.name);
-    setActionUrl("");
     setActionError(null);
   }
 
@@ -301,14 +287,9 @@ export function MaterialWorkspace({
     }
 
     const name = actionName.trim();
-    const sourceUrl = actionUrl.trim();
 
     if (!name) {
-      setActionError(actionTarget.kind === "createLink" ? "资料名称不能为空" : "文件夹名称不能为空");
-      return;
-    }
-    if (actionTarget.kind === "createLink" && !sourceUrl) {
-      setActionError("资料链接不能为空");
+      setActionError(actionTarget.kind === "renameMaterial" ? "资料名称不能为空" : "文件夹名称不能为空");
       return;
     }
 
@@ -320,14 +301,6 @@ export function MaterialWorkspace({
       } else if (actionTarget.kind === "renameFolder") {
         const nextFolder = await updateMaterialFolder(actionTarget.folder.id, { name });
         setFolders((current) => current.map((item) => (item.id === nextFolder.id ? nextFolder : item)));
-      } else if (actionTarget.kind === "createLink") {
-        const material = await createMaterialLink(courseId, {
-          name,
-          source_url: sourceUrl,
-          folder_id: null,
-        });
-        setMaterials((current) => [material, ...current]);
-        setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
       } else if (actionTarget.kind === "renameMaterial") {
         updateMaterial(await renameMaterial(actionTarget.material.id, { name }));
       }
@@ -510,7 +483,7 @@ export function MaterialWorkspace({
           <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameMaterialModal(material)}>
             重命名资料
           </Menu.Item>
-          {material.parse_status === "parse_failed" ? (
+          {material.parse_status === "parse_failed" && material.source_type !== "url" ? (
             <Menu.Item leftSection={<IconLoader2 size={16} />} onClick={() => handleParse(material)}>
               重试解析
             </Menu.Item>
@@ -553,14 +526,17 @@ export function MaterialWorkspace({
 
   function renderMaterialRow(material: Material) {
     const isParsed = material.parse_status === "parsed";
+    const isLegacyUrl = material.source_type === "url";
     const checked = isParsed && materialScope.material_ids.includes(material.id);
     const kind = materialKind(material);
-    const status = statusText(material.parse_status);
-    const StatusIcon = material.parse_status === "parsed"
-      ? IconCheck
-      : material.parse_status === "parse_failed"
-        ? IconAlertCircle
-        : IconLoader2;
+    const status = isLegacyUrl ? "已停止支持" : statusText(material.parse_status);
+    const StatusIcon = isLegacyUrl
+      ? IconAlertCircle
+      : material.parse_status === "parsed"
+        ? IconCheck
+        : material.parse_status === "parse_failed"
+          ? IconAlertCircle
+          : IconLoader2;
 
     return (
       <li
@@ -616,7 +592,7 @@ export function MaterialWorkspace({
           title={status}
         >
           <StatusIcon
-            className={material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
+            className={isLegacyUrl || material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
             size={13}
             stroke={2}
           />
@@ -712,17 +688,6 @@ export function MaterialWorkspace({
               type="button"
             >
               <IconUpload aria-hidden size={21} stroke={1.8} />
-            </button>
-          </Tooltip>
-          <Tooltip label="添加链接" openDelay={250} position="bottom" withArrow>
-            <button
-              aria-label="添加链接"
-              className="material-workspace__action-button"
-              disabled={isMutating}
-              onClick={openCreateLinkModal}
-              type="button"
-            >
-              <IconLink aria-hidden size={21} stroke={1.8} />
             </button>
           </Tooltip>
         </div>
@@ -839,11 +804,9 @@ export function MaterialWorkspace({
         isSubmitting={isMutating}
         name={actionName}
         onChangeName={setActionName}
-        onChangeUrl={setActionUrl}
         onClose={closeActionModal}
         onSubmit={submitActionModal}
         target={actionTarget}
-        url={actionUrl}
       />
       <PdfPreviewModal
         error={previewError}
@@ -939,32 +902,26 @@ function ActionModal({
   isSubmitting,
   name,
   onChangeName,
-  onChangeUrl,
   onClose,
   onSubmit,
   target,
-  url,
 }: {
   error: string | null;
   isSubmitting: boolean;
   name: string;
   onChangeName: (value: string) => void;
-  onChangeUrl: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
   target: ActionTarget;
-  url: string;
 }) {
   const titleMap: Record<NonNullable<ActionTarget>["kind"], string> = {
     createFolder: "新建文件夹",
-    createLink: "添加链接资料",
     renameFolder: "重命名文件夹",
     renameMaterial: "重命名资料",
   };
-  const isLink = target?.kind === "createLink";
   const isRenameMaterial = target?.kind === "renameMaterial";
-  const label = isLink || isRenameMaterial ? "资料名称" : "文件夹名称";
-  const canSubmit = Boolean(name.trim()) && (!isLink || Boolean(url.trim())) && !isSubmitting;
+  const label = isRenameMaterial ? "资料名称" : "文件夹名称";
+  const canSubmit = Boolean(name.trim()) && !isSubmitting;
 
   return (
     <Modal
@@ -988,15 +945,6 @@ function ActionModal({
           required
           value={name}
         />
-        {isLink ? (
-          <TextInput
-            label="资料链接"
-            maxLength={2048}
-            onChange={(event) => onChangeUrl(event.currentTarget.value)}
-            required
-            value={url}
-          />
-        ) : null}
         <Group justify="flex-end">
           <Button disabled={isSubmitting} onClick={onClose} variant="default">
             取消
