@@ -58,7 +58,16 @@ class MaterialPlanProvider:
                                     "estimated_minutes": 30,
                                     "citation_chunk_ids": ["chk_flow"],
                                     "sort_order": 1,
-                                }
+                                },
+                                {
+                                    "title": "当日测试",
+                                    "subtask_type": "test",
+                                    "description": "完成当日测试",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 2,
+                                },
                             ],
                         },
                         {
@@ -74,7 +83,16 @@ class MaterialPlanProvider:
                                     "estimated_minutes": 30,
                                     "citation_chunk_ids": ["chk_flow"],
                                     "sort_order": 1,
-                                }
+                                },
+                                {
+                                    "title": "综合测试",
+                                    "subtask_type": "test",
+                                    "description": "完成全计划综合测试",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 2,
+                                },
                             ],
                         },
                     ],

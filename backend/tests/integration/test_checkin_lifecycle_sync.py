@@ -18,6 +18,7 @@ from app.modules.study_plans.models import StudyTask
 from app.modules.study_plans.schemas import StudyPlanReplaceRequest, StudyPlanSaveRequest
 from app.modules.study_plans.service import delete_study_plan, replace_study_plan, save_study_plan
 from app.modules.users.models import User
+from tests.fixtures.study_mode_samples import compliant_daily_task, study_subtask
 
 
 @pytest.fixture()
@@ -71,31 +72,29 @@ def _seed_owner_course(db: Session) -> tuple[User, Course]:
 
 def _payload(*, title: str = "数据库计划", day: date = date(2026, 7, 11), second_day: date | None = None) -> StudyPlanSaveRequest:
     tasks: list[dict[str, object]] = [
-        {
-            "title": f"{day.isoformat()} 学习任务",
-            "task_date": day.isoformat(),
-            "sort_order": 1,
-            "subtasks": [
-                {
-                    "title": "阅读数据库设计",
-                    "subtask_type": "learn",
-                    "description": "学习数据库设计步骤",
-                    "related_material_ids": ["mat_seed"],
-                    "estimated_minutes": 30,
-                    "citation_chunk_ids": [],
-                    "sort_order": 1,
-                },
-                {
-                    "title": "复盘数据库设计",
-                    "subtask_type": "review",
-                    "description": "整理设计流程",
-                    "related_material_ids": ["mat_seed"],
-                    "estimated_minutes": 30,
-                    "citation_chunk_ids": [],
-                    "sort_order": 2,
-                },
+        # 保存契约要求每天恰好一个测试任务并排在最后（见 tests/fixtures/study_mode_samples.py）。
+        compliant_daily_task(
+            title=f"{day.isoformat()} 学习任务",
+            task_date=day.isoformat(),
+            sort_order=1,
+            plan_material_ids=["mat_seed"],
+            study_subtasks=[
+                study_subtask(
+                    title="阅读数据库设计",
+                    subtask_type="learn",
+                    material_ids=["mat_seed"],
+                    description="学习数据库设计步骤",
+                    sort_order=1,
+                ),
+                study_subtask(
+                    title="复盘数据库设计",
+                    subtask_type="review",
+                    material_ids=["mat_seed"],
+                    description="整理设计流程",
+                    sort_order=2,
+                ),
             ],
-        }
+        )
     ]
     if second_day is not None:
         tasks.append(
@@ -160,7 +159,7 @@ def test_save_study_plan_recalculates_new_task_dates(db: Session) -> None:
     dates = {task.task_date for task in bundle.tasks}
     records = _records(db, user.id)
     assert set(records) == dates
-    assert records[date(2026, 7, 11)].total_subtask_count == 2
+    assert records[date(2026, 7, 11)].total_subtask_count == 3
     assert records[date(2026, 7, 12)].total_subtask_count == 1
     assert all(record.completed_subtask_count == 0 for record in records.values())
 
@@ -187,7 +186,7 @@ def test_replace_study_plan_recalculates_old_and_new_dates(db: Session) -> None:
     records = _records(db, user.id)
     assert set(records) == old_dates | {date(2026, 7, 12), date(2026, 7, 13)}
     assert records[date(2026, 7, 11)].total_subtask_count == 0
-    assert records[date(2026, 7, 12)].total_subtask_count == 2
+    assert records[date(2026, 7, 12)].total_subtask_count == 3
     assert records[date(2026, 7, 13)].total_subtask_count == 1
 
 
