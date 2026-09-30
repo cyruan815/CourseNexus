@@ -57,6 +57,16 @@ def test_factory_returns_stable_service_unavailable_error_when_unconfigured() ->
     assert exc_info.value.details == {"purpose": "course_qa"}
 
 
+def test_factory_treats_whitespace_api_key_as_unconfigured() -> None:
+    with pytest.raises(CourseNexusError) as exc_info:
+        provider_factory.create_model_provider(
+            "course_qa",
+            settings=Settings(_env_file=None, course_qa_api_key="   "),
+        )
+
+    assert exc_info.value.code == "MODEL_PROVIDER_NOT_CONFIGURED"
+
+
 def test_factory_forwards_requested_api_style(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

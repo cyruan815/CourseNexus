@@ -31,7 +31,7 @@ def create_model_provider_from_endpoint(
     settings: Settings | None = None,
 ) -> ModelProvider:
     runtime_settings = settings or get_settings()
-    if endpoint.api_key:
+    if endpoint.api_key and endpoint.api_key.strip():
         return OpenAIModelProvider(
             api_key=endpoint.api_key,
             model=endpoint.model,
