@@ -197,7 +197,11 @@ function TodayTodoCard({
     const rightTime = Date.parse(right.updated_at || right.created_at);
     return rightTime - leftTime;
   })[0];
-  const selectedIds = new Set(materialScope.material_ids);
+  const selectedIds = new Set(
+    materialScope.include_all_parsed_materials && materialScope.material_ids.length === 0
+      ? parsedMaterials.map((material) => material.id)
+      : materialScope.material_ids,
+  );
   const materialSelection = parsedMaterials
     .filter((material) => selectedIds.has(material.id))
     .map((material) => ({ id: material.id, name: material.name }));

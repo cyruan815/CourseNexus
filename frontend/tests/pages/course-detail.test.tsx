@@ -227,6 +227,36 @@ describe("CourseDetailPage", () => {
     }));
   });
 
+  it("freezes the default all-material scope into concrete plan material ids", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders")) {
+        return Promise.resolve(successResponse([], "req_folders"));
+      }
+      if (url.endsWith("/materials")) {
+        return Promise.resolve(successResponse(parsedMaterials, "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage();
+    await screen.findByRole("checkbox", { name: `选择资料 ${parsedMaterials[0].name}` });
+    fireEvent.click(screen.getByRole("link", { name: "制定学习计划" }));
+
+    expect(screen.getByTestId("location-state")).toHaveTextContent(JSON.stringify({
+      studyPlanMaterialSelection: parsedMaterials.map((material) => ({ id: material.id, name: material.name })),
+    }));
+  });
+
   it("shows readable course terms in the detail header without rendering the description", async () => {
     let courseRequestCount = 0;
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
@@ -604,7 +634,8 @@ describe("CourseDetailPage", () => {
     });
 
     fireEvent.click(screen.getByRole("checkbox", { name: "选择资料 演示资料.md" }));
-    expect(screen.getByText("资料范围：当前课程全部已解析资料")).toBeInTheDocument();
+    expect(screen.getByText("资料范围：已选择")).toBeInTheDocument();
+    expect(screen.getByText("共 0 份资料")).toBeInTheDocument();
   });
 
   it("keeps a continuous qa conversation and renders assistant markdown", async () => {

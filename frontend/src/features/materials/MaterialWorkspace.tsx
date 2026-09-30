@@ -210,8 +210,7 @@ export function MaterialWorkspace({
       ? checkedParsedMaterialIds.filter((id) => id !== materialId)
       : [...checkedParsedMaterialIds, materialId];
     onMaterialScopeChange({
-      include_all_parsed_materials:
-        nextMaterialIds.length === 0 || nextMaterialIds.length === parsedMaterialIds.length,
+      include_all_parsed_materials: nextMaterialIds.length === parsedMaterialIds.length,
       material_ids: nextMaterialIds,
     });
   }
@@ -339,7 +338,7 @@ export function MaterialWorkspace({
         if (!materialScope.include_all_parsed_materials && removedMaterialIds.length > 0) {
           const nextMaterialIds = materialScope.material_ids.filter((id) => !removedMaterialIds.includes(id));
           onMaterialScopeChange({
-            include_all_parsed_materials: nextMaterialIds.length === 0,
+            include_all_parsed_materials: false,
             material_ids: nextMaterialIds,
           });
         }
@@ -350,7 +349,7 @@ export function MaterialWorkspace({
         if (!materialScope.include_all_parsed_materials) {
           const nextMaterialIds = materialScope.material_ids.filter((id) => id !== materialId);
           onMaterialScopeChange({
-            include_all_parsed_materials: nextMaterialIds.length === 0,
+            include_all_parsed_materials: false,
             material_ids: nextMaterialIds,
           });
         }
@@ -718,7 +717,7 @@ export function MaterialWorkspace({
                 checked={isExplicitAllParsedScope}
                 onChange={() =>
                   onMaterialScopeChange({
-                    include_all_parsed_materials: true,
+                    include_all_parsed_materials: !isExplicitAllParsedScope,
                     material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
                   })
                 }
