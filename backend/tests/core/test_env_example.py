@@ -35,3 +35,11 @@ def test_env_example_documents_study_plan_api_styles_and_map_concurrency() -> No
     assert "STUDY_PLAN_MAP_CONCURRENCY=1" in content
     assert "STUDY_PLAN_GENERATOR_BASE_URL=https://api.deepseek.com" in content
     assert "STUDY_PLAN_MAP_BASE_URL=https://api.deepseek.com" in content
+
+
+def test_env_example_disables_mock_model_provider_by_default() -> None:
+    content = (ROOT_DIR / ".env.example").read_text(encoding="utf-8")
+
+    assert "APP_ENV=development" in content
+    assert "ENABLE_MOCK_MODEL_PROVIDER=false" in content
+    assert "production 必须使用至少 32 位的非默认 SECRET_KEY" in content
