@@ -439,7 +439,7 @@ export interface GeneratedContentRead {
   generation_status: string;
   material_scope_json: unknown;
   error_code: string | null;
-  source_citations: unknown[];
+  source_citations: StudySubtaskQaSourceCitation[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

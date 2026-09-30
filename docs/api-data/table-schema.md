@@ -84,7 +84,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `Flashcard` | `flashcards` | `ai_generated_contents.content_type = flashcard`，卡片写入 `content_json.cards`。 | PRD 明确本期不做复杂间隔复习算法；卡片级长期掌握度可后续再拆。 |
 | `Mindmap` | `mindmaps`、`mindmap_nodes`、`mindmap_edges` | `ai_generated_contents.content_type = mindmap`，节点和边写入 `content_json`。 | PRD 建议 Mindmap 保存在 `AIGeneratedContent.content_json` 中；v0.1 不需要节点级编辑或图查询。 |
 | 复习提纲 | `outlines`、`outline_sections` | `ai_generated_contents.content_type = outline`，章节结构写入 `content_json.sections`。 | PRD 将复习提纲归入 AI 生成内容历史记录，不要求独立提纲表。 |
-| 知识点清单 | `knowledge_lists`、`knowledge_list_items` | `ai_generated_contents.content_type = knowledge_list`，知识点写入 `content_json.items`。 | v0.1 只需展示生成结果和引用来源，不做知识点级掌握模型。 |
+| 知识点清单 | `knowledge_lists`、`knowledge_list_items` | `ai_generated_contents.content_type = knowledge_list`，知识点写入 `content_json.items`。 | v0.1 展示生成结果与真实资料范围，不承诺知识点级引用；学习状态保存在 item 的 `learned`。 |
 | 保存为笔记 | `notes` | `ai_generated_contents.content_type = note`，正文写入 `content`，来源消息用 `source_message_id`。 | PRD 明确不新增 Note 对象。 |
 | 今日讲义 | `handouts` | `ai_generated_contents.content_type = handout`，并关联 `study_subtask_id`。 | PRD 要求按需生成并绑定二级任务，不要求独立讲义表。 |
 | 任务测试题 | `task_tests`、`task_test_questions` | `ai_generated_contents.content_type = task_test`，题目写入 `content_json.questions`，并关联 `study_subtask_id`。 | PRD 要求进入任务测试题页面后按需生成，不在计划保存时提前生成。 |

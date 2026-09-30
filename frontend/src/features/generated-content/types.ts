@@ -31,6 +31,7 @@ export interface TaskTestQuestion {
   options: Array<{ id: string; text: string }>;
   correct_answer: TaskTestAnswer;
   explanation?: string | null;
+  source_citation_ids?: string[];
 }
 
 export interface SerializedMarkmapAssets {

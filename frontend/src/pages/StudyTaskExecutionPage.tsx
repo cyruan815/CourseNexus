@@ -1220,7 +1220,11 @@ export function StudyTaskExecutionPage() {
                           ) : null}
                           {contentType === "task_test" && taskTestPreviewQuestions.length > 0 ? (
                             <Box className="study-plan-task-test-preview">
-                              <TaskTestResult attemptKey={taskTestAttemptKey} questions={taskTestPreviewQuestions} />
+                              <TaskTestResult
+                                attemptKey={taskTestAttemptKey}
+                                citations={currentGeneratedContent?.source_citations ?? []}
+                                questions={taskTestPreviewQuestions}
+                              />
                             </Box>
                           ) : null}
                         </>

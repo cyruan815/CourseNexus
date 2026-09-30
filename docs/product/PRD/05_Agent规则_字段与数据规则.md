@@ -172,23 +172,23 @@ Agent 问答必须满足可追溯、可连续追问、可失败重试。
 
 ### 12.7 与课程自测 Quiz / Flashcard / Mindmap 的联动规则
 
-学习辅助生成能力与 Agent 问答共用资料上下文规则和引用来源规则，但输出结构不同。
+学习辅助生成能力与 Agent 问答共用资料权限和范围规则，但来源能力按内容类型区分：问答和任务测试题提供结构化引用；Handout 与五类独立生成内容只提供真实资料范围说明。
 
 | 功能 | 输入上下文 | 输出内容 | 引用要求 |
 |---|---|---|---|
-| 课程自测 Quiz | 课程资料切片 | 题目、选项、答案、解析 | 每道题尽量带引用来源 |
-| Flashcard | 课程资料切片 | 卡片正面、背面、标签 | 每张卡片尽量带引用来源 |
-| Mindmap | 课程资料切片 | 节点、层级、关系 | 关键节点带引用来源 |
-| 复习提纲 | 课程资料切片 | 章节、重点、复习建议 | 每章或重点带引用来源 |
-| 知识点清单 | 课程资料切片 | 知识点、定义、重要程度 | 每个重点知识点带引用来源 |
-| 今日讲义 | 任务关联资料 | 讲义正文、重点解释 | 关键内容带引用来源 |
-| 任务测试题 | 测试类二级任务关联资料 | 题目、答案、解析 | 每道题尽量带引用来源 |
+| 课程自测 Quiz | 课程资料切片 | 题目、选项、答案、解析 | 展示实际生成资料范围，不提供逐题引用 |
+| Flashcard | 课程资料切片 | 卡片正面、背面、标签 | 展示实际生成资料范围，不提供逐卡引用 |
+| Mindmap | 课程资料切片 | 节点、层级、关系 | 展示实际生成资料范围，不提供逐节点引用 |
+| 复习提纲 | 课程资料切片 | 章节、重点、复习建议 | 展示实际生成资料范围，不提供逐章引用 |
+| 知识点清单 | 课程资料切片 | 知识点、定义、重要程度 | 展示实际生成资料范围，不提供逐项引用 |
+| 任务讲义 | 任务关联资料 | Markdown 讲义正文 | Markdown 顶部来源说明 + 实际生成资料范围，不提供逐段引用 |
+| 任务测试题 | 测试类二级任务关联资料 | 题目、答案、解析 | 每道题必须关联至少一个合法结构化引用 |
 
 联动规则：
 
 1. 学习辅助生成前必须确定 `course_id` 和资料范围。
 2. 生成结果统一保存为 `AIGeneratedContent` 或其关联结构。
-3. 生成结果的引用来源统一保存到 `SourceCitation`。
+3. 只有课程/任务问答、任务测试题和继承问答引用的笔记保存 `SourceCitation`；五类独立生成内容与新 Handout 不创建逐条引用。
 4. 课程自测 Quiz、Flashcard、Mindmap 可以有结构化子对象，也可以在 `AIGeneratedContent.content_json` 中保存结构化内容，后端根据实现复杂度选择。
 5. 计划学习执行页中的今日讲义和任务测试题，应关联到 `StudySubTask`，便于回到任务上下文。
 
@@ -224,7 +224,7 @@ erDiagram
 4. 用户需要规划多门课程时，应创建多个单课程计划。
 5. 首页今日待办和首页大日历按日期合并展示多个单课程计划的任务。
 6. 资料解析后切分为 `MaterialChunk`，供检索和引用。
-7. `SourceCitation` 可关联 `Message`，也可关联 `AIGeneratedContent`；今日讲义和任务测试题也统一通过 `AIGeneratedContent` 承载引用来源。
+7. `SourceCitation` 可关联 `Message`，也可关联需要结构化引用的 `AIGeneratedContent`；任务测试题通过题目内的 `source_citation_ids` 关联引用，今日讲义只在 `material_scope_json.source_materials` 保存真实资料清单并在正文保留来源说明。
 8. `CheckinRecord` 按用户和日期记录当日二级任务完成比例。
 
 ### 13.2 数据对象清单
@@ -455,7 +455,7 @@ erDiagram
 2. 今日讲义使用 `content_type = handout`，并关联 `study_subtask_id`。
 3. 计划执行中的任务测试题使用 `content_type = task_test`，并关联测试类 `study_subtask_id`。
 4. 课程详情页生成的课程自测 Quiz 使用 `content_type = quiz`。
-5. 引用来源统一通过 `SourceCitation.generated_content_id` 关联。
+5. 任务测试题的逐题引用通过 `SourceCitation.generated_content_id` 关联；新 Handout 与五类独立生成内容不创建逐条引用，真实资料范围保存在 `material_scope_json.source_materials`。
 
 #### 13.3.9 课程自测 Quiz 测验
 
@@ -474,7 +474,7 @@ erDiagram
 
 规则：
 
-1. 每道题尽量关联引用来源。
+1. 课程自测 Quiz 不承诺逐题引用；详情页展示本次实际参与生成的资料范围。任务测试题的逐题引用使用独立 `task_test.content_json.questions[].source_citation_ids` 契约。
 2. 计划执行页任务测试题进入后按需生成，不在计划保存时提前生成。
 3. 任务测试题支持 Markdown 导出；PDF 导出为后续能力。
 
@@ -513,7 +513,7 @@ Mindmap 建议保存在 `AIGeneratedContent.content_json` 中。
 | `label` | string | 是 | 节点名称 |
 | `summary` | text | 否 | 节点说明 |
 | `level` | int | 否 | 层级 |
-| `source_citation_ids` | array | 否 | 关联引用来源 |
+| `source_citation_ids` | array | 否 | V1 五类独立生成内容不使用该字段，历史数据仅兼容读取 |
 
 规则：
 

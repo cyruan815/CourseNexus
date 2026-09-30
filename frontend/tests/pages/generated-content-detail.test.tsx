@@ -29,7 +29,7 @@ describe("GeneratedContentDetailPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads generated content detail without metadata and citation panels", async () => {
+  it("shows the real generation material scope without item-level citations", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       successResponse({
         id: "gen_1",
@@ -53,20 +53,16 @@ describe("GeneratedContentDetailPage", () => {
           ],
         },
         generation_status: "success",
-        material_scope_json: { include_all_parsed_materials: true, material_ids: [] },
+        material_scope_json: {
+          include_all_parsed_materials: true,
+          material_ids: [],
+          source_materials: [
+            { material_id: "mat_1", material_name: "第一章.md" },
+            { material_id: "mat_2", material_name: "习题解析.pdf" },
+          ],
+        },
         error_code: null,
-        source_citations: [
-          {
-            id: "cit_1",
-            material_id: "mat_1",
-            chunk_id: "chk_1",
-            material_name: "第一章.md",
-            page: null,
-            page_index: 0,
-            hit_text: "极限定义",
-            sort_order: 1,
-          },
-        ],
+        source_citations: [],
         created_at: "2026-07-09T12:00:00+00:00",
         updated_at: "2026-07-09T12:00:00+00:00",
         deleted_at: null,
@@ -82,9 +78,10 @@ describe("GeneratedContentDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "函数与极限" }));
     expect(screen.getByText("梳理极限定义和常见计算方法")).toBeInTheDocument();
     expect(screen.getByText("先复盘定义，再做典型题")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "生成信息" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("生成使用的资料")).toHaveTextContent("2 份");
+    expect(screen.getByLabelText("生成使用的资料")).toHaveTextContent("第一章.md");
+    expect(screen.getByLabelText("生成使用的资料")).toHaveTextContent("习题解析.pdf");
     expect(screen.queryByRole("heading", { name: "引用来源" })).not.toBeInTheDocument();
-    expect(screen.queryByText("第一章.md · 页码未知")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/generated-contents/gen_1",
       expect.objectContaining({ method: "GET" }),
@@ -266,6 +263,8 @@ describe("GeneratedContentDetailPage", () => {
     expect(within(firstCard).getByText("回答正确")).toBeInTheDocument();
     expect(within(firstCard).getByText("正确答案：A")).toBeInTheDocument();
     expect(within(firstCard).getByText("解析：向量空间需要对加法和数乘封闭。")).toBeInTheDocument();
+    expect(within(firstCard).getByText("题目来源")).toBeInTheDocument();
+    expect(within(firstCard).getByRole("button", { name: "查看第 1 题来源 1：物理层.pdf" })).toBeInTheDocument();
 
     expect(screen.queryByRole("heading", { name: "引用来源" })).not.toBeInTheDocument();
     expect(screen.queryByText("物理层.pdf · 12")).not.toBeInTheDocument();

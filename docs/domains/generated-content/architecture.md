@@ -21,6 +21,8 @@ Generation does not use Top-K retrieval, batching, map/reduce, cross-batch mergi
 
 Successful generation writes only `ai_generated_contents`. It does not create `source_citations`; list/detail/POST responses retain the top-level `source_citations` field as `[]` for API compatibility.
 
+The frontend renders `material_scope_json.source_materials` as a compact “生成使用的资料” panel above Quiz, Flashcard, Mindmap, Outline, and Knowledge List results. Missing snapshots on legacy rows degrade to no panel. This display is intentionally separate from `source_citations`: it proves which materials actually entered generation, but does not claim which item came from which chunk.
+
 The total context limit is configured by `MATERIAL_CONTEXT_MAX_TOKENS`, default `120000`. Overflow is never silently truncated.
 
 ## Permanent deletion
