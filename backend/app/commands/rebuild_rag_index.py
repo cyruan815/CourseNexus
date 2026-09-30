@@ -43,7 +43,7 @@ def rebuild_material(*, db: Session, rag_index: RagIndex, material_id: str) -> R
         raise CourseNexusError(code="NOT_FOUND", message="资料不存在", status_code=404)
 
     rag_index.delete_material(material.id)
-    if material.parse_status != "parsed":
+    if material.active_parse_version_id is None:
         return RebuildRagIndexResult(material_count=0, chunk_count=0)
 
     return _index_rows(_parsed_chunk_rows(db, material_id=material.id), rag_index=rag_index)
@@ -122,7 +122,8 @@ def _parsed_chunk_rows(db: Session, material_id: str | None = None) -> list[tupl
         .join(MaterialChunk, MaterialChunk.material_id == CourseMaterial.id)
         .where(
             CourseMaterial.deleted_at.is_(None),
-            CourseMaterial.parse_status == "parsed",
+            CourseMaterial.active_parse_version_id.is_not(None),
+            MaterialChunk.parse_version_id == CourseMaterial.active_parse_version_id,
         )
         .order_by(CourseMaterial.id.asc(), MaterialChunk.chunk_index.asc())
     )
@@ -144,6 +145,7 @@ def _rag_chunk_for_row(material: CourseMaterial, chunk: MaterialChunk) -> RagChu
         page=chunk.page,
         page_index=chunk.page_index,
         heading=chunk.heading,
+        parse_version_id=chunk.parse_version_id,
     )
 
 

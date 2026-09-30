@@ -83,6 +83,50 @@ def test_rebuild_material_replaces_single_material_vectors(db: Session) -> None:
     assert rag_index.records[current.id].text == "updated matrix"
 
 
+def test_rebuild_material_indexes_active_version_while_update_is_running(db: Session) -> None:
+    user_id, course_id = _create_owner(db)
+    material = _material(db, user_id=user_id, course_id=course_id, material_id="mat_updating", parse_status="parsed")
+    current = _chunk(db, material, chunk_id="chk_updating_current", text="stable version")
+    material.parse_status = "parsing"
+    db.commit()
+
+    rag_index = FakeRagIndex()
+    result = rebuild_material(db=db, rag_index=rag_index, material_id=material.id)
+
+    assert result == RebuildRagIndexResult(material_count=1, chunk_count=1)
+    assert set(rag_index.records) == {current.id}
+
+
+def test_rebuild_all_excludes_retired_parse_versions(db: Session) -> None:
+    user_id, course_id = _create_owner(db)
+    material = _material(db, user_id=user_id, course_id=course_id, material_id="mat_versioned", parse_status="parsed")
+    active_chunk = _chunk(db, material, chunk_id="chk_active", text="current")
+    retired_version = MaterialParseVersion(
+        id="mpv_mat_versioned_retired",
+        material_id=material.id,
+        course_id=course_id,
+        user_id=user_id,
+        status="retired",
+    )
+    retired_chunk = MaterialChunk(
+        id="chk_retired",
+        material_id=material.id,
+        parse_version_id=retired_version.id,
+        course_id=course_id,
+        chunk_index=0,
+        content_text="obsolete",
+    )
+    db.add_all([retired_version, retired_chunk])
+    db.commit()
+
+    rag_index = FakeRagIndex()
+    result = rebuild_all(db=db, rag_index=rag_index)
+
+    assert result == RebuildRagIndexResult(material_count=1, chunk_count=1)
+    assert set(rag_index.records) == {active_chunk.id}
+    assert rag_index.records[active_chunk.id].parse_version_id == material.active_parse_version_id
+
+
 def test_rebuild_material_missing_or_deleted_material_raises_not_found(db: Session) -> None:
     user_id, course_id = _create_owner(db)
     deleted = _material(db, user_id=user_id, course_id=course_id, material_id="mat_deleted", parse_status="deleted")
