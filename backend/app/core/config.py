@@ -141,6 +141,11 @@ class Settings(BaseSettings):
     def normalize_chroma_persist_path(cls, value: str) -> str:
         return str(resolve_project_path(value))
 
+    @field_validator("log_dir")
+    @classmethod
+    def normalize_log_dir(cls, value: str) -> str:
+        return str(resolve_project_path(value))
+
     @model_validator(mode="after")
     def apply_legacy_model_settings(self) -> "Settings":
         configured_fields = self.model_fields_set

@@ -90,6 +90,10 @@ def test_default_upload_path_resolves_from_project_root() -> None:
     assert Settings(_env_file=None).file_storage_path == str(ROOT_DIR / "uploads")
 
 
+def test_default_log_path_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).log_dir == str(ROOT_DIR / "logs")
+
+
 @pytest.mark.parametrize("app_env", ["development", "test"])
 def test_non_production_environment_allows_explicit_mock_mode(app_env: str) -> None:
     settings = Settings(
