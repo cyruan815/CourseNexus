@@ -4,7 +4,7 @@ from typing import Literal, get_args
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.paths import PROJECT_ROOT, resolve_database_url
+from app.core.paths import PROJECT_ROOT, resolve_database_url, resolve_project_path
 
 
 ROOT_DIR = PROJECT_ROOT
@@ -130,6 +130,11 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
         return resolve_database_url(value)
+
+    @field_validator("file_storage_path")
+    @classmethod
+    def normalize_file_storage_path(cls, value: str) -> str:
+        return str(resolve_project_path(value))
 
     @model_validator(mode="after")
     def apply_legacy_model_settings(self) -> "Settings":

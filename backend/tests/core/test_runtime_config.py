@@ -86,6 +86,10 @@ def test_memory_sqlite_url_remains_in_memory() -> None:
     )
 
 
+def test_default_upload_path_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).file_storage_path == str(ROOT_DIR / "uploads")
+
+
 @pytest.mark.parametrize("app_env", ["development", "test"])
 def test_non_production_environment_allows_explicit_mock_mode(app_env: str) -> None:
     settings = Settings(
