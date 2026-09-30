@@ -14,7 +14,7 @@
 - 历史引用脱钩边界：`backend/app/modules/course_qa/citations.py`，只允许资料删除流程清空引用外键，不删除问答或生成内容。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击 PDF 资料名称在页面悬浮弹窗中预览原文。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击 PDF 资料名称在页面悬浮弹窗中预览原文。`course-qa/CitationLocator` 复用资料详情与 PDF 原文接口完成引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -45,6 +45,7 @@ flowchart LR
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
 - PDF 原文通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、PDF 类型、实际文件存在性和解析后路径仍在存储根目录内。
+- 引用定位先通过 `GET /api/v1/materials/{material_id}` 读取资料元数据并复核当前用户所有权；只有仍可访问的 PDF 且引用有可靠页码时才继续读取原文。
 - 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
 - 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
 - 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。历史 `source_type=url` 资料不参与该流转：解析重试接口对其返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变；创建端点 `POST /courses/{course_id}/material-links` 返回 `410 MATERIAL_LINK_REMOVED` 兼容反馈。
@@ -123,6 +124,13 @@ PDF 原文预览：
 3. 后端以 `application/pdf`、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
 4. 前端带 Bearer token 拉取完整 Blob，创建临时 object URL 交给弹窗内浏览器 PDF 查看器；关闭、替换预览或组件卸载时释放 URL，过期异步请求的结果也会立即释放。
 
+引用来源定位：
+
+1. 前端从持久化 `SourceCitation` 读取资料名快照、`material_id`、`page` / `page_index` 和 `hit_text`，不按当前 chunk 序号重新推断历史来源。
+2. `page` 是可转换为正整数的一基页码时优先使用；否则仅当 `page_index > 0` 时转换为 `page_index + 1`。`page_index = 0` 表示未知位置，不得解释为第一页。
+3. 可访问 PDF 只有在步骤 2 得到可靠页码时才下载原文并定位；Text / Markdown 以及没有页码的来源展示保存片段。
+4. 资料物理删除后 `material_id` 为空，或详情 / 原文读取失败时，前端显示“来源不可用”并继续展示 `material_name` 与 `hit_text` 快照。
+
 ### 5.3 复杂度与资源预算
 
 - 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
@@ -139,6 +147,7 @@ PDF 原文预览：
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
 - 基础前端归类与逐文件复选、PDF 名称点击预览、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 引用定位覆盖 PDF 指定页、Text / Markdown 快照、未知页码和资料删除后快照：`frontend/tests/features/course-qa/inline-citation-answer.test.tsx`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 - 真实 PDF 从上传、Docling 解析、Chroma 写入到资料/文件夹物理删除的端到端验证：[validation/real-pdf-permanent-deletion-e2e-2026-07-13.md](validation/real-pdf-permanent-deletion-e2e-2026-07-13.md)。
 
@@ -159,6 +168,7 @@ pnpm frontend:build
 - 2026-07-15 资料工作区支持点击 PDF 资料名称打开悬浮预览窗；前端使用鉴权请求获取 Blob 并在关闭或替换时释放 object URL，后端仅向当前用户返回位于存储根目录内的 PDF 原文。
 - 2026-07-15 课程详情资料工作区按已确认的 Product Design 视觉目标完成重构：保留现有三栏宽度和全部资料接口，头部提供选择统计与新建文件夹、上传资料、添加链接三个明确入口，主体使用搜索、一级文件夹和逐文件状态组成的圆角局部滚动列表。课程详情页不保留常驻底部拖拽区；只有点击上传按钮或文件夹菜单中的上传入口后，上传弹窗才承载文件选择与拖拽，并继续沿用单文件上传后自动解析的既有流程。
 - 2026-09-30 按负责人 V1 收尾审定下线 URL 链接资料入口：前端移除“添加链接”按钮与弹窗，后端 `material-links` 创建端点改为 `410 MATERIAL_LINK_REMOVED` 兼容占位，`parse_material` 对历史 URL 资料直接抛 `409 MATERIAL_LINK_REMOVED` 且不再改写状态。数据层保留 `source_type/source_url` 列和历史行；material-context 因始终过滤 `parse_status=parsed`，历史 URL 资料天然不进入检索、问答、生成与计划范围（有回归测试固化）。历史记录在前端标记“已停止支持”，保留查看、重命名与删除。
+- 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
 - 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。

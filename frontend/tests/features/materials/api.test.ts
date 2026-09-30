@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createMaterialFolder,
+  getMaterial,
   getMaterialPdf,
   listMaterialFolders,
   moveMaterialToFolder,
@@ -40,6 +41,15 @@ describe("materials api", () => {
         method: "GET",
         headers: { Authorization: "Bearer token_1" },
       }),
+    );
+  });
+
+  it("loads material metadata for citation routing", async () => {
+    await getMaterial("mat_1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/materials/mat_1",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
