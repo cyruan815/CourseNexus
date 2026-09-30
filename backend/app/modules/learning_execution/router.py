@@ -8,8 +8,7 @@ from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
-from app.integrations.model_provider.mock import MockModelProvider
-from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.model_provider.factory import create_model_provider
 from app.integrations.rag.base import RagIndex
 from app.modules.learning_execution.schemas import (
     ExecutionContextRead,
@@ -32,29 +31,16 @@ from app.shared.responses import success_response
 router = APIRouter(tags=["learning_execution"])
 
 
-def _model_provider_for_purpose(purpose: str, api_key_env_name: str) -> ModelProvider:
-    settings = get_settings()
-    endpoint = settings.model_endpoint(purpose)  # type: ignore[arg-type]
-    if endpoint.api_key:
-        return OpenAIModelProvider(
-            api_key=endpoint.api_key,
-            model=endpoint.model,
-            base_url=endpoint.base_url,
-            api_key_env_name=api_key_env_name,
-        )
-    return MockModelProvider()
-
-
 def get_handout_model_provider() -> ModelProvider:
-    return _model_provider_for_purpose("handout", "HANDOUT_API_KEY")
+    return create_model_provider("handout")
 
 
 def get_task_test_model_provider() -> ModelProvider:
-    return _model_provider_for_purpose("task_test", "TASK_TEST_API_KEY")
+    return create_model_provider("task_test")
 
 
 def get_task_qa_model_provider() -> ModelProvider:
-    return _model_provider_for_purpose("course_qa", "COURSE_QA_API_KEY")
+    return create_model_provider("course_qa")
 
 
 @router.get("/study-subtasks/{subtask_id}/execution-context")
