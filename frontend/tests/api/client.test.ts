@@ -118,4 +118,19 @@ describe("apiRequest", () => {
       }),
     );
   });
+
+  it.each([
+    "https://attacker.example/api/v1/courses",
+    "//attacker.example/api/v1/courses",
+    "/api/v1/../outside",
+    "/api/v1/courses#token",
+  ])("rejects an untrusted target before sending credentials: %s", async (path) => {
+    setSessionToken("sensitive-token");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiRequest(path)).rejects.toThrow(/鉴权 API 请求/);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

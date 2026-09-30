@@ -1,6 +1,6 @@
 import { ApiError } from "./errors";
 import type { ApiErrorResponse, ApiSuccess } from "./types";
-import { normalizeApiBaseUrl } from "./trusted-url";
+import { normalizeApiBaseUrl, resolveTrustedApiUrl } from "./trusted-url";
 import { clearSessionToken, getSessionToken } from "../features/auth/session";
 
 type JsonBody = object;
@@ -12,11 +12,7 @@ export interface ApiRequestInit extends Omit<RequestInit, "body"> {
 const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 function buildUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
-
-  return `${apiBaseUrl}${path}`;
+  return resolveTrustedApiUrl(path, apiBaseUrl);
 }
 
 function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
