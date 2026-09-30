@@ -63,6 +63,7 @@
 - 数据库地址、密钥、初始账号配置、文件存储路径通过配置或环境变量管理。
 - 本地默认配置可以有示例值，但真实密钥不得提交。
 - SQLite 是当前 POC 默认数据库，模型设计保持可迁移。
+- SQLite、上传目录、Chroma 和日志的相对路径统一相对仓库配置根目录解析，显式绝对路径保持原样；旧启动目录数据迁移及连接参数见 [local-runtime-storage.md](local-runtime-storage.md)。
 - 本仓库长期按 monorepo 管理，环境变量示例统一放在根目录 `.env.example`，真实 `.env` 也只放在根目录且不得提交。
 - 后端读取根目录 `.env`；前端 Vite 读取根目录 `.env` 中的 `VITE_` 公共变量。
 - `APP_ENV` 只允许 `development`、`test`、`production`。`production` 必须配置至少 32 位的非默认 `SECRET_KEY` 和当前 V1 全部已开放模型用途的 API Key，否则应用拒绝启动。
