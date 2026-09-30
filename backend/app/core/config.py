@@ -160,6 +160,21 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_production_model_endpoints(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        missing = [
+            purpose
+            for purpose in MODEL_PURPOSES
+            if not (self.model_endpoint(purpose).api_key or "").strip()
+        ]
+        if missing:
+            raise ValueError(
+                "production model API keys are required for: " + ", ".join(missing)
+            )
+        return self
+
     def model_endpoint(self, purpose: ModelPurpose) -> ModelEndpointConfig:
         return ModelEndpointConfig(
             api_key=getattr(self, f"{purpose}_api_key") or None,
