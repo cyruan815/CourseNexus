@@ -125,3 +125,38 @@ def test_configure_logging_is_idempotent(tmp_path: Path) -> None:
         isinstance(log_filter, UvicornRequestExceptionFilter)
         for log_filter in logging.getLogger("uvicorn.error").filters
     ) == 1
+
+
+def test_configure_logging_redacts_message_arguments_and_exceptions(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        log_dir=str(tmp_path),
+        secret_key="runtime-secret-value",
+        course_qa_api_key="runtime-api-key",
+    )
+    configure_logging(settings)
+    logger = get_logger("model.security")
+    try:
+        raise RuntimeError(
+            "provider rejected runtime-secret-value and runtime-api-key"
+        )
+    except RuntimeError:
+        logger.exception(
+            "调用失败 | api_key=%s authorization=Bearer %s",
+            "runtime-api-key",
+            "runtime-bearer-token",
+        )
+
+    for handler in logging.getLogger("course_nexus").handlers:
+        handler.flush()
+    console = capsys.readouterr().err
+    file_text = (tmp_path / "course-nexus.log").read_text(encoding="utf-8")
+
+    for output in (console, file_text):
+        assert "runtime-secret-value" not in output
+        assert "runtime-api-key" not in output
+        assert "runtime-bearer-token" not in output
+        assert "[REDACTED]" in output
