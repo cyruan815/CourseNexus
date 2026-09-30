@@ -673,14 +673,18 @@ def _permanently_delete_materials(
 ) -> None:
     material_ids = [material.id for material in materials]
     chunks = list_material_chunks_for_material_ids(db, material_ids)
-    parsed_materials = {material.id: material for material in materials if material.parse_status == "parsed"}
-    chunks_by_material: dict[str, list[MaterialChunk]] = {material_id: [] for material_id in parsed_materials}
+    versioned_materials = {
+        material.id: material for material in materials if material.active_parse_version_id is not None
+    }
+    chunks_by_material: dict[str, list[MaterialChunk]] = {
+        material_id: [] for material_id in versioned_materials
+    }
     for chunk in chunks:
         if chunk.material_id in chunks_by_material:
             chunks_by_material[chunk.material_id].append(chunk)
     rag_snapshot = [
         rag_chunk
-        for material_id, material in parsed_materials.items()
+        for material_id, material in versioned_materials.items()
         for rag_chunk in _rag_chunks_for_material(material, chunks_by_material[material_id])
     ]
     staged_files = _stage_material_file_deletions(storage, materials)
@@ -690,6 +694,7 @@ def _permanently_delete_materials(
         detach_material_references(db, material_ids)
         for chunk in chunks:
             db.delete(chunk)
+        db.flush()
         for material in materials:
             material.parse_status = "deleted"
             material.deleted_at = now
