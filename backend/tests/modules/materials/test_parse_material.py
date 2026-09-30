@@ -312,6 +312,36 @@ def test_parse_material_rejects_empty_candidate(db: Session, tmp_path: Path) -> 
     assert [version.status for version in parse_versions(db, material.id)] == ["failed"]
 
 
+def test_parse_material_rejects_concurrent_building_version(db: Session, tmp_path: Path) -> None:
+    user, _, material = create_uploaded_material(db, tmp_path)
+    db.add(
+        MaterialParseVersion(
+            id="mpv_existing_build",
+            material_id=material.id,
+            course_id=material.course_id,
+            user_id=material.user_id,
+            status="building",
+        )
+    )
+    db.commit()
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        parse_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            parser=PlainTextParser(),
+            rag_index=FakeRagIndex(),
+            storage_root=tmp_path,
+        )
+
+    assert exc_info.value.code == "PARSE_ALREADY_IN_PROGRESS"
+    assert exc_info.value.status_code == 409
+    assert [(version.id, version.status) for version in parse_versions(db, material.id)] == [
+        ("mpv_existing_build", "building")
+    ]
+
+
 def test_reparse_material_activates_new_chunks_and_retires_old_version(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
     parser = PlainTextParser()
