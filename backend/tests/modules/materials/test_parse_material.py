@@ -546,6 +546,54 @@ def test_parse_material_rejects_incomplete_candidate_vectors(db: Session, tmp_pa
     assert rag_index.records == {}
 
 
+def test_reparse_switch_failure_keeps_previous_active_version(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    rag_index = FakeRagIndex()
+    user, _, material = create_uploaded_material(db, tmp_path)
+    first = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+    first_version_id = first.active_parse_version_id
+    first_chunk_ids = set(rag_index.records)
+    (tmp_path / material.file_url).write_text("replacement", encoding="utf-8")
+
+    original_commit = db.commit
+    commit_count = 0
+
+    def fail_switch_commit() -> None:
+        nonlocal commit_count
+        commit_count += 1
+        if commit_count == 3:
+            raise RuntimeError("switch failed")
+        original_commit()
+
+    monkeypatch.setattr(db, "commit", fail_switch_commit)
+
+    failed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert failed.parse_status == "parsed"
+    assert failed.parse_error == "PARSE_VERSION_SWITCH_FAILED"
+    assert failed.active_parse_version_id == first_version_id
+    assert {version.status for version in parse_versions(db, material.id)} == {"active", "failed"}
+    assert {chunk.id for chunk in material_chunks(db, material.id)} == first_chunk_ids
+    assert set(rag_index.records) == first_chunk_ids
+
+
 def test_parse_material_normalizes_index_errors_to_indexing_failed(db: Session, tmp_path: Path, caplog) -> None:
     class UnexpectedRagIndex(FakeRagIndex):
         def index_chunks(self, chunks):
