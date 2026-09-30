@@ -12,8 +12,7 @@ from app.core.errors import CourseNexusError
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
-from app.integrations.model_provider.mock import MockModelProvider
-from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.model_provider.factory import create_model_provider
 from app.modules.generated_content.service import build_generated_content_read
 from app.modules.generation.orchestrator.contracts import GenerateContentRequest
 from app.modules.generation.orchestrator.registry import GeneratorRegistry, default_generator_registry
@@ -38,16 +37,7 @@ def get_generation_model_provider(content_type: str) -> ModelProvider:
             status_code=422,
             details={"content_type": content_type},
         )
-    settings = get_settings()
-    endpoint = settings.model_endpoint(cast(ModelPurpose, content_type))
-    if endpoint.api_key:
-        return OpenAIModelProvider(
-            api_key=endpoint.api_key,
-            model=endpoint.model,
-            base_url=endpoint.base_url,
-            api_key_env_name=f"{content_type.upper()}_API_KEY",
-        )
-    return MockModelProvider()
+    return create_model_provider(cast(ModelPurpose, content_type))
 
 
 def get_generation_model_provider_factory() -> GenerationModelProviderFactory:
