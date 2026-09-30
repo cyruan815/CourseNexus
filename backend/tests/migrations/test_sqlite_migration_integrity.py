@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from alembic import command
@@ -57,7 +58,10 @@ def test_batch_migration_preserves_referenced_sqlite_rows(tmp_path: Path, monkey
         engine.dispose()
 
         get_settings.cache_clear()
+        application_logger = logging.getLogger("course_nexus.migration-test")
+        application_logger.disabled = False
         command.upgrade(_alembic_config(), "20260712_0002")
+        assert application_logger.disabled is False
 
         engine = create_engine(database_url)
         with engine.connect() as connection:
