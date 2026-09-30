@@ -66,6 +66,8 @@
 - 本仓库长期按 monorepo 管理，环境变量示例统一放在根目录 `.env.example`，真实 `.env` 也只放在根目录且不得提交。
 - 后端读取根目录 `.env`；前端 Vite 读取根目录 `.env` 中的 `VITE_` 公共变量。
 - API Key、`SECRET_KEY`、模型服务地址等敏感配置只能作为后端变量使用，禁止放入 `VITE_` 变量。
+- `VITE_API_BASE_URL` 只能声明 CourseNexus 后端的 HTTP(S) Origin，不能包含凭据、路径、查询参数或 fragment；业务 API 和鉴权文件下载统一使用 `/api/v1/...` 根相对路径，由共享客户端拼接受信 Origin。
+- 自动附加登录凭据的前端客户端不得接受外部 URL；外部资源访问必须使用不附加 Authorization、Cookie 或其他 CourseNexus 会话信息的独立请求入口。
 - 每个模型用途必须独立声明 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`，并通过 `Settings.model_endpoint(purpose)` 读取；OpenAI SDK 只是统一接口规范，不得隐式复用其他用途的密钥、地址或模型。
 - 学习计划 `generator` 和 `map` 可分别声明 `STUDY_PLAN_GENERATOR_API_STYLE` / `STUDY_PLAN_MAP_API_STYLE`，取值为 `auto`、`responses` 或 `chat`；该协议选择只由学习计划 provider 使用，其他模型用途不接入。
 - 模型用途前缀固定为 `EMBEDDING`、`COURSE_QA`、`QUIZ`、`FLASHCARD`、`MINDMAP`、`OUTLINE`、`KNOWLEDGE_LIST`、`STUDY_PLAN_PARSER`、`STUDY_PLAN_GENERATOR`、`STUDY_PLAN_DIAGNOSTIC`、`HANDOUT` 和 `TASK_TEST`；新增用途必须先同步 `.env.example`、配置模型、测试和架构文档。

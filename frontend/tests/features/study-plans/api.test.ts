@@ -289,4 +289,32 @@ describe("study plans api", () => {
       expect.objectContaining({ method: "GET" }),
     );
   });
+
+  it("downloads exports through the authenticated shared file client", async () => {
+    window.localStorage.setItem("course_nexus_token", "token_export");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("markdown", {
+          status: 200,
+          headers: { "Content-Disposition": "attachment; filename=review.md" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("pdf", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const markdown = await exportGeneratedContentMarkdown("gen_1");
+    const pdf = await exportGeneratedContentPdf("gen_2");
+
+    expect(markdown.filename).toBe("review.md");
+    expect(pdf.filename).toBe("handout-gen_2.pdf");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/generated-contents/gen_1/exports/markdown",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ Authorization: "Bearer token_export" }),
+      }),
+    );
+  });
 });
