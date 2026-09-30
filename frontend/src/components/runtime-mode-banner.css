@@ -1,0 +1,80 @@
+.runtime-mode-banner {
+  position: fixed;
+  z-index: 1100;
+  right: 20px;
+  bottom: 20px;
+  display: inline-flex;
+  max-width: calc(100vw - 32px);
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #e4b04a;
+  border-radius: 999px;
+  background: rgb(255 250 235 / 96%);
+  box-shadow: 0 10px 28px rgb(120 78 0 / 18%);
+  color: #6d4300;
+  padding: 8px 14px 8px 10px;
+  font-size: 13px;
+  line-height: 1.25;
+  backdrop-filter: blur(10px);
+}
+
+.runtime-mode-banner__icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f8d477;
+  color: #704600;
+}
+
+.runtime-mode-banner__title {
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.runtime-mode-banner__separator {
+  width: 1px;
+  height: 16px;
+  background: #dfbd72;
+}
+
+.runtime-mode-banner__description {
+  color: #815c19;
+  white-space: nowrap;
+}
+
+:root[data-course-nexus-theme="dark"] .runtime-mode-banner {
+  border-color: #9d7828;
+  background: rgb(48 39 20 / 96%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  color: #ffe2a0;
+}
+
+:root[data-course-nexus-theme="dark"] .runtime-mode-banner__icon {
+  background: #745719;
+  color: #ffe7ad;
+}
+
+:root[data-course-nexus-theme="dark"] .runtime-mode-banner__separator {
+  background: #80672f;
+}
+
+:root[data-course-nexus-theme="dark"] .runtime-mode-banner__description {
+  color: #dfc481;
+}
+
+@media (max-width: 540px) {
+  .runtime-mode-banner {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .runtime-mode-banner__separator,
+  .runtime-mode-banner__description {
+    display: none;
+  }
+}
