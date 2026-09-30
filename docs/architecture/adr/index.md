@@ -16,6 +16,7 @@
 | [0006-handout-pdf-rendering.md](0006-handout-pdf-rendering.md) | Accepted；今日讲义 PDF 导出采用 Markdown/HTML/Playwright Chromium 打印链路。 | 2026-07-13 |
 | [0007-frontend-handout-mermaid-svg.md](0007-frontend-handout-mermaid-svg.md) | Accepted；可信本地 POC 的前端讲义使用 Mermaid 和 rehype-raw 渲染 Mermaid 图表与原始 SVG。 | 2026-07-15 |
 | [0008-frontend-unified-file-preview.md](0008-frontend-unified-file-preview.md) | Accepted；前端统一文件预览器使用格式适配器直接只读渲染 PDF、DOCX、PPTX、图片和文本。 | 2026-10-01 |
+| [0009-versioned-material-parsing.md](0009-versioned-material-parsing.md) | Accepted；材料重解析采用候选版本构建、向量完整性校验和生效指针原子切换。 | 2026-10-01 |
 
 ## 相关链接
 
