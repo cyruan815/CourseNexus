@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import MODEL_PURPOSES, Settings
+from app.core.config import MODEL_PURPOSES, ROOT_DIR, Settings
 
 
 def _production_model_keys() -> dict[str, str]:
@@ -71,6 +71,19 @@ def test_development_environment_allows_unconfigured_model_endpoints() -> None:
 
 def test_mock_model_provider_is_disabled_by_default() -> None:
     assert Settings(_env_file=None).enable_mock_model_provider is False
+
+
+def test_default_sqlite_url_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).database_url == (
+        f"sqlite:///{(ROOT_DIR / 'course_nexus.db').as_posix()}"
+    )
+
+
+def test_memory_sqlite_url_remains_in_memory() -> None:
+    assert (
+        Settings(_env_file=None, database_url="sqlite:///:memory:").database_url
+        == "sqlite:///:memory:"
+    )
 
 
 @pytest.mark.parametrize("app_env", ["development", "test"])
