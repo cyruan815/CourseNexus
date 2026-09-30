@@ -6,6 +6,7 @@ import { DocxFilePreview } from "./DocxFilePreview";
 import { filePreviewKindLabel, resolveFilePreviewKind } from "./file-types";
 import type { FilePreviewKind } from "./file-types";
 import { FilePreviewStatus } from "./FilePreviewStatus";
+import { PptxFilePreview } from "./PptxFilePreview";
 import "./universal-file-preview.css";
 
 const TEXT_PREVIEW_LIMIT_BYTES = 2 * 1024 * 1024;
@@ -89,7 +90,7 @@ function PreviewBody({
     return <DocxFilePreview file={file} />;
   }
   if (kind === "pptx") {
-    return <FilePreviewStatus message={`${filePreviewKindLabel(kind)} 预览器正在准备接入`} role="status" />;
+    return <PptxFilePreview file={file} />;
   }
   return <FilePreviewStatus message="暂不支持在页面内预览此格式，请下载原文件查看。" />;
 }

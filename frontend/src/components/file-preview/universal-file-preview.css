@@ -162,6 +162,35 @@
   margin: 0 auto 24px;
 }
 
+.universal-file-preview__viewport--pptx {
+  background: #e5e9ed;
+  overflow: hidden;
+}
+
+.universal-file-preview__pptx-shell {
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-document {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(20px, 5vw, 72px);
+  scrollbar-gutter: stable;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-document > * {
+  margin-inline: auto;
+}
+
+.universal-file-preview__pptx-document [data-slide-index] {
+  filter: drop-shadow(0 16px 30px rgba(41, 53, 65, 0.16));
+}
+
 .universal-file-preview__text-document {
   background: #fff;
   border: 1px solid #e1e7ec;
@@ -263,6 +292,10 @@
   }
 
   .universal-file-preview__viewport--docx {
+    padding: 14px;
+  }
+
+  .universal-file-preview__pptx-document {
     padding: 14px;
   }
 

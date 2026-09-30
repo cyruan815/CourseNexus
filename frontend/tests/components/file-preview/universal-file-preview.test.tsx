@@ -6,6 +6,14 @@ import {
   UniversalFilePreview,
 } from "../../../src/components/file-preview";
 import { renderAsync } from "docx-preview";
+import { PptxViewer } from "@aiden0z/pptx-renderer";
+
+const destroyPptxViewer = vi.fn();
+
+vi.mock("@aiden0z/pptx-renderer", () => ({
+  PptxViewer: { open: vi.fn() },
+  RECOMMENDED_ZIP_LIMITS: { maxEntries: 2_000 },
+}));
 
 vi.mock("docx-preview", () => ({
   renderAsync: vi.fn(async (_file: ArrayBuffer, container: HTMLElement) => {
@@ -33,6 +41,13 @@ describe("UniversalFilePreview", () => {
     vi.mocked(URL.createObjectURL).mockClear();
     vi.mocked(URL.revokeObjectURL).mockClear();
     vi.mocked(renderAsync).mockClear();
+    destroyPptxViewer.mockClear();
+    vi.mocked(PptxViewer.open).mockImplementation(async (_input, container) => {
+      const slide = document.createElement("div");
+      slide.textContent = "PowerPoint rendered";
+      container.append(slide);
+      return { destroy: destroyPptxViewer } as unknown as Awaited<ReturnType<typeof PptxViewer.open>>;
+    });
   });
 
   it("resolves supported formats from project type, MIME type, and extension", () => {
@@ -94,6 +109,29 @@ describe("UniversalFilePreview", () => {
         useBase64URL: true,
       }),
     );
+  });
+
+  it("renders PPTX with resource limits and releases the viewer", async () => {
+    const file = new File(["pptx fixture"], "lecture.pptx", {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    });
+    const { unmount } = render(<UniversalFilePreview file={file} fileName={file.name} materialType="ppt" />);
+
+    expect(screen.getByText("正在渲染 PowerPoint 演示文稿…")).toBeInTheDocument();
+    expect(await screen.findByText("PowerPoint rendered")).toBeInTheDocument();
+    expect(PptxViewer.open).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        lazyMedia: true,
+        lazySlides: true,
+        listOptions: expect.objectContaining({ windowed: true }),
+        zipLimits: { maxEntries: 2_000 },
+      }),
+    );
+
+    unmount();
+    expect(destroyPptxViewer).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to download for unsupported files", async () => {
