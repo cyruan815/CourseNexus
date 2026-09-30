@@ -130,6 +130,29 @@ def test_chroma_filters_user_and_material(tmp_path: Path) -> None:
     assert [hit.chunk_id for hit in hits] == ["u1-f2"]
 
 
+def test_chroma_filters_exact_active_chunk_ids(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks(
+        [
+            rag_chunk("active", material_id="m1", parse_version_id="mpv_active"),
+            rag_chunk("candidate", material_id="m1", parse_version_id="mpv_building"),
+        ]
+    )
+
+    hits = rag_index.retrieve(
+        query="matrix",
+        scope=RagScopeFilter(
+            user_id="u1",
+            course_id="math",
+            material_ids=("m1",),
+            chunk_ids=("active",),
+        ),
+        top_k=8,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["active"]
+
+
 def test_chroma_repeat_upsert_replaces_existing_chunk(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
     rag_index.index_chunks(

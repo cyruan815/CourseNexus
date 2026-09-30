@@ -80,6 +80,8 @@ class FakeRagIndex:
             return False
         if scope.material_ids and chunk.material_id not in scope.material_ids:
             return False
+        if scope.chunk_ids and chunk.chunk_id not in scope.chunk_ids:
+            return False
         return True
 
     def _score(self, query_tokens: set[str], text: str) -> float:

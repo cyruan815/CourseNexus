@@ -195,6 +195,10 @@ class LlamaIndexChromaRagIndex:
             filters.append(
                 MetadataFilter(key="material_id", value=list(scope.material_ids), operator=FilterOperator.IN)
             )
+        if scope.chunk_ids:
+            filters.append(
+                MetadataFilter(key="chunk_id", value=list(scope.chunk_ids), operator=FilterOperator.IN)
+            )
         return MetadataFilters(filters=filters, condition=FilterCondition.AND)
 
 

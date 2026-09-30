@@ -24,6 +24,7 @@ class RagScopeFilter:
     user_id: str
     course_id: str
     material_ids: tuple[str, ...] = ()
+    chunk_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
