@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,6 +9,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.paths import assert_no_legacy_data_conflicts
 from app.core.request_id import RequestIdMiddleware
+from app.integrations.rag.manager import get_rag_index_manager
 
 settings = get_settings()
 assert_no_legacy_data_conflicts(
@@ -15,7 +18,20 @@ assert_no_legacy_data_conflicts(
     chroma_persist_path=settings.chroma_persist_path,
 )
 configure_logging(settings)
-app = FastAPI(title="CourseNexus API", version="0.1.0")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    rag_index_manager = get_rag_index_manager()
+    app.state.rag_index_manager = rag_index_manager
+    rag_index_manager.initialize()
+    try:
+        yield
+    finally:
+        rag_index_manager.close()
+
+
+app = FastAPI(title="CourseNexus API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(RequestIdMiddleware, slow_request_ms=settings.slow_request_ms)
 app.add_middleware(
