@@ -11,12 +11,14 @@
 - API 前缀固定为 `/api/v1`。
 - 默认本地配置使用 `VITE_API_BASE_URL=http://localhost:8000`，浏览器直接请求后端；后端通过 `CORS_ALLOWED_ORIGINS`（默认 `http://localhost:5173`）响应跨域预检，并允许 `Authorization`、`Content-Type`、`Idempotency-Key` 和 `X-Request-ID` 请求头。多个允许来源使用英文逗号分隔。
 - `frontend/vite.config.ts` 保留 `/api` 到 `http://127.0.0.1:8000` 的开发代理；只有将 `VITE_API_BASE_URL` 留空时，浏览器才使用该同源代理。生产环境必须由后端 CORS 配置或反向代理明确允许前端来源，不能依赖 Vite 代理。
+- `VITE_API_BASE_URL` 只允许为空或配置为不含路径、凭据、查询参数及 fragment 的 HTTP(S) 后端 Origin；业务调用方只能向统一客户端传入 `/api/v1/...` 根相对路径，不能传入绝对 URL、协议相对 URL 或路径穿越输入。
 - JSON 字段统一使用 `snake_case`。
 - 成功响应统一为 `{ "data": ..., "meta": ... }`，前端业务代码只消费 `data`。
 - 错误响应统一为 `{ "error": { "code": "...", "message": "...", "details": ... }, "meta": ... }`。
 - 前端只根据 HTTP status 和稳定 `error.code` 做逻辑判断，不解析中文 `message`。
 - 登录态使用 Bearer token，请求头格式为 `Authorization: Bearer <access_token>`。
 - POC 阶段前端 token 存储 key 为 `course_nexus_token`；收到 `UNAUTHORIZED` 时必须清理该 token 并回到登录态。
+- JSON 请求、材料原文件与导出文件统一通过受信 API 客户端附加 Bearer token；访问外部资源必须使用不附带 CourseNexus 会话凭据的独立请求入口。
 - 前端不得直接调用 OpenAI API；所有模型调用只通过后端接口完成。
 
 ## 3. 当前已落地接口
