@@ -294,6 +294,8 @@
   "mime_type": "text/markdown",
   "parse_status": "uploaded",
   "parse_error": null,
+  "active_parse_version_id": null,
+  "is_learning_ready": false,
   "parse_quality": "unknown",
   "parse_diagnostics_json": null,
   "page_count": null,
@@ -321,9 +323,9 @@
 | 状态 | 含义 |
 | --- | --- |
 | `uploaded` | 已创建资料记录，尚未解析。 |
-| `parsing` | 正在同步解析。 |
-| `parsed` | 已解析并写入 `MaterialChunk`。 |
-| `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
+| `parsing` | 正在同步构建候选版本；若已有生效版本，旧内容仍可学习。 |
+| `parsed` | 当前存在生效解析版本；`parse_error` 非空时表示最近一次更新失败但旧版本仍可用。 |
+| `parse_failed` | 首次解析失败且没有生效版本，`parse_error` 保存稳定错误码。 |
 | `deleted` | 仅用于删除接口成功响应的最终快照；数据库中的资料记录已经物理删除。 |
 
 `parse_quality` 当前可能值：
@@ -334,7 +336,7 @@
 | `complete` | 本轮成功，且 parser 未观察到失败页或 warning。 |
 | `partial` | 存在可用 chunk，但 parser 检测到部分成功、失败页或 warning。 |
 
-`parse_status = "parsed"` 只表示资料内容可消费，不等同于完整解析；完整性统一读取 `parse_quality` 和 `parse_diagnostics_json`。
+`is_learning_ready` 是前端判断资料能否进入选择、检索、问答、生成和计划的权威字段；它为 `true` 时 `active_parse_version_id` 非空。`parse_status` 负责展示当前操作状态，不再单独决定可用性。生效版本的完整性统一读取 `parse_quality` 和 `parse_diagnostics_json`。
 
 ### 3.10.1 资料一级文件夹
 
@@ -343,7 +345,7 @@
 - `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
 - `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
 - `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
-- `DELETE /api/v1/material-folders/{folder_id}`：不可恢复地物理删除文件夹、其中全部资料记录、SQLite chunk、RAG 向量和原始上传文件。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。历史问答和生成内容保留，其引用退化为不带 `material_id` / `chunk_id` 的资料名、页码和命中文本快照。
+- `DELETE /api/v1/material-folders/{folder_id}`：不可恢复地物理删除文件夹、其中全部资料记录、解析版本、SQLite chunk、RAG 向量和原始上传文件。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。历史问答和生成内容保留，其引用退化为不带 `material_id` / `material_version_id` / `chunk_id` 的资料名、页码和命中文本快照。
 - `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
 
 文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。
@@ -442,18 +444,29 @@
 
 - `parse_status = "parsed"`。
 - `parse_error = null`。
+- `active_parse_version_id` 指向本次候选版本，`is_learning_ready = true`。
 - `parse_quality` 为 `complete`、`partial` 或 `unknown`。
 - `page_count` 和 `parse_diagnostics_json` 返回 parser 本轮诊断；非分页文本的 `page_count = null` 是正常结果。
 - 后端已写入有序 `MaterialChunk`，供后续资料上下文、问答和计划基础能力使用。
 
-失败时：
+首次解析失败时：
 
 - HTTP 仍返回成功响应和 `MaterialRead`。
 - `parse_status = "parse_failed"`。
+- `active_parse_version_id = null`，`is_learning_ready = false`。
 - `parse_error` 保存稳定错误码，例如 `PARSE_FAILED` 或 `UNSUPPORTED_FILE_TYPE`。
-- `parse_quality = "unknown"`、`page_count = null`、`parse_diagnostics_json = null`，不保留上一轮成功诊断。
+- `parse_quality = "unknown"`、`page_count = null`、`parse_diagnostics_json = null`。
 
-前端最小工作台只需要展示 `uploaded`、`parsing`、`parsed`、`parse_failed`、未知状态兜底，以及在 `parse_failed` 时提供重试入口。
+已有生效版本的重解析失败时：
+
+- HTTP 仍返回成功响应和 `MaterialRead`。
+- `active_parse_version_id` 保持旧值，`is_learning_ready = true`。
+- `parse_status = "parsed"`，`parse_error` 记录本次候选失败的稳定错误码。
+- `parse_quality`、`page_count` 和 `parse_diagnostics_json` 继续描述旧生效版本，不被失败候选清空。
+
+并发重复发起解析时返回 `409 PARSE_ALREADY_IN_PROGRESS`。候选向量不完整记录 `INDEXING_INCOMPLETE`；数据库生效切换失败记录 `PARSE_VERSION_SWITCH_FAILED`。这些失败都不得替换旧生效版本。
+
+前端展示并处理四种关键状态：普通可用、正在更新且旧版本可用、更新失败但旧版本可用、首次解析失败。已有生效版本提供“重新解析”，首次失败提供“重试解析”；资料是否可勾选始终读取 `is_learning_ready`。
 
 ### 3.17 课程对话列表
 
@@ -502,6 +515,7 @@
   "source_citations": [
     {
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -547,6 +561,7 @@
   "source_citations": [
     {
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -563,7 +578,7 @@
 - `grounded`：当前资料范围存在检索命中，回答基于检索到的真实 `MaterialChunk`。
 - `no_source`：当前资料范围没有可用 parsed chunk，或存在 parsed chunk 但本次问题没有相关检索命中；`source_citations = []`，前端不得展示伪引用。
 
-新回答的引用必须包含真实 `material_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这两个字段返回 `null`。
+新回答的引用必须包含真实 `material_id`、`material_version_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这三个字段返回 `null`。
 
 `answer_text` 使用内部行内标记 `[[cite:N]]` 将论述绑定到 `source_citations[N-1]`。标记只允许由后端根据本次 Top-K 命中的真实 chunk 生成并重新编号；模型返回越界序号、未检索 chunk 或其他伪造标记时，后端必须删除该标记且不得保存引用。前端应将合法标记渲染为可交互角标，不直接向用户展示原始标记。
 
@@ -623,13 +638,17 @@
   "generation_status": "success",
   "material_scope_json": {
     "include_all_parsed_materials": true,
-    "material_ids": []
+    "material_ids": [],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ]
   },
   "error_code": null,
   "source_citations": [
     {
       "id": "cit_123",
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -1090,6 +1109,14 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
     "include_all_parsed_materials": true,
     "material_ids": []
   },
+  "material_snapshot": {
+    "mode": "all_parsed",
+    "material_ids": ["mat_123"],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ],
+    "snapshot_hash": "sha256:..."
+  },
   "capacity": {
     "estimated_total_minutes": 60,
     "available_total_minutes": 60,
@@ -1166,6 +1193,14 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
   "material_scope": {
     "include_all_parsed_materials": true,
     "material_ids": []
+  },
+  "material_snapshot": {
+    "mode": "all_parsed",
+    "material_ids": ["mat_123"],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ],
+    "snapshot_hash": "sha256:..."
   },
   "capacity": {
     "estimated_total_minutes": 60,

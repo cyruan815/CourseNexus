@@ -47,7 +47,7 @@
 
 ## 模块间契约基线
 
-- 资料模块只把 `parse_status = parsed` 的资料暴露给检索和 Agent。
+- 资料模块只把 `active_parse_version_id` 指向的生效版本暴露给检索和 Agent；`parse_status = parsing` 时旧生效版本仍可用。
 - 问答不得直接读取资料表或 chunk 表，必须通过 `material_context.retrieve_relevant_context()` 获取相关资料上下文。
 - Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 必须通过 `material_context.resolve_generation_context()` 获取完整材料上下文；学习计划、handout 和 task_test 等保留批处理策略的消费者使用 `iter_material_context_batches()`。
 - Agent 模块不得跨课程混用上下文。
@@ -109,11 +109,12 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 ## 跨模块数据引用原则
 
 - 跨模块引用 ID 时，必须同时保证当前用户有权访问被引用资源。
-- Course QA 和 task test 的 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；新生成 handout 与五类独立 POC 生成不创建逐条引用。
+- Course QA 和 task test 的 `SourceCitation` 必须保存 `material_id`、`material_version_id`、`material_name`、页码或页序号、`hit_text`；新生成 handout 与五类独立 POC 生成不创建逐条引用。
 - `material_name` 是快照字段，避免资料改名后历史引用展示异常。
 - 历史引用定位失败时，前端仍可展示快照文本和定位失败提示。
 - `StudySubTask.related_material_ids_json` 只能引用当前课程下当前用户可访问的资料。
 - 成功生成内容的 `material_scope_json.source_materials` 由实际进入生成上下文的 chunk 去重构建，保存 `material_id` 与当时的 `material_name`；前端用它展示真实输入资料范围，不从模型文本推断来源。
+- 成功生成内容的 `material_scope_json.material_versions` 与学习计划 `material_snapshot.material_versions` 保存实际读取的 `{material_id, version_id}`；后续重解析不得改写历史快照。
 
 ## 资料上下文契约
 
@@ -128,17 +129,18 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 
 规则：
 
-- 默认 `include_all_parsed_materials = true`，返回当前课程下全部 `parsed` 且未删除资料的 chunk。
+- 默认 `include_all_parsed_materials = true`，返回当前课程下全部 `is_learning_ready = true` 资料的生效版本 chunk。
 - 当 `include_all_parsed_materials = false` 时，只能通过 `material_ids` 显式选择一个或多个具体资料。
 - `MaterialFolder` 只用于资料归类和列表浏览，不能作为 Agent 上下文选择范围，`MaterialScope` 不接受 `folder_ids`。
-- 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、已解析且未删除；否则返回 `NOT_FOUND`。
-- 未解析、解析失败和已删除资料不得进入上下文结果。
+- 显式传入 `material_ids` 时，后端必须校验这些资料属于当前用户、当前课程、存在生效解析版本且未删除；否则返回 `NOT_FOUND`。
+- 没有生效版本和已删除资料不得进入上下文结果；候选、失败和退休版本的 chunk 不得进入结果。
 
 `retrieve_relevant_context()`、`resolve_generation_context()` 和 `iter_material_context_batches()` 使用的 `ContextChunk` 最小字段：
 
 ```json
 {
   "material_id": "mat_123",
+  "material_version_id": "mpv_123",
   "chunk_id": "chk_123",
   "chunk_index": 0,
   "material_name": "notes.md",
@@ -150,7 +152,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 }
 ```
 
-问答检索没有可用 parsed chunk 时返回 `no_parsed_material = true`；有 parsed chunk 但没有相关命中时返回空 `chunks`。两种情况调用方都应进入 `no_source` 兜底流程，不能调用模型生成无依据回答或保存伪引用。
+问答检索没有可用生效版本 chunk 时返回 `no_parsed_material = true`；有生效 chunk 但没有相关命中时返回空 `chunks`。两种情况调用方都应进入 `no_source` 兜底流程，不能调用模型生成无依据回答或保存伪引用。
 
 `score` 只表示问答相关性检索的相似度；完整上下文和全材料批次读取可以返回 `null`。
 
@@ -167,7 +169,7 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`。最终 item 的 `learned` 默认为 `false`，历史 item 缺失时按 `false` 解释；学习状态接口只接受 `learned`，不允许借此修改知识点名称、定义、重要程度或章节。
 - 每个最终业务条目使用稳定 `id`，列表型结果同时使用连续 `sort_order`；业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。
 - 生成 POST、历史和详情的 `GeneratedContentRead` 统一包含 `source_citations`；这五类内容固定返回 `[]`，包括数据库中可能仍存在旧引用行的历史记录。
-- 五类内容的 `material_scope_json` 除基础范围字段外保存 `source_materials: [{material_id, material_name}]` 快照；该列表来自实际 `MaterialGenerationContext.chunks`，用于界面展示生成使用的资料范围，不构成逐条引用。
+- 五类内容的 `material_scope_json` 除基础范围字段外保存 `source_materials: [{material_id, material_name}]` 与 `material_versions: [{material_id, version_id}]` 快照；两者来自实际 `MaterialGenerationContext.chunks`，用于展示和追溯真实输入，不构成逐条引用。
 - 新生成 Handout 不写 `source_citations`，其 Markdown 顶部来源说明与 `material_scope_json.source_materials` 都由实际 material-context batch 构建；Task Test 的真实 `source_citations` 继续按题保存并通过 API 与 Markdown 导出返回。
 - 成功时只保存 `AIGeneratedContent`。模型、最终 schema 或 Markmap 预处理失败保存 failed 记录，不保存部分 JSON。
 
@@ -260,7 +262,7 @@ S02 已实现以下接口，前端可在契约评审后接入：
 
 保存接口支持 `Idempotency-Key`：key hash 写入 `study_plans.idempotency_key_hash`，request hash 保留在 `parsed_config_json.idempotency`；数据库通过 `(user_id, course_id, idempotency_key_hash)` 唯一索引兜底，同键同请求返回同一 plan bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`，已软删除计划占用的 key 不可复用。保存和替换显式 `tasks` 时，后端必须在写库前校验任务树：至少一个一级任务、每个一级任务至少一个二级任务、任务日期位于计划日期范围、一级和二级 `sort_order` 从 1 连续递增，且所有 `related_material_ids` 属于当前用户、当前课程、本次 `material_scope` 并处于 parsed 可用状态；校验失败不得写入计划、任务、二级任务或打卡记录。替换接口通过数据库条件 UPDATE 原子校验 `expected_updated_at`，在已有进度、已绑定生成内容或 `expected_updated_at` 不匹配时返回 `STATE_CONFLICT`；失败请求不得删除或部分修改旧任务树和打卡记录。S02 不新增业务表，不在保存阶段生成讲义或任务测试题。Preview 和保存后的 `parsed_config_json.capacity` 均以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；超出容量时 `feasibility_status = "over_capacity"` 且 `warnings` 包含 `PLAN_OVER_CAPACITY`。`recommended_daily_minutes` 可继续基于 map 阶段资料规模估算，`study_plans.daily_available_minutes` 保存最终采用的每日学习时间。
 
-Study Plan preview 额外返回资料解析质量摘要，位置固定为 `generation_metadata.material_quality.warnings`，不放入 `capacity.warnings`。该摘要只读取当前 `material_scope` 范围内 `parse_status = parsed` 的资料，将 `CourseMaterial.parse_quality` 和 `parse_diagnostics_json` 映射为前端可展示 warning；`severity = "info"` 的 parser 诊断不升级为 warning。P5a 不新增阻断：`NO_PARSED_MATERIAL` 和 `MATERIAL_COVERAGE_INCOMPLETE` 语义保持不变，显式选择未 parsed 资料的既有行为不收紧。最小结构如下：
+Study Plan preview 额外返回资料解析质量摘要，位置固定为 `generation_metadata.material_quality.warnings`，不放入 `capacity.warnings`。该摘要只读取当前 `material_scope` 范围内生效解析版本的 `parse_quality` 和 `parse_diagnostics_json` 并映射为前端可展示 warning；`severity = "info"` 的 parser 诊断不升级为 warning。`NO_PARSED_MATERIAL` 和 `MATERIAL_COVERAGE_INCOMPLETE` 继续表示范围内没有可消费的生效版本。最小结构如下：
 
 ```json
 {
