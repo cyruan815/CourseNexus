@@ -96,6 +96,26 @@ class LlamaIndexChromaRagIndex:
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引删除失败", status_code=502) from exc
 
+    def delete_parse_version(self, parse_version_id: str) -> None:
+        started_at = perf_counter()
+        try:
+            self.collection.delete(where={"parse_version_id": parse_version_id})
+            index_logger.info(
+                "解析版本索引删除成功 | collection=%s version=%s cost_ms=%.2f",
+                self.collection_name,
+                parse_version_id,
+                (perf_counter() - started_at) * 1000,
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="解析版本索引删除失败", status_code=502) from exc
+
+    def list_parse_version_chunk_ids(self, parse_version_id: str) -> set[str]:
+        try:
+            stored = self.collection.get(where={"parse_version_id": parse_version_id}, include=[])
+            return set(stored.get("ids") or [])
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="解析版本索引校验失败", status_code=502) from exc
+
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
         started_at = perf_counter()
         try:
@@ -156,6 +176,7 @@ class LlamaIndexChromaRagIndex:
                 "user_id": chunk.user_id,
                 "course_id": chunk.course_id,
                 "material_id": chunk.material_id,
+                "parse_version_id": chunk.parse_version_id or "",
                 "folder_id": chunk.folder_id or "",
                 "chunk_id": chunk.chunk_id,
                 "chunk_index": chunk.chunk_index,
