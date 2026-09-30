@@ -94,6 +94,18 @@ def test_default_log_path_resolves_from_project_root() -> None:
     assert Settings(_env_file=None).log_dir == str(ROOT_DIR / "logs")
 
 
+def test_runtime_paths_do_not_change_with_launch_directory(monkeypatch) -> None:
+    monkeypatch.chdir(ROOT_DIR)
+    from_project_root = Settings(_env_file=None)
+    monkeypatch.chdir(ROOT_DIR / "backend")
+    from_backend = Settings(_env_file=None)
+
+    assert from_backend.database_url == from_project_root.database_url
+    assert from_backend.file_storage_path == from_project_root.file_storage_path
+    assert from_backend.chroma_persist_path == from_project_root.chroma_persist_path
+    assert from_backend.log_dir == from_project_root.log_dir
+
+
 @pytest.mark.parametrize("app_env", ["development", "test"])
 def test_non_production_environment_allows_explicit_mock_mode(app_env: str) -> None:
     settings = Settings(
