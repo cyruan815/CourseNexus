@@ -1,6 +1,6 @@
 import { Alert, Badge, Box, Checkbox, Group, Stack, Text } from "@mantine/core";
 
-import type { Material, MaterialScope } from "../../materials/types";
+import { isMaterialLearningReady, type Material, type MaterialScope } from "../../materials/types";
 
 interface StudyPlanMaterialScopeSelectorProps {
   error: string | null;
@@ -24,7 +24,7 @@ export function StudyPlanMaterialScopeSelector({
   materials,
   onMaterialScopeChange,
 }: StudyPlanMaterialScopeSelectorProps) {
-  const parsedMaterials = materials.filter((material) => material.parse_status === "parsed");
+  const parsedMaterials = materials.filter(isMaterialLearningReady);
   const parsedIds = parsedMaterials.map((material) => material.id);
   const selectedIds = materialScope.material_ids.filter((id) => parsedIds.includes(id));
   const hasSelectedAll = parsedIds.length > 0 && selectedIds.length === parsedIds.length;
@@ -91,7 +91,7 @@ export function StudyPlanMaterialScopeSelector({
       {!isLoading && materials.length > 0 ? (
         <Stack className="study-plan-scope-list" gap={8}>
           {materials.map((material) => {
-            const isParsed = material.parse_status === "parsed";
+            const isParsed = isMaterialLearningReady(material);
             const isChecked = isParsed && selectedIds.includes(material.id);
 
             return (

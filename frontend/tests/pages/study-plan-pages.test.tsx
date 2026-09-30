@@ -648,6 +648,34 @@ describe("study plan pages", () => {
     ));
   });
 
+  it("keeps a selected material available while its replacement version is parsing", async () => {
+    const versionedMaterials = materials.map((material) => material.id === "mat_2"
+      ? {
+          ...material,
+          active_parse_version_id: "mpv_active",
+          is_learning_ready: true,
+        }
+      : material);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(versionedMaterials, "req_materials"));
+      }
+      return Promise.resolve(successResponse(url.endsWith("/courses/crs_123") ? course : {}));
+    }));
+
+    renderStudyPlanRoutes({
+      pathname: "/courses/crs_123/study-plans/new",
+      state: { studyPlanMaterialSelection: [{ id: "mat_2", name: "未解析习题.pdf" }] },
+    });
+
+    expect(await screen.findByText(/已选 1 份：未解析习题\.pdf/)).toBeInTheDocument();
+    expect(screen.queryByText(/已被删除、失效或尚未解析/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
+    expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeChecked();
+  });
+
   it("keeps an invalid material snapshot visible and requires explicit reselection", async () => {
     vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
