@@ -17,12 +17,13 @@ import {
   Title,
 } from "@mantine/core";
 import { IconArrowLeft, IconCalendarStats, IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
 import type { Material, MaterialScope } from "../features/materials/types";
+import { StudyPlanMaterialScopeSelector } from "../features/study-plans/components/StudyPlanMaterialScopeSelector";
 import {
   createDiagnosticProfile,
   fetchDiagnosticQuestions,
@@ -44,7 +45,7 @@ import type { Course } from "../types/course";
 import "./study-plan.css";
 
 const defaultScope: MaterialScope = {
-  include_all_parsed_materials: true,
+  include_all_parsed_materials: false,
   material_ids: [],
 };
 const defaultPreference = "balanced" as const;
@@ -52,6 +53,9 @@ const minimumDailyMinutes = 30;
 type StudyPlanCreatePhase = "goal" | "preparing" | "questionnaire" | "generating";
 
 interface StudyPlanCreateDraftStorage {
+  version?: 2;
+  userId?: string;
+  courseId?: string;
   goalText?: string;
   startDate?: string;
   endDate?: string;
@@ -59,7 +63,17 @@ interface StudyPlanCreateDraftStorage {
   dailyMinutes?: string;
   preference?: PlanPreference;
   materialScope?: MaterialScope;
+  materialSelection?: StudyPlanMaterialSelection[];
   pendingSaveAttempt?: StudyPlanPendingSaveAttempt;
+}
+
+interface StudyPlanMaterialSelection {
+  id: string;
+  name: string;
+}
+
+interface StudyPlanCreateLocationState {
+  studyPlanMaterialSelection?: StudyPlanMaterialSelection[];
 }
 
 interface StudyPlanPendingSaveAttempt {
@@ -74,19 +88,23 @@ function createStudyPlanIdempotencyKey(courseId: string): string {
   return `study-plan-${courseId}-${randomPart}`;
 }
 
-function createDraftStorageKey(courseId: string): string {
+function createLegacyDraftStorageKey(courseId: string): string {
   return `course-nexus:study-plan-create:${courseId}`;
 }
 
-function readCreateDraft(courseId: string): StudyPlanCreateDraftStorage | null {
+function createDraftStorageKey(userId: string, courseId: string): string {
+  return `course-nexus:study-plan-create:v2:${userId}:${courseId}`;
+}
+
+function readStoredDraft(storageKey: string): StudyPlanCreateDraftStorage | null {
   try {
-    const rawDraft = window.localStorage.getItem(createDraftStorageKey(courseId));
+    const rawDraft = window.localStorage.getItem(storageKey);
     if (!rawDraft) {
       return null;
     }
     return JSON.parse(rawDraft) as StudyPlanCreateDraftStorage;
   } catch {
-    window.localStorage.removeItem(createDraftStorageKey(courseId));
+    window.localStorage.removeItem(storageKey);
     return null;
   }
 }
@@ -107,16 +125,22 @@ function isStudyPlanPendingSaveAttempt(value: unknown): value is StudyPlanPendin
   );
 }
 
-function writeCreateDraft(courseId: string, draft: StudyPlanCreateDraftStorage) {
+function writeCreateDraft(userId: string, courseId: string, draft: StudyPlanCreateDraftStorage) {
   try {
-    window.localStorage.setItem(createDraftStorageKey(courseId), JSON.stringify(draft));
+    window.localStorage.setItem(createDraftStorageKey(userId, courseId), JSON.stringify({
+      ...draft,
+      version: 2,
+      userId,
+      courseId,
+    }));
   } catch {
     // Draft persistence is best effort; storage limits must not block plan creation or retry in this session.
   }
 }
 
-function clearCreateDraft(courseId: string) {
-  window.localStorage.removeItem(createDraftStorageKey(courseId));
+function clearCreateDraft(userId: string, courseId: string) {
+  window.localStorage.removeItem(createDraftStorageKey(userId, courseId));
+  window.localStorage.removeItem(createLegacyDraftStorageKey(courseId));
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -489,6 +513,7 @@ function StudyPlanCreateNav({
 
 export function StudyPlanCreatePage() {
   const { courseId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [course, setCourse] = useState<Course | null>(null);
   const [goalText, setGoalText] = useState("");
@@ -498,6 +523,9 @@ export function StudyPlanCreatePage() {
   const [dailyMinutes, setDailyMinutes] = useState("");
   const [preference, setPreference] = useState<PlanPreference>(defaultPreference);
   const [materialScope, setMaterialScope] = useState<MaterialScope>(defaultScope);
+  const [materialSelection, setMaterialSelection] = useState<StudyPlanMaterialSelection[]>([]);
+  const [isMaterialScopeOpen, setIsMaterialScopeOpen] = useState(false);
+  const [requiresMaterialConfirmation, setRequiresMaterialConfirmation] = useState(false);
   const [isCustomStartDateOpen, setIsCustomStartDateOpen] = useState(false);
   const [isCustomDurationDaysOpen, setIsCustomDurationDaysOpen] = useState(false);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -520,34 +548,63 @@ export function StudyPlanCreatePage() {
   const [pendingSaveAttempt, setPendingSaveAttempt] = useState<StudyPlanPendingSaveAttempt | null>(null);
   const startDateRef = useRef("");
   const isDraftPersistenceDisabledRef = useRef(false);
+  const incomingMaterialSelectionRef = useRef(
+    (location.state as StudyPlanCreateLocationState | null)?.studyPlanMaterialSelection,
+  );
   const startDateOptions = useMemo(() => buildStartDateOptions(), []);
 
   useEffect(() => {
-    if (!courseId) {
-      setIsDraftHydrated(true);
+    if (!courseId || !course || !hasLoadedMaterials || isDraftHydrated) {
       return;
     }
 
-    const storedDraft = readCreateDraft(courseId);
+    const storedDraft = readStoredDraft(createDraftStorageKey(course.user_id, courseId));
+    const legacyDraft = storedDraft ? null : readStoredDraft(createLegacyDraftStorageKey(courseId));
+    const draftToRestore = storedDraft ?? legacyDraft;
+    const incomingSelection = incomingMaterialSelectionRef.current;
+    const parsedMaterialsById = new Map(
+      materials
+        .filter((material) => material.parse_status === "parsed")
+        .map((material) => [material.id, material]),
+    );
+    let nextSelection: StudyPlanMaterialSelection[];
+    let needsConfirmation = false;
+
+    if (Array.isArray(incomingSelection)) {
+      nextSelection = incomingSelection.filter((item) => item && typeof item.id === "string" && typeof item.name === "string");
+    } else if (draftToRestore?.materialSelection) {
+      nextSelection = draftToRestore.materialSelection;
+    } else if (legacyDraft?.materialScope?.include_all_parsed_materials) {
+      nextSelection = [...parsedMaterialsById.values()].map((material) => ({ id: material.id, name: material.name }));
+      needsConfirmation = true;
+    } else {
+      nextSelection = (draftToRestore?.materialScope?.material_ids ?? []).map((id) => ({
+        id,
+        name: parsedMaterialsById.get(id)?.name ?? "已失效资料",
+      }));
+    }
+
     isDraftPersistenceDisabledRef.current = false;
-    setGoalText(storedDraft?.goalText ?? "");
-    setStartDate(storedDraft?.startDate ?? "");
-    startDateRef.current = storedDraft?.startDate ?? "";
-    setEndDate(storedDraft?.endDate ?? "");
+    setGoalText(draftToRestore?.goalText ?? "");
+    setStartDate(draftToRestore?.startDate ?? "");
+    startDateRef.current = draftToRestore?.startDate ?? "";
+    setEndDate(draftToRestore?.endDate ?? "");
     setDurationDaysText(
-      storedDraft?.durationDays ??
+      draftToRestore?.durationDays ??
       (
-        storedDraft?.startDate && storedDraft?.endDate
-          ? String(resolveDurationDays(storedDraft.startDate, storedDraft.endDate) ?? "")
+        draftToRestore?.startDate && draftToRestore?.endDate
+          ? String(resolveDurationDays(draftToRestore.startDate, draftToRestore.endDate) ?? "")
           : ""
       ),
     );
-    setDailyMinutes(storedDraft?.dailyMinutes ?? "");
-    setPreference(storedDraft?.preference ?? defaultPreference);
-    setMaterialScope(storedDraft?.materialScope ?? defaultScope);
+    setDailyMinutes(draftToRestore?.dailyMinutes ?? "");
+    setPreference(draftToRestore?.preference ?? defaultPreference);
+    setMaterialSelection(nextSelection);
+    setMaterialScope({ include_all_parsed_materials: false, material_ids: nextSelection.map((item) => item.id) });
+    setRequiresMaterialConfirmation(needsConfirmation);
     setPendingSaveAttempt(
-      isStudyPlanPendingSaveAttempt(storedDraft?.pendingSaveAttempt)
-        ? storedDraft.pendingSaveAttempt
+      isStudyPlanPendingSaveAttempt(draftToRestore?.pendingSaveAttempt)
+        ? draftToRestore.pendingSaveAttempt
         : null,
     );
     setPhase("goal");
@@ -558,14 +615,14 @@ export function StudyPlanCreatePage() {
     setUnresolvedFields([]);
     setShouldShowDateFollowups(false);
     setIsDraftHydrated(true);
-  }, [courseId]);
+  }, [course, courseId, hasLoadedMaterials, isDraftHydrated, materials]);
 
   useEffect(() => {
-    if (!courseId || !isDraftHydrated || isDraftPersistenceDisabledRef.current) {
+    if (!courseId || !course || !isDraftHydrated || isDraftPersistenceDisabledRef.current) {
       return;
     }
 
-    writeCreateDraft(courseId, {
+    writeCreateDraft(course.user_id, courseId, {
       goalText,
       startDate,
       endDate,
@@ -573,9 +630,12 @@ export function StudyPlanCreatePage() {
       dailyMinutes,
       preference,
       materialScope,
+      materialSelection,
       pendingSaveAttempt: pendingSaveAttempt ?? undefined,
     });
+    window.localStorage.removeItem(createLegacyDraftStorageKey(courseId));
   }, [
+    course,
     courseId,
     dailyMinutes,
     durationDaysText,
@@ -583,6 +643,7 @@ export function StudyPlanCreatePage() {
     goalText,
     isDraftHydrated,
     materialScope,
+    materialSelection,
     pendingSaveAttempt,
     preference,
     startDate,
@@ -670,29 +731,6 @@ export function StudyPlanCreatePage() {
     };
   }, [courseId]);
 
-  useEffect(() => {
-    if (!hasLoadedMaterials || isLoadingMaterials || materialScope.include_all_parsed_materials) {
-      return;
-    }
-
-    const parsedMaterialIds = materials
-      .filter((material) => material.parse_status === "parsed")
-      .map((material) => material.id);
-    const nextMaterialIds = materialScope.material_ids.filter((id) => parsedMaterialIds.includes(id));
-
-    if (nextMaterialIds.length === materialScope.material_ids.length) {
-      return;
-    }
-
-    setMaterialScope(
-      nextMaterialIds.length > 0
-        ? { include_all_parsed_materials: false, material_ids: nextMaterialIds }
-        : defaultScope,
-    );
-    setUnresolvedFields([]);
-    setShouldShowDateFollowups(false);
-  }, [hasLoadedMaterials, isLoadingMaterials, materialScope, materials]);
-
   const draft = useMemo<StudyPlanPreviewRequest | null>(() => {
     const minutes = Number.parseInt(dailyMinutes, 10);
     if (!goalText.trim()) {
@@ -719,10 +757,15 @@ export function StudyPlanCreatePage() {
     return baseDraft;
   }, [dailyMinutes, endDate, goalText, materialScope, preference, startDate]);
 
-  const parsedMaterialCount = materials.filter((material) => material.parse_status === "parsed").length;
-  const hasUsableMaterialScope = materialScope.include_all_parsed_materials
-    ? parsedMaterialCount > 0
-    : materialScope.material_ids.length > 0;
+  const parsedMaterialIds = useMemo(
+    () => new Set(materials.filter((material) => material.parse_status === "parsed").map((material) => material.id)),
+    [materials],
+  );
+  const invalidMaterialIds = materialScope.material_ids.filter((id) => !parsedMaterialIds.has(id));
+  const hasUsableMaterialScope = materialScope.material_ids.length > 0
+    && invalidMaterialIds.length === 0
+    && !requiresMaterialConfirmation;
+  const selectedMaterialNames = materialSelection.map((item) => item.name);
   const orderedDiagnosticQuestions = useMemo(
     () => sortDiagnosticQuestions(diagnosticQuestions),
     [diagnosticQuestions],
@@ -809,6 +852,25 @@ export function StudyPlanCreatePage() {
     }, "duration_days");
   }
 
+  function updateMaterialScope(nextScope: MaterialScope) {
+    const nextIds = nextScope.material_ids;
+    const nextSelection = nextIds.flatMap((id) => {
+      const material = materials.find((item) => item.id === id && item.parse_status === "parsed");
+      return material ? [{ id: material.id, name: material.name }] : [];
+    });
+    setMaterialScope({ include_all_parsed_materials: false, material_ids: nextSelection.map((item) => item.id) });
+    setMaterialSelection(nextSelection);
+    setRequiresMaterialConfirmation(false);
+    setPendingSaveAttempt(null);
+    setUnresolvedFields([]);
+    setShouldShowDateFollowups(false);
+  }
+
+  function confirmMaterialScope() {
+    updateMaterialScope(materialScope);
+    setIsMaterialScopeOpen(false);
+  }
+
   async function handleGoalSubmit() {
     if (!courseId) {
       return;
@@ -820,11 +882,13 @@ export function StudyPlanCreatePage() {
       return;
     }
     if (!hasUsableMaterialScope) {
-      setError(
-        materialScope.include_all_parsed_materials
-          ? "资料范围内没有可解析资料，请先上传或解析至少一份资料。"
-          : "请选择至少一份已解析资料。",
-      );
+      if (invalidMaterialIds.length > 0) {
+        setError("所选资料已被删除、失效或尚未解析，请调整并重新确认资料范围。");
+      } else if (requiresMaterialConfirmation) {
+        setError("旧草稿的“全部资料”没有历史快照，请确认本次实际使用的资料。");
+      } else {
+        setError("请选择至少一份已解析资料。");
+      }
       return;
     }
 
@@ -993,7 +1057,9 @@ export function StudyPlanCreatePage() {
         saveAttempt.idempotencyKey,
       );
       isDraftPersistenceDisabledRef.current = true;
-      clearCreateDraft(courseId);
+      if (course) {
+        clearCreateDraft(course.user_id, courseId);
+      }
       setGeneratedPlanPreview(saveAttempt.preview);
       setSavedPlanId(result.plan.id);
       setIsGenerationComplete(true);
@@ -1014,7 +1080,9 @@ export function StudyPlanCreatePage() {
       return;
     }
 
-    clearCreateDraft(courseId);
+    if (course) {
+      clearCreateDraft(course.user_id, courseId);
+    }
     navigate(`/courses/${courseId}/study-plans/${savedPlanId}`, { replace: true });
   }
 
@@ -1082,6 +1150,53 @@ export function StudyPlanCreatePage() {
                   placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
                   value={goalText}
                 />
+                <Paper className="study-plan-material-summary" p="md" radius="md" withBorder>
+                  <Stack gap="sm">
+                    <Group justify="space-between" wrap="nowrap">
+                      <Stack gap={2}>
+                        <Text fw={750}>本次使用的课程资料</Text>
+                        <Text c="dimmed" size="sm">
+                          {selectedMaterialNames.length > 0
+                            ? `已选 ${selectedMaterialNames.length} 份：${selectedMaterialNames.join("、")}`
+                            : "尚未选择资料"}
+                        </Text>
+                      </Stack>
+                      <Button onClick={() => setIsMaterialScopeOpen((open) => !open)} size="xs" variant="light">
+                        {isMaterialScopeOpen ? "收起" : "调整资料"}
+                      </Button>
+                    </Group>
+                    {invalidMaterialIds.length > 0 ? (
+                      <Alert color="red" role="alert" variant="light">
+                        有 {invalidMaterialIds.length} 份资料已被删除、失效或尚未解析，请重新选择并确认。
+                      </Alert>
+                    ) : null}
+                    {requiresMaterialConfirmation ? (
+                      <Alert color="yellow" role="status" variant="light">
+                        这是旧版草稿迁移出的当前资料列表。旧版未保存“全选”的历史快照，请确认后继续。
+                      </Alert>
+                    ) : null}
+                    {isMaterialScopeOpen ? (
+                      <Stack gap="sm">
+                        <StudyPlanMaterialScopeSelector
+                          error={materialsError}
+                          isLoading={isLoadingMaterials}
+                          materialScope={materialScope}
+                          materials={materials}
+                          onMaterialScopeChange={updateMaterialScope}
+                        />
+                        <Group justify="flex-end">
+                          <Button
+                            disabled={materialScope.material_ids.length === 0 || invalidMaterialIds.length > 0}
+                            onClick={confirmMaterialScope}
+                            size="xs"
+                          >
+                            确认资料范围
+                          </Button>
+                        </Group>
+                      </Stack>
+                    ) : null}
+                  </Stack>
+                </Paper>
                 {materialsError ? (
                   <Alert color="red" role="alert" variant="light">{materialsError}</Alert>
                 ) : null}
