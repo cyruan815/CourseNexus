@@ -2,6 +2,34 @@ from app.core.config import Settings
 from app.modules.study_plans import router
 
 
+def test_study_plan_dependencies_route_purposes_to_shared_factory(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+    expected_provider = object()
+
+    def fake_factory(purpose, *, api_style="auto", settings):
+        calls.append((purpose, api_style))
+        return expected_provider
+
+    monkeypatch.setattr(router, "create_model_provider", fake_factory)
+    monkeypatch.setattr(
+        router,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            study_plan_generator_api_style="responses",
+        ),
+    )
+
+    assert router.get_plan_parser_provider() is expected_provider
+    assert router.get_plan_generator_provider() is expected_provider
+    assert router.get_plan_diagnostic_provider() is expected_provider
+    assert calls == [
+        ("study_plan_parser", "auto"),
+        ("study_plan_generator", "responses"),
+        ("study_plan_diagnostic", "auto"),
+    ]
+
+
 def test_generator_and_map_api_styles_are_constructed_independently(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
