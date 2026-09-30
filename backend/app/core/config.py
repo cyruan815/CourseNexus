@@ -136,6 +136,11 @@ class Settings(BaseSettings):
     def normalize_file_storage_path(cls, value: str) -> str:
         return str(resolve_project_path(value))
 
+    @field_validator("chroma_persist_path")
+    @classmethod
+    def normalize_chroma_persist_path(cls, value: str) -> str:
+        return str(resolve_project_path(value))
+
     @model_validator(mode="after")
     def apply_legacy_model_settings(self) -> "Settings":
         configured_fields = self.model_fields_set
