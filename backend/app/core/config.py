@@ -24,6 +24,8 @@ ModelPurpose = Literal[
 ]
 MODEL_PURPOSES: tuple[ModelPurpose, ...] = get_args(ModelPurpose)
 AppEnvironment = Literal["development", "test", "production"]
+DEFAULT_DEVELOPMENT_SECRET = "replace-with-local-dev-secret"
+MINIMUM_PRODUCTION_SECRET_LENGTH = 32
 
 
 class ModelEndpointConfig(BaseModel):
@@ -41,7 +43,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./course_nexus.db"
     app_env: AppEnvironment = "development"
-    secret_key: str = "replace-with-local-dev-secret"
+    secret_key: str = DEFAULT_DEVELOPMENT_SECRET
     access_token_expire_minutes: int = 1440
     file_storage_path: str = "./uploads"
     max_upload_file_size_bytes: int = 52_428_800
@@ -140,6 +142,22 @@ class Settings(BaseSettings):
         if "course_qa_model" not in configured_fields and self.openai_model:
             self.course_qa_model = self.openai_model
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> "Settings":
+        secret = self.secret_key.strip()
+        if self.app_env != "production":
+            return self
+        if (
+            not secret
+            or secret == DEFAULT_DEVELOPMENT_SECRET
+            or len(secret) < MINIMUM_PRODUCTION_SECRET_LENGTH
+        ):
+            raise ValueError(
+                f"production SECRET_KEY must be non-default and at least "
+                f"{MINIMUM_PRODUCTION_SECRET_LENGTH} characters"
+            )
         return self
 
     def model_endpoint(self, purpose: ModelPurpose) -> ModelEndpointConfig:
