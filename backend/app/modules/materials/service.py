@@ -235,7 +235,7 @@ def move_material_to_folder(
     _assert_folder_in_course(db, user_id=user_id, course_id=material.course_id, folder_id=folder_id)
     if material.folder_id == folder_id:
         return material
-    if material.parse_status == "parsed":
+    if material.active_parse_version_id is not None:
         rag_index.update_material_folder(material.id, folder_id)
     material.folder_id = folder_id
     material.updated_at = datetime.now(timezone.utc)

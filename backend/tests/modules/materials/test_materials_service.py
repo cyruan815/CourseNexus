@@ -294,6 +294,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     )
     material.parse_status = "parsed"
     parse_version = _activate_material_version(db, material)
+    material.parse_status = "parsing"
     db.commit()
     folder = create_material_folder(
         db,
