@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import pytest
 
 from app.core.config import Settings
@@ -62,3 +65,31 @@ def test_manager_close_releases_reference_without_clearing_index() -> None:
 
     assert first is not second
     assert manager.is_initialized is True
+
+
+def test_concurrent_callers_share_one_index_instance() -> None:
+    created: list[FakeRagIndex] = []
+    barrier = Barrier(8)
+
+    def create_index(_settings: Settings) -> FakeRagIndex:
+        index = FakeRagIndex()
+        created.append(index)
+        return index
+
+    manager = RagIndexManager(
+        settings_provider=lambda: Settings(
+            _env_file=None,
+            embedding_api_key="embedding-key",
+        ),
+        index_factory=create_index,
+    )
+
+    def initialize_after_barrier() -> object:
+        barrier.wait()
+        return manager.initialize()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        indexes = list(executor.map(lambda _index: initialize_after_barrier(), range(8)))
+
+    assert len(created) == 1
+    assert all(index is created[0] for index in indexes)
