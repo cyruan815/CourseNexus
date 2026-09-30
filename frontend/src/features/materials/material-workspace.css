@@ -632,33 +632,6 @@
   width: 1px;
 }
 
-.material-workspace__preview-modal {
-  border-radius: 16px;
-  height: min(86vh, 920px);
-}
-
-.material-workspace__preview-body {
-  display: flex;
-  height: calc(100% - 60px);
-  padding: 0;
-}
-
-.material-workspace__preview-content {
-  align-items: center;
-  background: #eef1f4;
-  display: flex;
-  flex: 1;
-  justify-content: center;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.material-workspace__preview-content iframe {
-  border: 0;
-  height: 100%;
-  width: 100%;
-}
-
 :root[data-course-nexus-theme="dark"] .material-workspace {
   --resource-bg: #111c2f;
   --resource-soft: #0f172a;

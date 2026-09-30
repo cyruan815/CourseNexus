@@ -1,4 +1,4 @@
-import { type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Menu, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   IconAlertCircle,
@@ -20,7 +20,6 @@ import {
   createMaterialFolder,
   deleteMaterial,
   deleteMaterialFolder,
-  getMaterialFile,
   listMaterialFolders,
   listMaterials,
   moveMaterialToFolder,
@@ -29,6 +28,7 @@ import {
   updateMaterialFolder,
   uploadMaterial,
 } from "./api";
+import { MaterialPreviewModal } from "./MaterialPreviewModal";
 import type { Material, MaterialFolder, MaterialScope } from "./types";
 import "./material-workspace.css";
 
@@ -117,10 +117,6 @@ export function MaterialWorkspace({
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const previewRequestId = useRef(0);
 
   useEffect(() => {
     if (initialData) {
@@ -157,15 +153,6 @@ export function MaterialWorkspace({
       ignore = true;
     };
   }, [courseId, initialData]);
-
-  useEffect(
-    () => () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    },
-    [previewUrl],
-  );
 
   const parsedMaterialIds = useMemo(
     () => materials.filter((material) => material.parse_status === "parsed").map((material) => material.id),
@@ -432,38 +419,12 @@ export function MaterialWorkspace({
     });
   }
 
-  async function openPdfPreview(material: Material) {
-    const requestId = previewRequestId.current + 1;
-    previewRequestId.current = requestId;
+  function openMaterialPreview(material: Material) {
     setPreviewMaterial(material);
-    setPreviewUrl(null);
-    setPreviewError(null);
-    setIsPreviewLoading(true);
-    try {
-      const blob = await getMaterialFile(material.id);
-      const objectUrl = URL.createObjectURL(blob);
-      if (previewRequestId.current !== requestId) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      setPreviewUrl(objectUrl);
-    } catch (nextError) {
-      if (previewRequestId.current === requestId) {
-        setPreviewError(errorMessage(nextError));
-      }
-    } finally {
-      if (previewRequestId.current === requestId) {
-        setIsPreviewLoading(false);
-      }
-    }
   }
 
-  function closePdfPreview() {
-    previewRequestId.current += 1;
+  function closeMaterialPreview() {
     setPreviewMaterial(null);
-    setPreviewUrl(null);
-    setPreviewError(null);
-    setIsPreviewLoading(false);
   }
 
   function renderMaterialActionsMenu(material: Material) {
@@ -569,13 +530,13 @@ export function MaterialWorkspace({
             {kind}
           </span>
           <span className="material-workspace__file-copy">
-            {material.source_type === "file" && material.material_type === "pdf" ? (
+            {material.source_type === "file" ? (
               <button
                 aria-label={`预览资料 ${material.name}`}
                 className="material-workspace__file-name material-workspace__file-name-button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  void openPdfPreview(material);
+                  openMaterialPreview(material);
                 }}
                 type="button"
               >
@@ -808,51 +769,8 @@ export function MaterialWorkspace({
         onSubmit={submitActionModal}
         target={actionTarget}
       />
-      <PdfPreviewModal
-        error={previewError}
-        isLoading={isPreviewLoading}
-        material={previewMaterial}
-        onClose={closePdfPreview}
-        url={previewUrl}
-      />
+      <MaterialPreviewModal material={previewMaterial} onClose={closeMaterialPreview} />
     </section>
-  );
-}
-
-function PdfPreviewModal({
-  error,
-  isLoading,
-  material,
-  onClose,
-  url,
-}: {
-  error: string | null;
-  isLoading: boolean;
-  material: Material | null;
-  onClose: () => void;
-  url: string | null;
-}) {
-  return (
-    <Modal
-      centered
-      classNames={{ body: "material-workspace__preview-body", content: "material-workspace__preview-modal" }}
-      closeButtonProps={{ "aria-label": "关闭资料预览" }}
-      onClose={onClose}
-      opened={Boolean(material)}
-      size="min(1120px, calc(100vw - 32px))"
-      title={material?.name}
-      transitionProps={{ duration: 0 }}
-    >
-      <div className="material-workspace__preview-content">
-        {isLoading ? <Text role="status">正在加载 PDF...</Text> : null}
-        {error ? (
-          <Alert color="red" role="alert" title="预览失败" variant="light">
-            {error}
-          </Alert>
-        ) : null}
-        {url && material ? <iframe src={url} title={`${material.name} PDF 预览`} /> : null}
-      </div>
-    </Modal>
   );
 }
 

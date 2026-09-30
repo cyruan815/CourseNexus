@@ -14,7 +14,7 @@
 - 历史引用脱钩边界：`backend/app/modules/course_qa/citations.py`，只允许资料删除流程清空引用外键，不删除问答或生成内容。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击 PDF 资料名称在页面悬浮弹窗中预览原文。`course-qa/CitationLocator` 复用资料详情与 PDF 原文接口完成引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击上传资料名称在页面悬浮弹窗中预览原文件。跨页面格式渲染统一进入 `frontend/src/components/file-preview/UniversalFilePreview`，PDF、图片和文本使用浏览器能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer`。`course-qa/CitationLocator` 复用资料详情与原文件接口完成 PDF 引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -146,7 +146,7 @@ PDF 解析：
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、PDF 名称点击预览、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、上传资料名称点击统一预览、PDF/DOCX/PPTX 分发、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`、`frontend/tests/components/file-preview/`。
 - 引用定位覆盖 PDF 指定页、Text / Markdown 快照、未知页码和资料删除后快照：`frontend/tests/features/course-qa/inline-citation-answer.test.tsx`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 - 真实 PDF 从上传、Docling 解析、Chroma 写入到资料/文件夹物理删除的端到端验证：[validation/real-pdf-permanent-deletion-e2e-2026-07-13.md](validation/real-pdf-permanent-deletion-e2e-2026-07-13.md)。
