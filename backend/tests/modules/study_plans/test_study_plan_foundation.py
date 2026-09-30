@@ -21,7 +21,7 @@ from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
-from app.modules.materials.models import CourseMaterial
+from app.modules.materials.models import CourseMaterial, MaterialParseVersion
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.study_plans.schemas import StudyPlanBuildRequest
 from app.modules.study_plans.service import (
@@ -358,9 +358,12 @@ def test_preview_study_plan_exposes_material_quality_warnings_in_generation_meta
     material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
     material = db.get(CourseMaterial, material_id)
     assert material is not None
+    assert material.active_parse_version_id is not None
+    active_version = db.get(MaterialParseVersion, material.active_parse_version_id)
+    assert active_version is not None
     material.parse_quality = "partial"
     material.page_count = 4
-    material.parse_diagnostics_json = {
+    diagnostics = {
         "parser": "docling",
         "profile": "pdf_text_first",
         "conversion_status": "partial_success",
@@ -379,7 +382,11 @@ def test_preview_study_plan_exposes_material_quality_warnings_in_generation_meta
             }
         ],
     }
-    db.add(material)
+    material.parse_diagnostics_json = diagnostics
+    active_version.parse_quality = "partial"
+    active_version.page_count = 4
+    active_version.parse_diagnostics_json = diagnostics
+    db.add_all([material, active_version])
     db.commit()
 
     preview = preview_study_plan(
