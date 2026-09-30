@@ -22,6 +22,7 @@ EXPECTED_CORE_TABLES = {
     "courses",
     "material_folders",
     "course_materials",
+    "material_parse_versions",
     "material_chunks",
     "conversations",
     "messages",
@@ -89,14 +90,31 @@ EXPECTED_COLUMNS = {
         "mime_type",
         "parse_status",
         "parse_error",
+        "active_parse_version_id",
         "page_count",
         "created_at",
         "updated_at",
         "deleted_at",
     },
+    "material_parse_versions": {
+        "id",
+        "material_id",
+        "course_id",
+        "user_id",
+        "status",
+        "parse_error",
+        "parse_quality",
+        "parse_diagnostics_json",
+        "page_count",
+        "created_at",
+        "updated_at",
+        "activated_at",
+        "finished_at",
+    },
     "material_chunks": {
         "id",
         "material_id",
+        "parse_version_id",
         "course_id",
         "chunk_index",
         "page",
@@ -134,6 +152,7 @@ EXPECTED_COLUMNS = {
         "message_id",
         "generated_content_id",
         "material_id",
+        "material_version_id",
         "chunk_id",
         "material_name",
         "page",
@@ -287,7 +306,7 @@ def _insert_minimal_task_tree(session: Session, suffix: str = "1") -> None:
     session.flush()
 
 
-def test_baseline_has_exact_thirteen_core_tables(engine) -> None:
+def test_baseline_has_exact_fourteen_core_tables(engine) -> None:
     assert set(inspect(engine).get_table_names()) == EXPECTED_CORE_TABLES
 
 
