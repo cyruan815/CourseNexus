@@ -6,7 +6,7 @@
 
 一级文件夹只帮助用户整理和浏览资料，不代表 Agent 上下文。用户可以使用课程全部已解析资料，或选择一个、多个具体资料；不能选择整个文件夹。
 
-当前非目标包括嵌套目录、非 PDF 资料正文预览、下载、后台解析队列和链接内容抓取。2026-09-30 起 URL 链接资料入口已停止支持：不再提供新增入口，历史 `source_type=url` 记录只读、可重命名、可删除，标记“已停止支持”，不进入解析和学习上下文。
+当前非目标包括嵌套目录、Office 编辑与动画播放、像素级还原桌面 Office、后台解析队列和链接内容抓取。2026-09-30 起 URL 链接资料入口已停止支持：不再提供新增入口，历史 `source_type=url` 记录只读、可重命名、可删除，标记“已停止支持”，不进入解析和学习上下文。
 
 ## 2. 所有权与代码地图
 
@@ -14,7 +14,7 @@
 - 历史引用脱钩边界：`backend/app/modules/course_qa/citations.py`，只允许资料删除流程清空引用外键，不删除问答或生成内容。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
 - 资料范围：`backend/app/modules/material_context/`。
-- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击 PDF 资料名称在页面悬浮弹窗中预览原文。`course-qa/CitationLocator` 复用资料详情与 PDF 原文接口完成引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
+- 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击上传资料名称在页面悬浮弹窗中预览原文件。跨页面格式渲染统一进入 `frontend/src/components/file-preview/UniversalFilePreview`，PDF、图片和文本使用浏览器能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer`。`course-qa/CitationLocator` 复用资料详情与原文件接口完成 PDF 引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
@@ -44,7 +44,7 @@ flowchart LR
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；用户确认删除后物理移除。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
-- PDF 原文通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、PDF 类型、实际文件存在性和解析后路径仍在存储根目录内。
+- 上传资料原文件通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、文件型来源、实际文件存在性和解析后路径仍在存储根目录内，并按资料 MIME 类型返回。
 - 引用定位先通过 `GET /api/v1/materials/{material_id}` 读取资料元数据并复核当前用户所有权；只有仍可访问的 PDF 且引用有可靠页码时才继续读取原文。
 - 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
 - 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
@@ -117,12 +117,12 @@ PDF 解析：
 3. 只更新 `CourseMaterial.name` 和 `updated_at`，不调用文件存储、Parser 或 RagIndex。
 4. 历史 `SourceCitation.material_name` 作为生成时快照保留原值，新问答使用重命名后的资料名。
 
-PDF 原文预览：
+资料原文件预览：
 
-1. 按当前用户读取未删除资料，先完成所有权隔离，再校验 `source_type = file`、`material_type = pdf` 和 PDF MIME 类型。
+1. 按当前用户读取未删除资料，先完成所有权隔离，再校验 `source_type = file` 且存在内部文件路径；历史链接资料等没有原文件的记录不进入预览。
 2. 将内部 `file_url` 拼接到存储根目录并解析真实路径；路径逃逸存储根目录或文件不存在时返回 `PREVIEW_FILE_UNAVAILABLE`。
-3. 后端以 `application/pdf`、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
-4. 前端带 Bearer token 拉取完整 Blob，创建临时 object URL 交给弹窗内浏览器 PDF 查看器；关闭、替换预览或组件卸载时释放 URL，过期异步请求的结果也会立即释放。
+3. 后端以资料 MIME 类型、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
+4. 前端带 Bearer token 拉取完整 Blob，交给统一文件预览器按格式选择浏览器原生、DOCX 或 PPTX 适配器；关闭、替换预览或组件卸载时释放对象 URL 和渲染器资源，过期异步请求的结果也会立即丢弃。
 
 引用来源定位：
 
@@ -139,14 +139,14 @@ PDF 原文预览：
 - 正常级联删除不调用 Embedding；只有 RAG 或数据库失败后的补偿恢复才会重新计算被恢复 chunk 的 embedding。补偿仍失败时必须使用 `rebuild_rag_index` 运维命令恢复派生索引。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 - PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
-- 预览大小为 `s` 字节的 PDF 时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 和浏览器查看器的时间、网络和内存预算均为 `O(s)`。上传上限使单份预览原文件当前不超过 50 MiB，不调用 Parser、RAG、Embedding 或模型。
+- 预览大小为 `s` 字节的上传文件时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 的网络和内存预算为 `O(s)`，DOCX/PPTX 适配器还会在浏览器内读取完整 `ArrayBuffer` 并构造渲染节点。上传上限使单份预览原文件当前不超过 50 MiB，预览不调用 Parser、RAG、Embedding 或模型。
 
 ## 6. 测试与验收
 
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
-- 基础前端归类与逐文件复选、PDF 名称点击预览、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`。
+- 基础前端归类与逐文件复选、上传资料名称点击统一预览、PDF/DOCX/PPTX 分发、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`、`frontend/tests/components/file-preview/`。
 - 引用定位覆盖 PDF 指定页、Text / Markdown 快照、未知页码和资料删除后快照：`frontend/tests/features/course-qa/inline-citation-answer.test.tsx`。
 - 计网第七章 59 页 PDF 真实回归：[validation/net-chap7-pdf-parser-regression-2026-07-12.md](validation/net-chap7-pdf-parser-regression-2026-07-12.md)。
 - 真实 PDF 从上传、Docling 解析、Chroma 写入到资料/文件夹物理删除的端到端验证：[validation/real-pdf-permanent-deletion-e2e-2026-07-13.md](validation/real-pdf-permanent-deletion-e2e-2026-07-13.md)。
@@ -168,8 +168,8 @@ pnpm frontend:build
 - 2026-07-15 资料工作区支持点击 PDF 资料名称打开悬浮预览窗；前端使用鉴权请求获取 Blob 并在关闭或替换时释放 object URL，后端仅向当前用户返回位于存储根目录内的 PDF 原文。
 - 2026-07-15 课程详情资料工作区按已确认的 Product Design 视觉目标完成重构：保留现有三栏宽度和全部资料接口，头部提供选择统计与新建文件夹、上传资料、添加链接三个明确入口，主体使用搜索、一级文件夹和逐文件状态组成的圆角局部滚动列表。课程详情页不保留常驻底部拖拽区；只有点击上传按钮或文件夹菜单中的上传入口后，上传弹窗才承载文件选择与拖拽，并继续沿用单文件上传后自动解析的既有流程。
 - 2026-09-30 按负责人 V1 收尾审定下线 URL 链接资料入口：前端移除“添加链接”按钮与弹窗，后端 `material-links` 创建端点改为 `410 MATERIAL_LINK_REMOVED` 兼容占位，`parse_material` 对历史 URL 资料直接抛 `409 MATERIAL_LINK_REMOVED` 且不再改写状态。数据层保留 `source_type/source_url` 列和历史行；material-context 因始终过滤 `parse_status=parsed`，历史 URL 资料天然不进入检索、问答、生成与计划范围（有回归测试固化）。历史记录在前端标记“已停止支持”，保留查看、重命名与删除。
-- 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
-- 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
+- 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 通过项目统一文件预览器定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
+- 2026-10-01 资料工作区统一使用项目级原文件预览器：PDF、图片与文本使用浏览器原生能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer` 并配置本地 PDF.js 矢量回退资源；Office 适配器按需加载，失败时保留原文件下载入口。该能力是只读查看，不提供编辑、动画播放或桌面 Office 像素级一致性承诺。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
 
@@ -184,3 +184,4 @@ pnpm frontend:build
 - 2026-07-15: To prioritize the locally scrolling resource list in the fixed course-detail column, the three top actions are 40 px icon-only buttons aligned with the title and expose their labels through hover tooltips and accessible names. The selection row and search control use reduced vertical padding without changing their behavior.
 - 2026-07-15: Individual file rows omit separators and file-size metadata, use a 20 px type badge aligned with the filename scale, and reduce the parse-status control to 22 px so the fixed-height resource list can show more files. The filename, selection state, preview, drag-to-move, and action menu remain unchanged.
 - 2026-07-15: Folder rows follow the same density target: their minimum height is 48 px, the folder tile is 30 px, and the count badge is 23 px. Folder expand/collapse, drag target, count, and action-menu behavior remain unchanged.
+- 2026-10-01: Every uploaded file name opens the same authenticated preview modal even before parsing completes. The modal passes the fetched Blob to `UniversalFilePreview`; DOCX pages and PPTX slides preserve their original document layout, while unsupported formats keep a clear download fallback.

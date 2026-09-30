@@ -27,7 +27,7 @@ from app.modules.materials.service import (
     delete_material_folder,
     delete_material,
     get_material_detail,
-    get_material_pdf_content,
+    get_material_file_content,
     list_material_folders,
     list_course_materials,
     move_material_to_folder,
@@ -187,7 +187,7 @@ def get_material_content_endpoint(
     current_user: User = Depends(get_required_user),
     storage: FileStorage = Depends(get_material_storage),
 ) -> FileResponse:
-    material, file_path = get_material_pdf_content(
+    material, file_path = get_material_file_content(
         db,
         user_id=current_user.id,
         material_id=material_id,
@@ -195,7 +195,7 @@ def get_material_content_endpoint(
     )
     return FileResponse(
         file_path,
-        media_type="application/pdf",
+        media_type=material.mime_type or "application/octet-stream",
         filename=material.name,
         content_disposition_type="inline",
         headers={"Cache-Control": "private, no-store"},

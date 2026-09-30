@@ -98,12 +98,13 @@
   font-weight: 570;
 }
 
-.citation-locator-modal__pdf {
+.citation-locator-modal__file-preview {
   width: 100%;
   height: min(72vh, 760px);
   border: 1px solid #d9e0ea;
   border-radius: 10px;
   background: #f7f9fc;
+  overflow: hidden;
 }
 
 .citation-locator-modal__snippet {

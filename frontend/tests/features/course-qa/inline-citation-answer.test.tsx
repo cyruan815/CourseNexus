@@ -72,10 +72,15 @@ describe("InlineCitationAnswer", () => {
         headers: { "Content-Type": "application/pdf" },
       }));
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("URL", {
-      ...URL,
-      createObjectURL: vi.fn(() => "blob:citation-pdf"),
-      revokeObjectURL: vi.fn(),
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:citation-pdf"),
+      writable: true,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+      writable: true,
     });
 
     render(
@@ -86,9 +91,9 @@ describe("InlineCitationAnswer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "查看引用 1：Chap7 物理层.pdf" }));
 
-    expect(await screen.findByTitle("Chap7 物理层.pdf 第 18 页")).toHaveAttribute(
+    expect(await screen.findByTitle("Chap7 物理层.pdf PDF 预览")).toHaveAttribute(
       "src",
-      "blob:citation-pdf#page=18",
+      "blob:citation-pdf#page=18&view=FitH",
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,

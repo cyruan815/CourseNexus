@@ -1,0 +1,344 @@
+.universal-file-preview {
+  --file-preview-accent: #315f7d;
+  --file-preview-border: #dce4eb;
+  --file-preview-ink: #182537;
+  --file-preview-muted: #68788b;
+  background: #f3f6f8;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.universal-file-preview__toolbar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--file-preview-border);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 8px 18px;
+}
+
+.universal-file-preview__identity {
+  align-items: center;
+  display: flex;
+  gap: 11px;
+  min-width: 0;
+}
+
+.universal-file-preview__kind {
+  background: #e7eff5;
+  border: 1px solid #d3e1eb;
+  border-radius: 7px;
+  color: #315f7d;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  line-height: 24px;
+  padding: 0 8px;
+}
+
+.universal-file-preview__kind--docx {
+  background: #eaf1fb;
+  border-color: #d4e1f3;
+  color: #315d96;
+}
+
+.universal-file-preview__kind--pptx {
+  background: #faeee9;
+  border-color: #f0d9ce;
+  color: #9a5338;
+}
+
+.universal-file-preview__name {
+  color: var(--file-preview-ink);
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.universal-file-preview__download {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cfd9e2;
+  border-radius: 8px;
+  color: #36566d;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  text-decoration: none;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.universal-file-preview__download:hover {
+  background: #f5f9fb;
+  border-color: #aebfcb;
+  color: #204f6e;
+}
+
+.universal-file-preview__download[aria-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.universal-file-preview__viewport {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.universal-file-preview__viewport--pdf {
+  background: #e8edf1;
+  overflow: hidden;
+}
+
+.universal-file-preview__viewport iframe {
+  border: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.universal-file-preview__image {
+  background-image: linear-gradient(45deg, #edf1f4 25%, transparent 25%),
+    linear-gradient(-45deg, #edf1f4 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #edf1f4 75%),
+    linear-gradient(-45deg, transparent 75%, #edf1f4 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+  box-shadow: 0 18px 46px rgba(37, 54, 70, 0.12);
+  display: block;
+  margin: 32px;
+  max-height: calc(100% - 64px);
+  max-width: calc(100% - 64px);
+  object-fit: contain;
+}
+
+.universal-file-preview__viewport--text {
+  align-items: flex-start;
+  background: #eef2f5;
+  padding: 30px;
+}
+
+.universal-file-preview__viewport--docx {
+  align-items: flex-start;
+  background: #e7ebef;
+  justify-content: flex-start;
+  padding: 28px;
+}
+
+.universal-file-preview__docx-shell {
+  min-height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.universal-file-preview__docx-document {
+  min-height: 100%;
+}
+
+.universal-file-preview__docx-document .course-nexus-docx-wrapper {
+  background: transparent;
+  box-sizing: border-box;
+  min-width: 100%;
+  padding: 0;
+}
+
+.universal-file-preview__docx-document section.course-nexus-docx {
+  border: 1px solid #d9e0e6;
+  box-shadow: 0 18px 48px rgba(42, 56, 70, 0.13);
+  margin: 0 auto 24px;
+}
+
+.universal-file-preview__viewport--pptx {
+  background: #e5e9ed;
+  overflow: hidden;
+}
+
+.universal-file-preview__pptx-shell {
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-scroller {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(20px, 5vw, 72px);
+  scrollbar-gutter: stable;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-document {
+  min-height: 100%;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-document > * {
+  margin-inline: auto;
+}
+
+.universal-file-preview__pptx-document [data-slide-index] {
+  filter: drop-shadow(0 16px 30px rgba(41, 53, 65, 0.16));
+}
+
+.universal-file-preview__text-document {
+  background: #fff;
+  border: 1px solid #e1e7ec;
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(45, 61, 76, 0.09);
+  box-sizing: border-box;
+  color: #253446;
+  min-height: 100%;
+  padding: 36px 42px;
+  width: min(920px, 100%);
+}
+
+.universal-file-preview__text-document pre {
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.75;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.universal-file-preview__truncated {
+  background: #f6f1e7;
+  border: 1px solid #eadfc8;
+  border-radius: 7px;
+  color: #745b2f;
+  font-size: 13px;
+  margin: 0 0 22px;
+  padding: 9px 12px;
+}
+
+.universal-file-preview__state {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--file-preview-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(40, 57, 73, 0.08);
+  color: var(--file-preview-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 24px;
+  max-width: 420px;
+  padding: 28px 34px;
+  text-align: center;
+}
+
+.universal-file-preview__state-icon {
+  align-items: center;
+  background: #edf3f7;
+  border-radius: 50%;
+  color: var(--file-preview-accent);
+  display: inline-flex;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.universal-file-preview__state--error .universal-file-preview__state-icon {
+  background: #faece9;
+  color: #a34736;
+}
+
+.universal-file-preview__state-icon .is-spinning {
+  animation: universal-file-preview-spin 900ms linear infinite;
+}
+
+@keyframes universal-file-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.universal-file-preview__state p {
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .universal-file-preview__toolbar {
+    padding-inline: 12px;
+  }
+
+  .universal-file-preview__download {
+    font-size: 0;
+    padding: 0;
+    justify-content: center;
+    width: 36px;
+  }
+
+  .universal-file-preview__download svg {
+    height: 18px;
+    width: 18px;
+  }
+
+  .universal-file-preview__viewport--text {
+    padding: 14px;
+  }
+
+  .universal-file-preview__viewport--docx {
+    padding: 14px;
+  }
+
+  .universal-file-preview__pptx-scroller {
+    padding: 14px;
+  }
+
+  .universal-file-preview__text-document {
+    padding: 24px 20px;
+  }
+}
+
+:root[data-course-nexus-theme="dark"] .universal-file-preview {
+  --file-preview-border: #2a3a4e;
+  --file-preview-ink: #e8edf4;
+  --file-preview-muted: #a7b3c2;
+  background: #101a28;
+}
+
+:root[data-course-nexus-theme="dark"] .universal-file-preview__toolbar,
+:root[data-course-nexus-theme="dark"] .universal-file-preview__text-document,
+:root[data-course-nexus-theme="dark"] .universal-file-preview__state {
+  background: #152235;
+}
+
+:root[data-course-nexus-theme="dark"] .universal-file-preview__viewport,
+:root[data-course-nexus-theme="dark"] .universal-file-preview__viewport--pdf,
+:root[data-course-nexus-theme="dark"] .universal-file-preview__viewport--text {
+  background: #0f1926;
+}
+
+:root[data-course-nexus-theme="dark"] .universal-file-preview__download {
+  background: #18283b;
+  border-color: #34465a;
+  color: #dbe5ee;
+}
+
+:root[data-course-nexus-theme="dark"] .universal-file-preview__text-document {
+  border-color: #2a3a4e;
+  color: #dce4ed;
+}

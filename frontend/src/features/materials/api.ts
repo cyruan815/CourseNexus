@@ -27,7 +27,7 @@ function isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
   );
 }
 
-export async function getMaterialPdf(materialId: string): Promise<Blob> {
+export async function getMaterialFile(materialId: string, signal?: AbortSignal): Promise<Blob> {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
   const headers: Record<string, string> = {};
   const token = getSessionToken();
@@ -38,6 +38,7 @@ export async function getMaterialPdf(materialId: string): Promise<Blob> {
   const response = await fetch(`${apiBaseUrl}/api/v1/materials/${materialId}/content`, {
     method: "GET",
     headers,
+    signal,
   });
   if (!response.ok) {
     if (response.status === 401) {

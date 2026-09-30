@@ -152,7 +152,7 @@ def test_preview_pdf_material_returns_owned_original_file(client: TestClient) ->
     assert response.headers["content-disposition"].startswith("inline;")
 
 
-def test_preview_material_rejects_unsupported_type_and_cross_user_access(client: TestClient) -> None:
+def test_preview_material_returns_owned_non_pdf_file_and_rejects_cross_user_access(client: TestClient) -> None:
     alice_token = register_and_token(client, "alice")
     bob_token = register_and_token(client, "bob")
     alice_course_id = create_course(client, alice_token)
@@ -164,14 +164,16 @@ def test_preview_material_rejects_unsupported_type_and_cross_user_access(client:
     )
     material_id = upload_response.json()["data"]["id"]
 
-    unsupported_response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
+    content_response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
     cross_user_response = client.get(
         f"/api/v1/materials/{material_id}/content",
         headers={"Authorization": f"Bearer {bob_token}"},
     )
 
-    assert unsupported_response.status_code == 415
-    assert unsupported_response.json()["error"]["code"] == "PREVIEW_UNSUPPORTED"
+    assert content_response.status_code == 200
+    assert content_response.content == b"# Intro"
+    assert content_response.headers["content-type"].startswith("text/markdown")
+    assert content_response.headers["cache-control"] == "private, no-store"
     assert cross_user_response.status_code == 404
     assert cross_user_response.json()["error"]["code"] == "NOT_FOUND"
 

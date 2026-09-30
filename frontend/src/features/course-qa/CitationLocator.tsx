@@ -1,9 +1,10 @@
 import { Alert, Badge, Box, Divider, Group, HoverCard, Modal, Paper, Stack, Text } from "@mantine/core";
 import { IconFileDescription, IconMapPin, IconQuote } from "@tabler/icons-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { ApiError } from "../../api/errors";
-import { getMaterial, getMaterialPdf } from "../materials/api";
+import { UniversalFilePreview } from "../../components/file-preview";
+import { getMaterial, getMaterialFile } from "../materials/api";
 import type { Material } from "../materials/types";
 import "./citation-locator.css";
 
@@ -41,12 +42,6 @@ function errorMessage(error: unknown): string {
   return "原资料已删除或当前不可访问";
 }
 
-function revokeObjectUrl(url: string) {
-  if (typeof URL.revokeObjectURL === "function") {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export function CitationLocator({
   ariaLabel,
   citation,
@@ -63,19 +58,10 @@ export function CitationLocator({
   const [opened, setOpened] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [material, setMaterial] = useState<Material | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<Blob | null>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
   const requestId = useRef(0);
   const targetPage = pdfPageNumber(citation);
-
-  useEffect(
-    () => () => {
-      if (pdfUrl) {
-        revokeObjectUrl(pdfUrl);
-      }
-    },
-    [pdfUrl],
-  );
 
   async function openCitation() {
     const nextRequestId = requestId.current + 1;
@@ -84,12 +70,7 @@ export function CitationLocator({
     setIsLoading(false);
     setMaterial(null);
     setUnavailableReason(null);
-    setPdfUrl((current) => {
-      if (current) {
-        revokeObjectUrl(current);
-      }
-      return null;
-    });
+    setPreviewFile(null);
 
     if (!citation.material_id) {
       setUnavailableReason("原资料已删除或当前不可访问");
@@ -105,13 +86,11 @@ export function CitationLocator({
       setMaterial(nextMaterial);
 
       if (nextMaterial.source_type === "file" && nextMaterial.material_type === "pdf" && targetPage !== null) {
-        const blob = await getMaterialPdf(nextMaterial.id);
-        const objectUrl = URL.createObjectURL(blob);
+        const blob = await getMaterialFile(nextMaterial.id);
         if (requestId.current !== nextRequestId) {
-          revokeObjectUrl(objectUrl);
           return;
         }
-        setPdfUrl(objectUrl);
+        setPreviewFile(blob);
       }
     } catch (error) {
       if (requestId.current === nextRequestId) {
@@ -130,15 +109,10 @@ export function CitationLocator({
     setIsLoading(false);
     setMaterial(null);
     setUnavailableReason(null);
-    setPdfUrl((current) => {
-      if (current) {
-        revokeObjectUrl(current);
-      }
-      return null;
-    });
+    setPreviewFile(null);
   }
 
-  const previewMode = pdfUrl
+  const previewMode = previewFile
     ? "PDF 原文"
     : material?.material_type === "markdown" || material?.material_type === "text"
       ? "解析文本"
@@ -182,7 +156,7 @@ export function CitationLocator({
         closeButtonProps={{ "aria-label": "关闭引用来源" }}
         onClose={closeCitation}
         opened={opened}
-        size={pdfUrl ? "min(1080px, calc(100vw - 32px))" : "min(760px, calc(100vw - 32px))"}
+        size={previewFile ? "min(1080px, calc(100vw - 32px))" : "min(760px, calc(100vw - 32px))"}
         title={(
           <Group gap="sm" wrap="nowrap">
             <Box className="citation-locator-modal__title-icon" aria-hidden="true">
@@ -223,12 +197,16 @@ export function CitationLocator({
             </Alert>
           ) : null}
 
-          {pdfUrl && targetPage !== null ? (
-            <iframe
-              className="citation-locator-modal__pdf"
-              src={`${pdfUrl}#page=${targetPage}`}
-              title={`${citation.material_name} 第 ${targetPage} 页`}
-            />
+          {previewFile && material && targetPage !== null ? (
+            <div className="citation-locator-modal__file-preview">
+              <UniversalFilePreview
+                file={previewFile}
+                fileName={material.name}
+                initialPage={targetPage}
+                materialType={material.material_type}
+                mimeType={material.mime_type}
+              />
+            </div>
           ) : (
             <Paper className="citation-locator-modal__snippet" radius="md" withBorder>
               <Group className="citation-locator-modal__snippet-heading" gap="sm" wrap="nowrap">
