@@ -1,4 +1,7 @@
+import pytest
+
 from app.core.config import Settings
+from app.core.errors import CourseNexusError
 from app.modules.study_plans import router
 
 
@@ -59,3 +62,18 @@ def test_map_provider_reuses_generator_when_no_map_override(monkeypatch) -> None
     generator = router.get_plan_generator_provider()
 
     assert router.get_plan_map_provider(model_provider=generator) is generator
+
+
+def test_map_provider_reports_missing_configuration_instead_of_implicit_mock(monkeypatch) -> None:
+    settings = Settings(
+        _env_file=None,
+        study_plan_map_model="map-model",
+    )
+    monkeypatch.setattr(router, "get_settings", lambda: settings)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        router.get_plan_map_provider(model_provider=object())
+
+    assert exc_info.value.code == "MODEL_PROVIDER_NOT_CONFIGURED"
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.details == {"purpose": "study_plan_map"}

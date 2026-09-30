@@ -4,13 +4,14 @@ from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_required_user
-from app.core.config import get_settings
+from app.core.config import ModelEndpointConfig, get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
-from app.integrations.model_provider.factory import create_model_provider
-from app.integrations.model_provider.mock import MockModelProvider
-from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.model_provider.factory import (
+    create_model_provider,
+    create_model_provider_from_endpoint,
+)
 from app.modules.study_plans.repository import StudyPlanBundle
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
@@ -80,15 +81,15 @@ def get_plan_map_provider(
         return model_provider
 
     generator_endpoint = settings.model_endpoint("study_plan_generator")
-    api_key = settings.study_plan_map_api_key or generator_endpoint.api_key
-    if not api_key:
-        return MockModelProvider()
-    return OpenAIModelProvider(
-        api_key=api_key,
-        model=settings.study_plan_map_model or generator_endpoint.model,
-        base_url=settings.study_plan_map_base_url or generator_endpoint.base_url,
-        api_key_env_name="STUDY_PLAN_MAP_API_KEY",
+    return create_model_provider_from_endpoint(
+        "study_plan_map",
+        endpoint=ModelEndpointConfig(
+            api_key=settings.study_plan_map_api_key or generator_endpoint.api_key,
+            model=settings.study_plan_map_model or generator_endpoint.model,
+            base_url=settings.study_plan_map_base_url or generator_endpoint.base_url,
+        ),
         api_style=settings.study_plan_map_api_style,
+        settings=settings,
     )
 
 
