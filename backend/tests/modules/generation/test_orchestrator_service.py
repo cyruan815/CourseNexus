@@ -81,6 +81,10 @@ def test_generate_content_delivers_all_materials_once_without_citations(
             {"material_id": material.id, "material_name": material.name}
             for material in sorted(parsed_materials, key=lambda item: item.id)
         ],
+        "material_versions": [
+            {"material_id": material.id, "version_id": material.active_parse_version_id}
+            for material in sorted(parsed_materials, key=lambda item: item.id)
+        ],
     }
     assert db.scalar(select(func.count()).select_from(SourceCitation)) == 0
 

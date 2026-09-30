@@ -177,6 +177,9 @@ def test_ask_course_question_uses_retrieved_chunks_for_model_and_citations(
 
     assert [chunk.chunk_id for chunk in model_provider.context_chunks] == [eigen_chunk.id]
     assert [citation.chunk_id for citation in answer.source_citations] == [eigen_chunk.id]
+    assert [citation.material_version_id for citation in answer.source_citations] == [
+        eigen_chunk.parse_version_id
+    ]
     assert answer.answer_text == "retrieved answer [[cite:1]]"
 
 

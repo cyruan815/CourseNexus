@@ -868,6 +868,7 @@ def _save_task_content_citations(
                 id=citation_id,
                 generated_content_id=generated_content_id,
                 material_id=chunk.material_id,
+                material_version_id=chunk.material_version_id,
                 chunk_id=chunk.chunk_id,
                 material_name=chunk.material_name,
                 page=chunk.page,

@@ -12,5 +12,5 @@ def detach_material_references(db: Session, material_ids: list[str]) -> None:
     db.execute(
         update(SourceCitation)
         .where(SourceCitation.material_id.in_(material_ids))
-        .values(material_id=None, chunk_id=None)
+        .values(material_id=None, material_version_id=None, chunk_id=None)
     )
