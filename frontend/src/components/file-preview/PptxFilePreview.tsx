@@ -9,13 +9,15 @@ import { FilePreviewStatus } from "./FilePreviewStatus";
 type PptxRenderState = "loading" | "ready" | "error";
 
 export function PptxFilePreview({ file }: { file: Blob }) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<PptxViewerInstance | null>(null);
   const [renderState, setRenderState] = useState<PptxRenderState>("loading");
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) {
+    const scrollContainer = scrollContainerRef.current;
+    if (!container || !scrollContainer) {
       return;
     }
 
@@ -45,7 +47,7 @@ export function PptxFilePreview({ file }: { file: Blob }) {
             workerUrl: pdfjsWorkerUrl,
           },
           renderMode: "list",
-          scrollContainer: container,
+          scrollContainer,
           signal: abortController.signal,
           zipLimits: RECOMMENDED_ZIP_LIMITS,
         });
@@ -74,7 +76,9 @@ export function PptxFilePreview({ file }: { file: Blob }) {
 
   return (
     <div className="universal-file-preview__pptx-shell">
-      <div className="universal-file-preview__pptx-document" ref={containerRef} />
+      <div className="universal-file-preview__pptx-scroller" ref={scrollContainerRef}>
+        <div className="universal-file-preview__pptx-document" ref={containerRef} />
+      </div>
       {renderState === "loading" ? (
         <FilePreviewStatus message="正在渲染 PowerPoint 演示文稿…" role="status" tone="loading" />
       ) : null}

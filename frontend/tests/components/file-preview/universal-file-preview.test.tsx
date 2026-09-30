@@ -133,6 +133,9 @@ describe("UniversalFilePreview", () => {
         zipLimits: { maxEntries: 2_000 },
       }),
     );
+    const [_, renderContainer, options] = vi.mocked(PptxViewer.open).mock.calls[0];
+    expect(options?.scrollContainer).toBeInstanceOf(HTMLElement);
+    expect(options?.scrollContainer).not.toBe(renderContainer);
 
     unmount();
     expect(destroyPptxViewer).toHaveBeenCalledTimes(1);

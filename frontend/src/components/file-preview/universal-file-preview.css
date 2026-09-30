@@ -178,12 +178,17 @@
   width: 100%;
 }
 
-.universal-file-preview__pptx-document {
+.universal-file-preview__pptx-scroller {
   box-sizing: border-box;
   height: 100%;
   overflow: auto;
   padding: 28px clamp(20px, 5vw, 72px);
   scrollbar-gutter: stable;
+  width: 100%;
+}
+
+.universal-file-preview__pptx-document {
+  min-height: 100%;
   width: 100%;
 }
 
@@ -299,7 +304,7 @@
     padding: 14px;
   }
 
-  .universal-file-preview__pptx-document {
+  .universal-file-preview__pptx-scroller {
     padding: 14px;
   }
 
