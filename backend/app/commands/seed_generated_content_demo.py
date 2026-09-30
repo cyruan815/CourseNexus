@@ -10,7 +10,7 @@ from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.users.models import User
 
 
@@ -19,6 +19,7 @@ DEFAULT_PASSWORD = "password123"
 DEMO_USER_ID = "usr_demo_generated_content"
 DEMO_COURSE_ID = "crs_demo_generated_content"
 DEMO_MATERIAL_ID = "mat_demo_generated_content"
+DEMO_PARSE_VERSION_ID = "mpv_demo_generated_content"
 DEMO_CHUNK_ID = "chk_demo_generated_content"
 DEMO_CONTENT_ID = "gen_demo_handout"
 
@@ -67,12 +68,33 @@ def seed_demo_generated_content(
     material.page_count = 1
     material.deleted_at = None
     db.add(material)
+    db.flush()
+
+    parse_version = db.get(MaterialParseVersion, DEMO_PARSE_VERSION_ID) or MaterialParseVersion(
+        id=DEMO_PARSE_VERSION_ID,
+        material_id=material.id,
+        course_id=course.id,
+        user_id=user.id,
+        status="active",
+    )
+    parse_version.material_id = material.id
+    parse_version.course_id = course.id
+    parse_version.user_id = user.id
+    parse_version.status = "active"
+    parse_version.parse_error = None
+    parse_version.parse_quality = "complete"
+    parse_version.page_count = 1
+    db.add(parse_version)
+    db.flush()
+    material.active_parse_version_id = parse_version.id
+    db.add(material)
 
     chunk = db.get(MaterialChunk, DEMO_CHUNK_ID) or MaterialChunk(
         id=DEMO_CHUNK_ID, material_id=material.id, course_id=course.id, chunk_index=0,
         content_text="Limits describe how a function changes near a point.",
     )
     chunk.material_id = material.id
+    chunk.parse_version_id = parse_version.id
     chunk.course_id = course.id
     chunk.chunk_index = 0
     chunk.page = None
