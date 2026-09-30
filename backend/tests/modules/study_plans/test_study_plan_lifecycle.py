@@ -213,6 +213,36 @@ def test_save_request_accepts_old_body_without_tasks() -> None:
     assert request.preference == "balanced"
 
 
+@pytest.mark.parametrize("title", ["   ", "x" * 256])
+def test_save_request_rejects_invalid_title(title: str) -> None:
+    with pytest.raises(ValidationError):
+        StudyPlanSaveRequest.model_validate(
+            {
+                "goal_text": "掌握传输层",
+                "start_date": "2026-07-11",
+                "end_date": "2026-07-12",
+                "daily_available_minutes": 60,
+                "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+                "title": title,
+            }
+        )
+
+
+def test_save_request_normalizes_editable_title() -> None:
+    request = StudyPlanSaveRequest.model_validate(
+        {
+            "goal_text": "掌握传输层",
+            "start_date": "2026-07-11",
+            "end_date": "2026-07-12",
+            "daily_available_minutes": 60,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            "title": "  传输层   冲刺计划  ",
+        }
+    )
+
+    assert request.title == "传输层 冲刺计划"
+
+
 def test_replace_request_requires_tasks() -> None:
     with pytest.raises(ValidationError):
         StudyPlanReplaceRequest.model_validate(
@@ -696,6 +726,7 @@ def test_save_study_plan_without_idempotency_key_keeps_existing_create_behavior(
     )
 
     assert first.plan.id != second.plan.id
+    assert first.plan.title == second.plan.title
     assert first.plan.idempotency_key_hash is None
     assert second.plan.idempotency_key_hash is None
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 2

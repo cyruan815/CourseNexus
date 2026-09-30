@@ -66,6 +66,7 @@ from app.modules.study_plans.task_tree_rules import validate_daily_assessment_co
 logger = get_logger("study_plan.build")
 
 _CONFIG_PARSE_REFERENCE_TIMEZONE = "Asia/Shanghai"
+_STUDY_PLAN_TITLE_MAX_LENGTH = 255
 _CONFIG_PARSE_SYSTEM_FIELDS = {
     "recommended_daily_minutes",
     "daily_minutes_source",
@@ -393,7 +394,11 @@ def preview_study_plan(
         )
         return StudyPlanPreview(
             course_id=course_id,
-            title=coverage_result.value.title,
+            title=_default_study_plan_title(
+                goal_text=payload.goal_text,
+                start_date=payload.start_date,
+                fallback_title=coverage_result.value.title,
+            ),
             goal_text=payload.goal_text,
             start_date=payload.start_date,
             end_date=payload.end_date,
@@ -897,6 +902,17 @@ def _hash_request(payload: StudyPlanSaveRequest) -> str:
 
 def _duration_days_between(start_date: date, end_date: date) -> int:
     return (end_date - start_date).days + 1
+
+
+def _default_study_plan_title(*, goal_text: str, start_date: date, fallback_title: str) -> str:
+    normalized_goal = re.sub(r"\s+", " ", goal_text).strip().rstrip("。.!！?？")
+    normalized_fallback = re.sub(r"\s+", " ", fallback_title).strip().rstrip("。.!！?？")
+    topic = normalized_goal or normalized_fallback or "学习计划"
+    date_suffix = f" · {start_date.isoformat()}"
+    max_topic_length = _STUDY_PLAN_TITLE_MAX_LENGTH - len(date_suffix)
+    if len(topic) > max_topic_length:
+        topic = f"{topic[:max_topic_length - 1].rstrip()}…"
+    return f"{topic}{date_suffix}"
 
 
 def _normalize_preference_value(value: str | None) -> str | None:

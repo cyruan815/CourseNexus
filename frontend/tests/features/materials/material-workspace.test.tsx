@@ -254,7 +254,7 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByRole("button", { name: "预览资料 待解析.md" })).toBeEnabled();
   });
 
-  it("returns to all parsed materials when the last selected material is cleared", async () => {
+  it("keeps an empty scope when the last selected material is cleared", async () => {
     const onScopeChange = vi.fn();
 
     renderWorkspace(
@@ -269,7 +269,7 @@ describe("MaterialWorkspace", () => {
     fireEvent.click(parsedMaterial);
 
     expect(onScopeChange).toHaveBeenCalledWith({
-      include_all_parsed_materials: true,
+      include_all_parsed_materials: false,
       material_ids: [],
     });
   });
@@ -353,7 +353,7 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.click(firstMaterial);
     expect(onScopeChange).toHaveBeenLastCalledWith({
-      include_all_parsed_materials: true,
+      include_all_parsed_materials: false,
       material_ids: [],
     });
     expect(allScope).not.toBeChecked();

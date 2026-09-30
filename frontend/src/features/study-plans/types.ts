@@ -232,6 +232,7 @@ export interface StudyPlanDetail {
 export interface StudyCalendarTaskSummary {
   task_id: string;
   plan_id: string;
+  plan_title: string;
   course_id: string;
   course_name: string;
   title: string;
@@ -271,6 +272,7 @@ export interface StudyCalendarSubtaskTodo {
 export interface StudyCalendarTaskTodo {
   task_id: string;
   plan_id: string;
+  plan_title: string;
   course_id: string;
   course_name: string;
   title: string;

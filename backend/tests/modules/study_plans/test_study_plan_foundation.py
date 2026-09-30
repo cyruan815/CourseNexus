@@ -226,10 +226,28 @@ def test_preview_study_plan_uses_resolved_context(db: Session, tmp_path: Path) -
     )
 
     assert preview.course_id == course.id
-    assert preview.title == "Linear Algebra 学习计划"
+    assert preview.title == "期末复习 · 2026-07-10"
     assert [task.task_date for task in preview.tasks] == [date(2026, 7, 10), date(2026, 7, 11), date(2026, 7, 12)]
     assert preview.tasks[0].subtasks[0].related_material_ids == [material_id]
     assert preview.coverage.expected_material_ids == [material_id]
+
+
+def test_preview_study_plan_default_title_distinguishes_goal_and_date(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="title-user", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material_id = create_parsed_material(db, tmp_path, user.id, course.id, b"Alpha\n\nBeta")
+    request = build_request().model_copy(update={"goal_text": "矩阵秩冲刺"})
+
+    preview = preview_study_plan(
+        db,
+        user_id=user.id,
+        course_id=course.id,
+        payload=request,
+        model_provider=FoundationPlanProvider(material_id),
+        max_tokens=12_000,
+    )
+
+    assert preview.title == "矩阵秩冲刺 · 2026-07-10"
 
 
 

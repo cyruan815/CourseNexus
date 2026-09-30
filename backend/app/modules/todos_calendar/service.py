@@ -111,6 +111,7 @@ def build_task_reads(rows: list[TodoTaskRow]) -> list[TaskTodoRead]:
             TaskTodoRead(
                 task_id=first.task_id,
                 plan_id=first.plan_id,
+                plan_title=first.plan_title,
                 course_id=first.course_id,
                 course_name=first.course_name,
                 title=first.task_title,
@@ -165,6 +166,7 @@ def summarize_calendar_days(rows: list[TodoTaskRow], *, month: str) -> CalendarM
             TaskSummaryRead(
                 task_id=task.task_id,
                 plan_id=task.plan_id,
+                plan_title=task.plan_title,
                 course_id=task.course_id,
                 course_name=task.course_name,
                 title=task.title,

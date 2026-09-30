@@ -93,6 +93,7 @@ function createHomeFetchMock(courses = backendCourses) {
               {
                 task_id: "task_calendar",
                 plan_id: "plan_calendar",
+                plan_title: "离散数学期末复习",
                 course_id: "crs_discrete_math",
                 course_name: "离散数学",
                 title: "组合数学复习",
@@ -103,6 +104,7 @@ function createHomeFetchMock(courses = backendCourses) {
               {
                 task_id: "task_calendar_extra",
                 plan_id: "plan_calendar",
+                plan_title: "离散数学期末复习",
                 course_id: "crs_discrete_math",
                 course_name: "离散数学",
                 title: "图论复习",
@@ -218,6 +220,7 @@ describe("HomePage", () => {
             {
               task_id: "task_1",
               plan_id: "plan_1",
+              plan_title: "图论专项复习",
               course_id: "crs_discrete_math",
               course_name: "离散数学",
               title: "图论复习",
@@ -254,6 +257,7 @@ describe("HomePage", () => {
       "/study-subtasks/subtask_2",
     );
     expect(screen.getByRole("link", { name: "离散数学" })).toBeInTheDocument();
+    expect(screen.getByText("图论专项复习 · 离散数学")).toBeInTheDocument();
     expect(screen.getByText("1/3")).toBeInTheDocument();
     expect(screen.queryByText("1/3 个二级任务完成")).not.toBeInTheDocument();
     expect(screen.queryByText("今天还没有学习计划")).not.toBeInTheDocument();
@@ -354,9 +358,9 @@ describe("HomePage", () => {
     expect(screen.queryByRole("dialog", { name: "选择年月" })).not.toBeInTheDocument();
     await waitFor(() => expect(document.querySelector(".home-month-picker")).toBeInTheDocument());
     fireEvent.click(document.querySelector('[aria-label="关闭年月选择"]') as HTMLElement);
-    const calendarTaskTitle = await screen.findByText("组合数学复习");
+    const calendarTaskTitle = await screen.findByText("离散数学期末复习 · 组合数学复习");
     expect(calendarTaskTitle).toHaveClass("home-calendar-task-title");
-    expect(calendarTaskTitle).toHaveAttribute("title", "组合数学复习");
+    expect(calendarTaskTitle).toHaveAttribute("title", "离散数学期末复习 · 组合数学复习");
     expect(calendarTaskTitle.closest(".home-calendar-cell-summary")).toBeInTheDocument();
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-compact-grid");
     expect(calendarTaskTitle.closest(".home-calendar-grid")).toHaveClass("home-calendar-roomy-grid");

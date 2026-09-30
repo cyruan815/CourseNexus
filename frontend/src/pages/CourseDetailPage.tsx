@@ -181,12 +181,30 @@ function CourseTopBar({ course }: { course: Course }) {
   );
 }
 
-function TodayTodoCard({ courseId, plans }: { courseId: string; plans: StudyPlan[] }) {
+function TodayTodoCard({
+  courseId,
+  materialScope,
+  parsedMaterials,
+  plans,
+}: {
+  courseId: string;
+  materialScope: MaterialScope;
+  parsedMaterials: Material[];
+  plans: StudyPlan[];
+}) {
   const activePlan = [...plans].sort((left, right) => {
     const leftTime = Date.parse(left.updated_at || left.created_at);
     const rightTime = Date.parse(right.updated_at || right.created_at);
     return rightTime - leftTime;
   })[0];
+  const selectedIds = new Set(
+    materialScope.include_all_parsed_materials && materialScope.material_ids.length === 0
+      ? parsedMaterials.map((material) => material.id)
+      : materialScope.material_ids,
+  );
+  const materialSelection = parsedMaterials
+    .filter((material) => selectedIds.has(material.id))
+    .map((material) => ({ id: material.id, name: material.name }));
 
   return (
     <Paper className="course-detail-card course-detail-todo-card" radius="md" withBorder>
@@ -203,7 +221,15 @@ function TodayTodoCard({ courseId, plans }: { courseId: string; plans: StudyPlan
           <Text c="dimmed" size="sm">{"当前课程还没有学习计划"}</Text>
         )}
         <Group className="course-detail-plan-actions" gap="xs" justify="flex-end">
-          <Button className="course-detail-plan-button" component={Link} leftSection={<IconPlus size={16} />} size="sm" to={`/courses/${courseId}/study-plans/new`} variant="light">
+          <Button
+            className="course-detail-plan-button"
+            component={Link}
+            leftSection={<IconPlus size={16} />}
+            size="sm"
+            state={{ studyPlanMaterialSelection: materialSelection }}
+            to={`/courses/${courseId}/study-plans/new`}
+            variant="light"
+          >
             {activePlan ? "新建学习计划" : "制定学习计划"}
           </Button>
           <Button className="course-detail-plan-more-button" component={Link} leftSection={<IconCalendarStats size={16} />} size="sm" to={`/calendar?courseId=${courseId}`} variant="filled">
@@ -509,6 +535,7 @@ interface CourseDetailWorkbenchProps {
   materialPanel: ReactNode;
   materialScope?: MaterialScope;
   materialScopeNames?: string[];
+  parsedMaterials?: Material[];
   onGenerate?: (contentType: string) => void;
   onDeleteGeneratedContent?: (content: GeneratedContent) => Promise<void>;
   onRenameGeneratedContent?: (content: GeneratedContent, title: string) => Promise<void>;
@@ -527,6 +554,7 @@ export function CourseDetailWorkbench({
   materialPanel,
   materialScope = { include_all_parsed_materials: true, material_ids: [] },
   materialScopeNames = [],
+  parsedMaterials = [],
   onGenerate = () => undefined,
   onDeleteGeneratedContent = async () => undefined,
   onRenameGeneratedContent = async () => undefined,
@@ -543,7 +571,12 @@ export function CourseDetailWorkbench({
       <Box className="course-detail-shell" component="main">
         <Box className="course-detail-layout">
           <Stack className="course-detail-left" gap="sm">
-            <TodayTodoCard courseId={course.id} plans={studyPlans} />
+            <TodayTodoCard
+              courseId={course.id}
+              materialScope={materialScope}
+              parsedMaterials={parsedMaterials}
+              plans={studyPlans}
+            />
             <Paper className="course-detail-card course-detail-material-card" radius="md" withBorder>
               {materialPanel}
             </Paper>
@@ -827,6 +860,7 @@ export function CourseDetailPage() {
         )}
         materialScope={materialScope}
         materialScopeNames={selectedMaterialNames}
+        parsedMaterials={parsedMaterials}
         onGenerate={handleGenerateContent}
         onDeleteGeneratedContent={handleDeleteGeneratedContent}
         onQuestionChange={setQuestion}

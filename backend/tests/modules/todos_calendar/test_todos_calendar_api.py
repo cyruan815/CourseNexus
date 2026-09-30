@@ -141,7 +141,7 @@ def _seed_api_data(client: TestClient) -> tuple[str, str, str, str]:
     return token, net_course_id, math_course_id, other_course_id
 
 
-def test_today_todos_endpoint_returns_nested_tasks_without_plan_title(client: TestClient) -> None:
+def test_today_todos_endpoint_returns_nested_tasks_with_plan_title(client: TestClient) -> None:
     token, _, _, _ = _seed_api_data(client)
 
     response = client.get("/api/v1/todos/today?date=2026-07-11", headers={"Authorization": f"Bearer {token}"})
@@ -150,7 +150,7 @@ def test_today_todos_endpoint_returns_nested_tasks_without_plan_title(client: Te
     data = response.json()["data"]
     assert data["date"] == "2026-07-11"
     assert data["tasks"][0]["subtasks"]
-    assert "plan_title" not in data["tasks"][0]
+    assert {task["plan_title"] for task in data["tasks"]} == {"网络", "数学"}
     assert {task["course_name"] for task in data["tasks"]} == {"Computer Networks", "Math"}
 
 
@@ -163,6 +163,7 @@ def test_month_calendar_endpoint_limits_task_summaries_to_three(client: TestClie
     day = response.json()["data"]["days"][0]
     assert day["task_count"] == 5
     assert len(day["task_summaries"]) == 3
+    assert {summary["plan_title"] for summary in day["task_summaries"]} == {"网络"}
     assert day["hidden_task_count"] == 2
 
 

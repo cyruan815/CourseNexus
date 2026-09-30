@@ -40,6 +40,7 @@ const monthResponse = {
         {
           task_id: "task_1",
           plan_id: "plan_1",
+          plan_title: "计算机网络冲刺",
           course_id: "crs_123",
           course_name: "计算机网络",
           title: "物理层复习",
@@ -50,6 +51,7 @@ const monthResponse = {
         {
           task_id: "task_2",
           plan_id: "plan_1",
+          plan_title: "计算机网络冲刺",
           course_id: "crs_123",
           course_name: "计算机网络",
           title: "信道与有线介质",
@@ -60,6 +62,7 @@ const monthResponse = {
         {
           task_id: "task_3",
           plan_id: "plan_1",
+          plan_title: "计算机网络冲刺",
           course_id: "crs_123",
           course_name: "计算机网络",
           title: "物理层安全隐患",
@@ -81,6 +84,7 @@ const dayResponse = {
     {
       task_id: "task_1",
       plan_id: "plan_1",
+      plan_title: "计算机网络冲刺",
       course_id: "crs_123",
       course_name: "计算机网络",
       title: "物理层复习",
@@ -181,14 +185,15 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
-    expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("信道与有线介质").length).toBeGreaterThan(0);
+    expect(screen.getByText("计算机网络冲刺 · 物理层复习")).toBeInTheDocument();
+    expect(screen.getByText("计算机网络冲刺 · 信道与有线介质")).toBeInTheDocument();
     expect(container.querySelector(".calendar-cell-task-progress")).toHaveTextContent("1/2 完成");
     expect(container.querySelector(".calendar-cell-task-more")).toHaveTextContent("...");
 
     fireEvent.click(screen.getByRole("gridcell", { name: "查看 2026-07-14 的课程任务" }));
 
     expect(await screen.findByRole("heading", { name: "2026-07-14 任务" })).toBeInTheDocument();
+    expect(screen.getByText("所属计划：计算机网络冲刺")).toBeInTheDocument();
     expect(screen.getByText("1/2")).toBeInTheDocument();
     expect(screen.queryByText("1/2 个二级任务完成")).not.toBeInTheDocument();
     expect(screen.getByText("学习: 物理层功能")).toBeInTheDocument();
@@ -240,6 +245,7 @@ describe("CalendarPage", () => {
                 {
                   task_id: "task_1",
                   plan_id: "plan_1",
+                  plan_title: "计算机网络冲刺",
                   course_id: "crs_123",
                   course_name: "计算机网络",
                   title: "物理层复习",
@@ -288,7 +294,7 @@ describe("CalendarPage", () => {
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /切换为/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "打开个人中心" })).toHaveAttribute("href", "/profile");
-    expect(screen.getAllByText("物理层复习").length).toBeGreaterThan(0);
+    expect(screen.getByText("计算机网络冲刺 · 物理层复习")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "2026-07-14 待办" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "计算机网络" })).toBeInTheDocument();
     const taskActions = screen.getByRole("group", { name: "物理层复习操作" });
