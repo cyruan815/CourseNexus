@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.config import ModelPurpose, Settings, get_settings
+from app.core.config import ModelEndpointConfig, ModelPurpose, Settings, get_settings
 from app.core.errors import CourseNexusError
 from app.integrations.model_provider.base import ModelProvider
 from app.integrations.model_provider.mock import MockModelProvider
@@ -15,6 +15,22 @@ def create_model_provider(
 ) -> ModelProvider:
     runtime_settings = settings or get_settings()
     endpoint = runtime_settings.model_endpoint(purpose)
+    return create_model_provider_from_endpoint(
+        purpose,
+        endpoint=endpoint,
+        api_style=api_style,
+        settings=runtime_settings,
+    )
+
+
+def create_model_provider_from_endpoint(
+    purpose: str,
+    *,
+    endpoint: ModelEndpointConfig,
+    api_style: ApiStyle = "auto",
+    settings: Settings | None = None,
+) -> ModelProvider:
+    runtime_settings = settings or get_settings()
     if endpoint.api_key:
         return OpenAIModelProvider(
             api_key=endpoint.api_key,
