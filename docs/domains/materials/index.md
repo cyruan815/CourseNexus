@@ -6,7 +6,7 @@
 
 一级文件夹只帮助用户整理和浏览资料，不代表 Agent 上下文。用户可以使用课程全部已解析资料，或选择一个、多个具体资料；不能选择整个文件夹。
 
-当前非目标包括嵌套目录、非 PDF 资料正文预览、下载、后台解析队列和链接内容抓取。2026-09-30 起 URL 链接资料入口已停止支持：不再提供新增入口，历史 `source_type=url` 记录只读、可重命名、可删除，标记“已停止支持”，不进入解析和学习上下文。
+当前非目标包括嵌套目录、Office 编辑与动画播放、像素级还原桌面 Office、后台解析队列和链接内容抓取。2026-09-30 起 URL 链接资料入口已停止支持：不再提供新增入口，历史 `source_type=url` 记录只读、可重命名、可删除，标记“已停止支持”，不进入解析和学习上下文。
 
 ## 2. 所有权与代码地图
 
@@ -139,7 +139,7 @@ PDF 解析：
 - 正常级联删除不调用 Embedding；只有 RAG 或数据库失败后的补偿恢复才会重新计算被恢复 chunk 的 embedding。补偿仍失败时必须使用 `rebuild_rag_index` 运维命令恢复派生索引。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 - PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
-- 预览大小为 `s` 字节的 PDF 时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 和浏览器查看器的时间、网络和内存预算均为 `O(s)`。上传上限使单份预览原文件当前不超过 50 MiB，不调用 Parser、RAG、Embedding 或模型。
+- 预览大小为 `s` 字节的上传文件时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 的网络和内存预算为 `O(s)`，DOCX/PPTX 适配器还会在浏览器内读取完整 `ArrayBuffer` 并构造渲染节点。上传上限使单份预览原文件当前不超过 50 MiB，预览不调用 Parser、RAG、Embedding 或模型。
 
 ## 6. 测试与验收
 
@@ -169,7 +169,7 @@ pnpm frontend:build
 - 2026-07-15 课程详情资料工作区按已确认的 Product Design 视觉目标完成重构：保留现有三栏宽度和全部资料接口，头部提供选择统计与新建文件夹、上传资料、添加链接三个明确入口，主体使用搜索、一级文件夹和逐文件状态组成的圆角局部滚动列表。课程详情页不保留常驻底部拖拽区；只有点击上传按钮或文件夹菜单中的上传入口后，上传弹窗才承载文件选择与拖拽，并继续沿用单文件上传后自动解析的既有流程。
 - 2026-09-30 按负责人 V1 收尾审定下线 URL 链接资料入口：前端移除“添加链接”按钮与弹窗，后端 `material-links` 创建端点改为 `410 MATERIAL_LINK_REMOVED` 兼容占位，`parse_material` 对历史 URL 资料直接抛 `409 MATERIAL_LINK_REMOVED` 且不再改写状态。数据层保留 `source_type/source_url` 列和历史行；material-context 因始终过滤 `parse_status=parsed`，历史 URL 资料天然不进入检索、问答、生成与计划范围（有回归测试固化）。历史记录在前端标记“已停止支持”，保留查看、重命名与删除。
 - 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 通过项目统一文件预览器定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
-- 当前前端只提供可联调的基础操作，完整视觉和交互由 F04 负责人继续构建。
+- 2026-10-01 资料工作区统一使用项目级原文件预览器：PDF、图片与文本使用浏览器原生能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer` 并配置本地 PDF.js 矢量回退资源；Office 适配器按需加载，失败时保留原文件下载入口。该能力是只读查看，不提供编辑、动画播放或桌面 Office 像素级一致性承诺。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
 
@@ -184,3 +184,4 @@ pnpm frontend:build
 - 2026-07-15: To prioritize the locally scrolling resource list in the fixed course-detail column, the three top actions are 40 px icon-only buttons aligned with the title and expose their labels through hover tooltips and accessible names. The selection row and search control use reduced vertical padding without changing their behavior.
 - 2026-07-15: Individual file rows omit separators and file-size metadata, use a 20 px type badge aligned with the filename scale, and reduce the parse-status control to 22 px so the fixed-height resource list can show more files. The filename, selection state, preview, drag-to-move, and action menu remain unchanged.
 - 2026-07-15: Folder rows follow the same density target: their minimum height is 48 px, the folder tile is 30 px, and the count badge is 23 px. Folder expand/collapse, drag target, count, and action-menu behavior remain unchanged.
+- 2026-10-01: Every uploaded file name opens the same authenticated preview modal even before parsing completes. The modal passes the fetched Blob to `UniversalFilePreview`; DOCX pages and PPTX slides preserve their original document layout, while unsupported formats keep a clear download fallback.
