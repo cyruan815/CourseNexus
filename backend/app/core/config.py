@@ -23,6 +23,7 @@ ModelPurpose = Literal[
     "task_test",
 ]
 MODEL_PURPOSES: tuple[ModelPurpose, ...] = get_args(ModelPurpose)
+AppEnvironment = Literal["development", "test", "production"]
 
 
 class ModelEndpointConfig(BaseModel):
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite:///./course_nexus.db"
-    app_env: str = "development"
+    app_env: AppEnvironment = "development"
     secret_key: str = "replace-with-local-dev-secret"
     access_token_expire_minutes: int = 1440
     file_storage_path: str = "./uploads"
