@@ -42,10 +42,30 @@ def run_migrations_online() -> None:
     connectable = create_database_engine(get_url())
     try:
         with connectable.connect() as connection:
-            context.configure(connection=connection, target_metadata=target_metadata)
+            sqlite_migration = connection.dialect.name == "sqlite"
+            if sqlite_migration:
+                # SQLite cannot rebuild a referenced table while foreign keys are enabled.
+                # Alembic batch migrations need a narrow FK-off window, followed by a full
+                # integrity check before normal connections turn enforcement back on.
+                connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+                connection.commit()
+            try:
+                context.configure(connection=connection, target_metadata=target_metadata)
 
-            with context.begin_transaction():
-                context.run_migrations()
+                with context.begin_transaction():
+                    context.run_migrations()
+
+                if sqlite_migration:
+                    violations = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+                    connection.commit()
+                    if violations:
+                        raise RuntimeError(f"SQLite migration created foreign key violations: {violations!r}")
+            finally:
+                if sqlite_migration:
+                    if connection.in_transaction():
+                        connection.rollback()
+                    connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                    connection.commit()
     finally:
         connectable.dispose()
 
