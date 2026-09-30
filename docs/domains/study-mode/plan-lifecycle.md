@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 日期：2026-07-12
+- 日期：2026-10-01
 - 状态：已实现并通过自动化验证。
 - 范围：单课程学习计划生成、自然语言配置解析、开始前设置配置补问、学前诊断、诊断后 capacity 统计、确认保存、幂等、重生成预览、原子替换和软删除。
 
@@ -29,6 +29,14 @@
 8. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
 9. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
 10. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+
+## P08 / P09 生命周期补充
+
+- 创建链路使用显式资料 ID 快照；“全选”只是选择当时全部 parsed 资料，不使用动态 `include_all_parsed_materials=true`。资料范围在配置解析、诊断、preview 和 save 之间保持一致。
+- 失效资料不会被服务端或前端静默替换为全部资料；前端在发起后续请求前要求重新确认，后端继续执行归属、课程和 parsed 状态校验。
+- `preview_study_plan()` 不再直接采用模型生成标题作为用户默认名，而是确定性输出“规范化目标 · start_date”；标题总长不超过数据库 `StudyPlan.title` 的 255 字符。
+- `StudyPlanSaveRequest.title` 可由用户在首次保存前编辑；后端去除多余空白并拒绝空白或超过 255 字符的标题。同一课程不对标题加唯一约束，因此允许同名计划。
+- 名称修改只作用于新保存的计划。历史 `StudyPlan.title` 保持原样；列表、详情、待办和日历沿用现有已持久化数据，不执行批量改名。
 
 ## 计划质量约束
 

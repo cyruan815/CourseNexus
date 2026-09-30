@@ -1041,6 +1041,8 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 规则：
 
+- 学习计划创建向导应提交显式资料快照：`include_all_parsed_materials=false`，`material_ids` 为用户进入创建流程时选中的 parsed 资料 ID。即使用户当时全选，也不得用动态“未来全部资料”语义替代该快照。
+- 配置解析、诊断题、诊断 profile、preview 和 save 必须使用同一份资料 ID 集合；空数组阻止继续，资料失效时要求用户重新确认。
 - `recommended_daily_minutes` 继续按 map 阶段资料规模估算：`max(30, ceil(mapped_estimated_total_minutes / duration_days))`。
 - 未传 `daily_available_minutes` 时，`daily_available_minutes = recommended_daily_minutes`，`daily_minutes_source = "system_estimated"`。
 - 传入 `daily_available_minutes` 时，后端保留该最终采用值；若 `daily_minutes_source = "user_modified"`，capacity 的 `available_total_minutes` 使用前端传入值计算。
@@ -1056,7 +1058,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 ```json
 {
   "course_id": "crs_123",
-  "title": "Linear Algebra 学习计划",
+  "title": "期末复习 · 2026-07-10",
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
   "end_date": "2026-07-10",
@@ -1130,7 +1132,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 ```json
 {
   "client_flow": "wizard_v1",
-  "title": "Linear Algebra 学习计划",
+  "title": "期末复习冲刺 · 2026-07-10",
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
   "end_date": "2026-07-10",
@@ -1175,7 +1177,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `client_flow = "wizard_v1"` 但缺少 `tasks` 或提交 `tasks = []` 时，后端返回 `422 PREVIEW_TASKS_REQUIRED`。旧客户端兼容路径只适用于未声明新向导的保存请求。
 
-前端基础创建页采用 `wizard_v1` 保存：保存按钮只在 preview 未过期时可用，请求体提交当前表单配置、preview `title`、preview 中展示过的 exact `tasks`，并携带 `Idempotency-Key`。同一份未变化 preview 的保存重试必须复用同一个幂等键；重新生成 preview 后才创建新的保存幂等键。诊断问题、诊断 profile、重生成、替换和删除接口虽已具备后端契约，但对应前端向导 / 编辑视图不在基础创建页内伪造。
+Preview 默认 `title` 采用“规范化学习目标 · 开始日期”，总长最多 255 字符。前端基础创建页采用 `wizard_v1` 保存：用户先查看 preview，并可在首次保存前编辑 `title`；空白标题或超过 255 字符会返回校验错误。请求体提交当前表单配置、用户确认后的 `title`、preview 中展示过的 exact `tasks`，并携带 `Idempotency-Key`。同一份未变化保存 payload 的网络重试必须复用同一个幂等键；标题或 preview 变化后创建新的保存幂等键。同一课程允许保存同名计划，列表通过日期范围等信息辅助区分；已有计划标题不会被自动改写。
 
 响应 `data`：
 
