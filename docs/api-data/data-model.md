@@ -9,7 +9,7 @@
 | `User` | 用户账号与数据归属根对象。 | 根对象 |
 | `Course` | 课程基础对象。 | `user_id` |
 | `MaterialFolder` | 课程资料一级目录。 | `user_id`、`course_id` |
-| `CourseMaterial` | 文件或链接资料。 | `user_id`、`course_id` |
+| `CourseMaterial` | 文件资料；`source_type=url` 为历史保留记录。 | `user_id`、`course_id` |
 | `MaterialChunk` | 资料解析后的可检索片段。 | `material_id`、`course_id` |
 | `Conversation` | 课程问答会话。 | `user_id`、`course_id` |
 | `Message` | 用户消息或助手消息。 | `conversation_id`、`course_id` |

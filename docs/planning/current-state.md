@@ -156,7 +156,7 @@ pnpm test
 1. 在后端接口稳定后，将资料上传 UI、资料范围选择和问答面板拆成独立前端任务。
 2. 基于 [../engineering/rag-consumer-guide.md](../engineering/rag-consumer-guide.md)，将具体生成能力分批迁移到新上下文接口。
 3. 为 Flashcard、Mindmap 和 Quiz 补充真实课程材料质量验收和前端交互。
-4. 推进 S07：基于已生成讲义和任务测试题导出 PDF。
+4. 推进 S07：基于已生成讲义导出 PDF；任务测试题 PDF 导出已确认延期，V1 提供 Markdown 导出。
 5. 补齐图片 OCR 质量验收、复杂 PDF/PPT/DOCX 版面夹具和长耗时后台任务。
 6. 继续沿用“小功能完成 -> 小测试 -> 小提交”的版本管理规则。
 

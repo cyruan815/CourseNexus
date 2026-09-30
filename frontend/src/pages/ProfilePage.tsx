@@ -6,19 +6,22 @@ import {
   Box,
   Button,
   Group,
+  Modal,
   Paper,
+  PasswordInput,
   Progress,
   Skeleton,
   Stack,
   Text,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconLogout, IconUserCircle } from "@tabler/icons-react";
+import { IconArrowLeft, IconKey, IconLogout, IconUserCircle } from "@tabler/icons-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
-import { fetchCurrentUser, logout } from "../features/auth/api";
+import { changePassword, fetchCurrentUser, logout } from "../features/auth/api";
 import type { AuthUser } from "../features/auth/api";
+import { clearSessionToken } from "../features/auth/session";
 import { fetchCheckinDay, fetchCheckinRange } from "../features/profile/api";
 import type { CheckinRangeRead, CheckinRead } from "../features/profile/api";
 import "./profile.css";
@@ -119,6 +122,13 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isPasswordChanged, setIsPasswordChanged] = useState(false);
 
   const todayDate = useMemo(() => new Date(), []);
   const todayDateKey = useMemo(() => formatDate(todayDate), [todayDate]);
@@ -179,6 +189,59 @@ export function ProfilePage() {
     }
   }
 
+  function openChangePasswordModal() {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setChangePasswordError(null);
+    setIsPasswordChanged(false);
+    setIsChangePasswordOpen(true);
+  }
+
+  function closeChangePasswordModal() {
+    if (isChangingPassword) {
+      return;
+    }
+    setIsChangePasswordOpen(false);
+    if (isPasswordChanged) {
+      // 服务端已撤销全部登录态，清理本地 token 并回到登录页。
+      clearSessionToken();
+      navigate("/login", { state: { reason: "password_changed" } });
+    }
+  }
+
+  function submitChangePassword() {
+    setChangePasswordError(null);
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setChangePasswordError("请填写全部密码字段");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setChangePasswordError("新密码长度至少 8 位");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangePasswordError("两次输入的新密码不一致");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setChangePasswordError("新密码不能与当前密码相同");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    changePassword({ current_password: currentPassword, new_password: newPassword })
+      .then(() => {
+        setIsPasswordChanged(true);
+      })
+      .catch((nextError: unknown) => {
+        setChangePasswordError(errorMessage(nextError, "修改密码失败"));
+      })
+      .finally(() => {
+        setIsChangingPassword(false);
+      });
+  }
+
   if (isLoading) {
     return (
       <Box className="profile-page">
@@ -212,16 +275,21 @@ export function ProfilePage() {
           <Button component={Link} leftSection={<IconArrowLeft size={16} />} to="/" variant="subtle">
             返回首页
           </Button>
-          <Button
-            className="cn-danger-button"
-            color="red"
-            leftSection={<IconLogout size={16} />}
-            loading={isLoggingOut}
-            onClick={() => void handleLogout()}
-            variant="light"
-          >
-            退出登录
-          </Button>
+          <Group gap="sm">
+            <Button leftSection={<IconKey size={16} />} onClick={openChangePasswordModal} variant="light">
+              修改密码
+            </Button>
+            <Button
+              className="cn-danger-button"
+              color="red"
+              leftSection={<IconLogout size={16} />}
+              loading={isLoggingOut}
+              onClick={() => void handleLogout()}
+              variant="light"
+            >
+              退出登录
+            </Button>
+          </Group>
         </Group>
 
         <Paper className="profile-hero" radius="md" withBorder>
@@ -353,6 +421,68 @@ export function ProfilePage() {
             </Box>
           </Stack>
         </Paper>
+
+        <Modal
+          centered
+          closeOnClickOutside={!isPasswordChanged}
+          closeOnEscape={!isPasswordChanged}
+          closeButtonProps={{ "aria-label": "关闭修改密码弹窗" }}
+          onClose={closeChangePasswordModal}
+          opened={isChangePasswordOpen}
+          title="修改密码"
+          transitionProps={{ duration: 0 }}
+        >
+          <Stack gap="md">
+            {isPasswordChanged ? (
+              <>
+                <Alert color="green" title="密码已修改">
+                  密码已修改，当前登录已全部失效，请使用新密码重新登录。
+                </Alert>
+                <Group justify="flex-end">
+                  <Button onClick={closeChangePasswordModal}>重新登录</Button>
+                </Group>
+              </>
+            ) : (
+              <>
+                {changePasswordError ? (
+                  <Alert color="red" role="alert" title="修改失败" variant="light">
+                    {changePasswordError}
+                  </Alert>
+                ) : null}
+                <PasswordInput
+                  autoComplete="current-password"
+                  label="当前密码"
+                  onChange={(event) => setCurrentPassword(event.currentTarget.value)}
+                  required
+                  value={currentPassword}
+                />
+                <PasswordInput
+                  autoComplete="new-password"
+                  description="至少 8 位"
+                  label="新密码"
+                  onChange={(event) => setNewPassword(event.currentTarget.value)}
+                  required
+                  value={newPassword}
+                />
+                <PasswordInput
+                  autoComplete="new-password"
+                  label="确认新密码"
+                  onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+                  required
+                  value={confirmPassword}
+                />
+                <Group justify="flex-end">
+                  <Button disabled={isChangingPassword} onClick={closeChangePasswordModal} variant="default">
+                    取消
+                  </Button>
+                  <Button loading={isChangingPassword} onClick={() => void submitChangePassword()}>
+                    确认修改
+                  </Button>
+                </Group>
+              </>
+            )}
+          </Stack>
+        </Modal>
       </Box>
     </Box>
   );

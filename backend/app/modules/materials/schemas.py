@@ -56,12 +56,6 @@ class MaterialFolderAssignment(BaseModel):
     folder_id: str | None = None
 
 
-class MaterialLinkCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    source_url: str = Field(min_length=1, max_length=2048)
-    folder_id: str | None = None
-
-
 class MaterialUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
 

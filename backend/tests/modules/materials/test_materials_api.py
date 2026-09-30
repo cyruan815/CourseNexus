@@ -112,21 +112,23 @@ def test_upload_list_detail_and_delete_file_material(client: TestClient) -> None
     assert client.get(f"/api/v1/courses/{course_id}/materials", headers=headers).json()["data"] == []
 
 
-def test_create_link_material(client: TestClient) -> None:
+def test_create_link_material_endpoint_returns_gone(client: TestClient) -> None:
     token = register_and_token(client, "alice")
     course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
 
     response = client.post(
         f"/api/v1/courses/{course_id}/material-links",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         json={"name": "Course Site", "source_url": "https://example.com/course"},
     )
 
-    assert response.status_code == 200
-    material = response.json()["data"]
-    assert material["source_type"] == "url"
-    assert material["material_type"] == "link"
-    assert material["source_url"] == "https://example.com/course"
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "MATERIAL_LINK_REMOVED"
+
+    list_response = client.get(f"/api/v1/courses/{course_id}/materials", headers=headers)
+    assert list_response.status_code == 200
+    assert list_response.json()["data"] == []
 
 
 def test_preview_pdf_material_returns_owned_original_file(client: TestClient) -> None:

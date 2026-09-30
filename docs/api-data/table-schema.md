@@ -27,7 +27,7 @@ The five independent generators write `ai_generated_contents` only. The existing
 | `users` | `User` | `users` | 用户账号与个人资料。 |
 | `courses` | `Course` | `courses` | 课程基础信息。 |
 | `material_folders` | `MaterialFolder` | `materials` | 课程资料一级目录。 |
-| `course_materials` | `CourseMaterial` | `materials` | 文件或链接资料。 |
+| `course_materials` | `CourseMaterial` | `materials` | 文件资料；`source_type=url` 为历史保留记录。 |
 | `material_chunks` | `MaterialChunk` | `materials` | 资料解析后的检索切片。 |
 | `conversations` | `Conversation` | `course-qa` | 课程问答会话。 |
 | `messages` | `Message` | `course-qa` | 用户消息或助手消息。 |
@@ -138,6 +138,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `nickname` | string | 是 | null |  | 用户昵称。 |
 | `avatar_url` | string | 是 | null |  | 头像地址。 |
 | `status` | enum `user_status` | 否 | `active` | INDEX | 用户状态。 |
+| `token_epoch` | integer | 否 | `0` |  | 登录态纪元：token 签发时写入 payload，`get_current_user` 比对不一致即判定失效；修改密码时递增以撤销该用户全部存量登录态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
 | `deleted_at` | datetime | 是 | null | INDEX | 删除时间。 |
@@ -147,6 +148,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 登录使用 `username` + 密码。
 - `password_hash` 只能保存哈希值，不允许保存明文或可逆加密结果。
 - `username` 全局唯一；如果后续支持账号恢复或硬删除，需要单独评审唯一约束策略。
+- 历史 token payload 不含 `epoch` 字段，解码兜底为 0，与列默认值一致：升级 `20260930_0006` 后存量登录态继续有效，直到该用户修改密码。
 
 ## courses
 
@@ -202,9 +204,9 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `folder_id` | string | 是 | null | FK -> `material_folders.id`, INDEX | 所属一级目录；null 表示未分类。 |
 | `name` | string | 否 | 无 | INDEX(`course_id`, `name`) | 展示名称，允许重名。 |
 | `material_type` | enum `material_type` | 否 | 无 | INDEX | 资料类型。 |
-| `source_type` | enum `source_type` | 否 | 无 | INDEX | 来源类型。 |
+| `source_type` | enum `source_type` | 否 | 无 | INDEX | 来源类型。`url` 仅用于历史记录：链接资料创建入口已下线，历史 URL 资料只读、可删除，不进入学习上下文。 |
 | `file_url` | string | 是 | null |  | 内部文件地址；文件资料必填，文件名使用 ASCII `source.<ext>`，展示名使用 `name`。 |
-| `source_url` | string | 是 | null |  | 原始链接；链接资料必填。 |
+| `source_url` | string | 是 | null |  | 原始链接；仅历史 `url` 资料持有，新入口已停止支持。 |
 | `file_size` | integer | 是 | null |  | 文件大小，单位 byte。 |
 | `mime_type` | string | 是 | null |  | MIME 类型。 |
 | `parse_status` | enum `parse_status` | 否 | `uploaded` | INDEX(`course_id`, `parse_status`) | 解析状态。 |

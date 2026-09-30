@@ -431,3 +431,8 @@ PDF 导出同步支持相同 callout 契约。`render_markdown_pdf_html()` 会�
 执行页允许不同二级任务同时发起讲义或测试题生成。前端在 `StudyTaskExecutionPage.tsx` 中按 `subtask_id` 记录生成状态和错误，并使用任务级 in-flight 集合防止同一个二级任务重复点击；生成结果继续写入 `generatedContentBySubtask`，因此请求完成顺序不影响任务归属。
 
 本阶段不修改后端接口、数据库或生成服务。后端仍使用同步 HTTP 生成接口，但不同请求可并行执行；页面刷新、关闭页面后的任务恢复、持久化 job 状态、后端队列、重试和统一并发限流不属于本阶段，后续如需可靠后台任务应单独设计异步 job 方案。
+
+## 2026-09-30 任务测试题 PDF 导出延期确认
+
+负责人在 V1 收尾审定中确认：任务测试题 PDF 导出延期，不在 V1 实现。V1 任务测试题导出口径统一为 Markdown，任务讲义继续支持 PDF 导出；实现层无需改动——`exports` 服务本就只允许 `task_test` 走 Markdown、`handout` 走 PDF。PRD 与规划文档中的测试题 PDF 承诺已同步改为"Markdown 导出、PDF 为后续能力"；测试题导出埋点口径同步调整为 `test_export_markdown_click`。重新纳入 PDF 时需先补充题目排版与分页设计，再扩展 `exports` 服务允许的内容类型。
+

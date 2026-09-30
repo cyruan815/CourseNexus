@@ -110,10 +110,9 @@ describe("MaterialWorkspace", () => {
 
     const createFolderButton = screen.getByRole("button", { name: "新建文件夹" });
     const uploadButton = screen.getByRole("button", { name: "上传资料" });
-    const createLinkButton = screen.getByRole("button", { name: "添加链接" });
     expect(createFolderButton).toHaveTextContent("");
     expect(uploadButton).toHaveTextContent("");
-    expect(createLinkButton).toHaveTextContent("");
+    expect(screen.queryByRole("button", { name: "添加链接" })).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(createFolderButton);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("新建文件夹");
@@ -503,16 +502,29 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
   });
 
-  it("creates a link material from the top action button", async () => {
-    vi.mocked(materialsApi.createMaterialLink).mockResolvedValue({
-      ...materials[1],
-      id: "mat_link",
-      name: "课程网站",
-      source_type: "url",
-      material_type: "link",
-      file_url: null,
-      source_url: "https://example.com/course",
-    });
+  it("marks legacy url materials as discontinued without parse entry points", async () => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      ...materials,
+      {
+        id: "mat_url_1",
+        course_id: "crs_1",
+        user_id: "usr_1",
+        folder_id: null,
+        name: "课程网站",
+        material_type: "link",
+        source_type: "url",
+        file_url: null,
+        source_url: "https://example.com/course",
+        file_size: null,
+        mime_type: null,
+        parse_status: "uploaded",
+        parse_error: null,
+        page_count: null,
+        created_at: "2026-07-10T00:00:00Z",
+        updated_at: "2026-07-10T00:00:00Z",
+        deleted_at: null,
+      },
+    ]);
 
     renderWorkspace(
       <MaterialWorkspace
@@ -522,21 +534,16 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "添加链接" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /资料名称/ }), { target: { value: "课程网站" } });
-    fireEvent.change(screen.getByRole("textbox", { name: /资料链接/ }), {
-      target: { value: "https://example.com/course" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    expect(await screen.findByText("课程网站")).toBeInTheDocument();
+    expect(screen.getByText("URL")).toBeInTheDocument();
+    expect(screen.getByTitle("已停止支持")).toBeInTheDocument();
+    expect(screen.getByLabelText("选择资料 课程网站")).toBeDisabled();
+    expect(screen.getByLabelText("选择资料 课程网站")).not.toBeChecked();
 
-    await waitFor(() => {
-      expect(materialsApi.createMaterialLink).toHaveBeenCalledWith("crs_1", {
-        name: "课程网站",
-        source_url: "https://example.com/course",
-        folder_id: null,
-      });
-    });
-    expect(screen.getByText("课程网站")).toBeInTheDocument();
+    await openMaterialActions("课程网站");
+    expect(screen.queryByRole("menuitem", { name: "重试解析" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "重命名资料" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除资料" })).toBeInTheDocument();
   });
 
   it("renames a material from its actions menu", async () => {

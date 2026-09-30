@@ -55,3 +55,20 @@ export async function logout(): Promise<void> {
     clearSessionToken();
   }
 }
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ChangePasswordResult {
+  password_changed: boolean;
+  relogin_required: boolean;
+}
+
+export function changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResult> {
+  return apiRequest<ChangePasswordResult>("/api/v1/auth/change-password", {
+    method: "POST",
+    body: payload,
+  });
+}

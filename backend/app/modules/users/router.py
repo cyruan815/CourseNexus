@@ -7,8 +7,13 @@ from app.api.dependencies import get_required_user
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.modules.users.models import User
-from app.modules.users.schemas import UserCreate, UserLogin, UserRead
-from app.modules.users.service import authenticate_user, build_auth_response, register_user
+from app.modules.users.schemas import ChangePasswordRequest, UserCreate, UserLogin, UserRead
+from app.modules.users.service import (
+    authenticate_user,
+    build_auth_response,
+    change_password,
+    register_user,
+)
 from app.shared.responses import success_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,3 +44,22 @@ def me(request: Request, current_user: User = Depends(get_required_user)) -> dic
 @router.post("/logout")
 def logout(request: Request, current_user: User = Depends(get_required_user)) -> dict[str, object]:
     return success_response({"logged_out": True}, request_id=get_request_id(request))
+
+
+@router.post("/change-password")
+def change_password_endpoint(
+    payload: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_required_user),
+) -> dict[str, object]:
+    change_password(
+        db,
+        user=current_user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    return success_response(
+        {"password_changed": True, "relogin_required": True},
+        request_id=get_request_id(request),
+    )

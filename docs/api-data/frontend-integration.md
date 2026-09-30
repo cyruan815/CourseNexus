@@ -101,6 +101,43 @@
 }
 ```
 
+### 3.4.1 修改密码
+
+`POST /api/v1/auth/change-password`
+
+要求：Bearer token。
+
+请求：
+
+```json
+{
+  "current_password": "password123",
+  "new_password": "new-password456"
+}
+```
+
+`new_password` 长度 8-255；确认密码由前端校验，后端不接收第三字段。
+
+响应 `data`：
+
+```json
+{
+  "password_changed": true,
+  "relogin_required": true
+}
+```
+
+错误：
+
+| 错误码 | HTTP | 场景 |
+| --- | --- | --- |
+| `CURRENT_PASSWORD_MISMATCH` | 403 | 当前密码不正确。注意不是 401：前端把 401 统一处理为清理 token 并跳转登录，输错当前密码不应被登出。 |
+| `VALIDATION_ERROR` | 400 | 新密码与当前密码相同。 |
+| `VALIDATION_ERROR` | 422 | 新密码长度不满足 8-255。 |
+| `UNAUTHORIZED` | 401 | 未登录或登录态已失效。 |
+
+修改成功后服务端递增该用户的 `token_epoch`，其全部存量 token（含本次请求所用 token）立即失效；前端应清理本地 token 并引导用户使用新密码重新登录。
+
 ### 3.5 课程列表
 
 `GET /api/v1/courses`
@@ -324,23 +361,13 @@
 | `FILE_TOO_LARGE` | 文件大小超过 `MAX_UPLOAD_FILE_SIZE_BYTES`。 |
 | `NOT_FOUND` | 课程不存在或不属于当前用户。 |
 
-### 3.13 链接资料创建
+### 3.13 链接资料创建（已停止支持）
 
 `POST /api/v1/courses/{course_id}/material-links`
 
 要求：Bearer token。
 
-请求：
-
-```json
-{
-  "name": "Course Site",
-  "source_url": "https://example.com/course",
-  "folder_id": "fld_123"
-}
-```
-
-响应 `data`：`MaterialRead`，其中 `source_type = "url"`、`material_type = "link"`、`parse_status = "uploaded"`。
+该入口已于 2026-09-30 下线：URL 链接资料无法进入解析与学习上下文，为避免产生不可用记录而移除新增能力。兼容期内调用该端点返回 `410 Gone` 与错误码 `MATERIAL_LINK_REMOVED`，不创建任何记录；对历史 `source_type = "url"` 资料调用解析重试接口返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变。历史链接记录仍可在列表中查看、重命名和删除，但不会进入问答、生成内容和学习计划的资料范围。
 
 ### 3.14 资料详情
 

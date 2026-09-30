@@ -19,3 +19,10 @@ def create_user(db: Session, user: User) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def update_user(db: Session, user: User) -> User:
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
