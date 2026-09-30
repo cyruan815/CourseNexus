@@ -12,6 +12,7 @@ from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.repository import (
     has_parsed_context_chunks,
     list_active_context_chunk_ids,
+    list_active_material_versions,
     list_active_scope_material_ids,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
@@ -49,6 +50,27 @@ def resolve_material_scope_ids(
     if resolved_scope.empty_selection:
         return ()
     return resolved_scope.eligible_material_ids
+
+
+def resolve_material_scope_versions(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope | None,
+) -> list[dict[str, str]]:
+    resolved_scope = _resolve_scope(db, user_id=user_id, course_id=course_id, material_scope=material_scope)
+    if resolved_scope.empty_selection:
+        return []
+    return [
+        {"material_id": material_id, "version_id": version_id}
+        for material_id, version_id in list_active_material_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=list(resolved_scope.eligible_material_ids),
+        )
+    ]
 
 
 def summarize_material_quality_for_scope(

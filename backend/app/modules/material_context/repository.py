@@ -163,6 +163,32 @@ def list_active_context_chunk_ids(
     return list(db.execute(statement).scalars())
 
 
+def list_active_material_versions(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_ids: list[str],
+) -> list[tuple[str, str]]:
+    if not material_ids:
+        return []
+    return [
+        (row[0], row[1])
+        for row in db.execute(
+            select(CourseMaterial.id, CourseMaterial.active_parse_version_id)
+            .where(
+                CourseMaterial.user_id == user_id,
+                CourseMaterial.course_id == course_id,
+                CourseMaterial.deleted_at.is_(None),
+                CourseMaterial.id.in_(material_ids),
+                CourseMaterial.active_parse_version_id.is_not(None),
+            )
+            .order_by(CourseMaterial.id)
+        ).all()
+        if row[1] is not None
+    ]
+
+
 def list_active_scope_material_ids(
     db: Session,
     *,
