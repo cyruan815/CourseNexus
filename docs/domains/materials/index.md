@@ -19,7 +19,7 @@
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
 - 前端测试：`frontend/tests/features/materials/`。
 
-`materials` 拥有 `MaterialFolder`、`CourseMaterial` 和 `MaterialChunk`。问答、生成和计划模块只能通过 `material-context` 使用资料，不得直接写这些对象。P5a 后，`material-context` 还提供同一资料范围内 parsed 资料的只读解析质量摘要，用于下游展示 warning；下游不得直接读取 parser 或 materials 表。
+`materials` 拥有 `MaterialFolder`、`CourseMaterial`、`MaterialParseVersion` 和 `MaterialChunk`。问答、生成和计划模块只能通过 `material-context` 使用资料，不得直接写这些对象。`material-context` 还提供同一资料范围内生效版本的只读解析质量摘要，用于下游展示 warning；下游不得直接读取 parser 或 materials 表。
 
 Parser 只向 materials 返回项目内部的 `ParsedDocument`、`ParsedChunk` 和 `ParseDiagnostics`，不得把 Docling 类型暴露到业务模块。诊断页码统一使用一基页码；非分页文本的 `page_count = null` 是正常结果，不表示解析不完整。
 
@@ -29,7 +29,7 @@ Parser 只向 materials 返回项目内部的 `ParsedDocument`、`ParsedChunk` �
 flowchart LR
     FE["资料工作区"] --> API["materials router"]
     API --> SVC["materials service"]
-    SVC --> DB["SQLite: folder / material / chunk"]
+    SVC --> DB["SQLite: folder / material / parse version / chunk"]
     SVC --> FS["LocalFileStorage"]
     SVC --> PARSER["RoutingParser / Docling"]
     SVC --> RAG["RagIndex / Chroma"]
@@ -38,7 +38,7 @@ flowchart LR
     CTX --> RAG
 ```
 
-文件夹和资料 API 同步执行。上传先写文件和 `CourseMaterial`；解析接口同步写 chunk 与向量。移动已解析资料时，只更新 Chroma 的 `folder_id` metadata，不重新计算 embedding。删除资料或文件夹时，原始文件目录先移入同盘暂存区，后端从 SQLite chunk 构造 RAG 补偿快照，再物理删除数据库记录和向量；失败时恢复数据库、文件和向量，成功后清空暂存文件。
+文件夹和资料 API 同步执行。上传先写文件和 `CourseMaterial`；解析接口同步构建候选版本、写候选 chunk 与向量，校验完整性后原子切换生效指针。移动存在生效版本的资料时，只更新 Chroma 的 `folder_id` metadata，不重新计算 embedding。删除资料或文件夹时，原始文件目录先移入同盘暂存区，后端从 SQLite 版本化 chunk 构造 RAG 补偿快照，再物理删除数据库记录和向量；失败时恢复数据库、文件和向量，成功后清空暂存文件。
 
 SQLite、上传文件和 Chroma 的相对位置统一从仓库配置根目录解析。FastAPI lifespan 持有进程级 `RagIndexManager`，所有资料请求复用同一个延迟创建的 Chroma 索引；进程退出只释放引用，不删除派生索引。Alembic 和重建命令复用同一配置与旧路径冲突保护，详细运行及迁移规则见 [本地存储运行与迁移](../../engineering/local-runtime-storage.md)。
 
@@ -47,14 +47,17 @@ SQLite、上传文件和 Chroma 的相对位置统一从仓库配置根目录解
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；用户确认删除后物理移除。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
+- `CourseMaterial.active_parse_version_id`：当前学习可用版本指针；`is_learning_ready` 由该指针、资料未删除和非 `deleted` 状态派生。
+- `MaterialParseVersion.status`：`building`、`active`、`failed`、`retired`；同一资料最多一个 `building`。
+- `MaterialChunk.parse_version_id`：非空，切片只能属于一个解析版本；唯一序号约束为 `(parse_version_id, chunk_index)`。
 - 上传资料原文件通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、文件型来源、实际文件存在性和解析后路径仍在存储根目录内，并按资料 MIME 类型返回。
 - 引用定位先通过 `GET /api/v1/materials/{material_id}` 读取资料元数据并复核当前用户所有权；只有仍可访问的 PDF 且引用有可靠页码时才继续读取原文。
-- 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
-- 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
-- 资料状态：`uploaded -> parsing -> parsed`，失败进入 `parse_failed`，删除进入 `deleted`。历史 `source_type=url` 资料不参与该流转：解析重试接口对其返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变；创建端点 `POST /courses/{course_id}/material-links` 返回 `410 MATERIAL_LINK_REMOVED` 兼容反馈。
-- `material_context.summarize_material_quality_for_scope()` 只读取当前 scope 内 `parse_status = parsed` 的资料，把 `parse_quality` 和 `parse_diagnostics_json` 规整为 `MaterialQualitySummary.warnings`；`severity = "info"` 的 parser 诊断不升级为 warning。
+- 删除文件夹会级联物理删除其中全部资料、解析版本、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
+- 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`material_version_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
+- 首次解析状态为 `uploaded -> parsing -> parsed`，首次失败进入 `parse_failed`。已有生效版本重解析时暂时为 `parsing`，失败后回到 `parsed` 并保留 `parse_error`，旧版本继续可用。删除响应快照进入 `deleted`。历史 `source_type=url` 资料不参与该流转：解析重试接口对其返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变；创建端点 `POST /courses/{course_id}/material-links` 返回 `410 MATERIAL_LINK_REMOVED` 兼容反馈。
+- `material_context.summarize_material_quality_for_scope()` 只读取当前 scope 的生效解析版本，把版本上的 `parse_quality` 和 `parse_diagnostics_json` 规整为 `MaterialQualitySummary.warnings`；`severity = "info"` 的 parser 诊断不升级为 warning。
 - `parse_quality` 是全局解析质量信号：`complete` 表示本轮未观察到失败，`partial` 表示有可用 chunk 但存在失败页或 warning，`unknown` 表示证据不足。
-- `parse_status = parsed` 与 `parse_quality = partial` 可以同时存在；下游仍可读取 chunk，但不能把它解释为完整覆盖。
+- 生效版本的 `parse_quality = partial` 仍可消费，但下游不能把它解释为完整覆盖。
 - 文件夹、资料和课程必须属于当前用户；跨用户或跨课程统一返回 `NOT_FOUND`。
 - 公开接口和请求字段见 [../../api-data/frontend-integration.md](../../api-data/frontend-integration.md)。
 
@@ -74,7 +77,7 @@ SQLite、上传文件和 Chroma 的相对位置统一从仓库配置根目录解
 ### 5.1 输入、输出与不变量
 
 - 文件夹 ID 必须属于资料所在课程和当前用户。
-- 只有 `parsed` 且未删除资料可以进入 Agent 范围。
+- 只有 `active_parse_version_id` 非空且未删除资料可以进入 Agent 范围；候选、失败和退休版本不得进入当前上下文。
 - 文件夹创建、重命名和排序不得隐式改变当前选中的 `material_ids`；删除文件夹后，前端必须从当前 `MaterialScope` 移除已删除资料 ID。
 - 资料重命名不得改变文件路径、解析状态、chunk、向量或历史引用快照。
 - SQLite 的 `folder_id` 与 Chroma metadata 保持一致，但检索硬范围始终使用具体 `material_ids`。
@@ -88,8 +91,9 @@ PDF 解析：
 3. 首轮存在有效 chunk 时直接返回，不初始化 OCR converter。
 4. 首轮零 chunk 时使用 `pdf_ocr_fallback` profile 整份重试，并记录 `OCR_FALLBACK_USED` info。
 5. Docling 返回 `partial_success` 时保留有效 chunk，同时记录失败页和 warning；零 chunk 才映射为 `PARSE_FAILED`。
-6. SQLite chunk 和向量索引都成功后，才把 diagnostics、`page_count` 和 `parse_quality` 与 `parsed` 状态一起提交。
-7. 重解析开始时清空上一轮诊断；解析或索引整体失败时清空 chunk、向量和诊断，quality 回到 `unknown`。
+6. 创建 `building` 候选，把 diagnostics、`page_count`、`parse_quality` 和版本化 chunk 写到候选版本，并以版本化 ID 写入向量。
+7. 比较候选 SQLite chunk ID 与 Chroma 候选 ID；完全一致后，在一个数据库事务中退休旧版本、激活候选并切换 `active_parse_version_id`。
+8. 任一候选阶段失败时删除候选 chunk 与向量并标记 `failed`。已有生效版本时保留旧 diagnostics、quality、chunk 和向量；首次失败才清空材料镜像并进入 `parse_failed`。
 
 创建文件夹：
 
@@ -100,15 +104,15 @@ PDF 解析：
 移动资料：
 
 1. 校验资料所有权及目标文件夹同课程归属。
-2. 如果资料已解析，调用 `RagIndex.update_material_folder()` 原位更新 metadata。
+2. 如果资料有生效解析版本，调用 `RagIndex.update_material_folder()` 原位更新 metadata；即使候选正在构建，旧版本仍同步目录元数据。
 3. 更新 SQLite `CourseMaterial.folder_id` 和 `updated_at`。
 
 删除文件夹：
 
 1. 校验文件夹属于当前用户，并查询其中全部资料。
-2. 读取已解析资料的 SQLite chunk，构造可重新索引的 `RagChunk` 补偿快照。
+2. 读取有生效版本资料的版本化 SQLite chunk，携带 `parse_version_id` 构造可重新索引的 `RagChunk` 补偿快照。
 3. 把文件型资料目录原子移动到同盘 `.trash` 暂存区；链接资料没有本地文件。
-4. 将历史 `SourceCitation.material_id`、`chunk_id` 置空，并在同一 SQLite 事务中删除 chunk、资料和文件夹记录。
+4. 将历史 `SourceCitation.material_id`、`material_version_id`、`chunk_id` 置空，并在同一 SQLite 事务中删除 chunk、解析版本、资料和文件夹记录。
 5. 调用 `RagIndex.delete_materials()` 批量清理全部派生向量，随后提交 SQLite。
 6. RAG 清理或数据库提交失败时执行 `rollback()`，恢复暂存文件并用步骤 2 的快照重新索引；补偿失败返回 `DELETE_COMPENSATION_FAILED`。
 7. 数据库成功后彻底清空暂存文件；前端移除文件夹及资料并清理 scope。问答与生成内容及其引用快照不删除。
@@ -137,6 +141,7 @@ PDF 解析：
 ### 5.3 复杂度与资源预算
 
 - 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
+- 一次解析写入 `c` 个候选 chunk 和同量向量，完整性检查读取候选 ID 集合，时间与额外内存均为 `O(c)`。解析版本按次增长，旧版本默认保留；本轮不提供自动清理，磁盘预算需同时计入退休版本的 SQLite chunk 与 Chroma 向量。
 - 删除文件夹读取 `n` 份资料和 `c` 个 chunk，数据库与应用层工作量为 `O(n + c)`；RAG 使用一次批量 material-id 删除。文件目录使用同盘重命名暂存，正常路径不把文件内容载入内存。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
 - 正常级联删除不调用 Embedding；只有 RAG 或数据库失败后的补偿恢复才会重新计算被恢复 chunk 的 embedding。补偿仍失败时必须使用 `rebuild_rag_index` 运维命令恢复派生索引。
@@ -148,6 +153,8 @@ PDF 解析：
 ## 6. 测试与验收
 
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
+- 候选解析版本覆盖首次解析、成功重解析、解析/索引/完整性检查/切换故障、旧版本回退和同材料并发保护：`backend/tests/modules/materials/test_material_api.py`、`backend/tests/modules/materials/test_material_service.py`。
+- 历史材料、chunk 和引用的版本回填、异常空解析迁移与非空版本约束：`backend/tests/db/test_migrations.py`、`backend/tests/db/test_schema.py`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
 - 规范路径、SQLite 连接参数、FastAPI 索引生命周期与并发单例：`backend/tests/core/test_paths.py`、`backend/tests/db/test_session.py`、`backend/tests/api/test_lifespan.py`、`backend/tests/integrations/test_rag_index_manager.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
@@ -176,6 +183,7 @@ pnpm frontend:build
 - 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 通过项目统一文件预览器定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
 - 2026-10-01 资料工作区统一使用项目级原文件预览器：PDF、图片与文本使用浏览器原生能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer` 并配置本地 PDF.js 矢量回退资源；Office 适配器按需加载，失败时保留原文件下载入口。该能力是只读查看，不提供编辑、动画播放或桌面 Office 像素级一致性承诺。
 - 2026-10-01 本地业务数据统一使用仓库配置根目录：从不同当前目录启动不会生成第二套 SQLite、上传或 Chroma 数据；发现旧位置数据时先拒绝运行并要求人工备份迁移。Chroma 改为 FastAPI 进程级单例并由 lifespan 管理，退出不执行破坏性 reset。
+- 2026-10-01 资料解析改为候选版本切换：新版本在 `building` 状态完成 chunk、向量与完整性检查后才成为 `active`，旧版本转为 `retired`；任何候选失败均不破坏旧可用版本。首次失败没有生效版本，资料不可学习；重解析失败则保留旧版本并显示更新失败。旧版本默认保留，后续清理必须另行设计引用保留期和运维策略。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
 
@@ -184,9 +192,9 @@ pnpm frontend:build
 - 2026-07-13: `MaterialWorkspace` keeps the course-creation upload prompt as a dismissible UI affordance, but `CourseDetailPage` clears the route state after the first render so browser refreshes do not reopen the upload dialog.
 - 2026-07-13: The upload dialog exposes a top-right close button, removes the old "skip upload" action, supports selecting files by click or drag-and-drop, and uses copy that explains uploaded files enter parsing automatically.
 - 2026-07-13: After a file upload returns `parse_status = uploaded`, the frontend immediately shows the material as `parsing` and calls the retry-parse API. Parse API failure keeps the uploaded material visible and surfaces the backend error.
-- 2026-07-13: Material row actions are opened from a three-dot left-click button. The material menu keeps rename and delete, and only exposes "retry parse" for `parse_failed`; it no longer asks users to manually start parsing for newly uploaded materials.
+- 2026-10-01: Material row actions are opened from a three-dot left-click button. Already-ready materials expose “重新解析”, a first failed parse exposes “重试解析”, and an in-flight parse hides both actions. Existing active content remains selectable while the row shows “正在更新” or “更新失败，当前版本仍可用”; only a first parse failure is learning-unavailable.
 - 2026-07-13: Folder actions are also opened from a three-dot left-click button. The materials workspace no longer exposes custom business actions from right-clicking folders or the blank list area; top action buttons provide create folder and upload material entry points. Upload prompt copy shows the target folder on its own line and bolds the folder name.
-- 2026-07-15: The redesigned resource rows expose file type, parse status, folder counts, search, selection, menus, drag-to-move, and PDF preview without changing the existing APIs. The selected-count summary only counts explicit checked parsed files; an empty explicit selection still means the default all-parsed scope.
+- 2026-10-01: The redesigned resource rows expose file type, parse status, folder counts, search, selection, menus, drag-to-move, and unified preview. The selected-count summary only counts explicit checked learning-ready files; readiness comes from `is_learning_ready` / `active_parse_version_id`, with legacy `parse_status = parsed` only as a compatibility fallback.
 - 2026-07-15: To prioritize the locally scrolling resource list in the fixed course-detail column, the three top actions are 40 px icon-only buttons aligned with the title and expose their labels through hover tooltips and accessible names. The selection row and search control use reduced vertical padding without changing their behavior.
 - 2026-07-15: Individual file rows omit separators and file-size metadata, use a 20 px type badge aligned with the filename scale, and reduce the parse-status control to 22 px so the fixed-height resource list can show more files. The filename, selection state, preview, drag-to-move, and action menu remain unchanged.
 - 2026-07-15: Folder rows follow the same density target: their minimum height is 48 px, the folder tile is 30 px, and the count badge is 23 px. Folder expand/collapse, drag target, count, and action-menu behavior remain unchanged.
