@@ -80,10 +80,11 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 ## 跨模块数据引用原则
 
 - 跨模块引用 ID 时，必须同时保证当前用户有权访问被引用资源。
-- 需要引用的 Course QA、handout 和 task_test 等能力，其 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；五类独立 POC 生成不创建引用。
+- Course QA 和 task test 的 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；新生成 handout 与五类独立 POC 生成不创建逐条引用。
 - `material_name` 是快照字段，避免资料改名后历史引用展示异常。
 - 历史引用定位失败时，前端仍可展示快照文本和定位失败提示。
 - `StudySubTask.related_material_ids_json` 只能引用当前课程下当前用户可访问的资料。
+- 成功生成内容的 `material_scope_json.source_materials` 由实际进入生成上下文的 chunk 去重构建，保存 `material_id` 与当时的 `material_name`；前端用它展示真实输入资料范围，不从模型文本推断来源。
 
 ## 资料上下文契约
 
@@ -137,7 +138,8 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`。最终 item 的 `learned` 默认为 `false`，历史 item 缺失时按 `false` 解释；学习状态接口只接受 `learned`，不允许借此修改知识点名称、定义、重要程度或章节。
 - 每个最终业务条目使用稳定 `id`，列表型结果同时使用连续 `sort_order`；业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。
 - 生成 POST、历史和详情的 `GeneratedContentRead` 统一包含 `source_citations`；这五类内容固定返回 `[]`，包括数据库中可能仍存在旧引用行的历史记录。
-- Handout 和 Task Test 的真实 `source_citations` 继续保存在后端并通过 API 返回，用于内部追溯与导出；生成内容详情页不展示引用面板。
+- 五类内容的 `material_scope_json` 除基础范围字段外保存 `source_materials: [{material_id, material_name}]` 快照；该列表来自实际 `MaterialGenerationContext.chunks`，用于界面展示生成使用的资料范围，不构成逐条引用。
+- 新生成 Handout 不写 `source_citations`，其 Markdown 顶部来源说明与 `material_scope_json.source_materials` 都由实际 material-context batch 构建；Task Test 的真实 `source_citations` 继续按题保存并通过 API 与 Markdown 导出返回。
 - 成功时只保存 `AIGeneratedContent`。模型、最终 schema 或 Markmap 预处理失败保存 failed 记录，不保存部分 JSON。
 
 稳定错误语义：参数或未知类型 `422 VALIDATION_ERROR` 且不落库；无可用资料 `400 NO_PARSED_MATERIAL` 且不落库；总上下文超限返回 `400 MATERIAL_CONTEXT_TOO_LARGE` 且不调用模型、不落库；模型或最终 schema/Markmap 预处理失败保存 `GENERATION_FAILED` 或 `GENERATION_SCHEMA_INVALID` 记录。

@@ -22,6 +22,28 @@ class ContextChunk(BaseModel):
     score: float | None = None
 
 
+def build_material_scope_snapshot(
+    material_scope: MaterialScope,
+    chunks: list[ContextChunk],
+) -> dict[str, object]:
+    source_materials: list[dict[str, str]] = []
+    seen_material_ids: set[str] = set()
+    for chunk in chunks:
+        if chunk.material_id in seen_material_ids:
+            continue
+        seen_material_ids.add(chunk.material_id)
+        source_materials.append(
+            {
+                "material_id": chunk.material_id,
+                "material_name": chunk.material_name,
+            }
+        )
+    return {
+        **material_scope.model_dump(mode="json"),
+        "source_materials": source_materials,
+    }
+
+
 class MaterialContextResult(BaseModel):
     chunks: list[ContextChunk]
     no_parsed_material: bool

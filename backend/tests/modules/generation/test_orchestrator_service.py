@@ -74,6 +74,14 @@ def test_generate_content_delivers_all_materials_once_without_citations(
     assert set(generator.contexts[0].material_ids) == {material.id for material in parsed_materials}
     assert all(material.name in generator.contexts[0].text for material in parsed_materials)
     assert content.generation_status == "success"
+    assert content.material_scope_json == {
+        "include_all_parsed_materials": True,
+        "material_ids": [],
+        "source_materials": [
+            {"material_id": material.id, "material_name": material.name}
+            for material in sorted(parsed_materials, key=lambda item: item.id)
+        ],
+    }
     assert db.scalar(select(func.count()).select_from(SourceCitation)) == 0
 
 

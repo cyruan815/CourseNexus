@@ -261,7 +261,7 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 - `ai_generated_contents.content` 保存完整 Markdown 正文，正文顶部在一级标题后保留来源说明句，格式为 `本讲义基于《资料名1》《资料名2》中“二级任务标题”相关内容生成。`。
 - 来源说明中的资料名来自本次 handout 实际使用的 material-context batch 资料名去重；知识点优先使用当前 `StudySubTask.title`。
 - `ai_generated_contents.content_json` 只保存轻量格式元信息：`{"format":"markdown","schema_version":1}`。
-- `ai_generated_contents.material_scope_json` 继续保存本次资料范围，用于说明讲义基于哪些资料生成。
+- `ai_generated_contents.material_scope_json` 保存请求范围，并在 `source_materials` 中快照实际进入本次 material-context batch 的 `material_id` 与资料名；讲义和任务测试题都用该快照说明真实输入范围，不从模型正文反推资料名。
 - 新生成 handout 不写 `source_citations`，不做 section / block / formula card 级引用回绑，不兼容历史结构化 handout 导出。
 
 生成流程仍只读取当前二级任务关联资料：`StudySubTask.related_material_ids_json -> MaterialScope(include_all_parsed_materials=false)`。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，handout 专用分支会用该 chunk 范围过滤 material-context batch；公共 `material_context.repository.list_parsed_context_chunks_for_scope()` 只保留当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序这些基础边界，不承载任务级 chunk 范围规则。

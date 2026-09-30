@@ -15,7 +15,7 @@ flowchart LR
   I --> J[Persist ai_generated_contents]
 ```
 
-Generation does not use Top-K retrieval, batching, map/reduce, cross-batch merging, chunk IDs, or item-level citations. `material_scope_json` records which materials were selected, but it is not a citation contract.
+Generation does not use Top-K retrieval, batching, map/reduce, cross-batch merging, chunk IDs, or item-level citations. `material_scope_json` records the requested range and a `source_materials` snapshot built by deduplicating the actual `MaterialGenerationContext.chunks`; each snapshot item contains `material_id` and the material name at generation time. This lets the UI show the real input range without turning the range into an item-level citation contract or trusting model-authored filenames.
 
 `Generator.generate` receives one `MaterialGenerationContext`. `GeneratorOutput` contains only `title`, optional `content`, and `content_json`. Model/schema failures create a failed history record. Invalid parameters, no parsed material, and total-context overflow fail before history creation.
 
