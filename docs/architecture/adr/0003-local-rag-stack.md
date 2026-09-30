@@ -32,8 +32,10 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 - Docling 负责复杂文档解析和结构化、token-aware 切片。
 - LlamaIndex 负责 node / metadata 组织、embedding 和 retriever 编排。
 - Chroma 通过 Python `PersistentClient` 嵌入后端进程，将向量持久化到本地目录，不启动 Chroma Server。
+- FastAPI 每个后端进程通过 lifespan 和线程安全的 `RagIndexManager` 只持有一个 Chroma 索引实例；请求和维护入口不得各自创建客户端。
 - OpenAI SDK 接口规范承载 embedding 和生成调用；调用必须位于 integration / provider 边界，每个业务用途使用独立 endpoint 配置。
 - SQLite 的 `CourseMaterial` / `MaterialChunk` 是权威业务数据，Chroma 是可重建的派生检索索引。
+- SQLite、上传目录、Chroma 和日志的相对路径统一以仓库配置根目录解析，避免因启动目录不同生成第二套本地数据。
 - 问答使用带 `user_id`、`course_id` 和 `material_scope` metadata filter 的 Top-K 语义检索。
 - 指定材料生成从 SQLite 顺序读取全部选中 chunk，使用分批 map-reduce，不使用普通 Top-K 检索替代材料覆盖。
 - RAGFlow 记录为 future 备选，不加入当前依赖、运行环境或接口。
@@ -68,12 +70,16 @@ CourseNexus 已有 FastAPI 单体、资料上传、`.txt` / `.md` 基础解析�
 - 模型输出必须转换为项目内部 DTO，并对指定生成能力执行 Pydantic 结构校验。
 - 本地开发首次运行 Docling 可能下载模型文件；embedding 和真实生成需要网络，并分别配置对应用途的 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`。
 - Chroma 目录需要加入 `.gitignore`，并提供从 SQLite 重建索引的维护命令。
+- API、Alembic 和索引维护命令必须复用相同 Settings、规范路径和旧目录冲突保护；发现旧位置有数据且规范位置为空时拒绝运行，不自动搬迁或覆盖。
+- 文件 SQLite 统一启用外键、WAL、30 秒 busy timeout 和连接健康检查；内存 SQLite 不强制 WAL。
+- 应用退出只释放进程内索引引用，不调用 Chroma reset 或删除持久化目录。
 - FastAPI 同步进程承担解析和索引时会有较长请求；当前用状态字段和重试表达，不在本 ADR 中引入队列。
 - 如果未来改用 RAGFlow、Qdrant Server 或其他外部检索服务，必须新增 ADR，并保持 `material-context` 的业务接口和权限语义。
 
 ## References
 
 - [资料上下文与 RAG 架构](../material-context-rag.md)
+- [本地存储运行与迁移](../../engineering/local-runtime-storage.md)
 - [AI 资料业务线](../../product/ai-material-business.md)
 - [LlamaIndex Ingestion Pipeline](https://developers.llamaindex.ai/python/framework/module_guides/loading/ingestion_pipeline/)
 - [Docling Chunking](https://docling-project.github.io/docling/concepts/chunking/)
