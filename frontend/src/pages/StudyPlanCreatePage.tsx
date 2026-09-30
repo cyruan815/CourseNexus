@@ -50,6 +50,7 @@ const defaultScope: MaterialScope = {
 };
 const defaultPreference = "balanced" as const;
 const minimumDailyMinutes = 30;
+const maximumPlanTitleLength = 255;
 type StudyPlanCreatePhase = "goal" | "preparing" | "questionnaire" | "generating";
 
 interface StudyPlanCreateDraftStorage {
@@ -373,19 +374,27 @@ function StudyPlanCalendarGeneration({
   generatedPreview,
   isComplete,
   onEnterPlan,
+  onPlanTitleChange,
+  onSavePlan,
+  isSaving,
+  planTitle,
   startDate,
 }: {
   endDate: string;
   generatedPreview: StudyPlanPreview | null;
   isComplete: boolean;
   onEnterPlan: () => void;
+  onPlanTitleChange: (title: string) => void;
+  onSavePlan: () => void;
+  isSaving: boolean;
+  planTitle: string;
   startDate: string;
 }) {
   const [referenceDate, setReferenceDate] = useState(() => dateFromDateKey(startDate));
   const monthCells = useMemo(() => buildMonthCells(referenceDate), [referenceDate]);
   const plannedDateSummaries = useMemo(() => {
     const summaries = new Map<string, { count: number; title: string }>();
-    if (!isComplete || !generatedPreview) {
+    if (!generatedPreview) {
       return summaries;
     }
     for (const task of generatedPreview.tasks) {
@@ -396,7 +405,13 @@ function StudyPlanCalendarGeneration({
       });
     }
     return summaries;
-  }, [generatedPreview, isComplete]);
+  }, [generatedPreview]);
+  const normalizedTitle = planTitle.trim();
+  const titleError = !normalizedTitle
+    ? "计划名称不能为空"
+    : normalizedTitle.length > maximumPlanTitleLength
+      ? `计划名称不能超过 ${maximumPlanTitleLength} 个字符`
+      : null;
 
   return (
     <Box className="study-plan-calendar-generation" role="status">
@@ -404,8 +419,10 @@ function StudyPlanCalendarGeneration({
         <Group align="flex-start" justify="space-between" wrap="nowrap">
           <Stack gap={4}>
             <Text c="teal" fw={800} size="sm">生成学习计划</Text>
-            <Title order={2}>正在拆分每日任务</Title>
-            <Text c="dimmed" size="sm">把诊断结果、资料范围和学习日期安排到日历里。</Text>
+            <Title order={2}>{generatedPreview ? (isComplete ? "学习计划已保存" : "确认计划名称") : "正在拆分每日任务"}</Title>
+            <Text c="dimmed" size="sm">
+              {generatedPreview ? "确认名称后再保存；日历中的任务将使用这次预览结果。" : "把诊断结果、资料范围和学习日期安排到日历里。"}
+            </Text>
           </Stack>
           <IconCalendarStats className="study-plan-calendar-generation-icon" size={34} stroke={1.7} />
         </Group>
@@ -465,6 +482,21 @@ function StudyPlanCalendarGeneration({
             ))}
           </Box>
         </Box>
+
+        {generatedPreview && !isComplete ? (
+          <Stack gap="xs">
+            <TextInput
+              error={titleError}
+              label="计划名称"
+              maxLength={maximumPlanTitleLength + 1}
+              onChange={(event) => onPlanTitleChange(event.currentTarget.value)}
+              value={planTitle}
+            />
+            <Group justify="center">
+              <Button disabled={Boolean(titleError)} loading={isSaving} onClick={onSavePlan}>保存学习计划</Button>
+            </Group>
+          </Stack>
+        ) : null}
 
         {isComplete ? (
           <Group justify="center">
@@ -546,6 +578,8 @@ export function StudyPlanCreatePage() {
   const [savedPlanId, setSavedPlanId] = useState<string | null>(null);
   const [generatedPlanPreview, setGeneratedPlanPreview] = useState<StudyPlanPreview | null>(null);
   const [pendingSaveAttempt, setPendingSaveAttempt] = useState<StudyPlanPendingSaveAttempt | null>(null);
+  const [planTitle, setPlanTitle] = useState("");
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
   const startDateRef = useRef("");
   const isDraftPersistenceDisabledRef = useRef(false);
   const incomingMaterialSelectionRef = useRef(
@@ -1011,67 +1045,81 @@ export function StudyPlanCreatePage() {
     setIsGenerationComplete(false);
     setSavedPlanId(null);
     setGeneratedPlanPreview(null);
+    setPlanTitle("");
+    setPendingSaveAttempt(null);
 
     try {
-      const attemptSignature = JSON.stringify({
-        diagnosticNote: diagnosticNote.trim() || null,
-        draft,
-        questionVersion,
-        topicMastery,
-        weakArea: weakAreaAnswer,
+      const nextProfile = await createDiagnosticProfile(courseId, {
+        question_version: questionVersion,
+        topic_mastery: topicMastery,
+        weak_area: weakAreaAnswer,
+        diagnostic_note: diagnosticNote.trim() || null,
+        material_scope: materialScope,
       });
-      let saveAttempt = pendingSaveAttempt?.signature === attemptSignature
-        ? pendingSaveAttempt
-        : null;
+      const previewRequest: StudyPlanPreviewRequest = {
+        ...draft,
+        diagnostic_profile: nextProfile,
+      };
+      const nextPreview = await previewStudyPlan(courseId, previewRequest);
+      setGeneratedPlanPreview(nextPreview);
+      setPlanTitle(nextPreview.title);
+    } catch (nextError) {
+      setError(studyPlanActionErrorMessage(nextError, "生成学习计划失败"));
+      setPhase("questionnaire");
+      setIsGenerationComplete(false);
+      setSavedPlanId(null);
+      setGeneratedPlanPreview(null);
+    }
+  }
 
-      if (!saveAttempt) {
-        const nextProfile = await createDiagnosticProfile(courseId, {
-          question_version: questionVersion,
-          topic_mastery: topicMastery,
-          weak_area: weakAreaAnswer,
-          diagnostic_note: diagnosticNote.trim() || null,
-          material_scope: materialScope,
-        });
-        const previewRequest: StudyPlanPreviewRequest = {
-          ...draft,
-          diagnostic_profile: nextProfile,
-        };
-        const nextPreview = await previewStudyPlan(courseId, previewRequest);
-        saveAttempt = {
+  async function handleSaveGeneratedPlan() {
+    if (!courseId || !course || !draft || !generatedPlanPreview) {
+      return;
+    }
+
+    const normalizedTitle = planTitle.trim();
+    if (!normalizedTitle) {
+      setError("计划名称不能为空。");
+      return;
+    }
+    if (normalizedTitle.length > maximumPlanTitleLength) {
+      setError(`计划名称不能超过 ${maximumPlanTitleLength} 个字符。`);
+      return;
+    }
+
+    const payload: StudyPlanSaveRequest = {
+      ...draft,
+      diagnostic_profile: generatedPlanPreview.diagnostic_profile,
+      title: normalizedTitle,
+      client_flow: "wizard_v1",
+      tasks: generatedPlanPreview.tasks,
+    };
+    const signature = JSON.stringify(payload);
+    const saveAttempt = pendingSaveAttempt?.signature === signature
+      ? pendingSaveAttempt
+      : {
           idempotencyKey: createStudyPlanIdempotencyKey(courseId),
-          payload: {
-            ...previewRequest,
-            title: nextPreview.title,
-            client_flow: "wizard_v1",
-            tasks: nextPreview.tasks,
-          },
-          preview: nextPreview,
-          signature: attemptSignature,
+          payload,
+          preview: generatedPlanPreview,
+          signature,
         };
-        setPendingSaveAttempt(saveAttempt);
-      }
+    setPendingSaveAttempt(saveAttempt);
+    setIsSavingPlan(true);
+    setError(null);
 
-      const result = await saveStudyPlan(
-        courseId,
-        saveAttempt.payload,
-        saveAttempt.idempotencyKey,
-      );
+    try {
+      const result = await saveStudyPlan(courseId, saveAttempt.payload, saveAttempt.idempotencyKey);
       isDraftPersistenceDisabledRef.current = true;
-      if (course) {
-        clearCreateDraft(course.user_id, courseId);
-      }
-      setGeneratedPlanPreview(saveAttempt.preview);
+      clearCreateDraft(course.user_id, courseId);
       setSavedPlanId(result.plan.id);
       setIsGenerationComplete(true);
     } catch (nextError) {
       if (nextError instanceof ApiError && nextError.code === "IDEMPOTENCY_CONFLICT") {
         setPendingSaveAttempt(null);
       }
-      setError(studyPlanActionErrorMessage(nextError, "生成学习计划失败"));
-      setPhase("questionnaire");
-      setIsGenerationComplete(false);
-      setSavedPlanId(null);
-      setGeneratedPlanPreview(null);
+      setError(studyPlanActionErrorMessage(nextError, "保存学习计划失败"));
+    } finally {
+      setIsSavingPlan(false);
     }
   }
 
@@ -1099,6 +1147,7 @@ export function StudyPlanCreatePage() {
       setSavedPlanId(null);
       setGeneratedPlanPreview(null);
       setPendingSaveAttempt(null);
+      setPlanTitle("");
     }
   }
 
@@ -1343,7 +1392,7 @@ export function StudyPlanCreatePage() {
 
                 <Divider />
                 <Group className="study-plan-questionnaire-actions" justify="space-between">
-                  <Text c="dimmed" size="sm">提交后会自动生成并保存学习计划。</Text>
+                  <Text c="dimmed" size="sm">提交后会生成预览，确认名称后再保存。</Text>
                   <Button
                     data-testid="study-plan-questionnaire-submit"
                     disabled={!canSubmitQuestionnaire}
@@ -1360,7 +1409,14 @@ export function StudyPlanCreatePage() {
                 endDate={endDate}
                 generatedPreview={generatedPlanPreview}
                 isComplete={isGenerationComplete}
+                isSaving={isSavingPlan}
                 onEnterPlan={handleEnterGeneratedPlan}
+                onPlanTitleChange={(title) => {
+                  setPlanTitle(title);
+                  setError(null);
+                }}
+                onSavePlan={handleSaveGeneratedPlan}
+                planTitle={planTitle}
                 startDate={startDate}
               />
             ) : null}

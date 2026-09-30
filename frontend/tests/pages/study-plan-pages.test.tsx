@@ -69,6 +69,15 @@ const preview = {
   start_date: "2026-07-13",
   end_date: "2026-07-15",
   daily_available_minutes: 60,
+  diagnostic_profile: {
+    question_version: "study_plan_diagnostic_v2",
+    prior_knowledge_level: "little",
+    foundation_needed: true,
+    weak_topics: ["topic_vector_space"],
+    weak_area: "concept",
+    explanation_style: "plain_language",
+    diagnostic_note: "希望先补基础",
+  },
   material_scope: {
     include_all_parsed_materials: true,
     material_ids: [],
@@ -1000,8 +1009,13 @@ describe("study plan pages", () => {
     boundingRectSpy.mockRestore();
   });
 
-  it("turns a natural language goal into a mixed questionnaire, auto-saves, and enters detail after calendar preview", async () => {
+  it("turns a natural language goal into a preview, edits its title, saves, and enters detail", async () => {
     freezeStudyPlanDate();
+    const editedPlanTitle = "向量空间冲刺计划";
+    const editedSavedDetail = {
+      ...savedDetail,
+      plan: { ...savedDetail.plan, title: editedPlanTitle },
+    };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
@@ -1035,10 +1049,10 @@ describe("study plan pages", () => {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
       if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
-        return Promise.resolve(successResponse(savedDetail, "req_save"));
+        return Promise.resolve(successResponse(editedSavedDetail, "req_save"));
       }
       if (url.endsWith("/study-plans/plan_1")) {
-        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+        return Promise.resolve(successResponse(editedSavedDetail, "req_detail"));
       }
 
       return Promise.resolve(successResponse({}));
@@ -1082,8 +1096,17 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
 
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input, init]) => (
+      String(input).endsWith("/courses/crs_123/study-plans") && (init as RequestInit | undefined)?.method === "POST"
+    ))).toBe(false);
+    const planTitleInput = screen.getByLabelText("计划名称");
+    fireEvent.change(planTitleInput, { target: { value: "   " } });
+    expect(screen.getByText("计划名称不能为空")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存学习计划" })).toBeDisabled();
+    fireEvent.change(planTitleInput, { target: { value: editedPlanTitle } });
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
-    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: editedPlanTitle })).toBeInTheDocument();
     expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "开始学习" })).toHaveAttribute("href", "/study-subtasks/subtask_1");
 
@@ -1181,7 +1204,7 @@ describe("study plan pages", () => {
             start_date: "2026-07-13",
             end_date: "2026-07-14",
             diagnostic_profile: diagnosticProfile,
-            title: preview.title,
+            title: editedPlanTitle,
             client_flow: "wizard_v1",
             tasks: preview.tasks,
           }),
@@ -1259,10 +1282,11 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByLabelText("概念理解"));
 
     fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    fireEvent.click(await screen.findByRole("button", { name: "保存学习计划" }));
     expect(await screen.findByText("模拟保存响应丢失")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "确认计划名称" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     expect(await screen.findByRole("button", { name: "进入计划" })).toBeInTheDocument();
 
     expect(saveRequests).toHaveLength(2);
@@ -1355,6 +1379,7 @@ describe("study plan pages", () => {
     profileDeferred.resolve();
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "高等数学学习计划" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
   });
@@ -1554,6 +1579,7 @@ describe("study plan pages", () => {
             daily_available_minutes: replacementPreview.daily_available_minutes,
             preference: replacementPreview.preference,
             material_scope: replacementPreview.material_scope,
+            diagnostic_profile: replacementPreview.diagnostic_profile,
             title: replacementPreview.title,
             client_flow: "wizard_v1",
             tasks: replacementPreview.tasks,
