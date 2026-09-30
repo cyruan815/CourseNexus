@@ -67,3 +67,29 @@ def test_development_environment_allows_unconfigured_model_endpoints() -> None:
     settings = Settings(_env_file=None, app_env="development")
 
     assert all(settings.model_endpoint(purpose).api_key is None for purpose in MODEL_PURPOSES)
+
+
+def test_mock_model_provider_is_disabled_by_default() -> None:
+    assert Settings(_env_file=None).enable_mock_model_provider is False
+
+
+@pytest.mark.parametrize("app_env", ["development", "test"])
+def test_non_production_environment_allows_explicit_mock_mode(app_env: str) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env=app_env,
+        enable_mock_model_provider=True,
+    )
+
+    assert settings.enable_mock_model_provider is True
+
+
+def test_production_environment_rejects_mock_mode() -> None:
+    with pytest.raises(ValidationError, match="mock model provider"):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            enable_mock_model_provider=True,
+            secret_key="a-production-secret-that-is-long-enough",
+            **_production_model_keys(),
+        )
