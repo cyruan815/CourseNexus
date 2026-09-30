@@ -10,6 +10,7 @@ EXPECTED_TABLES = {
     "material_folders",
     "course_materials",
     "material_chunks",
+    "material_parse_versions",
     "conversations",
     "messages",
     "source_citations",
@@ -46,8 +47,15 @@ def test_key_columns_are_present() -> None:
         "parse_diagnostics_json",
         "file_url",
         "source_url",
+        "active_parse_version_id",
     } <= columns_by_table["course_materials"]
-    assert {"message_id", "generated_content_id", "hit_text"} <= columns_by_table["source_citations"]
+    assert {"parse_version_id", "material_id", "chunk_index"} <= columns_by_table["material_chunks"]
+    assert {"message_id", "generated_content_id", "hit_text", "material_version_id"} <= columns_by_table[
+        "source_citations"
+    ]
+    assert {"material_id", "status", "parse_quality", "activated_at", "finished_at"} <= columns_by_table[
+        "material_parse_versions"
+    ]
     assert {"content_type", "content_json", "study_subtask_id"} <= columns_by_table["ai_generated_contents"]
     assert {"task_date", "status", "sort_order"} <= columns_by_table["study_tasks"]
     assert {"subtask_type", "related_material_ids_json", "completed_at"} <= columns_by_table["study_subtasks"]
