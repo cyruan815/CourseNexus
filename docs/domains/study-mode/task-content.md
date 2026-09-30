@@ -46,7 +46,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
-- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-15 前端为 `task_test` 接入本地逐题交互：执行页和生成内容详情页都读取 `GeneratedContentRead.content_json.questions`，用户提交单道题后才显示正确答案 / 参考答案和解析；选择题与判断题只做浏览器内存内即时判断，简答题不自动判分。该视图不保存 attempt 历史。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-09-30 前端为 `task_test` 接入本地逐题交互与来源查看：执行页和生成内容详情页都读取 `GeneratedContentRead.content_json.questions` 与顶层 `source_citations`，用户提交单道题后才显示正确答案 / 参考答案、解析和该题合法 `source_citation_ids` 对应的来源卡片；选择题与判断题只做浏览器内存内即时判断，简答题不自动判分。该视图不保存 attempt 历史。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
 - C9/C11 不接入测试题作答持久化、后端判分、attempt 历史或反馈闭环；当前逐题提交反馈只存在浏览器内存，刷新后可以丢失。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
@@ -207,7 +207,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - `frontend/tests/features/study-plans/api.test.ts` 覆盖 PDF / Markdown 导出 adapter 路径。
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖执行页已有内容时的导出按钮和文件流请求。
 - `frontend/tests/features/generated-content/task-test-result.test.tsx` 覆盖 `task_test` 本地逐题作答、单选、多选、判断和简答提交反馈。
-- `frontend/tests/features/generated-content/generated-content-renderer.test.tsx` 和 `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页提交后反馈，不展示引用侧栏。
+- `frontend/tests/features/generated-content/generated-content-renderer.test.tsx` 和 `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页提交后反馈；只显示当前题合法引用，不展示与题目无关的全局引用侧栏。
 
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
@@ -261,7 +261,7 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 - `ai_generated_contents.content` 保存完整 Markdown 正文，正文顶部在一级标题后保留来源说明句，格式为 `本讲义基于《资料名1》《资料名2》中“二级任务标题”相关内容生成。`。
 - 来源说明中的资料名来自本次 handout 实际使用的 material-context batch 资料名去重；知识点优先使用当前 `StudySubTask.title`。
 - `ai_generated_contents.content_json` 只保存轻量格式元信息：`{"format":"markdown","schema_version":1}`。
-- `ai_generated_contents.material_scope_json` 继续保存本次资料范围，用于说明讲义基于哪些资料生成。
+- `ai_generated_contents.material_scope_json` 保存请求范围，并在 `source_materials` 中快照实际进入本次 material-context batch 的 `material_id` 与资料名；讲义和任务测试题都用该快照说明真实输入范围，不从模型正文反推资料名。
 - 新生成 handout 不写 `source_citations`，不做 section / block / formula card 级引用回绑，不兼容历史结构化 handout 导出。
 
 生成流程仍只读取当前二级任务关联资料：`StudySubTask.related_material_ids_json -> MaterialScope(include_all_parsed_materials=false)`。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，handout 专用分支会用该 chunk 范围过滤 material-context batch；公共 `material_context.repository.list_parsed_context_chunks_for_scope()` 只保留当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序这些基础边界，不承载任务级 chunk 范围规则。
@@ -272,10 +272,10 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 
 - Markdown 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 对成功 `handout` 直接返回 `content`。
 - PDF 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 `handout` 读取 `content`，复用 Markdown -> HTML -> KaTeX auto-render -> Playwright PDF renderer。
-- 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。
+- 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。`material_scope_json.source_materials` 仍保存真实输入快照，供追溯而非逐段引用。
 - 导出不写数据库、不修改任务状态、不写打卡记录。
 
-任务测试题 `task_test` 暂时仍保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；本轮只同步标题规则，`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`，不再固定为“任务测试题”。
+任务测试题 `task_test` 保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`。执行页和详情页把每题 `source_citation_ids` 与顶层 `source_citations` 匹配，提交该题后显示编号、资料名和页码/未知位置，并复用引用来源定位弹窗。
 
 ## 2026-07-15 任务讲义前端预览渲染切片
 

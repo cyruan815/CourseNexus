@@ -19,6 +19,7 @@ const questions: TaskTestQuestion[] = [
     ],
     correct_answer: "A",
     explanation: "向量空间需要对加法和数乘封闭。",
+    source_citation_ids: ["cit_1", "cit_2"],
   },
   {
     id: "q_2",
@@ -57,7 +58,38 @@ const questions: TaskTestQuestion[] = [
 function renderResult() {
   return render(
     <MantineProvider>
-      <TaskTestResult questions={questions} />
+      <TaskTestResult
+        citations={[
+          {
+            id: "cit_1",
+            chunk_id: "chk_1",
+            hit_text: "向量空间对加法和数乘封闭。",
+            material_id: "mat_1",
+            material_name: "线性代数.md",
+            page: null,
+            page_index: 0,
+          },
+          {
+            id: "cit_2",
+            chunk_id: "chk_2",
+            hit_text: "向量空间的八条公理。",
+            material_id: "mat_2",
+            material_name: "课程习题.pdf",
+            page: "18",
+            page_index: 17,
+          },
+          {
+            id: "cit_other",
+            chunk_id: "chk_3",
+            hit_text: "不属于当前题目的来源。",
+            material_id: "mat_3",
+            material_name: "网络协议.md",
+            page: null,
+            page_index: 0,
+          },
+        ]}
+        questions={questions}
+      />
     </MantineProvider>,
   );
 }
@@ -75,6 +107,10 @@ describe("TaskTestResult", () => {
     expect(within(firstCard).getByText("回答错误")).toBeInTheDocument();
     expect(within(firstCard).getByText("正确答案：A")).toBeInTheDocument();
     expect(within(firstCard).getByText("解析：向量空间需要对加法和数乘封闭。")).toBeInTheDocument();
+    expect(within(firstCard).getByText("题目来源")).toBeInTheDocument();
+    expect(within(firstCard).getByRole("button", { name: "查看第 1 题来源 1：线性代数.md" })).toBeInTheDocument();
+    expect(within(firstCard).getByRole("button", { name: "查看第 1 题来源 2：课程习题.pdf" })).toBeInTheDocument();
+    expect(within(firstCard).queryByText("网络协议.md")).not.toBeInTheDocument();
     expect(screen.queryByText("正确答案：A、B")).not.toBeInTheDocument();
   });
 

@@ -212,7 +212,15 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     assert handout["source_citations"] == []
     assert handout["content_json"] == {"format": "markdown", "schema_version": 1}
     assert "本讲义基于" in handout["content"]
+    assert handout["material_scope_json"]["source_materials"]
+    assert {
+        source["material_id"] for source in handout["material_scope_json"]["source_materials"]
+    } == set(handout["material_scope_json"]["material_ids"])
     assert task_test["source_citations"]
+    assert task_test["material_scope_json"]["source_materials"]
+    assert {
+        source["material_id"] for source in task_test["material_scope_json"]["source_materials"]
+    } == set(task_test["material_scope_json"]["material_ids"])
     task_test_citation_ids = {citation["id"] for citation in task_test["source_citations"]}
     assert set(task_test["content_json"]["questions"][0]["source_citation_ids"]).issubset(task_test_citation_ids)
 

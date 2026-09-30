@@ -41,7 +41,7 @@ from app.modules.learning_execution.schemas import (
     SubTaskCompletionResult,
 )
 from app.modules.material_context.coverage import run_material_coverage
-from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope
+from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope, build_material_scope_snapshot
 from app.modules.material_context.service import iter_material_context_batches
 from app.modules.study_plans.models import StudySubTask
 
@@ -208,6 +208,7 @@ def _generate_task_content(
 
     material_ids = _material_ids(target.subtask)
     material_scope = MaterialScope(include_all_parsed_materials=False, material_ids=material_ids)
+    material_scope_json: dict[str, object] = material_scope.model_dump(mode="json")
     content_id = f"gen_{uuid4().hex}"
 
     try:
@@ -239,6 +240,11 @@ def _generate_task_content(
                 "source_note": _handout_source_note(batches=batches, subtask_title=target.subtask.title),
             }
 
+        material_scope_json = build_material_scope_snapshot(
+            material_scope,
+            [chunk for batch in batches for chunk in batch.chunks],
+        )
+
         if content_type == "task_test":
             output = generator.generate(
                 batches=tuple(batches),
@@ -268,7 +274,7 @@ def _generate_task_content(
             course_id=target.course.id,
             subtask_id=target.subtask.id,
             content_type=content_type,
-            material_scope=material_scope,
+            material_scope_json=material_scope_json,
         )
         content.title = _generated_task_content_title(content_type=content_type, target=target)
         content.content = output.content
@@ -301,7 +307,7 @@ def _generate_task_content(
             course_id=target.course.id,
             subtask_id=target.subtask.id,
             content_type=content_type,
-            material_scope=material_scope,
+            material_scope_json=material_scope_json,
             error_code=exc.code,
         )
         raise
@@ -314,7 +320,7 @@ def _generate_task_content(
             course_id=target.course.id,
             subtask_id=target.subtask.id,
             content_type=content_type,
-            material_scope=material_scope,
+            material_scope_json=material_scope_json,
             error_code="GENERATION_FAILED",
         )
         raise CourseNexusError(code="GENERATION_FAILED", message="任务内容生成失败", status_code=502) from exc
@@ -610,7 +616,7 @@ def _new_task_generated_content(
     course_id: str,
     subtask_id: str,
     content_type: str,
-    material_scope: MaterialScope,
+    material_scope_json: dict[str, object],
 ) -> AIGeneratedContent:
     return AIGeneratedContent(
         id=content_id,
@@ -620,7 +626,7 @@ def _new_task_generated_content(
         content_type=content_type,
         title=content_type.replace("_", " ").title(),
         generation_status="pending",
-        material_scope_json=material_scope.model_dump(mode="json"),
+        material_scope_json=material_scope_json,
     )
 
 
@@ -632,7 +638,7 @@ def _save_failed_task_content(
     course_id: str,
     subtask_id: str,
     content_type: str,
-    material_scope: MaterialScope,
+    material_scope_json: dict[str, object],
     error_code: str,
 ) -> None:
     failed = _new_task_generated_content(
@@ -641,7 +647,7 @@ def _save_failed_task_content(
         course_id=course_id,
         subtask_id=subtask_id,
         content_type=content_type,
-        material_scope=material_scope,
+        material_scope_json=material_scope_json,
     )
     failed.generation_status = "failed"
     failed.error_code = error_code

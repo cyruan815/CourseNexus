@@ -7,6 +7,7 @@ import { getGeneratedContent } from "../features/course-workspace/api";
 import { generatedContentTitle } from "../features/course-workspace/generated-content-list";
 import type { GeneratedContent } from "../features/course-workspace/types";
 import { GeneratedContentRenderer } from "../features/generated-content/GeneratedContentRenderer";
+import { GeneratedSourceScope } from "../features/generated-content/GeneratedSourceScope";
 import "../features/generated-content/generated-content.css";
 import "./generated-content-detail.css";
 
@@ -37,6 +38,7 @@ export function GeneratedContentDetailPage() {
   return <Box className="generated-content-page"><Box className="generated-content-shell" component="main"><Stack gap="md">
     <Group justify="space-between"><Button component={Link} leftSection={<IconArrowLeft size={16} />} to={`/courses/${content.course_id}`} variant="subtle">返回课程详情</Button><Badge color={statusColor(content.generation_status)} variant="light">{content.generation_status}</Badge></Group>
     <header className="generated-content-header"><Group gap="xs"><Badge variant="light">{labels[content.content_type] ?? content.content_type}</Badge><Text c="dimmed" size="sm">{content.created_at}</Text></Group><Title order={1}>{displayTitle}</Title></header>
+    {publicGeneratorTypes.has(content.content_type) ? <GeneratedSourceScope materialScope={content.material_scope_json} /> : null}
     <Paper className="generated-content-main" withBorder><GeneratedContentRenderer content={content} /></Paper>
   </Stack></Box></Box>;
 }

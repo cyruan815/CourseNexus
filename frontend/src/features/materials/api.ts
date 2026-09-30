@@ -14,6 +14,10 @@ export function listMaterials(courseId: string): Promise<Material[]> {
   return apiRequest<Material[]>(`/api/v1/courses/${courseId}/materials`, { method: "GET" });
 }
 
+export function getMaterial(materialId: string): Promise<Material> {
+  return apiRequest<Material>(`/api/v1/materials/${materialId}`, { method: "GET" });
+}
+
 function isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
   return (
     typeof payload === "object" &&

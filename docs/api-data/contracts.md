@@ -80,10 +80,11 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 ## 跨模块数据引用原则
 
 - 跨模块引用 ID 时，必须同时保证当前用户有权访问被引用资源。
-- 需要引用的 Course QA、handout 和 task_test 等能力，其 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；五类独立 POC 生成不创建引用。
+- Course QA 和 task test 的 `SourceCitation` 必须保存 `material_id`、`material_name`、页码或页序号、`hit_text`；新生成 handout 与五类独立 POC 生成不创建逐条引用。
 - `material_name` 是快照字段，避免资料改名后历史引用展示异常。
 - 历史引用定位失败时，前端仍可展示快照文本和定位失败提示。
 - `StudySubTask.related_material_ids_json` 只能引用当前课程下当前用户可访问的资料。
+- 成功生成内容的 `material_scope_json.source_materials` 由实际进入生成上下文的 chunk 去重构建，保存 `material_id` 与当时的 `material_name`；前端用它展示真实输入资料范围，不从模型文本推断来源。
 
 ## 资料上下文契约
 
@@ -137,7 +138,8 @@ S01 阶段明确不新增 `todos`、`calendar_events`、`handouts`、`task_tests
 - `knowledge_list` 参数支持数量、提取偏好、最低重要性和 focus；成功记录写入 `content_json.items`。最终 item 的 `learned` 默认为 `false`，历史 item 缺失时按 `false` 解释；学习状态接口只接受 `learned`，不允许借此修改知识点名称、定义、重要程度或章节。
 - 每个最终业务条目使用稳定 `id`，列表型结果同时使用连续 `sort_order`；业务 JSON 不包含 `source_chunk_ids` 或 `source_citation_ids`。
 - 生成 POST、历史和详情的 `GeneratedContentRead` 统一包含 `source_citations`；这五类内容固定返回 `[]`，包括数据库中可能仍存在旧引用行的历史记录。
-- Handout 和 Task Test 的真实 `source_citations` 继续保存在后端并通过 API 返回，用于内部追溯与导出；生成内容详情页不展示引用面板。
+- 五类内容的 `material_scope_json` 除基础范围字段外保存 `source_materials: [{material_id, material_name}]` 快照；该列表来自实际 `MaterialGenerationContext.chunks`，用于界面展示生成使用的资料范围，不构成逐条引用。
+- 新生成 Handout 不写 `source_citations`，其 Markdown 顶部来源说明与 `material_scope_json.source_materials` 都由实际 material-context batch 构建；Task Test 的真实 `source_citations` 继续按题保存并通过 API 与 Markdown 导出返回。
 - 成功时只保存 `AIGeneratedContent`。模型、最终 schema 或 Markmap 预处理失败保存 failed 记录，不保存部分 JSON。
 
 稳定错误语义：参数或未知类型 `422 VALIDATION_ERROR` 且不落库；无可用资料 `400 NO_PARSED_MATERIAL` 且不落库；总上下文超限返回 `400 MATERIAL_CONTEXT_TOO_LARGE` 且不调用模型、不落库；模型或最终 schema/Markmap 预处理失败保存 `GENERATION_FAILED` 或 `GENERATION_SCHEMA_INVALID` 记录。
@@ -424,7 +426,7 @@ Markdown 内容包含标题、instructions、题目、选项、正确答案、�
 - `Content-Type: application/pdf`
 - `Content-Disposition: attachment; filename="handout-{generated_content_id}.pdf"`
 
-PDF 内容包含标题、overview、learning objectives、prerequisites、knowledge map、sections、key points、formula cards、exam focus、self check、summary 和引用来源。空的可选区块不输出标题或占位内容。轻量阶段仅支持今日讲义 PDF；`task_test` 调用 PDF 导出返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，任务测试题使用 Markdown 导出。
+PDF 内容渲染 `GeneratedContentRead.content` 中的完整 Markdown 讲义，包括标题、正文、表格、数学公式和 callout；来源说明保留在 Markdown 顶部，不渲染逐段引用列表。轻量阶段仅支持任务讲义 PDF；`task_test` 调用 PDF 导出返回 `EXPORT_UNSUPPORTED_CONTENT_TYPE`，任务测试题使用 Markdown 导出。
 
 错误码：
 
@@ -441,7 +443,7 @@ PDF 内容包含标题、overview、learning objectives、prerequisites、knowle
 - `POST /api/v1/study-subtasks/{subtask_id}/task-tests` 的请求 `parameters` 省略或为空时，后端优先读取计划快照中的 `task_test` 默认值；非法默认参数在生成阶段返回 `GENERATION_SCHEMA_INVALID` 并保存 failed 记录。
 - 合并计划默认参数和本次请求时，本次请求显式传 `question_type_counts` 或其兼容别名会整体覆盖计划中的题型分布；本次请求只传 `difficulty` 时保留计划分布；本次请求显式传 `question_count` 或字符串数组形式的 `question_types`、但不传按题型计数时，会清掉计划里的 `question_type_counts`，退回“总题数 + 题型白名单”旧契约。
 - 保存计划时会把模型输出的任务测试题参数别名归一化后写入快照；支持按题型计数对象、题型计数列表、`question_types` / `items` / `question_type_counts` 内嵌 `{type,count}` 或 `{question_type,question_count}` 对象、`task_test` 字符串 shorthand 搭配同级 `question_count`，以及题量文案到题型的映射，最终保存为规范 `question_count`、`question_types`、`question_type_counts` 和 `difficulty`。
-- `handout` / `task_test` 生成器内部仍使用 chunk id 校验引用范围；保存成功后同一事务创建 `SourceCitation` 行，并将 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`。handout 的 section block 继承 section 引用，顶层 prerequisites / formula_cards / exam_focus / self_check 保留并回绑独立引用；回绑后的 v2 handout 必须再次通过 schema 校验。Markdown/PDF 导出只按 `SourceCitation.id` 匹配来源；存在有效引用时不得输出 `Sources: unavailable`。
+- `task_test` 生成器使用 chunk id 校验逐题引用范围；保存成功后同一事务创建 `SourceCitation` 行，并将 `content_json.questions[].source_citation_ids` 回绑为 `SourceCitation.id`。前端逐题来源和 Markdown 导出都只按这些合法 ID 匹配，缺失时不得补造来源。新生成 `handout` 不创建 `SourceCitation`，其来源说明与真实资料范围都从实际 material-context batch 构建。
 - 执行页 QA 的 `OpenAIModelProvider.answer_question()` 在兼容服务对 `/responses` 返回 404 时回退 Chat Completions；非 404 的鉴权、网络、限流或服务端错误语义不变。
 - 今日讲义 PDF renderer 同时声明 `STSong-Light` 和 `Helvetica`：中文/CJK run 使用 `STSong-Light`，ASCII、数字、英文术语和公式 run 使用 `Helvetica`，避免 `Overview`、`Nyquist/Shannon` 等英文被中文 CID 字体逐字排版。
 - 物理层讲义生成后会扫描已知术语误拼，例如 `Nyquest`、`Shanon`、`bandwith`；命中时按 `GENERATION_SCHEMA_INVALID` 拒绝，不静默落库。

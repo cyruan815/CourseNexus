@@ -2,7 +2,7 @@
 
 ## 目标与范围
 
-课程资料问答在当前用户、单课程和显式资料范围内执行 Top-K 检索，生成基于命中资料的回答，并保存可追溯的行内引用。当前范围包含会话、消息、引用快照、新回答和历史消息接口；不包含资料原文预览、PDF 页内跳转和会话管理完整前端。
+课程资料问答在当前用户、单课程和显式资料范围内执行 Top-K 检索，生成基于命中资料的回答，并保存可追溯的行内引用。当前范围包含会话、消息、引用快照、新回答、历史消息接口和前端引用定位；会话管理完整前端仍不在当前范围。
 
 ## 代码入口与边界
 
@@ -12,6 +12,8 @@
 - API schema：`backend/app/modules/course_qa/schemas.py`
 - 模型协议：`backend/app/integrations/model_provider/base.py`
 - OpenAI-compatible 实现：`backend/app/integrations/model_provider/openai.py`
+- 前端行内引用与定位：`frontend/src/features/course-qa/{InlineCitationAnswer,CitationLocator}.tsx`
+- 资料元数据与 PDF 原文读取：`frontend/src/features/materials/api.ts`
 
 `course-qa` 只能通过 `material-context.retrieve_relevant_context()` 获取资料，不能直接查询资料 chunk 或向量库；model-provider 不负责用户、课程或资料范围权限。
 
@@ -47,6 +49,16 @@ sequenceDiagram
 
 不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
 
+## 引用定位规则
+
+1. 用户点击行内引用角标后，前端先用当前登录态读取 `GET /api/v1/materials/{material_id}`，重新校验资料是否仍可访问。
+2. 来源是 PDF 且引用有可验证的一基页码时，再读取 `GET /api/v1/materials/{material_id}/content`，用临时 object URL 的 `#page=N` 打开对应页；关闭、替换或卸载时释放 object URL。
+3. Text / Markdown 来源展示保存的 `hit_text` 引用快照；`page_index = 0` 是未知位置哨兵，界面显示“页码未知”。
+4. PDF 没有可验证页码时不打开第一页，只展示未定位说明与引用快照；不得把未知页码伪造成第一页。
+5. 来源已删除、无权限或原文件不可用时显示“来源不可用”，同时保留历史回答随 `SourceCitation` 保存的合法资料名、位置和片段快照。
+
+同一个回答命中多份资料时，正文引用继续使用连续角标 `[1][2]...`；每个角标独立打开对应资料，不把多份资料合并成一个不可定位的来源。
+
 ## 复杂度与资源预算
 
 - 检索结果最多为配置的 `RAG_SIMILARITY_TOP_K`，默认 8。
@@ -60,12 +72,16 @@ sequenceDiagram
 - 模型失败：保存失败消息并返回稳定生成错误；不会保存部分引用。
 - 越界或伪造引用：删除标记，不保存 fallback 引用。
 - 来源资料物理删除：引用外键置空，但保留资料名、位置与片段快照供历史回答展示。
+- PDF 无可靠页码：不请求 PDF 原文，不默认跳到第一页，直接展示保存快照。
+- 资料读取失败或权限失效：定位弹窗展示明确失败原因，不影响历史回答正文和引用快照继续阅读。
 
 ## 测试入口
 
 - `backend/tests/modules/course_qa/test_course_qa_service.py`
 - `backend/tests/modules/course_qa/test_course_qa_api.py`
 - `backend/tests/integrations/test_openai_model_provider.py`
+- `frontend/tests/features/course-qa/inline-citation-answer.test.tsx`
+- `frontend/tests/features/materials/api.test.ts`
 
 定向验证：
 
