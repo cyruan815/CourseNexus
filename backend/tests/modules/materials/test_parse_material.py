@@ -521,6 +521,31 @@ def test_reparse_index_failure_keeps_previous_active_version(db: Session, tmp_pa
     assert set(rag_index.records) == first_chunk_ids
 
 
+def test_parse_material_rejects_incomplete_candidate_vectors(db: Session, tmp_path: Path) -> None:
+    class IncompleteRagIndex(FakeRagIndex):
+        def list_parse_version_chunk_ids(self, parse_version_id: str) -> set[str]:
+            return set()
+
+    rag_index = IncompleteRagIndex()
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    failed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert failed.parse_status == "parse_failed"
+    assert failed.parse_error == "INDEXING_FAILED"
+    assert failed.active_parse_version_id is None
+    assert [version.status for version in parse_versions(db, material.id)] == ["failed"]
+    assert material_chunks(db, material.id) == []
+    assert rag_index.records == {}
+
+
 def test_parse_material_normalizes_index_errors_to_indexing_failed(db: Session, tmp_path: Path, caplog) -> None:
     class UnexpectedRagIndex(FakeRagIndex):
         def index_chunks(self, chunks):
