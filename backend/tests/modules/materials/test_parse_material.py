@@ -19,7 +19,7 @@ from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.models import MaterialChunk
+from app.modules.materials.models import MaterialChunk, MaterialParseVersion
 from app.modules.materials.service import delete_material, parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
@@ -95,6 +95,24 @@ def material_chunks(db: Session, material_id: str) -> list[MaterialChunk]:
     )
 
 
+def parse_versions(db: Session, material_id: str) -> list[MaterialParseVersion]:
+    return list(
+        db.execute(
+            select(MaterialParseVersion)
+            .where(MaterialParseVersion.material_id == material_id)
+            .order_by(MaterialParseVersion.created_at, MaterialParseVersion.id)
+        ).scalars()
+    )
+
+
+def active_material_chunks(db: Session, material) -> list[MaterialChunk]:
+    return [
+        chunk
+        for chunk in material_chunks(db, material.id)
+        if chunk.parse_version_id == material.active_parse_version_id
+    ]
+
+
 def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Path, caplog) -> None:
     logger = capture_course_logs(caplog)
     user, course, material = create_uploaded_material(db, tmp_path)
@@ -120,7 +138,9 @@ def test_parse_material_writes_chunks_and_marks_parsed(db: Session, tmp_path: Pa
     assert chunks[0].chunk_index == 0
     assert chunks[0].heading == "Intro"
     assert chunks[0].content_text == "Alpha"
-    assert chunks[0].id == f"chk_{material.id.removeprefix('mat_')}_000000"
+    assert parsed.active_parse_version_id is not None
+    assert chunks[0].parse_version_id == parsed.active_parse_version_id
+    assert chunks[0].id == f"chk_{parsed.active_parse_version_id.removeprefix('mpv_')}_000000"
     assert chunks[0].embedding_id == chunks[0].id
     assert {record.material_id for record in rag_index.records.values()} == {material.id}
     assert {record.course_id for record in rag_index.records.values()} == {course.id}
@@ -204,14 +224,14 @@ def test_reparse_replaces_previous_partial_diagnostics(db: Session, tmp_path: Pa
     assert reparsed.parse_diagnostics_json["warnings"] == []
 
 
-def test_parse_failure_clears_previous_diagnostics(db: Session, tmp_path: Path) -> None:
+def test_reparse_failure_keeps_previous_active_diagnostics(db: Session, tmp_path: Path) -> None:
     class FailingParser:
         def parse(self, file_path: Path) -> ParsedDocument:
             raise CourseNexusError(code="PARSE_FAILED", message="解析失败")
 
     user, _, material = create_uploaded_material(db, tmp_path)
     rag_index = FakeRagIndex()
-    parse_material(
+    first = parse_material(
         db,
         user_id=user.id,
         material_id=material.id,
@@ -229,10 +249,13 @@ def test_parse_failure_clears_previous_diagnostics(db: Session, tmp_path: Path) 
         storage_root=tmp_path,
     )
 
-    assert failed.parse_status == "parse_failed"
-    assert failed.parse_quality == "unknown"
-    assert failed.page_count is None
-    assert failed.parse_diagnostics_json is None
+    assert failed.parse_status == "parsed"
+    assert failed.parse_error == "PARSE_FAILED"
+    assert failed.active_parse_version_id == first.active_parse_version_id
+    assert failed.parse_quality == "partial"
+    assert failed.page_count == 59
+    assert failed.parse_diagnostics_json["failed_pages"] == [17]
+    assert [version.status for version in parse_versions(db, material.id)] == ["active", "failed"]
 
 
 def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path, caplog) -> None:
@@ -264,7 +287,7 @@ def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path, 
     assert isinstance(record.exc_info[1], ValueError)
 
 
-def test_reparse_material_replaces_old_chunks(db: Session, tmp_path: Path) -> None:
+def test_reparse_material_activates_new_chunks_and_retires_old_version(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
     parser = PlainTextParser()
     rag_index = FakeRagIndex()
@@ -287,31 +310,25 @@ def test_reparse_material_replaces_old_chunks(db: Session, tmp_path: Path) -> No
         storage_root=tmp_path,
     )
 
-    chunks = material_chunks(db, material.id)
+    chunks = active_material_chunks(db, reparsed)
     assert reparsed.parse_status == "parsed"
     assert [chunk.chunk_index for chunk in chunks] == [0, 1]
     assert [chunk.content_text for chunk in chunks] == ["First", "Second"]
-    assert set(rag_index.records) == {
-        f"chk_{material.id.removeprefix('mat_')}_000000",
-        f"chk_{material.id.removeprefix('mat_')}_000001",
-    }
+    versions = parse_versions(db, material.id)
+    assert [version.status for version in versions] == ["retired", "active"]
+    assert len(material_chunks(db, material.id)) == 3
+    assert set(rag_index.records) == {chunk.id for chunk in material_chunks(db, material.id)}
 
 
-def test_reparse_material_deletes_old_vectors_before_reindex(db: Session, tmp_path: Path) -> None:
+def test_reparse_material_keeps_retired_vectors_for_version_history(db: Session, tmp_path: Path) -> None:
     class RecordingRagIndex(FakeRagIndex):
         def __init__(self) -> None:
             super().__init__()
-            self.deleted_material_ids: list[str] = []
             self.operations: list[tuple[str, str]] = []
-
-        def delete_material(self, material_id: str) -> None:
-            self.deleted_material_ids.append(material_id)
-            self.operations.append(("delete", material_id))
-            super().delete_material(material_id)
 
         def index_chunks(self, chunks):
             indexed_chunks = list(chunks)
-            self.operations.extend(("index", chunk.material_id) for chunk in indexed_chunks)
+            self.operations.extend(("index", chunk.parse_version_id or "") for chunk in indexed_chunks)
             super().index_chunks(indexed_chunks)
 
     user, _, material = create_uploaded_material(db, tmp_path)
@@ -336,13 +353,10 @@ def test_reparse_material_deletes_old_vectors_before_reindex(db: Session, tmp_pa
         storage_root=tmp_path,
     )
 
-    assert rag_index.deleted_material_ids == [material.id, material.id]
-    assert rag_index.operations == [
-        ("delete", material.id),
-        ("index", material.id),
-        ("delete", material.id),
-        ("index", material.id),
-    ]
+    versions = parse_versions(db, material.id)
+    assert len(rag_index.operations) == 2
+    assert rag_index.operations == [("index", versions[0].id), ("index", versions[1].id)]
+    assert set(rag_index.records) == {chunk.id for chunk in material_chunks(db, material.id)}
 
 
 def test_deleted_material_cannot_be_parsed(db: Session, tmp_path: Path) -> None:
@@ -444,7 +458,7 @@ def test_parse_material_index_failure_still_marks_failed_when_cleanup_raises(db:
             super().index_chunks(chunks)
             raise CourseNexusError(code="INDEXING_FAILED", message="索引失败", status_code=502)
 
-        def delete_material(self, material_id: str) -> None:
+        def delete_parse_version(self, parse_version_id: str) -> None:
             raise CourseNexusError(code="INDEXING_FAILED", message="删除失败", status_code=502)
 
     user, _, material = create_uploaded_material(db, tmp_path)
