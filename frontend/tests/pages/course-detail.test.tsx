@@ -119,6 +119,7 @@ function renderDetailPage(path: InitialEntry = "/courses/crs_123") {
             )}
             path="/courses/:courseId"
           />
+          <Route element={<LocationStateProbe />} path="/courses/:courseId/study-plans/new" />
         </Routes>
       </MemoryRouter>
     </MantineProvider>,
@@ -191,6 +192,39 @@ describe("CourseDetailPage", () => {
     expect(screen.queryByText("保存入口")).not.toBeInTheDocument();
     expect(screen.queryByText("学习笔记")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成 知识点清单" })).toHaveClass("is-wide");
+  });
+
+  it("passes the current parsed-material selection as a plan-creation snapshot", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/material-folders")) {
+        return Promise.resolve(successResponse([], "req_folders"));
+      }
+      if (url.endsWith("/materials")) {
+        return Promise.resolve(successResponse(parsedMaterials, "req_materials"));
+      }
+      if (url.endsWith("/generated-contents")) {
+        return Promise.resolve(successResponse([], "req_generated"));
+      }
+      if (url.endsWith("/study-plans")) {
+        return Promise.resolve(successResponse([], "req_plans"));
+      }
+      if (url.endsWith("/conversations")) {
+        return Promise.resolve(successResponse([], "req_conversations"));
+      }
+      return Promise.resolve(successResponse(course));
+    }));
+
+    renderDetailPage();
+    const firstMaterial = await screen.findByRole("checkbox", { name: `选择资料 ${parsedMaterials[0].name}` });
+    const secondMaterial = screen.getByRole("checkbox", { name: `选择资料 ${parsedMaterials[1].name}` });
+    fireEvent.click(firstMaterial);
+    fireEvent.click(secondMaterial);
+    fireEvent.click(screen.getByRole("link", { name: "制定学习计划" }));
+
+    expect(screen.getByTestId("location-state")).toHaveTextContent(JSON.stringify({
+      studyPlanMaterialSelection: parsedMaterials.map((material) => ({ id: material.id, name: material.name })),
+    }));
   });
 
   it("shows readable course terms in the detail header without rendering the description", async () => {
