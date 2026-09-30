@@ -256,6 +256,9 @@ def test_task_qa_returns_citations_and_only_uses_current_subtask_materials(api: 
     assert data["answer_type"] == "grounded"
     assert data["used_material_ids"] == ["mat_task_allowed"]
     assert [citation["material_id"] for citation in data["source_citations"]] == ["mat_task_allowed"]
+    assert [citation["material_version_id"] for citation in data["source_citations"]] == [
+        "mpv_mat_task_allowed"
+    ]
 
     conversation = api.db.get(Conversation, data["conversation_id"])
     assert conversation is not None
