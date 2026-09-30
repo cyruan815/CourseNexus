@@ -87,6 +87,8 @@ class MaterialRead(BaseModel):
     parse_quality: str
     parse_diagnostics_json: dict | list | None
     page_count: int | None
+    active_parse_version_id: str | None
+    is_learning_ready: bool
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None

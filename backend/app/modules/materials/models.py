@@ -91,6 +91,10 @@ class CourseMaterial(Base):
         Index("ix_course_materials_deleted_at", "deleted_at"),
     )
 
+    @property
+    def is_learning_ready(self) -> bool:
+        return self.active_parse_version_id is not None and self.deleted_at is None and self.parse_status != "deleted"
+
 
 class MaterialParseVersion(Base):
     __tablename__ = "material_parse_versions"
