@@ -8,8 +8,7 @@ from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.model_provider.base import ModelProvider
-from app.integrations.model_provider.mock import MockModelProvider
-from app.integrations.model_provider.openai import OpenAIModelProvider
+from app.integrations.model_provider.factory import create_model_provider
 from app.integrations.rag.base import RagIndex
 from app.modules.course_qa.schemas import ConversationRead, CourseQuestionCreate, MessageRead
 from app.modules.course_qa.service import ask_course_question, list_conversation_messages, list_course_conversations
@@ -20,16 +19,7 @@ router = APIRouter(tags=["course_qa"])
 
 
 def get_model_provider() -> ModelProvider:
-    settings = get_settings()
-    endpoint = settings.model_endpoint("course_qa")
-    if endpoint.api_key:
-        return OpenAIModelProvider(
-            api_key=endpoint.api_key,
-            model=endpoint.model,
-            base_url=endpoint.base_url,
-            api_key_env_name="COURSE_QA_API_KEY",
-        )
-    return MockModelProvider()
+    return create_model_provider("course_qa")
 
 
 @router.get("/courses/{course_id}/conversations")
