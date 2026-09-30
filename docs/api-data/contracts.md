@@ -16,6 +16,35 @@
 - 空列表返回 `[]`，不使用 `null` 表示空集合。
 - `401` 触发重新登录；`403` 展示无权限；`404` 可用于不暴露他人数据是否存在。
 
+## 运行模式契约
+
+`GET /api/v1/health` 无需登录，成功响应 `data` 固定包含：
+
+```json
+{
+  "status": "ok",
+  "environment": "development",
+  "mock_model_provider_enabled": false
+}
+```
+
+`environment` 只可能为 `development`、`test`、`production`。Health 不返回 Secret、API Key、模型地址或模型名。前端读取 `mock_model_provider_enabled`；值为 `true` 时必须全局标识模拟模型模式，Health 不可用时不得阻塞应用壳。
+
+模型用途未配置且未显式开启 Mock 时，依赖模型的接口返回 HTTP `503`：
+
+```json
+{
+  "error": {
+    "code": "MODEL_PROVIDER_NOT_CONFIGURED",
+    "message": "模型服务未配置",
+    "details": {"purpose": "course_qa"}
+  },
+  "meta": {"request_id": "req_..."}
+}
+```
+
+`details.purpose` 仅标识逻辑用途，不暴露环境变量名或其他敏感配置。Mock 只允许在非生产环境由后端显式启用，客户端不能请求或切换 Mock。
+
 ## 模块间契约基线
 
 - 资料模块只把 `parse_status = parsed` 的资料暴露给检索和 Agent。
