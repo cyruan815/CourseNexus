@@ -1075,6 +1075,7 @@ export function StudyPlanCreatePage() {
                   </Text>
                 </Stack>
                 <Textarea
+                  aria-label="学习目标"
                   className="study-plan-goal-input"
                   minRows={8}
                   onChange={(event) => updateGoalText(event.currentTarget.value)}

@@ -317,7 +317,7 @@ function Header() {
       <Group justify="space-between" wrap="nowrap">
         <Group gap="lg" wrap="nowrap">
           <Title className="home-brand-title" order={1}>
-            <img alt="" src="/brand/coursenexus-logo.png" />
+            <img alt="课枢 CourseNexus" src="/brand/coursenexus-logo.png" />
           </Title>
         </Group>
 

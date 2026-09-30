@@ -54,9 +54,12 @@ def test_seed_demo_generated_content_creates_loginable_demo_graph() -> None:
     assert content is not None
     assert content.user_id == user.id
     assert content.course_id == course.id
-    assert content.content_type == "outline"
+    assert content.content_type == "handout"
+    assert content.title == "Functions and Limits讲义"
     assert content.generation_status == "success"
-    assert content.content_json["sections"][0]["title"] == "1. Functions and Limits"
+    assert content.content.startswith("# Functions and Limits讲义")
+    assert "Limits describe how a function changes near a point." in content.content
+    assert content.content_json == {"format": "markdown", "schema_version": 1}
     assert db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == content.id)).scalars().all() == []
 
 

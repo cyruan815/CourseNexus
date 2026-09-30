@@ -247,10 +247,18 @@ describe("GeneratedContentDetailPage", () => {
     expect(await screen.findByRole("heading", { name: "基础题任务测试题" })).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
+
+    // 单题导航：逐题前进查看，未提交前不显示答案反馈。
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     expect(screen.getByText("TCP 是面向连接的协议。")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：正确")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "下一题" }));
     expect(screen.getByText("UDP 会在传输数据前建立连接。")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：错误")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "上一题" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一题" }));
 
     const firstCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
     fireEvent.click(within(firstCard).getByRole("button", { name: "A. 加法和数乘封闭" }));

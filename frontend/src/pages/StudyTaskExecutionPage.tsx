@@ -784,6 +784,9 @@ export function StudyTaskExecutionPage() {
       return;
     }
 
+    // 写回捕获到的 epoch，保证 ref 中始终有数值记录：否则从未生成过的子任务
+    // 在详情解析完成时会以 undefined === requestEpoch 误判为过期请求而丢弃结果。
+    contentEpochBySubtaskRef.current[targetSubtaskId] = requestEpoch;
     setIsContentLoading(true);
     getGeneratedContentDetail(existingContentId)
       .then((content) => {

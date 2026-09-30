@@ -14,6 +14,7 @@ from app.modules.courses.models import Course
 from app.modules.materials.models import CourseMaterial, MaterialChunk
 import app.db.models  # noqa: F401
 from app.main import app
+from tests.fixtures.study_mode_samples import compliant_daily_task
 
 
 @pytest.fixture()
@@ -68,22 +69,13 @@ def _plan_payload(*, title: str, material_id: str, task_date: str = "2026-07-11"
         "daily_available_minutes": 60,
         "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
         "tasks": [
-            {
-                "title": f"{title} 任务 {index}",
-                "task_date": task_date,
-                "sort_order": index,
-                "subtasks": [
-                    {
-                        "title": f"{title} 子任务 {index}",
-                        "subtask_type": "learn",
-                        "description": "学习内容",
-                        "related_material_ids": [material_id],
-                        "estimated_minutes": 30,
-                        "citation_chunk_ids": [],
-                        "sort_order": 1,
-                    }
-                ],
-            }
+            # 保存契约要求每天恰好一个测试任务并排在最后（见 tests/fixtures/study_mode_samples.py）。
+            compliant_daily_task(
+                title=f"{title} 任务 {index}",
+                task_date=task_date,
+                sort_order=index,
+                plan_material_ids=[material_id],
+            )
             for index in range(1, task_count + 1)
         ],
     }

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  backend:
+    name: Backend tests and migrations
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 根 workspace 安装 katex/markmap-lib；讲义 PDF 导出测试需要 node_modules/katex/dist。
+      - name: Install root JS assets for PDF export tests
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install locked Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock.txt
+
+      - name: Install Chromium for PDF export tests
+        run: python -m playwright install --with-deps chromium
+
+      - name: Backend tests
+        run: python -m pytest
+
+      - name: Migration check on empty database
+        run: |
+          rm -f /tmp/ci-empty.db
+          DATABASE_URL="sqlite:////tmp/ci-empty.db" python -m alembic upgrade head
+
+      - name: Migration check upgrading an old database
+        run: |
+          rm -f /tmp/ci-old.db
+          DATABASE_URL="sqlite:////tmp/ci-old.db" python -m alembic upgrade 20260713_0004
+          DATABASE_URL="sqlite:////tmp/ci-old.db" python -m alembic upgrade head
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend tests
+        run: pnpm frontend:test
+
+      - name: Frontend build (tsc + vite)
+        run: pnpm frontend:build

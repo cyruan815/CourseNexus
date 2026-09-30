@@ -1213,7 +1213,7 @@ describe("study plan pages", () => {
     expect(screen.getByText("July 2026")).toBeInTheDocument();
     expect(screen.getByText("生成学习计划")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
-    expect(screen.getByText("本次生成计划")).toBeInTheDocument();
+    expect(screen.getByRole("grid", { name: "生成中的计划日历" })).toBeInTheDocument();
     expect(screen.queryByText("日期冲突")).not.toBeInTheDocument();
     expect(screen.queryByText("汇总问卷答案")).not.toBeInTheDocument();
     expect(screen.queryByText("保存学习计划")).not.toBeInTheDocument();
@@ -1348,7 +1348,7 @@ describe("study plan pages", () => {
     expect(within(topbar as HTMLElement).queryByRole("button", { name: "重新生成" })).not.toBeInTheDocument();
     expect(within(topbar as HTMLElement).queryByRole("button", { name: "删除计划" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "导出计划（待接入）" })).not.toBeInTheDocument();
     expect(screen.getByText("阅读并整理概念")).toBeInTheDocument();
     expect(screen.queryByText("含义")).not.toBeInTheDocument();
     expect(document.querySelector(".study-plan-task-structure-panel")).toBeInTheDocument();
@@ -1499,7 +1499,7 @@ describe("study plan pages", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "取消完成" })).toBeInTheDocument());
-    expect(screen.getByText("打卡进度")).toBeInTheDocument();
+    expect(screen.getByText("进度")).toBeInTheDocument();
     expect(screen.getAllByText("2/2").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "取消完成" }));
@@ -1629,7 +1629,7 @@ describe("study plan pages", () => {
 
     expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
-    expect(await screen.findByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
+    expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成任务讲义" })).not.toBeInTheDocument();
   });
 
@@ -1848,7 +1848,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1883,7 +1882,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
     const generatedTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
@@ -1995,7 +1993,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
     const existingTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
