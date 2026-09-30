@@ -14,6 +14,7 @@ def _row(
     course_name: str = "Computer Networks",
     course_id: str = "crs_net",
     plan_id: str = "sp_net",
+    plan_title: str = "期末复习计划",
     task_id: str = "task_transport",
     task_title: str = "可靠传输",
     task_status: str = "not_started",
@@ -27,7 +28,7 @@ def _row(
         course_id=course_id,
         course_name=course_name,
         plan_id=plan_id,
-        plan_title="期末复习计划",
+        plan_title=plan_title,
         plan_start_date=date(2026, 7, 10),
         plan_end_date=date(2026, 7, 20),
         task_id=task_id,
@@ -101,14 +102,21 @@ def test_build_task_reads_rejects_status_mismatch() -> None:
     assert exc_info.value.code == "STATE_CONFLICT"
 
 
-def test_build_course_groups_keeps_plan_ids_but_does_not_require_plan_title() -> None:
+def test_build_course_groups_keeps_plan_ids_and_titles() -> None:
     tasks = build_task_reads(
         [
-            _row(course_id="crs_net", course_name="Computer Networks", plan_id="sp_a", task_id="task_a"),
+            _row(
+                course_id="crs_net",
+                course_name="Computer Networks",
+                plan_id="sp_a",
+                plan_title="网络冲刺",
+                task_id="task_a",
+            ),
             _row(
                 course_id="crs_net",
                 course_name="Computer Networks",
                 plan_id="sp_b",
+                plan_title="网络巩固",
                 task_id="task_b",
                 task_sort_order=2,
             ),
@@ -121,6 +129,7 @@ def test_build_course_groups_keeps_plan_ids_but_does_not_require_plan_title() ->
     assert groups[0].course_name == "Computer Networks"
     assert groups[0].plan_ids == ["sp_a", "sp_b"]
     assert [task.plan_id for task in groups[0].tasks] == ["sp_a", "sp_b"]
+    assert [task.plan_title for task in groups[0].tasks] == ["网络冲刺", "网络巩固"]
 
 
 def test_summarize_calendar_days_limits_task_summaries_to_three() -> None:
@@ -134,6 +143,7 @@ def test_summarize_calendar_days_limits_task_summaries_to_three() -> None:
     day = month.days[0]
     assert day.task_count == 5
     assert [summary.title for summary in day.task_summaries] == ["任务 1", "任务 2", "任务 3"]
+    assert {summary.plan_title for summary in day.task_summaries} == {"期末复习计划"}
     assert day.hidden_task_count == 2
 
 from collections.abc import Generator
@@ -187,6 +197,7 @@ def _seed_plan_tree(
     user_id: str = "usr_a",
     course_id: str = "crs_net",
     plan_id: str = "sp_net",
+    plan_title: str = "期末复习计划",
     plan_status: str = "active",
     task_id: str = "task_transport",
     task_title: str = "可靠传输",
@@ -200,7 +211,7 @@ def _seed_plan_tree(
             id=plan_id,
             user_id=user_id,
             course_id=course_id,
-            title="期末复习计划",
+            title=plan_title,
             goal_text="复习",
             parsed_config_json={},
             start_date=date(2026, 7, 10),
@@ -278,7 +289,7 @@ def test_get_global_month_calendar_limits_summaries_and_counts_unique_courses(db
     assert day.hidden_task_count == 0
 
 
-def test_get_course_day_todos_returns_only_requested_course_without_plan_title(db: Session) -> None:
+def test_get_course_day_todos_returns_only_requested_course_with_plan_title(db: Session) -> None:
     _seed_calendar_fixture(db)
 
     result = get_course_day_todos(db, user_id="usr_a", course_id="crs_net", target_date=date(2026, 7, 11))
@@ -286,6 +297,7 @@ def test_get_course_day_todos_returns_only_requested_course_without_plan_title(d
     assert result.course_name == "Computer Networks"
     assert [task.course_id for task in result.tasks] == ["crs_net", "crs_net"]
     assert [task.plan_id for task in result.tasks] == ["sp_net", "sp_net_two"]
+    assert [task.plan_title for task in result.tasks] == ["期末复习计划", "期末复习计划"]
     assert all(task.subtasks for task in result.tasks)
 
 

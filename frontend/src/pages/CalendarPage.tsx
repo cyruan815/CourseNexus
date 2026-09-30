@@ -83,7 +83,7 @@ function buildCalendarCells(referenceDate: Date, today = new Date()): CalendarCe
 
 function calendarSummaryTaskLines(summary: StudyCalendarDaySummary, maxLines: number): string[] {
   const taskTitles = summary.task_summaries
-    .map((task) => task.title)
+    .map((task) => `${task.plan_title} · ${task.title}`)
     .filter((title) => title.trim().length > 0);
   const fallback = taskTitles.length > 0 ? taskTitles : [`${summary.task_count} 个任务`];
   const hasMore = summary.hidden_task_count > 0 || fallback.length > maxLines;
@@ -262,6 +262,7 @@ function CourseCalendarTaskCard({ courseId, task }: { courseId: string; task: St
         <Group justify="space-between" wrap="nowrap">
           <Stack gap={2}>
             <Text className="calendar-primary-task-title" fw={750}>{task.title}</Text>
+            <Text c="dimmed" size="xs">所属计划：{task.plan_title}</Text>
             <Text className="calendar-task-progress-count" c="dimmed" size="sm">
               {task.completed_subtask_count}/{task.total_subtask_count}
             </Text>
