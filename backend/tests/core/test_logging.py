@@ -4,6 +4,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
+import pytest
 from sqlalchemy.exc import OperationalError as SqlAlchemyOperationalError
 
 from app.core.config import Settings
@@ -17,6 +18,15 @@ from app.core.logging import (
     get_logger,
     reset_request_id,
 )
+
+
+@pytest.fixture(autouse=True)
+def cleanup_course_nexus_handlers():
+    yield
+    logger = logging.getLogger("course_nexus")
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        handler.close()
 
 
 def test_exception_summary_preserves_original_type_and_message() -> None:
