@@ -5,6 +5,15 @@ import {
   resolveFilePreviewKind,
   UniversalFilePreview,
 } from "../../../src/components/file-preview";
+import { renderAsync } from "docx-preview";
+
+vi.mock("docx-preview", () => ({
+  renderAsync: vi.fn(async (_file: ArrayBuffer, container: HTMLElement) => {
+    const page = document.createElement("section");
+    page.textContent = "Word document rendered";
+    container.append(page);
+  }),
+}));
 
 describe("UniversalFilePreview", () => {
   beforeAll(() => {
@@ -23,6 +32,7 @@ describe("UniversalFilePreview", () => {
   beforeEach(() => {
     vi.mocked(URL.createObjectURL).mockClear();
     vi.mocked(URL.revokeObjectURL).mockClear();
+    vi.mocked(renderAsync).mockClear();
   });
 
   it("resolves supported formats from project type, MIME type, and extension", () => {
@@ -63,6 +73,27 @@ describe("UniversalFilePreview", () => {
 
     expect(await screen.findByText(/<script>danger\(\)<\/script>/)).toBeInTheDocument();
     expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("renders DOCX with the secure read-only options", async () => {
+    const file = new File(["docx fixture"], "lecture.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    render(<UniversalFilePreview file={file} fileName={file.name} materialType="word" />);
+
+    expect(screen.getByText("正在渲染 Word 文档…")).toBeInTheDocument();
+    expect(await screen.findByText("Word document rendered")).toBeInTheDocument();
+    expect(renderAsync).toHaveBeenCalledWith(
+      expect.any(ArrayBuffer),
+      expect.any(HTMLElement),
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        breakPages: true,
+        renderAltChunks: false,
+        useBase64URL: true,
+      }),
+    );
   });
 
   it("falls back to download for unsupported files", async () => {

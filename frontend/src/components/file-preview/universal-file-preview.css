@@ -134,6 +134,34 @@
   padding: 30px;
 }
 
+.universal-file-preview__viewport--docx {
+  align-items: flex-start;
+  background: #e7ebef;
+  justify-content: flex-start;
+  padding: 28px;
+}
+
+.universal-file-preview__docx-shell {
+  min-height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.universal-file-preview__docx-document {
+  min-height: 100%;
+}
+
+.universal-file-preview__docx-document .course-nexus-docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+
+.universal-file-preview__docx-document section.course-nexus-docx {
+  border: 1px solid #d9e0e6;
+  box-shadow: 0 18px 48px rgba(42, 56, 70, 0.13);
+  margin: 0 auto 24px;
+}
+
 .universal-file-preview__text-document {
   background: #fff;
   border: 1px solid #e1e7ec;
@@ -192,6 +220,21 @@
   width: 46px;
 }
 
+.universal-file-preview__state--error .universal-file-preview__state-icon {
+  background: #faece9;
+  color: #a34736;
+}
+
+.universal-file-preview__state-icon .is-spinning {
+  animation: universal-file-preview-spin 900ms linear infinite;
+}
+
+@keyframes universal-file-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .universal-file-preview__state p {
   font-size: 14px;
   line-height: 1.65;
@@ -216,6 +259,10 @@
   }
 
   .universal-file-preview__viewport--text {
+    padding: 14px;
+  }
+
+  .universal-file-preview__viewport--docx {
     padding: 14px;
   }
 

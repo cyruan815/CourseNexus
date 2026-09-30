@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { IconDownload, IconFileAlert } from "@tabler/icons-react";
+import { IconDownload } from "@tabler/icons-react";
 
+import { readBlobAsText } from "./blob-readers";
+import { DocxFilePreview } from "./DocxFilePreview";
 import { filePreviewKindLabel, resolveFilePreviewKind } from "./file-types";
 import type { FilePreviewKind } from "./file-types";
+import { FilePreviewStatus } from "./FilePreviewStatus";
 import "./universal-file-preview.css";
 
 const TEXT_PREVIEW_LIMIT_BYTES = 2 * 1024 * 1024;
@@ -70,7 +73,7 @@ function PreviewBody({
   objectUrl: string | null;
 }) {
   if (!objectUrl) {
-    return <PreviewState message="正在准备文件预览…" role="status" />;
+    return <FilePreviewStatus message="正在准备文件预览…" role="status" tone="loading" />;
   }
   if (kind === "pdf") {
     const pageFragment = initialPage && initialPage > 0 ? `#page=${Math.floor(initialPage)}&view=FitH` : "";
@@ -82,10 +85,13 @@ function PreviewBody({
   if (kind === "text") {
     return <TextFilePreview file={file} />;
   }
-  if (kind === "docx" || kind === "pptx") {
-    return <PreviewState message={`${filePreviewKindLabel(kind)} 预览器正在准备接入`} role="status" />;
+  if (kind === "docx") {
+    return <DocxFilePreview file={file} />;
   }
-  return <PreviewState message="暂不支持在页面内预览此格式，请下载原文件查看。" />;
+  if (kind === "pptx") {
+    return <FilePreviewStatus message={`${filePreviewKindLabel(kind)} 预览器正在准备接入`} role="status" />;
+  }
+  return <FilePreviewStatus message="暂不支持在页面内预览此格式，请下载原文件查看。" />;
 }
 
 function TextFilePreview({ file }: { file: Blob }) {
@@ -114,36 +120,16 @@ function TextFilePreview({ file }: { file: Blob }) {
   }, [file]);
 
   if (error) {
-    return <PreviewState message="文本读取失败，请下载原文件查看。" role="alert" />;
+    return <FilePreviewStatus message="文本读取失败，请下载原文件查看。" role="alert" tone="error" />;
   }
   if (content === null) {
-    return <PreviewState message="正在读取文本…" role="status" />;
+    return <FilePreviewStatus message="正在读取文本…" role="status" tone="loading" />;
   }
   return (
     <article className="universal-file-preview__text-document">
       {isTruncated ? <p className="universal-file-preview__truncated">文件较长，仅展示前 2 MiB。</p> : null}
       <pre>{content}</pre>
     </article>
-  );
-}
-
-function readBlobAsText(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("File read failed"));
-    reader.readAsText(blob);
-  });
-}
-
-function PreviewState({ message, role }: { message: string; role?: "alert" | "status" }) {
-  return (
-    <div className="universal-file-preview__state" role={role}>
-      <span className="universal-file-preview__state-icon" aria-hidden>
-        <IconFileAlert size={25} stroke={1.7} />
-      </span>
-      <p>{message}</p>
-    </div>
   );
 }
 
