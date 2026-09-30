@@ -16,11 +16,13 @@ from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
+from app.integrations.model_provider.mock import MockModelProvider
 from app.main import app
 from app.modules.checkins.models import CheckinRecord
 from app.modules.course_qa.models import Conversation, Message
 from app.modules.courses.models import Course
 from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.learning_execution import router as learning_router
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
 
@@ -49,6 +51,9 @@ def api() -> Generator[ApiHarness, None, None]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_retrieval_rag_index] = lambda: rag_index
+    app.dependency_overrides[learning_router.get_task_qa_model_provider] = (
+        lambda: MockModelProvider()
+    )
     try:
         yield ApiHarness(client=TestClient(app), db=session, rag_index=rag_index)
     finally:
