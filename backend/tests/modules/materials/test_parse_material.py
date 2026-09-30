@@ -287,6 +287,31 @@ def test_parse_material_failure_marks_parse_failed(db: Session, tmp_path: Path, 
     assert isinstance(record.exc_info[1], ValueError)
 
 
+def test_parse_material_rejects_empty_candidate(db: Session, tmp_path: Path) -> None:
+    class EmptyParser:
+        def parse(self, file_path: Path) -> ParsedDocument:
+            return ParsedDocument(
+                chunks=[],
+                diagnostics=ParseDiagnostics(parser="test", conversion_status="success"),
+            )
+
+    user, _, material = create_uploaded_material(db, tmp_path)
+
+    parsed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=EmptyParser(),
+        rag_index=FakeRagIndex(),
+        storage_root=tmp_path,
+    )
+
+    assert parsed.parse_status == "parse_failed"
+    assert parsed.parse_error == "PARSE_FAILED"
+    assert parsed.active_parse_version_id is None
+    assert [version.status for version in parse_versions(db, material.id)] == ["failed"]
+
+
 def test_reparse_material_activates_new_chunks_and_retires_old_version(db: Session, tmp_path: Path) -> None:
     user, _, material = create_uploaded_material(db, tmp_path)
     parser = PlainTextParser()

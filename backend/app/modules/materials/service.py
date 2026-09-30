@@ -354,6 +354,20 @@ def parse_material(
         )
         for chunk in parsed_document.chunks
     ]
+    if not chunks:
+        parse_logger.warning(
+            "候选解析版本没有可用内容 | code=PARSE_FAILED material=%s version=%s cost_ms=%.2f",
+            material.id,
+            candidate.id,
+            (perf_counter() - started_at) * 1000,
+        )
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="PARSE_FAILED",
+            rag_index=rag_index,
+        )
     try:
         candidate.parse_quality = _parse_quality(parsed_document.diagnostics)
         candidate.page_count = parsed_document.diagnostics.page_count
