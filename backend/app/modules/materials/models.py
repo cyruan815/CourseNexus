@@ -149,8 +149,9 @@ class MaterialChunk(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     material_id: Mapped[str] = mapped_column(ForeignKey("course_materials.id"), nullable=False)
-    parse_version_id: Mapped[str | None] = mapped_column(
+    parse_version_id: Mapped[str] = mapped_column(
         ForeignKey("material_parse_versions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

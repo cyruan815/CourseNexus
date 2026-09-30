@@ -108,6 +108,19 @@ def test_upgrade_backfills_versions_chunks_and_citations(tmp_path: Path, monkeyp
         engine.dispose()
 
         get_settings.cache_clear()
+        command.upgrade(_alembic_config(), "20261001_0007")
+        engine = create_engine(database_url)
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO material_chunks "
+                    "(id, material_id, parse_version_id, course_id, chunk_index, content_text) "
+                    "VALUES ('chk_unversioned', 'mat_good', NULL, 'crs_legacy', 1, 'late legacy text')"
+                )
+            )
+        engine.dispose()
+
+        get_settings.cache_clear()
         command.upgrade(_alembic_config(), "head")
 
         engine = create_engine(database_url)
@@ -121,7 +134,7 @@ def test_upgrade_backfills_versions_chunks_and_citations(tmp_path: Path, monkeyp
             good_version = connection.execute(
                 text(
                     "SELECT id, status, parse_quality FROM material_parse_versions "
-                    "WHERE material_id = 'mat_good'"
+                    "WHERE material_id = 'mat_good' AND status = 'active'"
                 )
             ).mappings().one()
             assert good["parse_status"] == "parsed"
@@ -134,6 +147,14 @@ def test_upgrade_backfills_versions_chunks_and_citations(tmp_path: Path, monkeyp
             assert connection.execute(
                 text("SELECT material_version_id FROM source_citations WHERE id = 'cite_legacy'")
             ).scalar_one() == good_version["id"]
+            recovered_version = connection.execute(
+                text("SELECT parse_version_id FROM material_chunks WHERE id = 'chk_unversioned'")
+            ).scalar_one()
+            assert recovered_version != good_version["id"]
+            assert connection.execute(
+                text("SELECT status FROM material_parse_versions WHERE id = :version_id"),
+                {"version_id": recovered_version},
+            ).scalar_one() == "retired"
 
             empty = connection.execute(
                 text(
@@ -152,6 +173,10 @@ def test_upgrade_backfills_versions_chunks_and_citations(tmp_path: Path, monkeyp
             assert connection.execute(
                 text("SELECT parse_error FROM material_parse_versions WHERE material_id = 'mat_failed'")
             ).scalar_one() == "OLD_FAILURE"
+        chunk_columns = {
+            column["name"]: column for column in inspect(engine).get_columns("material_chunks")
+        }
+        assert chunk_columns["parse_version_id"]["nullable"] is False
         engine.dispose()
 
         get_settings.cache_clear()
