@@ -479,6 +479,48 @@ def test_parse_material_index_failure_marks_failed_and_clears_chunks(db: Session
     assert rag_index.records == {}
 
 
+def test_reparse_index_failure_keeps_previous_active_version(db: Session, tmp_path: Path) -> None:
+    class ToggleFailingRagIndex(FakeRagIndex):
+        fail_indexing = False
+
+        def index_chunks(self, chunks):
+            indexed_chunks = list(chunks)
+            super().index_chunks(indexed_chunks)
+            if self.fail_indexing:
+                raise CourseNexusError(code="INDEXING_FAILED", message="索引失败", status_code=502)
+
+    rag_index = ToggleFailingRagIndex()
+    user, _, material = create_uploaded_material(db, tmp_path)
+    first = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+    first_version_id = first.active_parse_version_id
+    first_chunk_ids = set(rag_index.records)
+    (tmp_path / material.file_url).write_text("replacement", encoding="utf-8")
+    rag_index.fail_indexing = True
+
+    failed = parse_material(
+        db,
+        user_id=user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=rag_index,
+        storage_root=tmp_path,
+    )
+
+    assert failed.parse_status == "parsed"
+    assert failed.parse_error == "INDEXING_FAILED"
+    assert failed.active_parse_version_id == first_version_id
+    assert {version.status for version in parse_versions(db, material.id)} == {"active", "failed"}
+    assert {chunk.id for chunk in material_chunks(db, material.id)} == first_chunk_ids
+    assert set(rag_index.records) == first_chunk_ids
+
+
 def test_parse_material_normalizes_index_errors_to_indexing_failed(db: Session, tmp_path: Path, caplog) -> None:
     class UnexpectedRagIndex(FakeRagIndex):
         def index_chunks(self, chunks):
