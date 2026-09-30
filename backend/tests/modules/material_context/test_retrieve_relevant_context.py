@@ -11,7 +11,7 @@ from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.base import RagScopeFilter, RetrievalHit
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.material_context.schemas import MaterialScope
-from app.modules.material_context.service import retrieve_relevant_context
+from app.modules.material_context.service import resolve_context, retrieve_relevant_context
 from app.modules.materials.service import parse_material, upload_file_material
 
 
@@ -246,3 +246,38 @@ def test_relevant_context_treats_selected_unparsed_material_as_no_parsed(
 
     assert result.chunks == []
     assert result.no_parsed_material is True
+
+
+def test_reparse_excludes_retired_chunks_from_context_and_retrieval(db: Session, tmp_path, context_seed) -> None:
+    material = context_seed.math_material
+    assert material.file_url is not None
+    (tmp_path / material.file_url).write_text("Replacement topic only", encoding="utf-8")
+
+    reparsed = parse_material(
+        db,
+        user_id=context_seed.user.id,
+        material_id=material.id,
+        parser=PlainTextParser(),
+        rag_index=context_seed.rag_index,
+        storage_root=tmp_path,
+    )
+
+    resolved = resolve_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        material_scope=MaterialScope(include_all_parsed_materials=False, material_ids=[material.id]),
+    )
+    assert [chunk.content_text for chunk in resolved.chunks] == ["Replacement topic only"]
+    assert {chunk.material_version_id for chunk in resolved.chunks} == {reparsed.active_parse_version_id}
+
+    retrieved = retrieve_relevant_context(
+        db,
+        user_id=context_seed.user.id,
+        course_id=context_seed.course.id,
+        query="eigenvalue",
+        material_scope=MaterialScope(include_all_parsed_materials=False, material_ids=[material.id]),
+        rag_index=context_seed.rag_index,
+        top_k=8,
+    )
+    assert retrieved.chunks == []
