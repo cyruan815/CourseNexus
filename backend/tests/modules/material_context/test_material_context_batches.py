@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from io import BytesIO
 
-import pytest
 from sqlalchemy.orm import Session
 
-from app.core.errors import CourseNexusError
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.parsers.plain_text import PlainTextParser
 from app.integrations.rag.fake import FakeRagIndex
@@ -14,6 +12,7 @@ from app.modules.material_context.service import (
     iter_material_context_batches,
     summarize_material_quality_for_scope,
 )
+from app.modules.materials.models import MaterialParseVersion
 from app.modules.materials.service import parse_material, upload_file_material
 
 
@@ -94,28 +93,29 @@ def test_batches_never_split_oversized_chunk(db: Session, tmp_path, context_seed
     assert batches[0].estimated_tokens == 20
 
 
-def test_batches_raise_when_selected_parsed_material_has_no_chunks(db: Session, context_seed) -> None:
-    with pytest.raises(CourseNexusError) as exc_info:
-        list(
-            iter_material_context_batches(
-                db,
-                user_id=context_seed.user.id,
-                course_id=context_seed.course.id,
-                material_scope=MaterialScope(
-                    include_all_parsed_materials=False,
-                    material_ids=[context_seed.empty_material.id],
-                ),
-                max_tokens=20,
-            )
+def test_batches_ignore_failed_material_without_active_version(db: Session, context_seed) -> None:
+    batches = list(
+        iter_material_context_batches(
+            db,
+            user_id=context_seed.user.id,
+            course_id=context_seed.course.id,
+            material_scope=MaterialScope(
+                include_all_parsed_materials=False,
+                material_ids=[context_seed.empty_material.id],
+            ),
+            max_tokens=20,
         )
+    )
 
-    assert exc_info.value.code == "MATERIAL_COVERAGE_INCOMPLETE"
+    assert batches == []
 
 
 def test_material_quality_summary_maps_partial_parse_diagnostics_for_scope(db: Session, context_seed) -> None:
-    context_seed.math_material.parse_quality = "partial"
-    context_seed.math_material.page_count = 4
-    context_seed.math_material.parse_diagnostics_json = {
+    active_version = db.get(MaterialParseVersion, context_seed.math_material.active_parse_version_id)
+    assert active_version is not None
+    active_version.parse_quality = "partial"
+    active_version.page_count = 4
+    active_version.parse_diagnostics_json = {
         "parser": "docling",
         "profile": "pdf_text_first",
         "conversion_status": "partial_success",
@@ -139,7 +139,7 @@ def test_material_quality_summary_maps_partial_parse_diagnostics_for_scope(db: S
             },
         ],
     }
-    db.add(context_seed.math_material)
+    db.add(active_version)
     db.commit()
 
     summary = summarize_material_quality_for_scope(

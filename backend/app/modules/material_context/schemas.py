@@ -12,6 +12,7 @@ class MaterialScope(BaseModel):
 
 class ContextChunk(BaseModel):
     material_id: str
+    material_version_id: str | None = None
     chunk_id: str
     chunk_index: int = 0
     material_name: str

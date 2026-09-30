@@ -11,6 +11,7 @@ from app.integrations.rag.base import RagIndex, RagScopeFilter
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.repository import (
     has_parsed_context_chunks,
+    list_active_context_chunk_ids,
     list_active_scope_material_ids,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
@@ -128,7 +129,19 @@ def retrieve_relevant_context(
 
     hits = rag_index.retrieve(
         query=query,
-        scope=_rag_scope_filter(user_id=user_id, course_id=course_id, resolved_scope=resolved_scope),
+        scope=_rag_scope_filter(
+            user_id=user_id,
+            course_id=course_id,
+            resolved_scope=resolved_scope,
+            active_chunk_ids=tuple(
+                list_active_context_chunk_ids(
+                    db,
+                    user_id=user_id,
+                    course_id=course_id,
+                    material_ids=material_ids,
+                )
+            ),
+        ),
         top_k=top_k,
     )
     rows_by_chunk_id = {
@@ -271,14 +284,21 @@ def _resolve_scope(
     )
 
 
-def _rag_scope_filter(*, user_id: str, course_id: str, resolved_scope: _ResolvedScope) -> RagScopeFilter:
+def _rag_scope_filter(
+    *,
+    user_id: str,
+    course_id: str,
+    resolved_scope: _ResolvedScope,
+    active_chunk_ids: tuple[str, ...],
+) -> RagScopeFilter:
     if resolved_scope.material_ids:
         return RagScopeFilter(
             user_id=user_id,
             course_id=course_id,
             material_ids=resolved_scope.eligible_material_ids,
+            chunk_ids=active_chunk_ids,
         )
-    return RagScopeFilter(user_id=user_id, course_id=course_id)
+    return RagScopeFilter(user_id=user_id, course_id=course_id, chunk_ids=active_chunk_ids)
 
 
 def _batch_context_chunks(chunks: list[ContextChunk], *, max_tokens: int) -> Iterator[MaterialContextBatch]:
@@ -331,6 +351,7 @@ def _format_generation_context(chunks: list[ContextChunk]) -> str:
 def _to_context_chunk(chunk: MaterialChunk, material_name: str, *, score: float | None = None) -> ContextChunk:
     return ContextChunk(
         material_id=chunk.material_id,
+        material_version_id=chunk.parse_version_id,
         chunk_id=chunk.id,
         chunk_index=chunk.chunk_index,
         material_name=material_name,

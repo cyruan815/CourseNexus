@@ -51,6 +51,7 @@ def test_relevant_context_preserves_hit_order_scope_and_score(db: Session, conte
         user_id=context_seed.user.id,
         course_id=context_seed.course.id,
         material_ids=(context_seed.math_material.id,),
+        chunk_ids=(first_chunk.id, second_chunk.id),
     )
 
 
