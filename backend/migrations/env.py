@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
+from app.core.paths import assert_no_legacy_data_conflicts
 from app.db.base import Base
 import app.db.models  # noqa: F401
 
@@ -16,7 +17,13 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return get_settings().database_url or config.get_main_option("sqlalchemy.url")
+    settings = get_settings()
+    assert_no_legacy_data_conflicts(
+        database_url=settings.database_url,
+        file_storage_path=settings.file_storage_path,
+        chroma_persist_path=settings.chroma_persist_path,
+    )
+    return settings.database_url or config.get_main_option("sqlalchemy.url")
 
 
 def run_migrations_offline() -> None:

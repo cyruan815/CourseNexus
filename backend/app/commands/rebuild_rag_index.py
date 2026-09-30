@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import CourseNexusError
 from app.core.logging import configure_logging, get_logger
+from app.core.paths import assert_no_legacy_data_conflicts
 from app.db.session import SessionLocal
 from app.integrations.rag.base import RagChunk, RagIndex
 from app.integrations.rag.llama_index_chroma import create_openai_chroma_rag_index
@@ -56,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = get_settings()
+    assert_no_legacy_data_conflicts(
+        database_url=settings.database_url,
+        file_storage_path=settings.file_storage_path,
+        chroma_persist_path=settings.chroma_persist_path,
+    )
     configure_logging(settings)
     started_at = perf_counter()
     endpoint = settings.model_endpoint("embedding")

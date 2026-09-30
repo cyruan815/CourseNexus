@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.commands.rebuild_rag_index as rebuild_command
-from app.core.config import Settings
+from app.core.config import ROOT_DIR, Settings
 from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
@@ -164,7 +164,7 @@ def test_rebuild_command_passes_embedding_endpoint_to_adapter(
 
     assert exit_code == 0
     assert captured == {
-        "persist_path": "./data/chroma",
+        "persist_path": str(ROOT_DIR / "data" / "chroma"),
         "collection_name": "course_nexus_material_chunks",
         "api_key": "embedding-key",
         "embedding_model": "text-embedding-3-large",
