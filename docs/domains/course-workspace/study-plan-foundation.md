@@ -78,6 +78,7 @@
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendar(courseId, month)` 调用 `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`。
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendarDay(courseId, date)` 调用 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`。
 - 月视图只展示后端日期摘要；点击日期后才读取当天任务树。
+- 日期摘要和任务树都携带已持久化的 `plan_title`；月历行以“计划名称 · 任务名称”展示，单日任务卡单独标明所属计划，用于区分同课程下的多个计划。
 - 任务卡在有可执行二级任务时优先跳转 `/study-subtasks/{subtask_id}`，没有可执行子任务时退回计划详情；日历页本身仍不写完成状态。
 
 测试入口：

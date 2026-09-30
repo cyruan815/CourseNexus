@@ -1246,6 +1246,8 @@ Preview 默认 `title` 采用“规范化学习目标 · 开始日期”，总�
 | 任务测试题 Markdown 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 返回 Markdown 文件流；只支持成功的 `task_test`，不保存作答、不判分、不生成 PDF。 |
 | 今日讲义 PDF 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 返回 PDF 文件流；只支持成功的 `handout`，不保存导出历史，不支持任务测试题 PDF。 |
 
+今日待办、全局日期待办和课程日期待办中的任务对象均包含 `plan_id` 与 `plan_title`；全局 / 课程月历的 `task_summaries[]` 也包含相同字段。`plan_title` 是计划保存时的实际标题，前端应直接展示该值，不能根据课程名或任务名重新推导；历史计划标题保持原样。首页待办、首页月历和学习日历据此区分同课程下的多个计划。
+
 任务测试题后端生成和 Markdown 文件导出已实现。前端现在提供浏览器内存内的逐题作答交互：用户提交单道题后才显示正确答案和解析；单选、多选、判断题只做本地即时判断，简答题只显示参考答案和解析。该交互不调用新增 API，不保存 attempt 历史，不写错题本，也不影响二级任务完成、打卡或导出。
 ## 5. 前端最小工作台验收口径
 
