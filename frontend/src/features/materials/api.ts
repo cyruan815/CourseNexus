@@ -27,7 +27,7 @@ function isApiErrorResponse(payload: unknown): payload is ApiErrorResponse {
   );
 }
 
-export async function getMaterialPdf(materialId: string): Promise<Blob> {
+export async function getMaterialFile(materialId: string): Promise<Blob> {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
   const headers: Record<string, string> = {};
   const token = getSessionToken();

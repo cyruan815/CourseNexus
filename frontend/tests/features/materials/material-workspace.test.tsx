@@ -142,7 +142,7 @@ describe("MaterialWorkspace", () => {
   });
 
   it("opens a PDF preview modal when clicking the material name", async () => {
-    vi.mocked(materialsApi.getMaterialPdf).mockResolvedValue(
+    vi.mocked(materialsApi.getMaterialFile).mockResolvedValue(
       new Blob(["%PDF-1.4"], { type: "application/pdf" }),
     );
 
@@ -157,7 +157,7 @@ describe("MaterialWorkspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "预览资料 第一章.pdf" }));
 
     expect(await screen.findByRole("dialog", { name: "第一章.pdf" })).toBeInTheDocument();
-    await waitFor(() => expect(materialsApi.getMaterialPdf).toHaveBeenCalledWith("mat_1"));
+    await waitFor(() => expect(materialsApi.getMaterialFile).toHaveBeenCalledWith("mat_1"));
     expect(await screen.findByTitle("第一章.pdf PDF 预览")).toHaveAttribute("src", "blob:material-preview");
 
     fireEvent.click(screen.getByRole("button", { name: "关闭资料预览" }));

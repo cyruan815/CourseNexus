@@ -3,7 +3,7 @@ import { IconFileDescription, IconMapPin, IconQuote } from "@tabler/icons-react"
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../api/errors";
-import { getMaterial, getMaterialPdf } from "../materials/api";
+import { getMaterial, getMaterialFile } from "../materials/api";
 import type { Material } from "../materials/types";
 import "./citation-locator.css";
 
@@ -105,7 +105,7 @@ export function CitationLocator({
       setMaterial(nextMaterial);
 
       if (nextMaterial.source_type === "file" && nextMaterial.material_type === "pdf" && targetPage !== null) {
-        const blob = await getMaterialPdf(nextMaterial.id);
+        const blob = await getMaterialFile(nextMaterial.id);
         const objectUrl = URL.createObjectURL(blob);
         if (requestId.current !== nextRequestId) {
           revokeObjectUrl(objectUrl);

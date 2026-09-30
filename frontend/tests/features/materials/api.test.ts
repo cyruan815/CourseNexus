@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createMaterialFolder,
   getMaterial,
-  getMaterialPdf,
+  getMaterialFile,
   listMaterialFolders,
   moveMaterialToFolder,
   updateMaterial,
@@ -26,13 +26,13 @@ describe("materials api", () => {
     );
   });
 
-  it("loads an authenticated PDF blob for preview", async () => {
+  it("loads an authenticated original-file blob for preview", async () => {
     window.localStorage.setItem("course_nexus_token", "token_1");
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response("%PDF-1.4", { status: 200, headers: { "Content-Type": "application/pdf" } }),
     );
 
-    const blob = await getMaterialPdf("mat_1");
+    const blob = await getMaterialFile("mat_1");
 
     expect(blob.type).toBe("application/pdf");
     expect(fetch).toHaveBeenCalledWith(

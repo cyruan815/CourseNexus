@@ -20,7 +20,7 @@ import {
   createMaterialFolder,
   deleteMaterial,
   deleteMaterialFolder,
-  getMaterialPdf,
+  getMaterialFile,
   listMaterialFolders,
   listMaterials,
   moveMaterialToFolder,
@@ -440,7 +440,7 @@ export function MaterialWorkspace({
     setPreviewError(null);
     setIsPreviewLoading(true);
     try {
-      const blob = await getMaterialPdf(material.id);
+      const blob = await getMaterialFile(material.id);
       const objectUrl = URL.createObjectURL(blob);
       if (previewRequestId.current !== requestId) {
         URL.revokeObjectURL(objectUrl);
