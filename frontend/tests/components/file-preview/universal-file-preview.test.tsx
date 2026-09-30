@@ -126,6 +126,10 @@ describe("UniversalFilePreview", () => {
         lazyMedia: true,
         lazySlides: true,
         listOptions: expect.objectContaining({ windowed: true }),
+        pdfjs: {
+          moduleUrl: expect.stringContaining("pdf.min"),
+          workerUrl: expect.stringContaining("pdf.worker.min"),
+        },
         zipLimits: { maxEntries: 2_000 },
       }),
     );

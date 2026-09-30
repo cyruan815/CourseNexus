@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PptxViewer as PptxViewerInstance } from "@aiden0z/pptx-renderer";
+import pdfjsModuleUrl from "pdfjs-dist/build/pdf.min.mjs?url";
+import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import { readBlobAsArrayBuffer } from "./blob-readers";
 import { FilePreviewStatus } from "./FilePreviewStatus";
@@ -37,6 +39,10 @@ export function PptxFilePreview({ file }: { file: Blob }) {
             overscanViewport: 1,
             showSlideLabels: true,
             windowed: true,
+          },
+          pdfjs: {
+            moduleUrl: pdfjsModuleUrl,
+            workerUrl: pdfjsWorkerUrl,
           },
           renderMode: "list",
           scrollContainer: container,

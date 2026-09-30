@@ -22,7 +22,7 @@ CourseNexus 当前仅在资料工作区和引用定位弹窗中预览 PDF。DOCX
 - 在 `frontend/src/components/file-preview/` 提供业务无关的统一预览组件。组件只接收已经取得的 `Blob`、文件名、MIME 类型和项目内部文件类型，不自行请求业务 API。
 - 资料等业务模块负责鉴权获取原文件，并把文件数据传给统一组件；业务页面不得直接 import DOCX 或 PPTX 渲染库。
 - PDF 使用临时 object URL 交给浏览器内置 PDF 查看能力；图片和纯文本使用浏览器原生元素安全展示。
-- DOCX 通过 `docx-preview` 从 `ArrayBuffer` 只读渲染，关闭 altChunk 渲染；PPTX 通过 `@aiden0z/pptx-renderer` 从 `ArrayBuffer` 只读渲染，并启用库提供的压缩包与资源限制。
+- DOCX 通过 `docx-preview` 从 `ArrayBuffer` 只读渲染，关闭 altChunk 渲染；PPTX 通过 `@aiden0z/pptx-renderer` 从 `ArrayBuffer` 只读渲染，并启用库提供的压缩包与资源限制。PPTX 的 SmartArt/EMF 内嵌 PDF 回退使用项目自托管的 PDF.js 模块和 Worker，不请求第三方 CDN。
 - DOCX、PPTX 适配器及其依赖使用动态 `import()`，普通页面和 PDF 预览不加载 Office 渲染依赖。
 - 统一外壳拥有格式识别、加载/失败/不支持状态、对象 URL 生命周期和适配器销毁；格式适配器只负责把一个文件渲染到受控容器。
 - 私有文件不发送给第三方服务。渲染失败时显示明确错误并保留原文件下载入口，不静默替换成解析文本。
