@@ -23,10 +23,17 @@ export interface Material {
   mime_type: string | null;
   parse_status: string;
   parse_error: string | null;
+  active_parse_version_id?: string | null;
+  is_learning_ready?: boolean;
   page_count: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+export function isMaterialLearningReady(material: Material): boolean {
+  return material.is_learning_ready
+    ?? (material.active_parse_version_id != null || material.parse_status === "parsed");
 }
 
 export interface MaterialScope {

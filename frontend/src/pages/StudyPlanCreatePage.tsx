@@ -22,7 +22,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/errors";
 import { fetchCourse } from "../features/courses/api";
 import { listMaterials } from "../features/materials/api";
-import type { Material, MaterialScope } from "../features/materials/types";
+import { isMaterialLearningReady, type Material, type MaterialScope } from "../features/materials/types";
 import { StudyPlanMaterialScopeSelector } from "../features/study-plans/components/StudyPlanMaterialScopeSelector";
 import {
   createDiagnosticProfile,
@@ -598,7 +598,7 @@ export function StudyPlanCreatePage() {
     const incomingSelection = incomingMaterialSelectionRef.current;
     const parsedMaterialsById = new Map(
       materials
-        .filter((material) => material.parse_status === "parsed")
+        .filter(isMaterialLearningReady)
         .map((material) => [material.id, material]),
     );
     let nextSelection: StudyPlanMaterialSelection[];
@@ -792,7 +792,7 @@ export function StudyPlanCreatePage() {
   }, [dailyMinutes, endDate, goalText, materialScope, preference, startDate]);
 
   const parsedMaterialIds = useMemo(
-    () => new Set(materials.filter((material) => material.parse_status === "parsed").map((material) => material.id)),
+    () => new Set(materials.filter(isMaterialLearningReady).map((material) => material.id)),
     [materials],
   );
   const invalidMaterialIds = materialScope.material_ids.filter((id) => !parsedMaterialIds.has(id));
@@ -889,7 +889,7 @@ export function StudyPlanCreatePage() {
   function updateMaterialScope(nextScope: MaterialScope) {
     const nextIds = nextScope.material_ids;
     const nextSelection = nextIds.flatMap((id) => {
-      const material = materials.find((item) => item.id === id && item.parse_status === "parsed");
+      const material = materials.find((item) => item.id === id && isMaterialLearningReady(item));
       return material ? [{ id: material.id, name: material.name }] : [];
     });
     setMaterialScope({ include_all_parsed_materials: false, material_ids: nextSelection.map((item) => item.id) });
