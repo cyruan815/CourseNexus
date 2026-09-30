@@ -13,7 +13,7 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.modules.checkins.models import CheckinRecord
 from app.modules.courses.models import Course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.models import StudyTask
 from app.modules.study_plans.schemas import StudyPlanReplaceRequest, StudyPlanSaveRequest
 from app.modules.study_plans.service import delete_study_plan, replace_study_plan, save_study_plan
@@ -56,16 +56,26 @@ def _seed_owner_course(db: Session) -> tuple[User, Course]:
         file_size=16,
         mime_type="text/plain",
         parse_status="parsed",
+        active_parse_version_id="mpv_mat_seed",
+    )
+    parse_version = MaterialParseVersion(
+        id="mpv_mat_seed",
+        material_id=material.id,
+        course_id=course.id,
+        user_id=user.id,
+        status="active",
+        parse_quality="complete",
     )
     chunk = MaterialChunk(
         id="chk_mat_seed_000001",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=1,
         heading="Seed",
         content_text="Seed material",
     )
-    db.add_all([user, course, material, chunk])
+    db.add_all([user, course, material, parse_version, chunk])
     db.commit()
     return user, course
 

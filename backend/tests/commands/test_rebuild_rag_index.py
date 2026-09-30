@@ -16,7 +16,7 @@ from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 from app.commands.rebuild_rag_index import RebuildRagIndexResult, rebuild_all, rebuild_material
@@ -208,13 +208,41 @@ def _material(
     )
     db.add(material)
     db.flush()
+    if parse_status == "parsed":
+        version = MaterialParseVersion(
+            id=f"mpv_{material_id}",
+            material_id=material.id,
+            course_id=course_id,
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
+        )
+        db.add(version)
+        db.flush()
+        material.active_parse_version_id = version.id
+        db.add(material)
+        db.flush()
     return material
 
 
 def _chunk(db: Session, material: CourseMaterial, *, chunk_id: str, text: str) -> MaterialChunk:
+    parse_version_id = material.active_parse_version_id
+    if parse_version_id is None:
+        parse_version_id = f"mpv_{material.id}_retired"
+        db.add(
+            MaterialParseVersion(
+                id=parse_version_id,
+                material_id=material.id,
+                course_id=material.course_id,
+                user_id=material.user_id,
+                status="retired",
+            )
+        )
+        db.flush()
     chunk = MaterialChunk(
         id=chunk_id,
         material_id=material.id,
+        parse_version_id=parse_version_id,
         course_id=material.course_id,
         chunk_index=0,
         page=None,

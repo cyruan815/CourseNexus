@@ -22,7 +22,7 @@ from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.learning_execution import router as learning_router
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
 
@@ -98,6 +98,7 @@ def _seed_plan_with_materials(db: Session, *, user_id: str) -> tuple[str, str]:
         ("mat_flow_1", "chunk_flow_1", "主键.pdf", "主键用于唯一标识表中的一行。"),
         ("mat_flow_2", "chunk_flow_2", "外键.pdf", "外键用于表达两个表之间的关系。"),
     ]:
+        parse_version_id = f"mpv_{material_id}"
         db.add(
             CourseMaterial(
                 id=material_id,
@@ -108,12 +109,24 @@ def _seed_plan_with_materials(db: Session, *, user_id: str) -> tuple[str, str]:
                 source_type="file",
                 file_url=f"/uploads/{name}",
                 parse_status="parsed",
+                active_parse_version_id=parse_version_id,
+            )
+        )
+        db.add(
+            MaterialParseVersion(
+                id=parse_version_id,
+                material_id=material_id,
+                course_id="crs_flow",
+                user_id=user_id,
+                status="active",
+                parse_quality="complete",
             )
         )
         db.add(
             MaterialChunk(
                 id=chunk_id,
                 material_id=material_id,
+                parse_version_id=parse_version_id,
                 course_id="crs_flow",
                 chunk_index=0,
                 page="1",

@@ -23,7 +23,7 @@ from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.materials.schemas import MaterialFolderCreate, MaterialUpdate
-from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder, MaterialParseVersion
 from app.modules.materials.service import (
     create_material_folder,
     delete_material_folder,
@@ -68,6 +68,20 @@ def db() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+def _activate_material_version(db: Session, material: CourseMaterial) -> MaterialParseVersion:
+    version = MaterialParseVersion(
+        id=f"mpv_{material.id}",
+        material_id=material.id,
+        course_id=material.course_id,
+        user_id=material.user_id,
+        status="active",
+        parse_quality="complete",
+    )
+    material.active_parse_version_id = version.id
+    db.add_all([material, version])
+    return version
 
 
 def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -> None:
@@ -279,6 +293,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
     db.commit()
     folder = create_material_folder(
         db,
@@ -329,6 +344,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",
@@ -405,9 +421,11 @@ def test_delete_folder_rag_failure_rolls_back_database_and_restores_vectors(db: 
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",
@@ -472,9 +490,11 @@ def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",

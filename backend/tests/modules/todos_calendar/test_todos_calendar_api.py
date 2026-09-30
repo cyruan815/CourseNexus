@@ -12,7 +12,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.integrations.model_provider.mock import MockModelProvider
 from app.modules.courses.models import Course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans import router as study_plan_router
 import app.db.models  # noqa: F401
 from app.main import app
@@ -92,6 +92,7 @@ def _seed_parsed_material(client: TestClient, course_id: str, material_id: str) 
     try:
         course = db.get(Course, course_id)
         assert course is not None
+        parse_version_id = f"mpv_{material_id}"
         db.add_all(
             [
                 CourseMaterial(
@@ -105,10 +106,20 @@ def _seed_parsed_material(client: TestClient, course_id: str, material_id: str) 
                     file_size=16,
                     mime_type="text/plain",
                     parse_status="parsed",
+                    active_parse_version_id=parse_version_id,
+                ),
+                MaterialParseVersion(
+                    id=parse_version_id,
+                    material_id=material_id,
+                    course_id=course.id,
+                    user_id=course.user_id,
+                    status="active",
+                    parse_quality="complete",
                 ),
                 MaterialChunk(
                     id=f"chk_{material_id}_000001",
                     material_id=material_id,
+                    parse_version_id=parse_version_id,
                     course_id=course.id,
                     chunk_index=1,
                     heading="Calendar",
