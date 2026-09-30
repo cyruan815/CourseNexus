@@ -44,7 +44,7 @@ flowchart LR
 - `MaterialFolder`：课程内一级文件夹，`sort_order` 从 1 开始；用户确认删除后物理移除。
 - `CourseMaterial.folder_id`：可空，`null` 表示未分类。
 - `CourseMaterial.name`：用户可见展示名，可以重命名；`file_url` 是不可由重命名改变的内部存储路径。
-- PDF 原文通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、PDF 类型、实际文件存在性和解析后路径仍在存储根目录内。
+- 上传资料原文件通过受 Bearer token 保护的 `GET /api/v1/materials/{material_id}/content` 读取；接口校验资料所有权、文件型来源、实际文件存在性和解析后路径仍在存储根目录内，并按资料 MIME 类型返回。
 - 引用定位先通过 `GET /api/v1/materials/{material_id}` 读取资料元数据并复核当前用户所有权；只有仍可访问的 PDF 且引用有可靠页码时才继续读取原文。
 - 删除文件夹会级联物理删除其中全部资料、`MaterialChunk`、RAG 向量和原始上传目录，不提供回收站或恢复能力。
 - 问答、生成内容和学习结果不随资料删除；其 `SourceCitation.material_id`、`chunk_id` 置空，继续使用 `material_name`、页码和 `hit_text` 快照展示历史引用。
@@ -117,12 +117,12 @@ PDF 解析：
 3. 只更新 `CourseMaterial.name` 和 `updated_at`，不调用文件存储、Parser 或 RagIndex。
 4. 历史 `SourceCitation.material_name` 作为生成时快照保留原值，新问答使用重命名后的资料名。
 
-PDF 原文预览：
+资料原文件预览：
 
-1. 按当前用户读取未删除资料，先完成所有权隔离，再校验 `source_type = file`、`material_type = pdf` 和 PDF MIME 类型。
+1. 按当前用户读取未删除资料，先完成所有权隔离，再校验 `source_type = file` 且存在内部文件路径；历史链接资料等没有原文件的记录不进入预览。
 2. 将内部 `file_url` 拼接到存储根目录并解析真实路径；路径逃逸存储根目录或文件不存在时返回 `PREVIEW_FILE_UNAVAILABLE`。
-3. 后端以 `application/pdf`、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
-4. 前端带 Bearer token 拉取完整 Blob，创建临时 object URL 交给弹窗内浏览器 PDF 查看器；关闭、替换预览或组件卸载时释放 URL，过期异步请求的结果也会立即释放。
+3. 后端以资料 MIME 类型、`inline` 和 `private, no-store` 流式返回原文件；该只读链路不修改数据库、解析状态或索引，因此失败时不需要补偿。
+4. 前端带 Bearer token 拉取完整 Blob，交给统一文件预览器按格式选择浏览器原生、DOCX 或 PPTX 适配器；关闭、替换预览或组件卸载时释放对象 URL 和渲染器资源，过期异步请求的结果也会立即丢弃。
 
 引用来源定位：
 

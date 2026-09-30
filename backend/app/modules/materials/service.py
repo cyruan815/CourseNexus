@@ -102,7 +102,7 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     return material
 
 
-def get_material_pdf_content(
+def get_material_file_content(
     db: Session,
     *,
     user_id: str,
@@ -110,15 +110,10 @@ def get_material_pdf_content(
     storage_root: str | Path,
 ) -> tuple[CourseMaterial, Path]:
     material = get_material_detail(db, user_id, material_id)
-    if (
-        material.source_type != "file"
-        or material.material_type != "pdf"
-        or material.mime_type != "application/pdf"
-        or material.file_url is None
-    ):
+    if material.source_type != "file" or material.file_url is None:
         raise CourseNexusError(
             code="PREVIEW_UNSUPPORTED",
-            message="当前仅支持预览 PDF 资料",
+            message="当前资料没有可预览的原文件",
             status_code=415,
         )
 
