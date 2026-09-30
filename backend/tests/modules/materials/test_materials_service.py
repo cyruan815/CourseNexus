@@ -364,6 +364,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         id="cit-1",
         generated_content_id=generated_content.id,
         material_id=material.id,
+        material_version_id=parse_version.id,
         chunk_id=chunk.id,
         material_name=material.name,
         page="1",
@@ -390,6 +391,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     assert db.get(AIGeneratedContent, generated_content.id) is not None
     assert preserved_citation is not None
     assert preserved_citation.material_id is None
+    assert preserved_citation.material_version_id is None
     assert preserved_citation.chunk_id is None
     assert preserved_citation.material_name == "notes.txt"
     assert preserved_citation.hit_text == "matrix notes"
