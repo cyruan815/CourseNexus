@@ -51,11 +51,13 @@ export function CitationLocator({
   ariaLabel,
   citation,
   className,
+  detailsAriaLabel,
   label,
 }: {
   ariaLabel: string;
   citation: CitationLocatorData;
   className?: string;
+  detailsAriaLabel?: string;
   label: ReactNode;
 }) {
   const [opened, setOpened] = useState(false);
@@ -150,7 +152,11 @@ export function CitationLocator({
             {label}
           </button>
         </HoverCard.Target>
-        <HoverCard.Dropdown aria-label={`${citation.material_name} 引用详情`} className="inline-citation-popover" role="tooltip">
+        <HoverCard.Dropdown
+          aria-label={detailsAriaLabel ?? `${citation.material_name} 引用详情`}
+          className="inline-citation-popover"
+          role="tooltip"
+        >
           <Stack gap="xs">
             <Box>
               <Text fw={700} lineClamp={2}>{citation.material_name}</Text>

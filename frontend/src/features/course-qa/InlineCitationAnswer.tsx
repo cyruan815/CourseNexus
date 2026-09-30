@@ -35,6 +35,7 @@ function CitationMarker({ citation, ordinal }: { citation: InlineAnswerCitation;
       ariaLabel={`查看引用 ${ordinal}：${citation.material_name}`}
       citation={citation}
       className="inline-citation-marker"
+      detailsAriaLabel={`引用 ${ordinal} 详情`}
       label={ordinal}
     />
   );
