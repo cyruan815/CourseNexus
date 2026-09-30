@@ -10,8 +10,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db
+from app.integrations.model_provider.mock import MockModelProvider
 from app.modules.courses.models import Course
 from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.study_plans import router as study_plan_router
 import app.db.models  # noqa: F401
 from app.main import app
 from tests.fixtures.study_mode_samples import compliant_daily_task
@@ -35,6 +37,9 @@ def client() -> Generator[TestClient, None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = (
+        lambda: MockModelProvider()
+    )
     app.state.todos_calendar_testing_session = testing_session
     try:
         yield TestClient(app)

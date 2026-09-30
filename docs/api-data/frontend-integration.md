@@ -21,6 +21,23 @@
 - JSON 请求、材料原文件与导出文件统一通过受信 API 客户端附加 Bearer token；访问外部资源必须使用不附带 CourseNexus 会话凭据的独立请求入口。
 - 前端不得直接调用 OpenAI API；所有模型调用只通过后端接口完成。
 
+### 2.1 运行模式状态
+
+前端启动后调用 `GET /api/v1/health`，读取：
+
+```json
+{
+  "status": "ok",
+  "environment": "development",
+  "mock_model_provider_enabled": false
+}
+```
+
+- `mock_model_provider_enabled=true` 时，应用全局展示“模拟模型模式”，明确当前生成内容仅用于开发验证。
+- `false` 时不展示提示；Health 临时失败也不阻塞登录、首页或工作台渲染。
+- 前端不读取、缓存或展示任何模型 Key、Secret、模型地址或模型名。
+- 依赖模型的业务请求收到 HTTP `503` 且 `error.code=MODEL_PROVIDER_NOT_CONFIGURED` 时，展示“模型服务未配置”类可恢复错误，不得伪造结果或自动切换 Mock。
+
 ## 3. 当前已落地接口
 
 ### 3.1 注册

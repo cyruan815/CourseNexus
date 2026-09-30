@@ -23,6 +23,9 @@ ModelPurpose = Literal[
     "task_test",
 ]
 MODEL_PURPOSES: tuple[ModelPurpose, ...] = get_args(ModelPurpose)
+AppEnvironment = Literal["development", "test", "production"]
+DEFAULT_DEVELOPMENT_SECRET = "replace-with-local-dev-secret"
+MINIMUM_PRODUCTION_SECRET_LENGTH = 32
 
 
 class ModelEndpointConfig(BaseModel):
@@ -39,8 +42,9 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite:///./course_nexus.db"
-    app_env: str = "development"
-    secret_key: str = "replace-with-local-dev-secret"
+    app_env: AppEnvironment = "development"
+    enable_mock_model_provider: bool = False
+    secret_key: str = DEFAULT_DEVELOPMENT_SECRET
     access_token_expire_minutes: int = 1440
     file_storage_path: str = "./uploads"
     max_upload_file_size_bytes: int = 52_428_800
@@ -139,6 +143,43 @@ class Settings(BaseSettings):
         if "course_qa_model" not in configured_fields and self.openai_model:
             self.course_qa_model = self.openai_model
 
+        return self
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> "Settings":
+        secret = self.secret_key.strip()
+        if self.app_env != "production":
+            return self
+        if (
+            not secret
+            or secret == DEFAULT_DEVELOPMENT_SECRET
+            or len(secret) < MINIMUM_PRODUCTION_SECRET_LENGTH
+        ):
+            raise ValueError(
+                f"production SECRET_KEY must be non-default and at least "
+                f"{MINIMUM_PRODUCTION_SECRET_LENGTH} characters"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_production_model_endpoints(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        missing = [
+            purpose
+            for purpose in MODEL_PURPOSES
+            if not (self.model_endpoint(purpose).api_key or "").strip()
+        ]
+        if missing:
+            raise ValueError(
+                "production model API keys are required for: " + ", ".join(missing)
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_mock_model_provider_mode(self) -> "Settings":
+        if self.enable_mock_model_provider and self.app_env == "production":
+            raise ValueError("mock model provider is not allowed in production")
         return self
 
     def model_endpoint(self, purpose: ModelPurpose) -> ModelEndpointConfig:

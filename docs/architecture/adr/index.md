@@ -9,7 +9,7 @@
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
 | [0001-tech-stack.md](0001-tech-stack.md) | Accepted；v0.1 技术栈与本地 POC 架构选择。 | 2026-07-09 |
-| [0002-foundation-runtime-dependencies.md](0002-foundation-runtime-dependencies.md) | Accepted；基础设施阶段运行依赖、Vite 7 主版本和 OpenAI SDK 接入边界。 | 2026-07-09 |
+| [0002-foundation-runtime-dependencies.md](0002-foundation-runtime-dependencies.md) | Accepted；基础设施运行依赖、显式 Mock 边界、生产配置校验和 OpenAI SDK 接入边界。 | 2026-10-01 |
 | [0003-local-rag-stack.md](0003-local-rag-stack.md) | Accepted；本地资料上下文与 RAG 采用 LlamaIndex、Docling、Chroma 和用途级独立 OpenAI-compatible API，RAGFlow 作为 future 方案。 | 2026-07-10 |
 | [0004-frontend-ui-foundation.md](0004-frontend-ui-foundation.md) | Accepted；前端 UI 基础设施采用 Mantine、Tabler Icons、TanStack Query 和 dayjs。 | 2026-07-10 |
 | [0005-simplified-generation-poc.md](0005-simplified-generation-poc.md) | Accepted；五类独立 POC 使用完整材料上下文单次生成，不保存逐条引用。 | 2026-07-13 |
