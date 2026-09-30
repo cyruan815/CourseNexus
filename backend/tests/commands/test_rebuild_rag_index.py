@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.commands.rebuild_rag_index as rebuild_command
-from app.core.config import Settings
+from app.core.config import ROOT_DIR, Settings
 from app.core.errors import CourseNexusError
 from app.db.base import Base
 import app.db.models  # noqa: F401
@@ -124,22 +124,26 @@ def test_rebuild_command_passes_embedding_endpoint_to_adapter(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def fake_create_openai_chroma_rag_index(
-        *,
-        persist_path: str,
-        collection_name: str,
-        api_key: str,
-        embedding_model: str,
-        api_base_url: str | None,
-    ):
-        captured.update(
-            persist_path=persist_path,
-            collection_name=collection_name,
-            api_key=api_key,
-            embedding_model=embedding_model,
-            api_base_url=api_base_url,
-        )
-        return FakeRagIndex()
+    class FakeManager:
+        def __init__(self, *, settings_provider):
+            settings = settings_provider()
+            captured.update(
+                persist_path=settings.chroma_persist_path,
+                collection_name=settings.chroma_collection,
+                api_key=settings.model_endpoint("embedding").api_key,
+                embedding_model=settings.model_endpoint("embedding").model,
+                api_base_url=settings.model_endpoint("embedding").base_url,
+            )
+
+        def require_index(self, *, missing_code: str, missing_message: str):
+            captured.update(
+                missing_code=missing_code,
+                missing_message=missing_message,
+            )
+            return FakeRagIndex()
+
+        def close(self) -> None:
+            captured["closed"] = True
 
     monkeypatch.setattr(
         rebuild_command,
@@ -152,7 +156,7 @@ def test_rebuild_command_passes_embedding_endpoint_to_adapter(
             log_dir=str(tmp_path / "logs"),
         ),
     )
-    monkeypatch.setattr(rebuild_command, "create_openai_chroma_rag_index", fake_create_openai_chroma_rag_index)
+    monkeypatch.setattr(rebuild_command, "RagIndexManager", FakeManager)
     monkeypatch.setattr(rebuild_command, "SessionLocal", lambda: FakeSessionLocal())
     monkeypatch.setattr(
         rebuild_command,
@@ -164,11 +168,14 @@ def test_rebuild_command_passes_embedding_endpoint_to_adapter(
 
     assert exit_code == 0
     assert captured == {
-        "persist_path": "./data/chroma",
+        "persist_path": str(ROOT_DIR / "data" / "chroma"),
         "collection_name": "course_nexus_material_chunks",
         "api_key": "embedding-key",
         "embedding_model": "text-embedding-3-large",
         "api_base_url": "https://embedding.example/v1",
+        "missing_code": "INDEXING_FAILED",
+        "missing_message": "资料索引配置缺失",
+        "closed": True,
     }
     log_text = (tmp_path / "logs" / "course-nexus.log").read_text(encoding="utf-8")
     assert "command.rebuild_rag | 索引重建成功" in log_text

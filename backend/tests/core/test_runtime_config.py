@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import MODEL_PURPOSES, Settings
+from app.core.config import MODEL_PURPOSES, ROOT_DIR, Settings
 
 
 def _production_model_keys() -> dict[str, str]:
@@ -71,6 +71,39 @@ def test_development_environment_allows_unconfigured_model_endpoints() -> None:
 
 def test_mock_model_provider_is_disabled_by_default() -> None:
     assert Settings(_env_file=None).enable_mock_model_provider is False
+
+
+def test_default_sqlite_url_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).database_url == (
+        f"sqlite:///{(ROOT_DIR / 'course_nexus.db').as_posix()}"
+    )
+
+
+def test_memory_sqlite_url_remains_in_memory() -> None:
+    assert (
+        Settings(_env_file=None, database_url="sqlite:///:memory:").database_url
+        == "sqlite:///:memory:"
+    )
+
+
+def test_default_upload_path_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).file_storage_path == str(ROOT_DIR / "uploads")
+
+
+def test_default_log_path_resolves_from_project_root() -> None:
+    assert Settings(_env_file=None).log_dir == str(ROOT_DIR / "logs")
+
+
+def test_runtime_paths_do_not_change_with_launch_directory(monkeypatch) -> None:
+    monkeypatch.chdir(ROOT_DIR)
+    from_project_root = Settings(_env_file=None)
+    monkeypatch.chdir(ROOT_DIR / "backend")
+    from_backend = Settings(_env_file=None)
+
+    assert from_backend.database_url == from_project_root.database_url
+    assert from_backend.file_storage_path == from_project_root.file_storage_path
+    assert from_backend.chroma_persist_path == from_project_root.chroma_persist_path
+    assert from_backend.log_dir == from_project_root.log_dir
 
 
 @pytest.mark.parametrize("app_env", ["development", "test"])

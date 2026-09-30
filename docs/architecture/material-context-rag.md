@@ -297,9 +297,11 @@ MATERIAL_BATCH_MAX_TOKENS=12000
 
 1. 在现有 `course-nexus` Conda 环境安装 Python 依赖。
 2. 使用现有命令启动 FastAPI；第一次使用 Docling 时允许其下载所需模型文件。
-3. Chroma 由后端进程通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口。
-4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`。
+3. Chroma 由后端进程级 `RagIndexManager` 通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口；请求复用同一实例，应用退出只释放引用，不重置持久化数据。
+4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`；相对路径统一相对仓库配置根目录解析，API、Alembic 与维护命令不得随启动目录改变数据位置。
 5. 真实 embedding 至少配置 `EMBEDDING_API_KEY`；真实课程问答至少配置 `COURSE_QA_API_KEY`。各自的 `*_BASE_URL` 和 `*_MODEL` 只作用于对应用途。单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
+
+旧版本若在 `backend/` 等启动目录遗留 SQLite、上传或 Chroma 数据，规范位置为空时运行入口会拒绝继续并报告迁移目标。程序不自动移动或删除旧数据；备份、迁移和 SQLite 连接基线见 [本地存储运行与迁移](../engineering/local-runtime-storage.md)。
 
 ## 10. 错误与一致性
 

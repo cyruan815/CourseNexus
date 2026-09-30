@@ -1,12 +1,13 @@
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal, get_args
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.paths import PROJECT_ROOT, resolve_database_url, resolve_project_path
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+
+ROOT_DIR = PROJECT_ROOT
 
 ModelPurpose = Literal[
     "embedding",
@@ -124,6 +125,26 @@ class Settings(BaseSettings):
     study_plan_map_concurrency: int = Field(default=1, ge=1, le=5)
     markmap_node_command: str = "node"
     markmap_transform_timeout_seconds: float = 15.0
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        return resolve_database_url(value)
+
+    @field_validator("file_storage_path")
+    @classmethod
+    def normalize_file_storage_path(cls, value: str) -> str:
+        return str(resolve_project_path(value))
+
+    @field_validator("chroma_persist_path")
+    @classmethod
+    def normalize_chroma_persist_path(cls, value: str) -> str:
+        return str(resolve_project_path(value))
+
+    @field_validator("log_dir")
+    @classmethod
+    def normalize_log_dir(cls, value: str) -> str:
+        return str(resolve_project_path(value))
 
     @model_validator(mode="after")
     def apply_legacy_model_settings(self) -> "Settings":

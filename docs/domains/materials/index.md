@@ -13,6 +13,7 @@
 - 后端入口：`backend/app/modules/materials/{router,schemas,service,repository,models}.py`。
 - 历史引用脱钩边界：`backend/app/modules/course_qa/citations.py`，只允许资料删除流程清空引用外键，不删除问答或生成内容。
 - 解析和索引：`backend/app/integrations/parsers/`、`backend/app/integrations/rag/`。
+- 本地数据路径与连接生命周期：`backend/app/core/paths.py`、`backend/app/db/session.py`、`backend/app/integrations/rag/manager.py` 和 `backend/app/main.py` lifespan。
 - 资料范围：`backend/app/modules/material_context/`。
 - 基础前端：`frontend/src/features/materials/`，由第一阶段前端负责人继续完善。`MaterialWorkspace` 支持课程详情页传入创建后上传提示开关，用于课程创建成功后引导用户上传资料；当前提供资源管理器式资料区，并支持点击上传资料名称在页面悬浮弹窗中预览原文件。跨页面格式渲染统一进入 `frontend/src/components/file-preview/UniversalFilePreview`，PDF、图片和文本使用浏览器能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer`。`course-qa/CitationLocator` 复用资料详情与原文件接口完成 PDF 引用页码定位，非 PDF 或不可定位来源只展示保存的引用快照。
 - 后端测试：`backend/tests/modules/materials/`、`backend/tests/modules/material_context/`、`backend/tests/integrations/test_llama_index_chroma.py`。
@@ -38,6 +39,8 @@ flowchart LR
 ```
 
 文件夹和资料 API 同步执行。上传先写文件和 `CourseMaterial`；解析接口同步写 chunk 与向量。移动已解析资料时，只更新 Chroma 的 `folder_id` metadata，不重新计算 embedding。删除资料或文件夹时，原始文件目录先移入同盘暂存区，后端从 SQLite chunk 构造 RAG 补偿快照，再物理删除数据库记录和向量；失败时恢复数据库、文件和向量，成功后清空暂存文件。
+
+SQLite、上传文件和 Chroma 的相对位置统一从仓库配置根目录解析。FastAPI lifespan 持有进程级 `RagIndexManager`，所有资料请求复用同一个延迟创建的 Chroma 索引；进程退出只释放引用，不删除派生索引。Alembic 和重建命令复用同一配置与旧路径冲突保护，详细运行及迁移规则见 [本地存储运行与迁移](../../engineering/local-runtime-storage.md)。
 
 ## 4. 数据、状态与接口
 
@@ -137,6 +140,7 @@ PDF 解析：
 - 删除文件夹读取 `n` 份资料和 `c` 个 chunk，数据库与应用层工作量为 `O(n + c)`；RAG 使用一次批量 material-id 删除。文件目录使用同盘重命名暂存，正常路径不把文件内容载入内存。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
 - 正常级联删除不调用 Embedding；只有 RAG 或数据库失败后的补偿恢复才会重新计算被恢复 chunk 的 embedding。补偿仍失败时必须使用 `rebuild_rag_index` 运维命令恢复派生索引。
+- Chroma 客户端的进程内数量为 `O(1)`；并发资料请求共享管理器实例。多进程部署仍会各自持有一个客户端，当前单机 V1 不提供跨进程写入协调。
 - 上传文件大小上限由 `MAX_UPLOAD_FILE_SIZE_BYTES` 控制，默认 50 MiB。
 - PDF parser 同时只让每个模型阶段处理 1 个 batch，空间预算以单页 layout/OCR 推理为主，不随磁盘压缩体积线性变化。
 - 预览大小为 `s` 字节的上传文件时，后端按文件响应流传输，应用层不主动读取整份文件；前端 Blob 的网络和内存预算为 `O(s)`，DOCX/PPTX 适配器还会在浏览器内读取完整 `ArrayBuffer` 并构造渲染节点。上传上限使单份预览原文件当前不超过 50 MiB，预览不调用 Parser、RAG、Embedding 或模型。
@@ -145,6 +149,7 @@ PDF 解析：
 
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
+- 规范路径、SQLite 连接参数、FastAPI 索引生命周期与并发单例：`backend/tests/core/test_paths.py`、`backend/tests/db/test_session.py`、`backend/tests/api/test_lifespan.py`、`backend/tests/integrations/test_rag_index_manager.py`。
 - 文件夹范围字段拒绝和逐文件范围：`backend/tests/modules/material_context/`。
 - 基础前端归类与逐文件复选、上传资料名称点击统一预览、PDF/DOCX/PPTX 分发、创建后上传提示、文件夹折叠、右键菜单关闭、删除文件夹及其资料后立即移除、删除资料后立即移除、删除失败保留列表并展示错误、历史 URL 资料“已停止支持”展示与无解析入口、资料重命名和拖拽移动的前端状态回归：`frontend/tests/features/materials/`、`frontend/tests/components/file-preview/`。
 - 引用定位覆盖 PDF 指定页、Text / Markdown 快照、未知页码和资料删除后快照：`frontend/tests/features/course-qa/inline-citation-answer.test.tsx`。
@@ -170,6 +175,7 @@ pnpm frontend:build
 - 2026-09-30 按负责人 V1 收尾审定下线 URL 链接资料入口：前端移除“添加链接”按钮与弹窗，后端 `material-links` 创建端点改为 `410 MATERIAL_LINK_REMOVED` 兼容占位，`parse_material` 对历史 URL 资料直接抛 `409 MATERIAL_LINK_REMOVED` 且不再改写状态。数据层保留 `source_type/source_url` 列和历史行；material-context 因始终过滤 `parse_status=parsed`，历史 URL 资料天然不进入检索、问答、生成与计划范围（有回归测试固化）。历史记录在前端标记“已停止支持”，保留查看、重命名与删除。
 - 2026-09-30 引用角标支持打开来源阅读器：有可靠页码的 PDF 通过项目统一文件预览器定位到原文页，Text / Markdown 展示解析片段；未知页码不默认打开第一页，资料删除或权限失效时保留并展示生成时引用快照。
 - 2026-10-01 资料工作区统一使用项目级原文件预览器：PDF、图片与文本使用浏览器原生能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer` 并配置本地 PDF.js 矢量回退资源；Office 适配器按需加载，失败时保留原文件下载入口。该能力是只读查看，不提供编辑、动画播放或桌面 Office 像素级一致性承诺。
+- 2026-10-01 本地业务数据统一使用仓库配置根目录：从不同当前目录启动不会生成第二套 SQLite、上传或 Chroma 数据；发现旧位置数据时先拒绝运行并要求人工备份迁移。Chroma 改为 FastAPI 进程级单例并由 lifespan 管理，退出不执行破坏性 reset。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
 
