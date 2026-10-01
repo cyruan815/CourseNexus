@@ -46,9 +46,13 @@ def assert_material_snapshot_publishable(
     user_id: str,
     course_id: str,
     material_versions: Sequence[Mapping[str, str]],
+    expected_material_ids: Sequence[str] | None = None,
 ) -> None:
     assert_course_owner(db, user_id, course_id)
+    expected_ids = set(expected_material_ids or [])
     if not material_versions:
+        if expected_ids:
+            _raise_stale_material_scope(expected_count=len(expected_ids), current_count=0)
         return
 
     expected_pairs: set[tuple[str, str]] = set()
@@ -63,6 +67,8 @@ def assert_material_snapshot_publishable(
         expected_pairs
     ):
         _raise_stale_material_scope(expected_count=len(material_versions), current_count=0)
+    if expected_ids and {pair[0] for pair in expected_pairs} != expected_ids:
+        _raise_stale_material_scope(expected_count=len(expected_ids), current_count=len(expected_pairs))
 
     current_pairs = set(
         list_publishable_material_versions(

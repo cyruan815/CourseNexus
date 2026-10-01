@@ -539,6 +539,15 @@ def save_study_plan(
             message="新向导保存必须提交预览中的 tasks",
             status_code=422,
         )
+    submitted_material_versions = _material_versions_from_snapshot(save_payload.material_snapshot)
+    if submitted_material_versions:
+        assert_material_snapshot_publishable(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_versions=submitted_material_versions,
+            expected_material_ids=_task_previews_material_ids(save_payload.tasks or []),
+        )
     key_hash = _hash_value(idempotency_key) if idempotency_key else None
     request_hash = _hash_request(save_payload)
     if key_hash:
@@ -619,6 +628,14 @@ def save_study_plan(
                 )
             }
         )
+
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_snapshot(save_payload.material_snapshot),
+        expected_material_ids=_task_previews_material_ids(tasks_preview),
+    )
 
     plan_id = _new_plan_id()
     now = datetime.now(timezone.utc)
@@ -772,6 +789,28 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
     _assert_replace_allowed(db, plan_id=plan_id)
+    if not payload.material_snapshot:
+        payload = payload.model_copy(
+            update={
+                "material_snapshot": _build_material_snapshot(
+                    material_scope=payload.material_scope,
+                    expected_material_ids=set(_task_previews_material_ids(payload.tasks)),
+                    material_versions=resolve_material_scope_versions(
+                        db,
+                        user_id=user_id,
+                        course_id=plan.course_id,
+                        material_scope=payload.material_scope,
+                    ),
+                )
+            }
+        )
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=plan.course_id,
+        material_versions=_material_versions_from_snapshot(payload.material_snapshot),
+        expected_material_ids=_task_previews_material_ids(payload.tasks),
+    )
     _validate_confirmed_task_tree(
         db,
         user_id=user_id,
@@ -1540,6 +1579,21 @@ def _material_versions_from_batches(batches: list[MaterialContextBatch]) -> list
         {"material_id": material_id, "version_id": version_id}
         for material_id, version_id in sorted(versions.items())
     ]
+
+
+def _material_versions_from_snapshot(snapshot: dict[str, object]) -> list[dict[str, str]]:
+    raw_versions = snapshot.get("material_versions")
+    if not isinstance(raw_versions, list):
+        return []
+    versions: list[dict[str, str]] = []
+    for item in raw_versions:
+        if not isinstance(item, dict):
+            continue
+        material_id = item.get("material_id")
+        version_id = item.get("version_id")
+        if isinstance(material_id, str) and isinstance(version_id, str):
+            versions.append({"material_id": material_id, "version_id": version_id})
+    return versions
 
 
 

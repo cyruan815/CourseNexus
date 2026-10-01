@@ -550,7 +550,7 @@ def test_save_study_plan_rejects_confirmed_task_material_violations_without_side
             max_tokens=12_000,
         )
 
-    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND", "MATERIAL_SCOPE_STALE"}
     _assert_no_plan_write_side_effects(db)
 
 
@@ -593,6 +593,47 @@ def test_save_study_plan_rejects_task_without_subtasks_without_side_effects(db: 
         )
 
     assert exc_info.value.code == "VALIDATION_ERROR"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_save_study_plan_rejects_deleted_material_snapshot_without_side_effects(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="save-stale-snapshot", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "save-stale.txt",
+        b"Reliable transport",
+    )
+    material = db.get(CourseMaterial, material_id)
+    data = _request_data([material_id])
+    data["material_snapshot"] = {
+        "mode": "all_parsed",
+        "material_ids": [material_id],
+        "material_versions": [
+            {"material_id": material_id, "version_id": material.active_parse_version_id}
+        ],
+    }
+    material.deleted_at = datetime.now(timezone.utc)
+    db.add(material)
+    db.commit()
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
     _assert_no_plan_write_side_effects(db)
 
 
@@ -652,7 +693,7 @@ def test_replace_study_plan_rejects_confirmed_task_material_violations_without_s
     with pytest.raises(CourseNexusError) as exc_info:
         replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=_replace_request_from_data(saved.plan.updated_at, data))
 
-    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND", "MATERIAL_SCOPE_STALE"}
     assert _study_plan_counts(db) == before_counts
     assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).subtasks[0].related_material_ids_json == [valid_material_id]
 
