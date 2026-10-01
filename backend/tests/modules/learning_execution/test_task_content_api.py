@@ -31,7 +31,7 @@ from app.modules.learning_execution.service import (
     generate_handout_for_subtask,
     generate_task_test_for_subtask,
 )
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
 
@@ -116,12 +116,24 @@ def _seed_task_content_plan(
             source_type="file",
             file_url="/uploads/db.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content",
+            material_id="mat_api_content",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
         )
     )
     db.add(
         MaterialChunk(
             id="chunk_api_content",
             material_id="mat_api_content",
+            parse_version_id="mpv_api_content",
             course_id="crs_api_content",
             chunk_index=0,
             page="1",
@@ -185,6 +197,16 @@ def _add_related_material_without_chunks(db: Session, *, user_id: str, subtask_i
             source_type="file",
             file_url="/uploads/empty.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content_empty",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content_empty",
+            material_id="mat_api_content_empty",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
         )
     )
     subtask = db.get(StudySubTask, subtask_id)
@@ -205,12 +227,24 @@ def _add_related_material_with_chunk(db: Session, *, user_id: str, subtask_id: s
             source_type="file",
             file_url="/uploads/index.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content_second",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content_second",
+            material_id="mat_api_content_second",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
         )
     )
     db.add(
         MaterialChunk(
             id="chunk_api_content_second",
             material_id="mat_api_content_second",
+            parse_version_id="mpv_api_content_second",
             course_id="crs_api_content",
             chunk_index=0,
             page="2",

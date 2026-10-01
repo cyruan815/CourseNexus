@@ -74,6 +74,9 @@ class SourceCitation(Base):
     generated_content_id: Mapped[str | None] = mapped_column(ForeignKey("ai_generated_contents.id"))
     material_id: Mapped[str | None] = mapped_column(ForeignKey("course_materials.id"))
     chunk_id: Mapped[str | None] = mapped_column(ForeignKey("material_chunks.id"))
+    material_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("material_parse_versions.id", ondelete="SET NULL")
+    )
     material_name: Mapped[str] = mapped_column(String(255), nullable=False)
     page: Mapped[str | None] = mapped_column(String(64))
     page_index: Mapped[int | None] = mapped_column(Integer)
@@ -91,5 +94,6 @@ class SourceCitation(Base):
         Index("ix_source_citations_generated_content_id", "generated_content_id"),
         Index("ix_source_citations_material_id", "material_id"),
         Index("ix_source_citations_chunk_id", "chunk_id"),
+        Index("ix_source_citations_material_version_id", "material_version_id"),
         Index("ix_source_citations_sort_order", "sort_order"),
     )

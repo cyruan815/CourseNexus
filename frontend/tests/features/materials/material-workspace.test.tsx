@@ -449,7 +449,7 @@ describe("MaterialWorkspace", () => {
     });
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
     expect(screen.getByText("chapter.pdf")).toBeInTheDocument();
-    expect(screen.getByText("解析中")).toBeInTheDocument();
+    expect(screen.getByLabelText("解析中")).toBeInTheDocument();
   });
 
   it("opens material actions from a three-dot button without a manual start-parse action", async () => {
@@ -466,6 +466,58 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByRole("menuitem", { name: "重命名资料" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除资料" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "开始解析" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the active version selectable while a replacement version is parsing", async () => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      {
+        ...materials[0],
+        active_parse_version_id: "mpv_active",
+        is_learning_ready: true,
+        parse_status: "parsing",
+      },
+    ]);
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("checkbox", { name: "选择资料 第一章.pdf" })).toBeEnabled();
+    expect(screen.getByLabelText("正在更新")).toBeInTheDocument();
+    await openMaterialActions();
+    expect(screen.queryByRole("menuitem", { name: "重新解析" })).not.toBeInTheDocument();
+  });
+
+  it("offers reparse for usable materials and preserves the active version after failure", async () => {
+    const activeMaterial = {
+      ...materials[0],
+      active_parse_version_id: "mpv_active",
+      is_learning_ready: true,
+    };
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([activeMaterial]);
+    vi.mocked(materialsApi.retryParseMaterial).mockResolvedValue({
+      ...activeMaterial,
+      parse_error: "INDEXING_FAILED",
+    });
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    await openMaterialActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "重新解析" }));
+
+    await waitFor(() => expect(materialsApi.retryParseMaterial).toHaveBeenCalledWith("mat_1"));
+    expect(await screen.findByLabelText("更新失败，当前版本仍可用")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" })).toBeEnabled();
   });
 
   it("removes a deleted folder and its materials after confirmation", async () => {

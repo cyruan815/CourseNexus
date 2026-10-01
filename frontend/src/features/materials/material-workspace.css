@@ -304,7 +304,23 @@
 }
 
 .material-workspace__file-copy {
+  display: grid;
+  gap: 1px;
+}
+
+.material-workspace__file-state {
+  color: var(--resource-subtle);
   display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-workspace__file-state--parse_failed,
+.material-workspace__file-state--parsed {
+  color: var(--resource-danger);
 }
 
 .material-workspace__folder-name {

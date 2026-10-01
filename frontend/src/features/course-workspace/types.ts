@@ -3,6 +3,7 @@ import type { MaterialScope } from "../materials/types";
 export interface SourceCitation {
   id?: string;
   material_id: string | null;
+  material_version_id?: string | null;
   chunk_id: string | null;
   material_name: string;
   page: string | number | null;

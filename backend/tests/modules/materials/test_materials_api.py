@@ -194,6 +194,8 @@ def test_parse_retry_parses_uploaded_text_material(client: TestClient) -> None:
     assert parse_response.status_code == 200
     parsed = parse_response.json()["data"]
     assert parsed["parse_status"] == "parsed"
+    assert parsed["active_parse_version_id"]
+    assert parsed["is_learning_ready"] is True
     assert parsed["parse_error"] is None
     assert parsed["parse_quality"] == "complete"
     assert parsed["parse_diagnostics_json"]["parser"] == "plain_text"

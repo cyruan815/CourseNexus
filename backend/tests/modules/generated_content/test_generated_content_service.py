@@ -201,6 +201,7 @@ def test_list_generated_contents_groups_ordered_citations_and_uses_one_bulk_quer
     assert contents_by_id[cited.id].source_citations[0].model_dump() == {
         "id": "cit_a",
         "material_id": "mat_a",
+        "material_version_id": None,
         "chunk_id": "chunk_a",
         "material_name": "mat_a.md",
         "page": "p-2",

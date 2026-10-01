@@ -320,6 +320,7 @@ def _build_citations(message_id: str, chunks: list[ContextChunk]) -> list[Source
             id=_new_citation_id(),
             message_id=message_id,
             material_id=chunk.material_id,
+            material_version_id=chunk.material_version_id,
             chunk_id=chunk.chunk_id,
             material_name=chunk.material_name,
             page=chunk.page,

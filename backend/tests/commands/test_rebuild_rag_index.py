@@ -16,7 +16,7 @@ from app.integrations.rag.base import RagChunk
 from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 from app.commands.rebuild_rag_index import RebuildRagIndexResult, rebuild_all, rebuild_material
@@ -81,6 +81,50 @@ def test_rebuild_material_replaces_single_material_vectors(db: Session) -> None:
     assert result.chunk_count == 1
     assert set(rag_index.records) == {"chk_other", current.id}
     assert rag_index.records[current.id].text == "updated matrix"
+
+
+def test_rebuild_material_indexes_active_version_while_update_is_running(db: Session) -> None:
+    user_id, course_id = _create_owner(db)
+    material = _material(db, user_id=user_id, course_id=course_id, material_id="mat_updating", parse_status="parsed")
+    current = _chunk(db, material, chunk_id="chk_updating_current", text="stable version")
+    material.parse_status = "parsing"
+    db.commit()
+
+    rag_index = FakeRagIndex()
+    result = rebuild_material(db=db, rag_index=rag_index, material_id=material.id)
+
+    assert result == RebuildRagIndexResult(material_count=1, chunk_count=1)
+    assert set(rag_index.records) == {current.id}
+
+
+def test_rebuild_all_excludes_retired_parse_versions(db: Session) -> None:
+    user_id, course_id = _create_owner(db)
+    material = _material(db, user_id=user_id, course_id=course_id, material_id="mat_versioned", parse_status="parsed")
+    active_chunk = _chunk(db, material, chunk_id="chk_active", text="current")
+    retired_version = MaterialParseVersion(
+        id="mpv_mat_versioned_retired",
+        material_id=material.id,
+        course_id=course_id,
+        user_id=user_id,
+        status="retired",
+    )
+    retired_chunk = MaterialChunk(
+        id="chk_retired",
+        material_id=material.id,
+        parse_version_id=retired_version.id,
+        course_id=course_id,
+        chunk_index=0,
+        content_text="obsolete",
+    )
+    db.add_all([retired_version, retired_chunk])
+    db.commit()
+
+    rag_index = FakeRagIndex()
+    result = rebuild_all(db=db, rag_index=rag_index)
+
+    assert result == RebuildRagIndexResult(material_count=1, chunk_count=1)
+    assert set(rag_index.records) == {active_chunk.id}
+    assert rag_index.records[active_chunk.id].parse_version_id == material.active_parse_version_id
 
 
 def test_rebuild_material_missing_or_deleted_material_raises_not_found(db: Session) -> None:
@@ -208,13 +252,41 @@ def _material(
     )
     db.add(material)
     db.flush()
+    if parse_status == "parsed":
+        version = MaterialParseVersion(
+            id=f"mpv_{material_id}",
+            material_id=material.id,
+            course_id=course_id,
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
+        )
+        db.add(version)
+        db.flush()
+        material.active_parse_version_id = version.id
+        db.add(material)
+        db.flush()
     return material
 
 
 def _chunk(db: Session, material: CourseMaterial, *, chunk_id: str, text: str) -> MaterialChunk:
+    parse_version_id = material.active_parse_version_id
+    if parse_version_id is None:
+        parse_version_id = f"mpv_{material.id}_retired"
+        db.add(
+            MaterialParseVersion(
+                id=parse_version_id,
+                material_id=material.id,
+                course_id=material.course_id,
+                user_id=material.user_id,
+                status="retired",
+            )
+        )
+        db.flush()
     chunk = MaterialChunk(
         id=chunk_id,
         material_id=material.id,
+        parse_version_id=parse_version_id,
         course_id=material.course_id,
         chunk_index=0,
         page=None,

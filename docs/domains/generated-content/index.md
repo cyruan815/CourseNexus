@@ -41,7 +41,7 @@
 - 前端详情页只渲染后端返回内容，不补造引用或统计。Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 在结果上方展示 `material_scope_json.source_materials` 的真实资料名称与数量，但不展示逐条引用；Task Test 在用户提交单题后按该题的 `source_citation_ids` 展示可点击来源；Handout 只展示 Markdown 顶部来源说明，不展示逐段引用。
 - 2026-07-14 前端详情页增加 `task_test` 只读 renderer，用于计划学习执行页生成的任务测试题。它展示题目、选项、正确答案和解析，不提供作答、判分、保存记录或 attempt 历史；任务测试题仍不属于五类公共课程生成器。
 - 生成失败记录展示 `error_code` 和失败态，不伪装成成功内容。
-- 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json.source_materials` 是实际进入生成上下文的资料快照，可用于结果页范围说明，但不是条目级引用契约。
+- 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json.source_materials` 是实际进入生成上下文的资料名称快照，`material_scope_json.material_versions` 保存实际输入的解析版本。两者用于追溯与结果页范围说明，但不是条目级引用契约，后续重解析不会改写历史快照。
 - 为了在资料解析 / 索引未配置时手动查看前端详情页，后端提供仅限本地开发使用的 seed 命令。该命令创建或更新固定 demo 用户、课程、已解析占位资料、MaterialChunk 和五类示例生成内容，不新增正式 API，也不代表生产数据生成路径。
 
 详细架构、算法、资源预算和失败策略见 [architecture.md](architecture.md)。

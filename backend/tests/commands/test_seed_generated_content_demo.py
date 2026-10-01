@@ -12,7 +12,7 @@ import app.db.models  # noqa: F401
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.users.models import User
 
 
@@ -49,8 +49,13 @@ def test_seed_demo_generated_content_creates_loginable_demo_graph() -> None:
     assert course.user_id == user.id
     assert material is not None
     assert material.parse_status == "parsed"
+    assert material.active_parse_version_id is not None
+    parse_version = db.get(MaterialParseVersion, material.active_parse_version_id)
+    assert parse_version is not None
+    assert parse_version.status == "active"
     assert chunk is not None
     assert chunk.material_id == material.id
+    assert chunk.parse_version_id == parse_version.id
     assert content is not None
     assert content.user_id == user.id
     assert content.course_id == course.id
@@ -72,5 +77,6 @@ def test_seed_demo_generated_content_is_idempotent() -> None:
     assert second == first
     assert len(db.execute(select(User)).scalars().all()) == 1
     assert len(db.execute(select(Course)).scalars().all()) == 1
+    assert len(db.execute(select(MaterialParseVersion)).scalars().all()) == 1
     assert len(db.execute(select(AIGeneratedContent)).scalars().all()) == 1
     assert len(db.execute(select(SourceCitation)).scalars().all()) == 0

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder, MaterialParseVersion
 
 
 def save_material_folder(db: Session, folder: MaterialFolder) -> MaterialFolder:
@@ -75,6 +75,60 @@ def list_material_chunks_for_material_ids(db: Session, material_ids: list[str]) 
             select(MaterialChunk)
             .where(MaterialChunk.material_id.in_(material_ids))
             .order_by(MaterialChunk.material_id, MaterialChunk.chunk_index, MaterialChunk.id)
+        ).scalars()
+    )
+
+
+def list_material_chunks_for_parse_version(db: Session, parse_version_id: str) -> list[MaterialChunk]:
+    return list(
+        db.execute(
+            select(MaterialChunk)
+            .where(MaterialChunk.parse_version_id == parse_version_id)
+            .order_by(MaterialChunk.chunk_index, MaterialChunk.id)
+        ).scalars()
+    )
+
+
+def delete_material_chunks_for_parse_version_in_session(db: Session, parse_version_id: str) -> None:
+    db.execute(delete(MaterialChunk).where(MaterialChunk.parse_version_id == parse_version_id))
+
+
+def save_parse_version(db: Session, parse_version: MaterialParseVersion) -> MaterialParseVersion:
+    db.add(parse_version)
+    db.commit()
+    db.refresh(parse_version)
+    return parse_version
+
+
+def get_parse_version_for_material(
+    db: Session,
+    *,
+    material_id: str,
+    parse_version_id: str,
+) -> MaterialParseVersion | None:
+    return db.execute(
+        select(MaterialParseVersion).where(
+            MaterialParseVersion.id == parse_version_id,
+            MaterialParseVersion.material_id == material_id,
+        )
+    ).scalar_one_or_none()
+
+
+def get_building_parse_version(db: Session, material_id: str) -> MaterialParseVersion | None:
+    return db.execute(
+        select(MaterialParseVersion).where(
+            MaterialParseVersion.material_id == material_id,
+            MaterialParseVersion.status == "building",
+        )
+    ).scalar_one_or_none()
+
+
+def list_parse_versions_for_material(db: Session, material_id: str) -> list[MaterialParseVersion]:
+    return list(
+        db.execute(
+            select(MaterialParseVersion)
+            .where(MaterialParseVersion.material_id == material_id)
+            .order_by(MaterialParseVersion.created_at, MaterialParseVersion.id)
         ).scalars()
     )
 

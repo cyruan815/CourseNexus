@@ -22,7 +22,7 @@ from app.modules.courses.models import Course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generation.generators.task_test.schemas import TaskTestContent
 from app.modules.learning_execution import router as learning_router
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
 
@@ -98,6 +98,7 @@ def _seed_plan_with_materials(db: Session, *, user_id: str) -> tuple[str, str]:
         ("mat_flow_1", "chunk_flow_1", "主键.pdf", "主键用于唯一标识表中的一行。"),
         ("mat_flow_2", "chunk_flow_2", "外键.pdf", "外键用于表达两个表之间的关系。"),
     ]:
+        parse_version_id = f"mpv_{material_id}"
         db.add(
             CourseMaterial(
                 id=material_id,
@@ -108,12 +109,24 @@ def _seed_plan_with_materials(db: Session, *, user_id: str) -> tuple[str, str]:
                 source_type="file",
                 file_url=f"/uploads/{name}",
                 parse_status="parsed",
+                active_parse_version_id=parse_version_id,
+            )
+        )
+        db.add(
+            MaterialParseVersion(
+                id=parse_version_id,
+                material_id=material_id,
+                course_id="crs_flow",
+                user_id=user_id,
+                status="active",
+                parse_quality="complete",
             )
         )
         db.add(
             MaterialChunk(
                 id=chunk_id,
                 material_id=material_id,
+                parse_version_id=parse_version_id,
                 course_id="crs_flow",
                 chunk_index=0,
                 page="1",
@@ -216,11 +229,25 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     assert {
         source["material_id"] for source in handout["material_scope_json"]["source_materials"]
     } == set(handout["material_scope_json"]["material_ids"])
+    assert {
+        version["material_id"]: version["version_id"]
+        for version in handout["material_scope_json"]["material_versions"]
+    } == {
+        "mat_flow_1": "mpv_mat_flow_1",
+        "mat_flow_2": "mpv_mat_flow_2",
+    }
     assert task_test["source_citations"]
     assert task_test["material_scope_json"]["source_materials"]
     assert {
         source["material_id"] for source in task_test["material_scope_json"]["source_materials"]
     } == set(task_test["material_scope_json"]["material_ids"])
+    assert {
+        version["material_id"]: version["version_id"]
+        for version in task_test["material_scope_json"]["material_versions"]
+    } == {
+        "mat_flow_1": "mpv_mat_flow_1",
+        "mat_flow_2": "mpv_mat_flow_2",
+    }
     task_test_citation_ids = {citation["id"] for citation in task_test["source_citations"]}
     assert set(task_test["content_json"]["questions"][0]["source_citation_ids"]).issubset(task_test_citation_ids)
 
@@ -233,6 +260,10 @@ def test_task_content_generation_flow_preserves_task_and_checkin_state(api: ApiH
     task_test_citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == task_test["id"])).scalars().all()
     assert handout_citations == []
     assert {citation.chunk_id for citation in task_test_citations} == {"chunk_flow_1", "chunk_flow_2"}
+    assert {citation.material_version_id for citation in task_test_citations} == {
+        "mpv_mat_flow_1",
+        "mpv_mat_flow_2",
+    }
 
     markdown_response = api.client.get(f"/api/v1/generated-contents/{task_test['id']}/exports/markdown", headers=headers)
     assert markdown_response.status_code == 200

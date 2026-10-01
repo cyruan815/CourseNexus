@@ -1,6 +1,6 @@
 import { Alert, Badge, Box, Checkbox, Group, Stack, Text } from "@mantine/core";
 
-import type { Material, MaterialScope } from "../../materials/types";
+import { isMaterialLearningReady, type Material, type MaterialScope } from "../../materials/types";
 
 interface StudyPlanMaterialScopeSelectorProps {
   error: string | null;
@@ -24,7 +24,7 @@ export function StudyPlanMaterialScopeSelector({
   materials,
   onMaterialScopeChange,
 }: StudyPlanMaterialScopeSelectorProps) {
-  const parsedMaterials = materials.filter((material) => material.parse_status === "parsed");
+  const parsedMaterials = materials.filter(isMaterialLearningReady);
   const parsedIds = parsedMaterials.map((material) => material.id);
   const selectedIds = materialScope.material_ids.filter((id) => parsedIds.includes(id));
   const hasSelectedAll = parsedIds.length > 0 && selectedIds.length === parsedIds.length;
@@ -91,8 +91,15 @@ export function StudyPlanMaterialScopeSelector({
       {!isLoading && materials.length > 0 ? (
         <Stack className="study-plan-scope-list" gap={8}>
           {materials.map((material) => {
-            const isParsed = material.parse_status === "parsed";
+            const isParsed = isMaterialLearningReady(material);
             const isChecked = isParsed && selectedIds.includes(material.id);
+            const status = material.parse_status === "parsing" && isParsed
+              ? "正在更新"
+              : material.parse_error && isParsed
+                ? "更新失败，当前版本仍可用"
+                : material.parse_status === "parse_failed"
+                  ? "首次解析失败"
+                  : statusLabels[material.parse_status] ?? material.parse_status;
 
             return (
               <Group className="study-plan-scope-row" key={material.id} justify="space-between" wrap="nowrap">
@@ -103,7 +110,7 @@ export function StudyPlanMaterialScopeSelector({
                   onChange={() => toggleMaterial(material.id)}
                 />
                 <Badge color={isParsed ? "teal" : "gray"} variant="light">
-                  {statusLabels[material.parse_status] ?? material.parse_status}
+                  {status}
                 </Badge>
               </Group>
             );

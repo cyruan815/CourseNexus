@@ -6,12 +6,13 @@ from pathlib import Path
 import zipfile
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.errors import CourseNexusError
 from app.db.base import Base
+from app.db.session import create_database_engine
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.integrations.parsers.plain_text import PlainTextParser
@@ -23,7 +24,7 @@ from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.materials.schemas import MaterialFolderCreate, MaterialUpdate
-from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder, MaterialParseVersion
 from app.modules.materials.service import (
     create_material_folder,
     delete_material_folder,
@@ -68,6 +69,20 @@ def db() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+def _activate_material_version(db: Session, material: CourseMaterial) -> MaterialParseVersion:
+    version = MaterialParseVersion(
+        id=f"mpv_{material.id}",
+        material_id=material.id,
+        course_id=material.course_id,
+        user_id=material.user_id,
+        status="active",
+        parse_quality="complete",
+    )
+    material.active_parse_version_id = version.id
+    db.add_all([material, version])
+    return version
 
 
 def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -> None:
@@ -279,6 +294,8 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
+    material.parse_status = "parsing"
     db.commit()
     folder = create_material_folder(
         db,
@@ -329,6 +346,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",
@@ -346,6 +364,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
         id="cit-1",
         generated_content_id=generated_content.id,
         material_id=material.id,
+        material_version_id=parse_version.id,
         chunk_id=chunk.id,
         material_name=material.name,
         page="1",
@@ -372,6 +391,7 @@ def test_moving_and_deleting_folder_updates_material_and_rag_metadata(db: Sessio
     assert db.get(AIGeneratedContent, generated_content.id) is not None
     assert preserved_citation is not None
     assert preserved_citation.material_id is None
+    assert preserved_citation.material_version_id is None
     assert preserved_citation.chunk_id is None
     assert preserved_citation.material_name == "notes.txt"
     assert preserved_citation.hit_text == "matrix notes"
@@ -405,9 +425,12 @@ def test_delete_folder_rag_failure_rolls_back_database_and_restores_vectors(db: 
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
+    material.parse_status = "parsing"
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",
@@ -442,10 +465,60 @@ def test_delete_folder_rag_failure_rolls_back_database_and_restores_vectors(db: 
         )
 
     assert exc_info.value.code == "INDEXING_FAILED"
-    assert get_material_detail(db, user.id, material.id).parse_status == "parsed"
+    assert get_material_detail(db, user.id, material.id).parse_status == "parsing"
     assert get_material_folder(db, user.id, folder.id).deleted_at is None
     assert set(rag_index.records) == {chunk.id}
     assert (tmp_path / material.file_url).exists()
+
+
+def test_delete_material_cascades_parse_versions_with_foreign_keys(tmp_path) -> None:
+    database_path = tmp_path / "foreign-keys.db"
+    engine = create_database_engine(f"sqlite:///{database_path.as_posix()}")
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    storage_root = tmp_path / "uploads"
+    storage = LocalFileStorage(root_path=storage_root, max_file_size_bytes=1024)
+    rag_index = FakeRagIndex()
+
+    with testing_session() as db:
+        user = register_user(db, UserCreate(username="fk-delete", password="password123"))
+        course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+        material = upload_file_material(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            filename="notes.txt",
+            stream=BytesIO(b"matrix notes"),
+            content_type="text/plain",
+            storage=storage,
+        )
+        parsed = parse_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            parser=PlainTextParser(),
+            rag_index=rag_index,
+            storage_root=storage_root,
+        )
+        version_id = parsed.active_parse_version_id
+        assert version_id is not None
+
+        delete_material(
+            db,
+            user_id=user.id,
+            material_id=material.id,
+            rag_index=rag_index,
+            storage=storage,
+        )
+
+        assert db.get(CourseMaterial, material.id) is None
+        assert db.get(MaterialParseVersion, version_id) is None
+        assert db.execute(
+            select(MaterialChunk).where(MaterialChunk.material_id == material.id)
+        ).scalars().all() == []
+        assert rag_index.records == {}
+
+    engine.dispose()
 
 
 def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
@@ -472,9 +545,11 @@ def test_delete_folder_commit_failure_rolls_back_database_and_restores_vectors(
         storage=LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024),
     )
     material.parse_status = "parsed"
+    parse_version = _activate_material_version(db, material)
     chunk = MaterialChunk(
         id="chunk-1",
         material_id=material.id,
+        parse_version_id=parse_version.id,
         course_id=course.id,
         chunk_index=0,
         content_text="matrix notes",

@@ -15,7 +15,7 @@
 - 前端行内引用与定位：`frontend/src/features/course-qa/{InlineCitationAnswer,CitationLocator}.tsx`
 - 资料元数据与 PDF 原文读取：`frontend/src/features/materials/api.ts`
 
-`course-qa` 只能通过 `material-context.retrieve_relevant_context()` 获取资料，不能直接查询资料 chunk 或向量库；model-provider 不负责用户、课程或资料范围权限。
+`course-qa` 只能通过 `material-context.retrieve_relevant_context()` 获取资料，不能直接查询资料 chunk 或向量库；material-context 只返回每份资料的生效解析版本，候选、失败和退休版本不得进入问答。model-provider 不负责用户、课程或资料范围权限。
 
 ## 请求与数据流
 
@@ -44,10 +44,10 @@ sequenceDiagram
 1. prompt 将检索 chunk 标为从 1 开始的上下文序号，并要求模型在相关论述后输出 `[[cite:N]]`。
 2. model-provider 只把落在本次上下文范围内的 `N` 映射为内部 chunk id；越界标记直接删除。模型偶发输出的单层 `[cite:N]` 也会先按同一范围校验并规范化，避免原始标记泄漏。
 3. course-qa 将 provider 返回的 chunk id 与本次检索结果取交集，按首次出现去重。
-4. 内部 chunk 标记转换为连续的 `[[cite:1]]`、`[[cite:2]]`，并以同序保存 `SourceCitation`。
+4. 内部 chunk 标记转换为连续的 `[[cite:1]]`、`[[cite:2]]`，并以同序保存 `SourceCitation`；每条引用同时快照该 chunk 的 `material_version_id`。
 5. provider 返回了有效引用 id 但没有行内标记时，兼容路径把引用角标附加到回答末尾；未检索或伪造 id 不生成引用。
 
-不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
+不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果并记录实际使用的解析版本。后续重解析不会把历史引用静默改指新版本。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
 
 ## 引用定位规则
 
@@ -68,10 +68,10 @@ sequenceDiagram
 
 ## 失败与补偿
 
-- 没有 parsed 资料或没有检索命中：保存 `no_source` 回答，不调用模型，不保存引用。
+- 没有生效解析版本或没有检索命中：保存 `no_source` 回答，不调用模型，不保存引用。
 - 模型失败：保存失败消息并返回稳定生成错误；不会保存部分引用。
 - 越界或伪造引用：删除标记，不保存 fallback 引用。
-- 来源资料物理删除：引用外键置空，但保留资料名、位置与片段快照供历史回答展示。
+- 来源资料物理删除：引用的 `material_id`、`material_version_id` 和 `chunk_id` 外键置空，但保留资料名、位置与片段快照供历史回答展示。
 - PDF 无可靠页码：不请求 PDF 原文，不默认跳到第一页，直接展示保存快照。
 - 资料读取失败或权限失效：定位弹窗展示明确失败原因，不影响历史回答正文和引用快照继续阅读。
 
@@ -79,6 +79,7 @@ sequenceDiagram
 
 - `backend/tests/modules/course_qa/test_course_qa_service.py`
 - `backend/tests/modules/course_qa/test_course_qa_api.py`
+- `backend/tests/modules/course_qa/test_course_qa_persistence.py`
 - `backend/tests/integrations/test_openai_model_provider.py`
 - `frontend/tests/features/course-qa/inline-citation-answer.test.tsx`
 - `frontend/tests/features/materials/api.test.ts`

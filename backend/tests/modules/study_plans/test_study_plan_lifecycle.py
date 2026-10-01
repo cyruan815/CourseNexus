@@ -24,6 +24,7 @@ from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
+from app.modules.materials.models import CourseMaterial
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.schemas import (
@@ -326,6 +327,13 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
     assert preview.tasks[0].subtasks[-1].subtask_type == "test"
     assert sum(subtask.estimated_minutes for subtask in preview.tasks[0].subtasks) == 60
     assert set(preview.tasks[0].subtasks[0].related_material_ids) == set(material_ids)
+    assert preview.material_snapshot["material_versions"] == [
+        {
+            "material_id": material_id,
+            "version_id": db.get(CourseMaterial, material_id).active_parse_version_id,
+        }
+        for material_id in sorted(material_ids)
+    ]
     assert _study_plan_counts(db) == before_counts
 
 def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
@@ -655,6 +663,12 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert first.subtasks[0].title == "用户调整后的学习项"
     assert first.subtasks[0].related_material_ids_json == [material_id]
     assert first.subtasks[1].title == "saved test"
+    assert first.plan.parsed_config_json["material_snapshot"]["material_versions"] == [
+        {
+            "material_id": material_id,
+            "version_id": db.get(CourseMaterial, material_id).active_parse_version_id,
+        }
+    ]
     task_snapshot = first.plan.parsed_config_json["task_snapshot"]
     assert task_snapshot[0]["subtasks"][1]["generation_parameters"]["task_test"]["question_count"] == 5
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1

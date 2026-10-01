@@ -18,6 +18,7 @@ class SourceCitationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     material_id: str | None
+    material_version_id: str | None
     chunk_id: str | None
     material_name: str
     page: str | None

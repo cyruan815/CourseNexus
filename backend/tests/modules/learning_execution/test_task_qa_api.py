@@ -21,7 +21,7 @@ from app.main import app
 from app.modules.checkins.models import CheckinRecord
 from app.modules.course_qa.models import Conversation, Message
 from app.modules.courses.models import Course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.learning_execution import router as learning_router
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
@@ -81,6 +81,7 @@ def _seed_task_qa_plan(
     api.db.add(Course(id=course_id, user_id=user_id, name="Database Systems", status="active"))
     material_ids = ["mat_task_allowed"] if related_material_ids is None else related_material_ids
     for material_id in material_ids:
+        parse_version_id = f"mpv_{material_id}" if include_chunks else None
         api.db.add(
             CourseMaterial(
                 id=material_id,
@@ -91,8 +92,20 @@ def _seed_task_qa_plan(
                 source_type="file",
                 file_url=f"/uploads/{material_id}.md",
                 parse_status="parsed" if include_chunks else "uploaded",
+                active_parse_version_id=parse_version_id,
             )
         )
+        if parse_version_id is not None:
+            api.db.add(
+                MaterialParseVersion(
+                    id=parse_version_id,
+                    material_id=material_id,
+                    course_id=course_id,
+                    user_id=user_id,
+                    status="active",
+                    parse_quality="complete",
+                )
+            )
     api.db.add(
         StudyPlan(
             id=f"sp_{subtask_id}",
@@ -139,6 +152,7 @@ def _seed_task_qa_plan(
                 MaterialChunk(
                     id=chunk_id,
                     material_id=material_id,
+                    parse_version_id=f"mpv_{material_id}",
                     course_id=course_id,
                     chunk_index=index,
                     page="1",
@@ -160,6 +174,7 @@ def _seed_task_qa_plan(
                         page="1",
                         page_index=index,
                         heading="Keys",
+                        parse_version_id=f"mpv_{material_id}",
                     )
                 ]
             )
@@ -168,6 +183,7 @@ def _seed_task_qa_plan(
 
 
 def _add_same_course_out_of_scope_material(api: ApiHarness, *, user_id: str) -> None:
+    parse_version_id = "mpv_mat_task_out_of_scope"
     api.db.add(
         CourseMaterial(
             id="mat_task_out_of_scope",
@@ -178,12 +194,24 @@ def _add_same_course_out_of_scope_material(api: ApiHarness, *, user_id: str) -> 
             source_type="file",
             file_url="/uploads/out-of-scope.md",
             parse_status="parsed",
+            active_parse_version_id=parse_version_id,
+        )
+    )
+    api.db.add(
+        MaterialParseVersion(
+            id=parse_version_id,
+            material_id="mat_task_out_of_scope",
+            course_id="crs_task_qa",
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
         )
     )
     api.db.add(
         MaterialChunk(
             id="chunk_task_out_of_scope",
             material_id="mat_task_out_of_scope",
+            parse_version_id=parse_version_id,
             course_id="crs_task_qa",
             chunk_index=0,
             page="1",
@@ -205,6 +233,7 @@ def _add_same_course_out_of_scope_material(api: ApiHarness, *, user_id: str) -> 
                 page="1",
                 page_index=0,
                 heading="Keys",
+                parse_version_id=parse_version_id,
             )
         ]
     )
@@ -227,6 +256,9 @@ def test_task_qa_returns_citations_and_only_uses_current_subtask_materials(api: 
     assert data["answer_type"] == "grounded"
     assert data["used_material_ids"] == ["mat_task_allowed"]
     assert [citation["material_id"] for citation in data["source_citations"]] == ["mat_task_allowed"]
+    assert [citation["material_version_id"] for citation in data["source_citations"]] == [
+        "mpv_mat_task_allowed"
+    ]
 
     conversation = api.db.get(Conversation, data["conversation_id"])
     assert conversation is not None

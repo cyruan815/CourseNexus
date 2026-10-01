@@ -23,6 +23,7 @@ from app.modules.material_context.schemas import ContextChunk, MaterialContextBa
 from app.modules.material_context.service import (
     iter_material_context_batches,
     resolve_material_scope_ids,
+    resolve_material_scope_versions,
     summarize_material_quality_for_scope,
 )
 from app.modules.study_plans import repository as study_plan_repository
@@ -375,9 +376,10 @@ def preview_study_plan(
         )
         daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"
         available_total_minutes = daily_available_minutes * duration_days
-        material_snapshot = payload.material_snapshot or _build_material_snapshot(
+        material_snapshot = _build_material_snapshot(
             material_scope=payload.material_scope,
             expected_material_ids=expected_material_ids,
+            material_versions=_material_versions_from_batches(batches),
         )
         capacity = _build_capacity_summary(
             estimated_total_minutes=estimated_total_minutes,
@@ -594,6 +596,22 @@ def save_study_plan(
         save_payload = _resolve_save_payload_daily_minutes(save_payload, tasks_preview=tasks_preview)
 
     tasks_preview = _with_subtask_generation_parameters(tasks_preview)
+    if not save_payload.material_snapshot:
+        material_versions = resolve_material_scope_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_scope=save_payload.material_scope,
+        )
+        save_payload = save_payload.model_copy(
+            update={
+                "material_snapshot": _build_material_snapshot(
+                    material_scope=save_payload.material_scope,
+                    expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
+                    material_versions=material_versions,
+                )
+            }
+        )
 
     plan_id = _new_plan_id()
     now = datetime.now(timezone.utc)
@@ -1480,19 +1498,41 @@ def _task_previews_material_ids(task_previews: list[StudyTaskPreview]) -> list[s
     return material_ids
 
 
-def _build_material_snapshot(*, material_scope: object, expected_material_ids: set[str]) -> dict[str, object]:
+def _build_material_snapshot(
+    *,
+    material_scope: object,
+    expected_material_ids: set[str],
+    material_versions: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
     scope = material_scope if hasattr(material_scope, "include_all_parsed_materials") else None
     include_all = bool(getattr(scope, "include_all_parsed_materials", False)) if scope is not None else False
     material_ids = sorted(expected_material_ids)
+    versions = sorted(
+        material_versions or [],
+        key=lambda item: (item["material_id"], item["version_id"]),
+    )
     snapshot_basis = {
         "mode": "all_parsed" if include_all else "selected",
         "material_ids": material_ids,
+        "material_versions": versions,
     }
     snapshot_hash = hashlib.sha256(json.dumps(snapshot_basis, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return {
         **snapshot_basis,
         "snapshot_hash": f"sha256:{snapshot_hash}",
     }
+
+
+def _material_versions_from_batches(batches: list[MaterialContextBatch]) -> list[dict[str, str]]:
+    versions: dict[str, str] = {}
+    for batch in batches:
+        for chunk in batch.chunks:
+            if chunk.material_version_id is not None:
+                versions[chunk.material_id] = chunk.material_version_id
+    return [
+        {"material_id": material_id, "version_id": version_id}
+        for material_id, version_id in sorted(versions.items())
+    ]
 
 
 
@@ -1608,6 +1648,7 @@ def _saved_config(
     material_snapshot = payload.material_snapshot or _build_material_snapshot(
         material_scope=payload.material_scope,
         expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
+        material_versions=[],
     )
     coverage_value = coverage or _build_coverage_summary(tasks_preview)
     capacity_value = _build_capacity_summary(

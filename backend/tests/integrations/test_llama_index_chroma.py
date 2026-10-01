@@ -52,6 +52,7 @@ def rag_chunk(
     folder_id: str | None = None,
     chunk_index: int = 0,
     text: str = "matrix eigenvalue",
+    parse_version_id: str = "mpv_1",
 ) -> RagChunk:
     return RagChunk(
         chunk_id=chunk_id,
@@ -64,6 +65,7 @@ def rag_chunk(
         page="1",
         page_index=0,
         heading="A",
+        parse_version_id=parse_version_id,
     )
 
 
@@ -128,6 +130,29 @@ def test_chroma_filters_user_and_material(tmp_path: Path) -> None:
     assert [hit.chunk_id for hit in hits] == ["u1-f2"]
 
 
+def test_chroma_filters_exact_active_chunk_ids(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks(
+        [
+            rag_chunk("active", material_id="m1", parse_version_id="mpv_active"),
+            rag_chunk("candidate", material_id="m1", parse_version_id="mpv_building"),
+        ]
+    )
+
+    hits = rag_index.retrieve(
+        query="matrix",
+        scope=RagScopeFilter(
+            user_id="u1",
+            course_id="math",
+            material_ids=("m1",),
+            chunk_ids=("active",),
+        ),
+        top_k=8,
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["active"]
+
+
 def test_chroma_repeat_upsert_replaces_existing_chunk(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
     rag_index.index_chunks(
@@ -189,6 +214,23 @@ def test_chroma_delete_materials_removes_all_requested_vectors(tmp_path: Path) -
     )
 
     assert [hit.chunk_id for hit in hits] == ["c3"]
+
+
+def test_chroma_deletes_and_lists_one_parse_version(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks(
+        [
+            rag_chunk("c1", material_id="m1", parse_version_id="mpv_1"),
+            rag_chunk("c2", material_id="m1", parse_version_id="mpv_2"),
+        ]
+    )
+
+    assert rag_index.list_parse_version_chunk_ids("mpv_1") == {"c1"}
+
+    rag_index.delete_parse_version("mpv_1")
+
+    assert rag_index.list_parse_version_chunk_ids("mpv_1") == set()
+    assert rag_index.list_parse_version_chunk_ids("mpv_2") == {"c2"}
 
 
 def test_chroma_updates_material_folder_without_reembedding(tmp_path: Path) -> None:

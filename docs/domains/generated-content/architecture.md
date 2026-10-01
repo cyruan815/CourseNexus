@@ -4,8 +4,8 @@ The five independent generators share one endpoint and one simplified execution 
 
 ```mermaid
 flowchart LR
-  A[Selected material scope] --> B[Validate ownership and parsed state]
-  B --> C[Read all selected chunks in stable order]
+  A[Selected material scope] --> B[Validate ownership and active version]
+  B --> C[Read active-version chunks in stable order]
   C --> D[Merge complete material context]
   D --> E{Total tokens within limit?}
   E -- No --> F[MATERIAL_CONTEXT_TOO_LARGE]
@@ -15,7 +15,7 @@ flowchart LR
   I --> J[Persist ai_generated_contents]
 ```
 
-Generation does not use Top-K retrieval, batching, map/reduce, cross-batch merging, chunk IDs, or item-level citations. `material_scope_json` records the requested range and a `source_materials` snapshot built by deduplicating the actual `MaterialGenerationContext.chunks`; each snapshot item contains `material_id` and the material name at generation time. This lets the UI show the real input range without turning the range into an item-level citation contract or trusting model-authored filenames.
+Generation does not use Top-K retrieval, batching, map/reduce, cross-batch merging, chunk IDs, or item-level citations. It reads only each selected material's active parse version. `material_scope_json` records the requested range, a `source_materials` snapshot built by deduplicating the actual `MaterialGenerationContext.chunks`, and a `material_versions` snapshot containing each used `{material_id, version_id}` pair. This lets the UI show the real input range and preserves the exact input versions without turning the range into an item-level citation contract or trusting model-authored filenames.
 
 `Generator.generate` receives one `MaterialGenerationContext`. `GeneratorOutput` contains only `title`, optional `content`, and `content_json`. Model/schema failures create a failed history record. Invalid parameters, no parsed material, and total-context overflow fail before history creation.
 

@@ -12,6 +12,7 @@ class MaterialScope(BaseModel):
 
 class ContextChunk(BaseModel):
     material_id: str
+    material_version_id: str | None = None
     chunk_id: str
     chunk_index: int = 0
     material_name: str
@@ -27,6 +28,7 @@ def build_material_scope_snapshot(
     chunks: list[ContextChunk],
 ) -> dict[str, object]:
     source_materials: list[dict[str, str]] = []
+    material_versions: list[dict[str, str]] = []
     seen_material_ids: set[str] = set()
     for chunk in chunks:
         if chunk.material_id in seen_material_ids:
@@ -38,9 +40,17 @@ def build_material_scope_snapshot(
                 "material_name": chunk.material_name,
             }
         )
+        if chunk.material_version_id is not None:
+            material_versions.append(
+                {
+                    "material_id": chunk.material_id,
+                    "version_id": chunk.material_version_id,
+                }
+            )
     return {
         **material_scope.model_dump(mode="json"),
         "source_materials": source_materials,
+        "material_versions": material_versions,
     }
 
 

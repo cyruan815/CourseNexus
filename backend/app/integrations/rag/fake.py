@@ -38,6 +38,20 @@ class FakeRagIndex:
             if chunk.material_id not in deleted_ids
         }
 
+    def delete_parse_version(self, parse_version_id: str) -> None:
+        self.records = {
+            chunk_id: chunk
+            for chunk_id, chunk in self.records.items()
+            if chunk.parse_version_id != parse_version_id
+        }
+
+    def list_parse_version_chunk_ids(self, parse_version_id: str) -> set[str]:
+        return {
+            chunk_id
+            for chunk_id, chunk in self.records.items()
+            if chunk.parse_version_id == parse_version_id
+        }
+
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
         self.records = {
             chunk_id: replace(chunk, folder_id=folder_id) if chunk.material_id == material_id else chunk
@@ -65,6 +79,8 @@ class FakeRagIndex:
         if chunk.user_id != scope.user_id or chunk.course_id != scope.course_id:
             return False
         if scope.material_ids and chunk.material_id not in scope.material_ids:
+            return False
+        if scope.chunk_ids and chunk.chunk_id not in scope.chunk_ids:
             return False
         return True
 
