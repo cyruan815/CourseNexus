@@ -37,6 +37,7 @@ from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUp
 
 parse_logger = get_logger("materials.parse")
 index_logger = get_logger("rag.index")
+upload_logger = get_logger("materials.upload")
 
 
 def _new_material_id() -> str:
@@ -98,11 +99,29 @@ def upload_file_material(
         return save_material(db, material)
     except Exception:
         db.rollback()
-        storage.discard_material_files(
-            user_id=user_id,
-            course_id=course_id,
-            material_id=material_id,
-        )
+        try:
+            storage.discard_material_files(
+                user_id=user_id,
+                course_id=course_id,
+                material_id=material_id,
+            )
+        except Exception as compensation_error:
+            upload_logger.error(
+                "上传补偿失败 | code=UPLOAD_COMPENSATION_FAILED material=%s course=%s",
+                material_id,
+                course_id,
+                exc_info=(
+                    type(compensation_error),
+                    compensation_error,
+                    compensation_error.__traceback__,
+                ),
+            )
+            raise CourseNexusError(
+                code="UPLOAD_COMPENSATION_FAILED",
+                message="上传失败且文件回收未完成，请联系管理员检查存储",
+                status_code=500,
+                details={"material_id": material_id},
+            ) from compensation_error
         raise
 
 
