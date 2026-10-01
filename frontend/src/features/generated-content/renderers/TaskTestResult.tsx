@@ -1,6 +1,7 @@
 import { Badge, Button, Checkbox, Group, Paper, Stack, Text, Textarea } from "@mantine/core";
 import { useState } from "react";
 
+import { CitationLocator, citationLocation, type CitationLocatorData } from "../../course-qa/CitationLocator";
 import type { TaskTestAnswer, TaskTestQuestion } from "../types";
 
 type DraftAnswer = TaskTestAnswer | undefined;
@@ -15,6 +16,7 @@ interface InteractionState {
 
 interface TaskTestResultProps {
   attemptKey?: string | null;
+  citations?: CitationLocatorData[];
   questions: TaskTestQuestion[];
 }
 
@@ -60,7 +62,7 @@ function isCorrect(question: TaskTestQuestion, answer: DraftAnswer): boolean | n
   return answer === question.correct_answer;
 }
 
-export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
+export function TaskTestResult({ attemptKey, citations = [], questions }: TaskTestResultProps) {
   const ordered = [...questions].sort((left, right) => left.sort_order - right.sort_order);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [interaction, setInteraction] = useState<InteractionState>(() => ({
@@ -112,6 +114,10 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
         const isSubmitted = Boolean(submitted[question.id]);
         const correct = isSubmitted ? isCorrect(question, answer) : null;
         const canSubmit = hasAnswer(question, answer);
+        const questionCitationIds = new Set(question.source_citation_ids ?? []);
+        const questionCitations = citations.filter(
+          (citation) => citation.id && questionCitationIds.has(citation.id),
+        );
 
         return (
           <Paper
@@ -247,6 +253,28 @@ export function TaskTestResult({ attemptKey, questions }: TaskTestResultProps) {
                   </Text>
                   {question.explanation ? (
                     <Text size="sm">解析：{question.explanation}</Text>
+                  ) : null}
+                  {questionCitations.length > 0 ? (
+                    <Stack className="gc-task-test-sources" gap={6}>
+                      <Text fw={700} size="xs">题目来源</Text>
+                      <Group className="gc-task-test-source-list" gap="xs">
+                        {questionCitations.map((citation, sourceIndex) => (
+                          <CitationLocator
+                            ariaLabel={`查看第 ${index + 1} 题来源 ${sourceIndex + 1}：${citation.material_name}`}
+                            citation={citation}
+                            className="gc-task-test-source-button"
+                            key={citation.id ?? `${citation.material_name}-${sourceIndex}`}
+                            label={(
+                              <>
+                                <span className="gc-task-test-source-index">{sourceIndex + 1}</span>
+                                <span className="gc-task-test-source-name">{citation.material_name}</span>
+                                <span className="gc-task-test-source-location">{citationLocation(citation)}</span>
+                              </>
+                            )}
+                          />
+                        ))}
+                      </Group>
+                    </Stack>
                   ) : null}
                 </Stack>
               ) : null}

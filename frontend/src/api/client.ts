@@ -1,5 +1,6 @@
 import { ApiError } from "./errors";
 import type { ApiErrorResponse, ApiSuccess } from "./types";
+import { normalizeApiBaseUrl, resolveTrustedApiUrl } from "./trusted-url";
 import { clearSessionToken, getSessionToken } from "../features/auth/session";
 
 type JsonBody = object;
@@ -8,14 +9,19 @@ export interface ApiRequestInit extends Omit<RequestInit, "body"> {
   body?: BodyInit | JsonBody | null;
 }
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+export interface ApiFileRequestInit extends Omit<RequestInit, "body"> {
+  fallbackFilename?: string;
+}
+
+export interface ApiFileResponse {
+  blob: Blob;
+  filename: string | null;
+}
+
+const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 function buildUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
-
-  return `${apiBaseUrl}${path}`;
+  return resolveTrustedApiUrl(path, apiBaseUrl);
 }
 
 function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
@@ -74,6 +80,39 @@ function isApiSuccess<T>(payload: unknown): payload is ApiSuccess<T> {
   return typeof payload === "object" && payload !== null && "data" in payload;
 }
 
+function filenameFromDisposition(disposition: string | null, fallback: string | undefined): string | null {
+  if (!disposition) {
+    return fallback ?? null;
+  }
+
+  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ""));
+  }
+
+  const asciiMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  return asciiMatch?.[1]?.trim() || fallback || null;
+}
+
+async function throwApiResponseError(response: Response): Promise<never> {
+  if (response.status === 401) {
+    clearSessionToken();
+  }
+
+  const payload = await readJson(response).catch(() => undefined);
+  if (isApiErrorResponse(payload)) {
+    throw new ApiError(payload.error, response.status);
+  }
+
+  throw new ApiError(
+    {
+      code: "HTTP_ERROR",
+      message: `Request failed with status ${response.status}`,
+    },
+    response.status,
+  );
+}
+
 export async function apiRequest<T = unknown>(
   path: string,
   init: ApiRequestInit = {},
@@ -122,4 +161,34 @@ export async function apiRequest<T = unknown>(
   }
 
   return undefined as T;
+}
+
+export async function apiFileRequest(
+  path: string,
+  init: ApiFileRequestInit = {},
+): Promise<ApiFileResponse> {
+  const { fallbackFilename, headers: initHeaders, ...requestInit } = init;
+  const headers = toHeaderRecord(initHeaders);
+  const token = getSessionToken();
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(buildUrl(path), {
+    method: "GET",
+    ...requestInit,
+    headers,
+  });
+  if (!response.ok) {
+    return throwApiResponseError(response);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: filenameFromDisposition(
+      response.headers.get("Content-Disposition"),
+      fallbackFilename,
+    ),
+  };
 }

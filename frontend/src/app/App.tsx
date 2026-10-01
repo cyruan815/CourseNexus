@@ -4,6 +4,7 @@ import { Notifications } from "@mantine/notifications";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppRouter } from "../router/AppRouter";
+import { RuntimeModeBanner } from "../components/RuntimeModeBanner";
 import "./theme.css";
 
 const queryClient = new QueryClient();
@@ -14,6 +15,7 @@ export function App() {
       <MantineProvider>
         <ModalsProvider>
           <Notifications />
+          <RuntimeModeBanner />
           <AppRouter />
         </ModalsProvider>
       </MantineProvider>

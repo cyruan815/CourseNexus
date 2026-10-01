@@ -27,7 +27,8 @@ The five independent generators write `ai_generated_contents` only. The existing
 | `users` | `User` | `users` | 用户账号与个人资料。 |
 | `courses` | `Course` | `courses` | 课程基础信息。 |
 | `material_folders` | `MaterialFolder` | `materials` | 课程资料一级目录。 |
-| `course_materials` | `CourseMaterial` | `materials` | 文件或链接资料。 |
+| `course_materials` | `CourseMaterial` | `materials` | 文件资料；`source_type=url` 为历史保留记录。 |
+| `material_parse_versions` | `MaterialParseVersion` | `materials` | 每轮解析的候选、生效、失败与退休版本。 |
 | `material_chunks` | `MaterialChunk` | `materials` | 资料解析后的检索切片。 |
 | `conversations` | `Conversation` | `course-qa` | 课程问答会话。 |
 | `messages` | `Message` | `course-qa` | 用户消息或助手消息。 |
@@ -38,12 +39,12 @@ The five independent generators write `ai_generated_contents` only. The existing
 | `study_subtasks` | `StudySubTask` | `study-plans` / `learning-execution` | 二级学习任务。 |
 | `checkin_records` | `CheckinRecord` | `checkins` | 每日学习完成记录。 |
 
-## S01 计划学习模式表结构审计
+## 计划学习模式表结构契约
 
-S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 对计划学习模式依赖的 13 张核心表做 metadata 契约测试。审计结论：
+S01 最初复用了 13 张业务表；R02 为材料可靠重解析增加 `material_parse_versions` 基础设施表。`backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 现在对 14 张核心表做 metadata 契约测试。结论：
 
-- 当前表集合必须严格等于 `users`、`courses`、`material_folders`、`course_materials`、`material_chunks`、`conversations`、`messages`、`source_citations`、`ai_generated_contents`、`study_plans`、`study_tasks`、`study_subtasks`、`checkin_records`。
-- S01 不新增 Alembic migration，不修改 `backend/migrations/versions/20260709_0001_create_core_tables.py`。
+- 当前表集合必须严格等于 `users`、`courses`、`material_folders`、`course_materials`、`material_parse_versions`、`material_chunks`、`conversations`、`messages`、`source_citations`、`ai_generated_contents`、`study_plans`、`study_tasks`、`study_subtasks`、`checkin_records`。
+- baseline migration 保持不变；R02 通过后续兼容 migration 新增解析版本结构并回填旧数据。
 - `checkin_records` 必须保留 `(user_id, checkin_date)` 唯一约束，支持每用户每日一条打卡记录。
 - `ai_generated_contents.content_type` 必须支持 `handout` 和 `task_test`，并通过 `study_subtask_id` 绑定二级任务。
 - `study_plans.status`、`study_tasks.status`、`study_subtasks.subtask_type` 必须由数据库约束拒绝非法枚举值。
@@ -60,6 +61,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `Course` | `courses` | 已建表 | `courses` | 还需实现课程 CRUD、归属校验和软删除隐藏规则。 |
 | `MaterialFolder` | `material_folders` | 已建表并已接入 API | `materials` | 已实现一级目录创建、列表、重命名、排序、级联物理删除资料和资料移动。 |
 | `CourseMaterial` | `course_materials` | 已建表 | `materials` | 还需实现上传、链接保存、解析状态流转、重试和资料预览。 |
+| `MaterialParseVersion` | `material_parse_versions` | 已建表并已接入解析流程 | `materials` | 已实现候选构建、失败回退、生效切换和历史版本保留。 |
 | `MaterialChunk` | `material_chunks` | 已建表 | `materials` | 还需实现资料解析切片、索引写入和重新解析后的旧切片处理。 |
 | `Conversation` | `conversations` | 已建表 | `course-qa` | 还需实现会话创建、连续追问和课程内会话查询。 |
 | `Message` | `messages` | 已建表 | `course-qa` | 还需实现消息保存、生成失败记录和重试策略。 |
@@ -72,7 +74,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 实现要求：
 
-- `backend/migrations/versions/20260709_0001_create_core_tables.py` 是当前 13 张表的 baseline migration。
+- `backend/migrations/versions/20260709_0001_create_core_tables.py` 是最初 13 张业务表的 baseline migration；解析版本表由后续 migration 添加。
 - 如果后续为了 walking skeleton 临时只接入部分表对应的 API，必须在任务说明中明确已接入和暂缓的业务能力，并同步更新本文。
 - 上线前必须满足 PRD 第 18.2 节“数据库：完成真实数据库表结构和必要索引”的要求。
 
@@ -84,7 +86,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `Flashcard` | `flashcards` | `ai_generated_contents.content_type = flashcard`，卡片写入 `content_json.cards`。 | PRD 明确本期不做复杂间隔复习算法；卡片级长期掌握度可后续再拆。 |
 | `Mindmap` | `mindmaps`、`mindmap_nodes`、`mindmap_edges` | `ai_generated_contents.content_type = mindmap`，节点和边写入 `content_json`。 | PRD 建议 Mindmap 保存在 `AIGeneratedContent.content_json` 中；v0.1 不需要节点级编辑或图查询。 |
 | 复习提纲 | `outlines`、`outline_sections` | `ai_generated_contents.content_type = outline`，章节结构写入 `content_json.sections`。 | PRD 将复习提纲归入 AI 生成内容历史记录，不要求独立提纲表。 |
-| 知识点清单 | `knowledge_lists`、`knowledge_list_items` | `ai_generated_contents.content_type = knowledge_list`，知识点写入 `content_json.items`。 | v0.1 只需展示生成结果和引用来源，不做知识点级掌握模型。 |
+| 知识点清单 | `knowledge_lists`、`knowledge_list_items` | `ai_generated_contents.content_type = knowledge_list`，知识点写入 `content_json.items`。 | v0.1 展示生成结果与真实资料范围，不承诺知识点级引用；学习状态保存在 item 的 `learned`。 |
 | 保存为笔记 | `notes` | `ai_generated_contents.content_type = note`，正文写入 `content`，来源消息用 `source_message_id`。 | PRD 明确不新增 Note 对象。 |
 | 今日讲义 | `handouts` | `ai_generated_contents.content_type = handout`，并关联 `study_subtask_id`。 | PRD 要求按需生成并绑定二级任务，不要求独立讲义表。 |
 | 任务测试题 | `task_tests`、`task_test_questions` | `ai_generated_contents.content_type = task_test`，题目写入 `content_json.questions`，并关联 `study_subtask_id`。 | PRD 要求进入任务测试题页面后按需生成，不在计划保存时提前生成。 |
@@ -138,6 +140,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `nickname` | string | 是 | null |  | 用户昵称。 |
 | `avatar_url` | string | 是 | null |  | 头像地址。 |
 | `status` | enum `user_status` | 否 | `active` | INDEX | 用户状态。 |
+| `token_epoch` | integer | 否 | `0` |  | 登录态纪元：token 签发时写入 payload，`get_current_user` 比对不一致即判定失效；修改密码时递增以撤销该用户全部存量登录态。 |
 | `created_at` | datetime | 否 | 当前时间 |  | 创建时间。 |
 | `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
 | `deleted_at` | datetime | 是 | null | INDEX | 删除时间。 |
@@ -147,6 +150,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 登录使用 `username` + 密码。
 - `password_hash` 只能保存哈希值，不允许保存明文或可逆加密结果。
 - `username` 全局唯一；如果后续支持账号恢复或硬删除，需要单独评审唯一约束策略。
+- 历史 token payload 不含 `epoch` 字段，解码兜底为 0，与列默认值一致：升级 `20260930_0006` 后存量登录态继续有效，直到该用户修改密码。
 
 ## courses
 
@@ -202,13 +206,14 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `folder_id` | string | 是 | null | FK -> `material_folders.id`, INDEX | 所属一级目录；null 表示未分类。 |
 | `name` | string | 否 | 无 | INDEX(`course_id`, `name`) | 展示名称，允许重名。 |
 | `material_type` | enum `material_type` | 否 | 无 | INDEX | 资料类型。 |
-| `source_type` | enum `source_type` | 否 | 无 | INDEX | 来源类型。 |
+| `source_type` | enum `source_type` | 否 | 无 | INDEX | 来源类型。`url` 仅用于历史记录：链接资料创建入口已下线，历史 URL 资料只读、可删除，不进入学习上下文。 |
 | `file_url` | string | 是 | null |  | 内部文件地址；文件资料必填，文件名使用 ASCII `source.<ext>`，展示名使用 `name`。 |
-| `source_url` | string | 是 | null |  | 原始链接；链接资料必填。 |
+| `source_url` | string | 是 | null |  | 原始链接；仅历史 `url` 资料持有，新入口已停止支持。 |
 | `file_size` | integer | 是 | null |  | 文件大小，单位 byte。 |
 | `mime_type` | string | 是 | null |  | MIME 类型。 |
 | `parse_status` | enum `parse_status` | 否 | `uploaded` | INDEX(`course_id`, `parse_status`) | 解析状态。 |
 | `parse_error` | text | 是 | null |  | 解析失败原因。 |
+| `active_parse_version_id` | string | 是 | null | FK -> `material_parse_versions.id`, INDEX, ON DELETE SET NULL | 当前学习可用解析版本；null 表示没有可消费版本。 |
 | `parse_quality` | enum `parse_quality` | 否 | `unknown` |  | 当前解析结果的完整性判断。 |
 | `parse_diagnostics_json` | json | 是 | null |  | Parser、profile、页覆盖、失败页和 warning。 |
 | `page_count` | integer | 是 | null |  | Parser 报告的文档总页数；非分页文本为 null。 |
@@ -219,7 +224,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 规则：
 
 - `source_type = file` 时 `file_url` 必填；`source_type = url` 时 `source_url` 必填。
-- 只有 `parse_status = parsed` 且仍存在的资料可进入检索、问答、生成和计划上下文。
+- 只有 `active_parse_version_id` 非空且资料仍存在时可进入检索、问答、生成和计划上下文；`parse_status = parsing` 时可以继续使用旧生效版本。
 - `parse_status = parsed` 可与 `parse_quality = partial` 同时存在：资料有可消费 chunk，但不能据此声称完整覆盖原文档。
 - 历史已解析数据和没有诊断能力的 parser 使用 `parse_quality = unknown`，不得自动回填为 `complete`。
 - 删除资料物理删除数据库记录、chunk、RAG 向量和原始文件；删除接口响应中的 `deleted_at`、`parse_status = deleted` 只是最终响应快照。
@@ -250,14 +255,40 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 页码数组使用一基页码并按升序去重。API 只返回稳定 warning code、安全消息、组件名和页码，不返回本地文件路径或异常堆栈。
 
+## material_parse_versions
+
+| 字段 | 类型 | Null | 默认值 | 约束 / 索引 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | string | 否 | 后端生成 | PK | 解析版本 ID。 |
+| `material_id` | string | 否 | 无 | FK -> `course_materials.id`, INDEX, ON DELETE CASCADE | 所属资料。 |
+| `course_id` | string | 否 | 无 | FK -> `courses.id`, INDEX | 所属课程快照。 |
+| `user_id` | string | 否 | 无 | FK -> `users.id`, INDEX | 所属用户快照。 |
+| `status` | enum `material_parse_version_status` | 否 | 无 | INDEX；同一材料至多一个 `building` | `building`、`active`、`failed`、`retired`。 |
+| `parse_error` | text | 是 | null |  | 本版本失败错误码。 |
+| `parse_quality` | enum `parse_quality` | 否 | `unknown` |  | 本版本解析完整性。 |
+| `parse_diagnostics_json` | json | 是 | null |  | 本版本解析诊断。 |
+| `page_count` | integer | 是 | null |  | 本版本页数。 |
+| `created_at` | datetime | 否 | 当前时间 | INDEX | 候选创建时间。 |
+| `updated_at` | datetime | 否 | 当前时间 |  | 更新时间。 |
+| `activated_at` | datetime | 是 | null |  | 成为生效版本的时间。 |
+| `finished_at` | datetime | 是 | null |  | 构建结束、失败或退休时间。 |
+
+规则：
+
+- 同一资料最多一个 `building` 版本；候选完整性校验成功后才能切换为 `active`。
+- 同一资料至多由 `course_materials.active_parse_version_id` 指向一个生效版本；旧版本切换为 `retired`。
+- 失败版本没有可用 chunk；退休版本本轮保留，不自动清理。
+- 删除资料时版本与其 chunk 级联删除。
+
 ## material_chunks
 
 | 字段 | 类型 | Null | 默认值 | 约束 / 索引 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | `id` | string | 否 | 后端生成 | PK | 切片 ID。 |
 | `material_id` | string | 否 | 无 | FK -> `course_materials.id`, INDEX | 所属资料。 |
+| `parse_version_id` | string | 否 | 无 | FK -> `material_parse_versions.id`, INDEX, ON DELETE CASCADE | 所属解析版本。 |
 | `course_id` | string | 否 | 无 | FK -> `courses.id`, INDEX | 所属课程，冗余便于检索过滤。 |
-| `chunk_index` | integer | 否 | 无 | UNIQUE(`material_id`, `chunk_index`) | 同资料内递增切片序号。 |
+| `chunk_index` | integer | 否 | 无 | UNIQUE(`parse_version_id`, `chunk_index`) | 同一解析版本内递增切片序号。 |
 | `page` | string | 是 | null | INDEX | 真实页码；PDF 可用。 |
 | `page_index` | integer | 是 | null | INDEX | 页序号；PPT 或无法识别页码时使用。 |
 | `heading` | string | 是 | null |  | 标题或章节。 |
@@ -267,8 +298,8 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 规则：
 
-- 切片必须能反向定位到原资料和课程。
-- 重新解析资料时，新切片替换旧切片；如果历史引用定位到旧切片失败，前端仍展示引用快照。
+- 切片必须能反向定位到原资料、解析版本和课程；切片 ID 包含解析版本，不同轮次不会冲突。
+- 重解析先写候选版本切片；只有完整性校验和原子切换成功后才成为当前上下文。旧版本切片保留但不得进入当前检索。
 - v0.1 不强制在 SQLite 内保存向量；`embedding_id` 可指向外部或本地向量索引。
 
 ## conversations
@@ -320,6 +351,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 | `message_id` | string | 是 | null | FK -> `messages.id`, INDEX | 关联消息。 |
 | `generated_content_id` | string | 是 | null | FK -> `ai_generated_contents.id`, INDEX | 关联 AI 生成内容。 |
 | `material_id` | string | 是 | null | FK -> `course_materials.id`, INDEX | 来源资料；资料物理删除后置空。 |
+| `material_version_id` | string | 是 | null | FK -> `material_parse_versions.id`, INDEX, ON DELETE SET NULL | 生成引用时实际使用的解析版本。 |
 | `chunk_id` | string | 是 | null | FK -> `material_chunks.id`, INDEX | 来源切片。 |
 | `material_name` | string | 否 | 无 |  | 资料名快照。 |
 | `page` | string | 是 | null |  | 真实页码。 |
@@ -332,7 +364,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 
 - `message_id` 与 `generated_content_id` 至少一个非空。
 - 创建新引用时必须有真实 `material_id`，不允许生成伪引用；仅资料物理删除后允许历史引用的 `material_id` 变为 null。
-- `material_name`、页码和 `hit_text` 是快照字段，资料删除后仍用于历史展示；`chunk_id` 同时置空。
+- `material_name`、页码和 `hit_text` 是快照字段，资料删除后仍用于历史展示；`material_version_id` 与 `chunk_id` 同时置空。
 - 数据库约束保留`page`和`page_index`至少一个非空。无分页Text/Markdown引用兼容保存`page=null,page_index=0`；0是未知位置哨兵，前端展示“页码未知”，不得解释为真实第0页。
 - 生成内容引用的`sort_order`从1连续递增；历史兼容数据允许为null，读取时使用`ASC NULLS LAST`和引用ID保证SQLite/PostgreSQL顺序一致。
 - 用户永久删除生成内容时，同一事务物理删除所有关联 `source_citations`，不保留生成内容引用快照。
@@ -365,6 +397,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - S06 进入生成流程后的失败也写入本表，`generation_status = failed` 且 `error_code` 为稳定错误码。
 - 课程详情页生成的课程自测 Quiz 使用 `content_type = quiz`。
 - 保留逐条引用的能力通过 `source_citations.generated_content_id` 关联；新生成 `handout` 不写该表，`task_test` 继续写逐题引用。
+- 成功生成时 `material_scope_json.material_versions` 保存实际读取的 `{material_id, version_id}` 列表；资料后续重解析不改写该快照。
 - 用户删除生成内容时，先删除关联引用，再物理删除 `ai_generated_contents` 主记录；删除不可恢复。
 
 ## study_plans
@@ -391,6 +424,7 @@ S01 已用 `backend/tests/modules/study_mode/test_subsystem_schema_contract.py` 
 - 本期明确只支持单课程计划，不使用 `course_ids`。
 - 多门课程计划通过创建多个 `study_plans` 实现。
 - 保存计划时生成任务结构，不提前生成讲义和任务测试题正文。
+- `parsed_config_json.material_snapshot.material_versions` 保存计划 preview / 保存时实际消费的材料版本；与 `material_ids` 一起参与快照 hash。
 
 ## study_tasks
 

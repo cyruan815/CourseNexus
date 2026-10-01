@@ -2,7 +2,7 @@
 
 ## 目标与范围
 
-课程资料问答在当前用户、单课程和显式资料范围内执行 Top-K 检索，生成基于命中资料的回答，并保存可追溯的行内引用。当前范围包含会话、消息、引用快照、新回答和历史消息接口；不包含资料原文预览、PDF 页内跳转和会话管理完整前端。
+课程资料问答在当前用户、单课程和显式资料范围内执行 Top-K 检索，生成基于命中资料的回答，并保存可追溯的行内引用。当前范围包含会话、消息、引用快照、新回答、历史消息接口和前端引用定位；会话管理完整前端仍不在当前范围。
 
 ## 代码入口与边界
 
@@ -12,8 +12,10 @@
 - API schema：`backend/app/modules/course_qa/schemas.py`
 - 模型协议：`backend/app/integrations/model_provider/base.py`
 - OpenAI-compatible 实现：`backend/app/integrations/model_provider/openai.py`
+- 前端行内引用与定位：`frontend/src/features/course-qa/{InlineCitationAnswer,CitationLocator}.tsx`
+- 资料元数据与 PDF 原文读取：`frontend/src/features/materials/api.ts`
 
-`course-qa` 只能通过 `material-context.retrieve_relevant_context()` 获取资料，不能直接查询资料 chunk 或向量库；model-provider 不负责用户、课程或资料范围权限。
+`course-qa` 只能通过 `material-context.retrieve_relevant_context()` 获取资料，不能直接查询资料 chunk 或向量库；material-context 只返回每份资料的生效解析版本，候选、失败和退休版本不得进入问答。model-provider 不负责用户、课程或资料范围权限。
 
 ## 请求与数据流
 
@@ -42,10 +44,20 @@ sequenceDiagram
 1. prompt 将检索 chunk 标为从 1 开始的上下文序号，并要求模型在相关论述后输出 `[[cite:N]]`。
 2. model-provider 只把落在本次上下文范围内的 `N` 映射为内部 chunk id；越界标记直接删除。模型偶发输出的单层 `[cite:N]` 也会先按同一范围校验并规范化，避免原始标记泄漏。
 3. course-qa 将 provider 返回的 chunk id 与本次检索结果取交集，按首次出现去重。
-4. 内部 chunk 标记转换为连续的 `[[cite:1]]`、`[[cite:2]]`，并以同序保存 `SourceCitation`。
+4. 内部 chunk 标记转换为连续的 `[[cite:1]]`、`[[cite:2]]`，并以同序保存 `SourceCitation`；每条引用同时快照该 chunk 的 `material_version_id`。
 5. provider 返回了有效引用 id 但没有行内标记时，兼容路径把引用角标附加到回答末尾；未检索或伪造 id 不生成引用。
 
-不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
+不变量：`answer_text` 中每个合法 `[[cite:N]]` 都满足 `1 <= N <= len(source_citations)`，每条引用都来自本次实际检索结果并记录实际使用的解析版本。后续重解析不会把历史引用静默改指新版本。前端对历史消息中的 `[cite:N]` 做同范围的防御性渲染，但不会为越界序号创建引用。
+
+## 引用定位规则
+
+1. 用户点击行内引用角标后，前端先用当前登录态读取 `GET /api/v1/materials/{material_id}`，重新校验资料是否仍可访问。
+2. 来源是 PDF 且引用有可验证的一基页码时，再读取 `GET /api/v1/materials/{material_id}/content`，用临时 object URL 的 `#page=N` 打开对应页；关闭、替换或卸载时释放 object URL。
+3. Text / Markdown 来源展示保存的 `hit_text` 引用快照；`page_index = 0` 是未知位置哨兵，界面显示“页码未知”。
+4. PDF 没有可验证页码时不打开第一页，只展示未定位说明与引用快照；不得把未知页码伪造成第一页。
+5. 来源已删除、无权限或原文件不可用时显示“来源不可用”，同时保留历史回答随 `SourceCitation` 保存的合法资料名、位置和片段快照。
+
+同一个回答命中多份资料时，正文引用继续使用连续角标 `[1][2]...`；每个角标独立打开对应资料，不把多份资料合并成一个不可定位的来源。
 
 ## 复杂度与资源预算
 
@@ -56,16 +68,23 @@ sequenceDiagram
 
 ## 失败与补偿
 
-- 没有 parsed 资料或没有检索命中：保存 `no_source` 回答，不调用模型，不保存引用。
+- 没有生效解析版本或没有检索命中：保存 `no_source` 回答，不调用模型，不保存引用。
 - 模型失败：保存失败消息并返回稳定生成错误；不会保存部分引用。
+- 模型返回后、保存 assistant 消息和引用前，服务会按本次检索记录的 `{material_id, version_id}` 快照重新校验用户、课程、材料和解析版本。模型调用期间资料被删除、转移或版本失效时返回 `MATERIAL_SCOPE_STALE`，只保留既有用户消息，不保存迟到的成功回答或引用。
 - 越界或伪造引用：删除标记，不保存 fallback 引用。
-- 来源资料物理删除：引用外键置空，但保留资料名、位置与片段快照供历史回答展示。
+- 来源资料物理删除：引用的 `material_id`、`material_version_id` 和 `chunk_id` 外键置空，但保留资料名、位置与片段快照供历史回答展示。
+- PDF 无可靠页码：不请求 PDF 原文，不默认跳到第一页，直接展示保存快照。
+- 资料读取失败或权限失效：定位弹窗展示明确失败原因，不影响历史回答正文和引用快照继续阅读。
 
 ## 测试入口
 
 - `backend/tests/modules/course_qa/test_course_qa_service.py`
 - `backend/tests/modules/course_qa/test_course_qa_api.py`
+- `backend/tests/modules/course_qa/test_course_qa_persistence.py`
+- `backend/tests/modules/material_context/test_publication_guard.py`
 - `backend/tests/integrations/test_openai_model_provider.py`
+- `frontend/tests/features/course-qa/inline-citation-answer.test.tsx`
+- `frontend/tests/features/materials/api.test.ts`
 
 定向验证：
 

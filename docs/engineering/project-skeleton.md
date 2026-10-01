@@ -2,7 +2,7 @@
 
 ## 项目基座目标
 
-项目基座的目标是先支撑一个可运行、可验证、可继续扩展的 CourseNexus 本地 POC。基座不实现完整业务功能，但要为后续前后端开发提供清晰目录、配置、鉴权、数据库、错误处理、日志、测试和文档入口。
+项目基座支撑一个可运行、可验证、可继续扩展的 CourseNexus 单机 V1，并为后续开发提供清晰目录、配置、鉴权、数据库、错误处理、日志、测试和文档入口。本文中的 walking skeleton 条目描述最低基线；当前能力状态以 [../planning/current-state.md](../planning/current-state.md) 为准。
 
 ## 推荐目录结构
 
@@ -24,7 +24,7 @@
 - 根目录保留 `README.md`、`AGENTS.md`、`docs/`、`frontend/`、`backend/`。
 - 根目录提供 `package.json` 和 `pnpm-workspace.yaml`，用于统一运行前端和后端常用命令。
 - `frontend/` 已创建 Vite 7 + React + TypeScript/TSX 最小应用入口，并保留 `api`、`app`、`components`、`features`、`hooks`、`pages`、`router`、`types`、`utils`、`tests` 目录。
-- `frontend/` 当前已实现 API client、token 管理、路由壳、登录页、课程列表和课程详情空工作台。
+- `frontend/` 已在 API client、token 管理和路由壳上实现课程资料、统一文件预览、问答引用、生成内容、学习计划、待办日历、执行与导出页面。
 - `backend/` 已创建 FastAPI 应用入口、API router、SQLAlchemy base/session、Alembic migration、模块目录、integration 目录和测试目录。
 - `backend/` 当前已实现鉴权、课程、资料上传 / 解析、资料上下文、课程问答、生成编排和学习计划基础接口。
 - `backend/` 已建立 Python `logging` 统一日志入口，终端输出单行摘要，轮转文件保存完整异常，并通过请求 ID 串联接口与业务日志。
@@ -39,10 +39,10 @@ walking skeleton 应只证明端到端链路可用：
 3. 前端能调用后端并处理成功、未登录和错误响应。
 4. 后端能连接 SQLite，并通过 ORM 读写最小数据。
 5. 有基础账号登录态和当前用户识别。
-6. 有最小课程列表和课程详情空工作台，用于验证课程选择、页面挂载区域、前后端、数据库和错误处理。
+6. 有课程列表和课程详情工作台，用于验证课程选择、前后端、数据库和错误处理。
 7. 有最小测试和手动验收清单。
 
-基础设施阶段不要求实现资料上传 UI、资料范围选择 UI 或课程问答 UI。这些属于后续前端功能任务；当前底座只要求对应后端接口、测试和契约稳定。
+资料上传、资料范围选择和课程问答 UI 已在 V1 实现；后续体验增强不能削弱对应后端接口、测试和契约的独立稳定性。
 
 ## 当前阶段必须具备的基础能力
 

@@ -259,7 +259,7 @@ POST /api/v1/study-subtasks/{subtask_id}/qa/questions 只需传 conversation_id�
 
 POST /api/v1/study-subtasks/{subtask_id}/handouts，仅 learn/review 可用。
 
-默认复用最近成功版本；force_regenerate=true 才新建。生成优先使用 task_snapshot.citation_chunk_ids，按资料批次调用模型，多批次再综合。每批和最终 Markdown 必须至少包含 SVG 或 Mermaid。正文存 content，元数据存 content_json；当前讲义不写 source_citations 行。
+默认复用最近成功版本；force_regenerate=true 才新建。生成优先使用 task_snapshot.citation_chunk_ids，按资料批次调用模型，多批次再综合。新生成的最终 Markdown 必须至少包含安全内联 SVG，并禁止 Mermaid；前端只为历史内容保留 Mermaid 兼容。正文存 content，元数据存 content_json；当前讲义不写 source_citations 行。
 
 ### 8.3 测验
 
@@ -343,13 +343,13 @@ flowchart LR
 | 生成细节 | preview | 参数归一化 | plan.task_snapshot |
 | 待办/日历 | 任务树 | 联查、过滤、聚合 | 不落库 |
 | 问答 | question + 任务资料范围 | Top-K + 引用校验 | conversations、messages、citations |
-| 讲义 | 快照 + 全量批次 | Markdown、SVG/Mermaid | ai_generated_contents |
+| 讲义 | 快照 + 全量批次 | Markdown、安全内联 SVG | ai_generated_contents |
 | 测验 | 参数 + 全量批次 | 题型、数量、答案、引用 | contents + citations |
 | 完成 | completed 布尔值 | 权限、幂等、聚合 | subtask、task、plan、checkin |
 
 ## 12. 模型端点和失败策略
 
-独立端点包括 study_plan_parser、study_plan_diagnostic、study_plan_generator、handout、task_test、course_qa；均可通过环境变量独立配置，当前默认 gpt-5.4-mini。
+独立端点包括 study_plan_parser、study_plan_diagnostic、study_plan_generator、handout、task_test、course_qa；均可通过环境变量独立配置。仓库当前可运行示例使用 DeepSeek `deepseek-flash`，但 Provider Factory 不把模型名硬编码为业务规则。
 
 当前是同步处理、没有任务队列。资源控制依赖资料分批、Top-K、超时重试、成功内容复用和显式 force_regenerate。
 
@@ -387,7 +387,7 @@ uv run python -m pytest tests/modules/study_plans -q
 205 passed, 20 failed
 ~~~
 
-失败主要是旧 mock/fixture 未跟上两项新规则：讲义至少包含 SVG/Mermaid；每天恰好一个最终 assessment。因此可以确认计划模块测试通过，但不能说整个 Study Mode 测试集全绿。
+历史测试漂移曾来自旧 mock/fixture 未跟上“讲义必须包含安全内联 SVG”和“每天恰好一个最终 assessment”两项规则；对应 fixture 已修复。当前完整回归状态以 [V1 发布验收](../../engineering/v1-release-acceptance.md) 为准。
 
 ## 15. 代码入口
 

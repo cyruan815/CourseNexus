@@ -2,22 +2,41 @@
 
 ## 1. 阶段定位
 
-基础设施阶段的前端只作为最小集成验证工作台，用来验证登录态、课程选择、资料上传、资料范围、问答和计划基础接口是否能被浏览器侧接入。
+当前前端已经承载 V1 浏览器闭环：登录、课程与资料管理、统一文件预览、问答与引用、五类内容生成、学习计划、待办日历、任务执行、打卡和既定导出。本文是这些页面调用后端契约的权威接入入口。
 
-本阶段不追求完整产品体验、视觉完善度或复杂前端状态管理。所有核心能力必须能通过后端接口、后端测试或命令独立运行，不能依赖前端页面作为唯一验证方式。
+前端体验不替代后端契约验证；所有核心能力仍必须能通过后端接口、自动化测试或维护命令独立验证。
 
 ## 2. 接入基线
 
 - API 前缀固定为 `/api/v1`。
 - 默认本地配置使用 `VITE_API_BASE_URL=http://localhost:8000`，浏览器直接请求后端；后端通过 `CORS_ALLOWED_ORIGINS`（默认 `http://localhost:5173`）响应跨域预检，并允许 `Authorization`、`Content-Type`、`Idempotency-Key` 和 `X-Request-ID` 请求头。多个允许来源使用英文逗号分隔。
 - `frontend/vite.config.ts` 保留 `/api` 到 `http://127.0.0.1:8000` 的开发代理；只有将 `VITE_API_BASE_URL` 留空时，浏览器才使用该同源代理。生产环境必须由后端 CORS 配置或反向代理明确允许前端来源，不能依赖 Vite 代理。
+- `VITE_API_BASE_URL` 只允许为空或配置为不含路径、凭据、查询参数及 fragment 的 HTTP(S) 后端 Origin；业务调用方只能向统一客户端传入 `/api/v1/...` 根相对路径，不能传入绝对 URL、协议相对 URL 或路径穿越输入。
 - JSON 字段统一使用 `snake_case`。
 - 成功响应统一为 `{ "data": ..., "meta": ... }`，前端业务代码只消费 `data`。
 - 错误响应统一为 `{ "error": { "code": "...", "message": "...", "details": ... }, "meta": ... }`。
 - 前端只根据 HTTP status 和稳定 `error.code` 做逻辑判断，不解析中文 `message`。
 - 登录态使用 Bearer token，请求头格式为 `Authorization: Bearer <access_token>`。
 - POC 阶段前端 token 存储 key 为 `course_nexus_token`；收到 `UNAUTHORIZED` 时必须清理该 token 并回到登录态。
+- JSON 请求、材料原文件与导出文件统一通过受信 API 客户端附加 Bearer token；访问外部资源必须使用不附带 CourseNexus 会话凭据的独立请求入口。
 - 前端不得直接调用 OpenAI API；所有模型调用只通过后端接口完成。
+
+### 2.1 运行模式状态
+
+前端启动后调用 `GET /api/v1/health`，读取：
+
+```json
+{
+  "status": "ok",
+  "environment": "development",
+  "mock_model_provider_enabled": false
+}
+```
+
+- `mock_model_provider_enabled=true` 时，应用全局展示“模拟模型模式”，明确当前生成内容仅用于开发验证。
+- `false` 时不展示提示；Health 临时失败也不阻塞登录、首页或工作台渲染。
+- 前端不读取、缓存或展示任何模型 Key、Secret、模型地址或模型名。
+- 依赖模型的业务请求收到 HTTP `503` 且 `error.code=MODEL_PROVIDER_NOT_CONFIGURED` 时，展示“模型服务未配置”类可恢复错误，不得伪造结果或自动切换 Mock。
 
 ## 3. 当前已落地接口
 
@@ -100,6 +119,43 @@
   "logged_out": true
 }
 ```
+
+### 3.4.1 修改密码
+
+`POST /api/v1/auth/change-password`
+
+要求：Bearer token。
+
+请求：
+
+```json
+{
+  "current_password": "password123",
+  "new_password": "new-password456"
+}
+```
+
+`new_password` 长度 8-255；确认密码由前端校验，后端不接收第三字段。
+
+响应 `data`：
+
+```json
+{
+  "password_changed": true,
+  "relogin_required": true
+}
+```
+
+错误：
+
+| 错误码 | HTTP | 场景 |
+| --- | --- | --- |
+| `CURRENT_PASSWORD_MISMATCH` | 403 | 当前密码不正确。注意不是 401：前端把 401 统一处理为清理 token 并跳转登录，输错当前密码不应被登出。 |
+| `VALIDATION_ERROR` | 400 | 新密码与当前密码相同。 |
+| `VALIDATION_ERROR` | 422 | 新密码长度不满足 8-255。 |
+| `UNAUTHORIZED` | 401 | 未登录或登录态已失效。 |
+
+修改成功后服务端递增该用户的 `token_epoch`，其全部存量 token（含本次请求所用 token）立即失效；前端应清理本地 token 并引导用户使用新密码重新登录。
 
 ### 3.5 课程列表
 
@@ -238,6 +294,8 @@
   "mime_type": "text/markdown",
   "parse_status": "uploaded",
   "parse_error": null,
+  "active_parse_version_id": null,
+  "is_learning_ready": false,
   "parse_quality": "unknown",
   "parse_diagnostics_json": null,
   "page_count": null,
@@ -265,9 +323,9 @@
 | 状态 | 含义 |
 | --- | --- |
 | `uploaded` | 已创建资料记录，尚未解析。 |
-| `parsing` | 正在同步解析。 |
-| `parsed` | 已解析并写入 `MaterialChunk`。 |
-| `parse_failed` | 解析失败，`parse_error` 保存稳定错误码。 |
+| `parsing` | 正在同步构建候选版本；若已有生效版本，旧内容仍可学习。 |
+| `parsed` | 当前存在生效解析版本；`parse_error` 非空时表示最近一次更新失败但旧版本仍可用。 |
+| `parse_failed` | 首次解析失败且没有生效版本，`parse_error` 保存稳定错误码。 |
 | `deleted` | 仅用于删除接口成功响应的最终快照；数据库中的资料记录已经物理删除。 |
 
 `parse_quality` 当前可能值：
@@ -278,7 +336,7 @@
 | `complete` | 本轮成功，且 parser 未观察到失败页或 warning。 |
 | `partial` | 存在可用 chunk，但 parser 检测到部分成功、失败页或 warning。 |
 
-`parse_status = "parsed"` 只表示资料内容可消费，不等同于完整解析；完整性统一读取 `parse_quality` 和 `parse_diagnostics_json`。
+`is_learning_ready` 是前端判断资料能否进入选择、检索、问答、生成和计划的权威字段；它为 `true` 时 `active_parse_version_id` 非空。`parse_status` 负责展示当前操作状态，不再单独决定可用性。生效版本的完整性统一读取 `parse_quality` 和 `parse_diagnostics_json`。
 
 ### 3.10.1 资料一级文件夹
 
@@ -287,7 +345,7 @@
 - `GET /api/v1/courses/{course_id}/material-folders`：返回当前课程未删除的 `MaterialFolderRead[]`。
 - `POST /api/v1/courses/{course_id}/material-folders`：创建文件夹，请求为 `{ "name": "第一周", "sort_order": 1 }`；`sort_order` 可省略。
 - `PATCH /api/v1/material-folders/{folder_id}`：重命名或调整顺序，请求至少包含 `name` 或 `sort_order`。
-- `DELETE /api/v1/material-folders/{folder_id}`：不可恢复地物理删除文件夹、其中全部资料记录、SQLite chunk、RAG 向量和原始上传文件。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。历史问答和生成内容保留，其引用退化为不带 `material_id` / `chunk_id` 的资料名、页码和命中文本快照。
+- `DELETE /api/v1/material-folders/{folder_id}`：不可恢复地物理删除文件夹、其中全部资料记录、解析版本、SQLite chunk、RAG 向量和原始上传文件。前端需在二次确认后调用接口；成功后移除文件夹及其中资料并清理当前 `MaterialScope` 中对应 ID，失败时保留当前页面数据并展示后端错误。历史问答和生成内容保留，其引用退化为不带 `material_id` / `material_version_id` / `chunk_id` 的资料名、页码和命中文本快照。
 - `PATCH /api/v1/materials/{material_id}/folder`：请求 `{ "folder_id": "fld_123" }`；传 `null` 表示移动到未分类。
 
 文件夹和资料必须属于当前用户的同一课程。文件夹列表按 `sort_order`、创建时间和 ID 排序。
@@ -324,23 +382,13 @@
 | `FILE_TOO_LARGE` | 文件大小超过 `MAX_UPLOAD_FILE_SIZE_BYTES`。 |
 | `NOT_FOUND` | 课程不存在或不属于当前用户。 |
 
-### 3.13 链接资料创建
+### 3.13 链接资料创建（已停止支持）
 
 `POST /api/v1/courses/{course_id}/material-links`
 
 要求：Bearer token。
 
-请求：
-
-```json
-{
-  "name": "Course Site",
-  "source_url": "https://example.com/course",
-  "folder_id": "fld_123"
-}
-```
-
-响应 `data`：`MaterialRead`，其中 `source_type = "url"`、`material_type = "link"`、`parse_status = "uploaded"`。
+该入口已于 2026-09-30 下线：URL 链接资料无法进入解析与学习上下文，为避免产生不可用记录而移除新增能力。兼容期内调用该端点返回 `410 Gone` 与错误码 `MATERIAL_LINK_REMOVED`，不创建任何记录；对历史 `source_type = "url"` 资料调用解析重试接口返回 `409 MATERIAL_LINK_REMOVED`，状态保持不变。历史链接记录仍可在列表中查看、重命名和删除，但不会进入问答、生成内容和学习计划的资料范围。
 
 ### 3.14 资料详情
 
@@ -368,13 +416,13 @@
 
 重命名只修改用户可见的 `name` 和 `updated_at`，不修改 `file_url`、`source_url`、解析状态、chunk 或向量索引，也不回写历史 `SourceCitation.material_name`。
 
-### 3.14.2 PDF 资料原文预览
+### 3.14.2 资料原文件预览
 
 `GET /api/v1/materials/{material_id}/content`
 
-要求：Bearer token。只能读取当前用户自己的本地 PDF 资料。成功时直接返回 `application/pdf` 文件流，`Content-Disposition` 为 `inline`，不包统一 `{data, meta}` envelope，并通过 `Cache-Control: private, no-store` 避免缓存私有资料。
+要求：Bearer token。只能读取当前用户自己的本地上传资料。成功时直接返回原文件流，`Content-Type` 使用资料上传时按扩展名确认的 MIME 类型，`Content-Disposition` 为 `inline`，不包统一 `{data, meta}` envelope，并通过 `Cache-Control: private, no-store` 避免缓存私有资料。
 
-当前非 PDF 或链接资料返回 `415 PREVIEW_UNSUPPORTED`；原文文件丢失或存储路径不可用返回 `404 PREVIEW_FILE_UNAVAILABLE`；资料不存在或不属于当前用户统一返回 `404 NOT_FOUND`。前端应使用带鉴权头的 `fetch` 读取 Blob，再用临时 object URL 在页面弹窗内展示；不得直接访问 `file_url`。
+历史链接资料等没有原文件的记录返回 `415 PREVIEW_UNSUPPORTED`；原文文件丢失或存储路径不可用返回 `404 PREVIEW_FILE_UNAVAILABLE`；资料不存在或不属于当前用户统一返回 `404 NOT_FOUND`。前端应使用带鉴权头的 `fetch` 读取 Blob，再交给统一文件预览器；不得直接访问 `file_url`，也不得把私有文件 URL 交给第三方在线预览服务。
 
 ### 3.15 资料删除
 
@@ -396,18 +444,29 @@
 
 - `parse_status = "parsed"`。
 - `parse_error = null`。
+- `active_parse_version_id` 指向本次候选版本，`is_learning_ready = true`。
 - `parse_quality` 为 `complete`、`partial` 或 `unknown`。
 - `page_count` 和 `parse_diagnostics_json` 返回 parser 本轮诊断；非分页文本的 `page_count = null` 是正常结果。
 - 后端已写入有序 `MaterialChunk`，供后续资料上下文、问答和计划基础能力使用。
 
-失败时：
+首次解析失败时：
 
 - HTTP 仍返回成功响应和 `MaterialRead`。
 - `parse_status = "parse_failed"`。
+- `active_parse_version_id = null`，`is_learning_ready = false`。
 - `parse_error` 保存稳定错误码，例如 `PARSE_FAILED` 或 `UNSUPPORTED_FILE_TYPE`。
-- `parse_quality = "unknown"`、`page_count = null`、`parse_diagnostics_json = null`，不保留上一轮成功诊断。
+- `parse_quality = "unknown"`、`page_count = null`、`parse_diagnostics_json = null`。
 
-前端最小工作台只需要展示 `uploaded`、`parsing`、`parsed`、`parse_failed`、未知状态兜底，以及在 `parse_failed` 时提供重试入口。
+已有生效版本的重解析失败时：
+
+- HTTP 仍返回成功响应和 `MaterialRead`。
+- `active_parse_version_id` 保持旧值，`is_learning_ready = true`。
+- `parse_status = "parsed"`，`parse_error` 记录本次候选失败的稳定错误码。
+- `parse_quality`、`page_count` 和 `parse_diagnostics_json` 继续描述旧生效版本，不被失败候选清空。
+
+并发重复发起解析时返回 `409 PARSE_ALREADY_IN_PROGRESS`。候选向量不完整记录 `INDEXING_INCOMPLETE`；数据库生效切换失败记录 `PARSE_VERSION_SWITCH_FAILED`。这些失败都不得替换旧生效版本。
+
+前端展示并处理四种关键状态：普通可用、正在更新且旧版本可用、更新失败但旧版本可用、首次解析失败。已有生效版本提供“重新解析”，首次失败提供“重试解析”；资料是否可勾选始终读取 `is_learning_ready`。
 
 ### 3.17 课程对话列表
 
@@ -456,6 +515,7 @@
   "source_citations": [
     {
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -473,7 +533,7 @@
 
 `POST /api/v1/courses/{course_id}/qa/questions`
 
-要求：Bearer token。当前后端在无 `COURSE_QA_API_KEY` 时使用 deterministic mock provider；配置课程问答专用的 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL` 后，通过后端 `OpenAIModelProvider` 使用 OpenAI Python SDK 接口规范。该配置与 Embedding 及其他生成功能相互独立。
+要求：Bearer token。课程问答读取独立的 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL`，通过后端 `OpenAIModelProvider` 使用 OpenAI-compatible SDK 接口规范。缺少配置且未显式开启允许的 Mock 模式时返回 HTTP 503 / `MODEL_PROVIDER_NOT_CONFIGURED`，不得自动生成模拟回答。该配置与 Embedding 及其他生成功能相互独立。
 
 请求：
 
@@ -501,6 +561,7 @@
   "source_citations": [
     {
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -517,7 +578,7 @@
 - `grounded`：当前资料范围存在检索命中，回答基于检索到的真实 `MaterialChunk`。
 - `no_source`：当前资料范围没有可用 parsed chunk，或存在 parsed chunk 但本次问题没有相关检索命中；`source_citations = []`，前端不得展示伪引用。
 
-新回答的引用必须包含真实 `material_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这两个字段返回 `null`。
+新回答的引用必须包含真实 `material_id`、`material_version_id` 和 `chunk_id`。来源资料后来被物理删除时，历史回答仍保留引用快照，但这三个字段返回 `null`。
 
 `answer_text` 使用内部行内标记 `[[cite:N]]` 将论述绑定到 `source_citations[N-1]`。标记只允许由后端根据本次 Top-K 命中的真实 chunk 生成并重新编号；模型返回越界序号、未检索 chunk 或其他伪造标记时，后端必须删除该标记且不得保存引用。前端应将合法标记渲染为可交互角标，不直接向用户展示原始标记。
 
@@ -577,13 +638,17 @@
   "generation_status": "success",
   "material_scope_json": {
     "include_all_parsed_materials": true,
-    "material_ids": []
+    "material_ids": [],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ]
   },
   "error_code": null,
   "source_citations": [
     {
       "id": "cit_123",
       "material_id": "mat_123",
+      "material_version_id": "mpv_123",
       "chunk_id": "chk_123",
       "material_name": "notes.md",
       "page": null,
@@ -1014,6 +1079,8 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 规则：
 
+- 学习计划创建向导应提交显式资料快照：`include_all_parsed_materials=false`，`material_ids` 为用户进入创建流程时选中的 parsed 资料 ID。即使用户当时全选，也不得用动态“未来全部资料”语义替代该快照。
+- 配置解析、诊断题、诊断 profile、preview 和 save 必须使用同一份资料 ID 集合；空数组阻止继续，资料失效时要求用户重新确认。
 - `recommended_daily_minutes` 继续按 map 阶段资料规模估算：`max(30, ceil(mapped_estimated_total_minutes / duration_days))`。
 - 未传 `daily_available_minutes` 时，`daily_available_minutes = recommended_daily_minutes`，`daily_minutes_source = "system_estimated"`。
 - 传入 `daily_available_minutes` 时，后端保留该最终采用值；若 `daily_minutes_source = "user_modified"`，capacity 的 `available_total_minutes` 使用前端传入值计算。
@@ -1029,7 +1096,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 ```json
 {
   "course_id": "crs_123",
-  "title": "Linear Algebra 学习计划",
+  "title": "期末复习 · 2026-07-10",
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
   "end_date": "2026-07-10",
@@ -1041,6 +1108,14 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
   "material_scope": {
     "include_all_parsed_materials": true,
     "material_ids": []
+  },
+  "material_snapshot": {
+    "mode": "all_parsed",
+    "material_ids": ["mat_123"],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ],
+    "snapshot_hash": "sha256:..."
   },
   "capacity": {
     "estimated_total_minutes": 60,
@@ -1103,7 +1178,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 ```json
 {
   "client_flow": "wizard_v1",
-  "title": "Linear Algebra 学习计划",
+  "title": "期末复习冲刺 · 2026-07-10",
   "goal_text": "期末复习",
   "start_date": "2026-07-10",
   "end_date": "2026-07-10",
@@ -1118,6 +1193,14 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
   "material_scope": {
     "include_all_parsed_materials": true,
     "material_ids": []
+  },
+  "material_snapshot": {
+    "mode": "all_parsed",
+    "material_ids": ["mat_123"],
+    "material_versions": [
+      {"material_id": "mat_123", "version_id": "mpv_123"}
+    ],
+    "snapshot_hash": "sha256:..."
   },
   "capacity": {
     "estimated_total_minutes": 60,
@@ -1148,7 +1231,7 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 
 `client_flow = "wizard_v1"` 但缺少 `tasks` 或提交 `tasks = []` 时，后端返回 `422 PREVIEW_TASKS_REQUIRED`。旧客户端兼容路径只适用于未声明新向导的保存请求。
 
-前端基础创建页采用 `wizard_v1` 保存：保存按钮只在 preview 未过期时可用，请求体提交当前表单配置、preview `title`、preview 中展示过的 exact `tasks`，并携带 `Idempotency-Key`。同一份未变化 preview 的保存重试必须复用同一个幂等键；重新生成 preview 后才创建新的保存幂等键。诊断问题、诊断 profile、重生成、替换和删除接口虽已具备后端契约，但对应前端向导 / 编辑视图不在基础创建页内伪造。
+Preview 默认 `title` 采用“规范化学习目标 · 开始日期”，总长最多 255 字符。前端基础创建页采用 `wizard_v1` 保存：用户先查看 preview，并可在首次保存前编辑 `title`；空白标题或超过 255 字符会返回校验错误。请求体提交当前表单配置、用户确认后的 `title`、preview 中展示过的 exact `tasks`，并携带 `Idempotency-Key`。同一份未变化保存 payload 的网络重试必须复用同一个幂等键；标题或 preview 变化后创建新的保存幂等键。同一课程允许保存同名计划，列表通过日期范围等信息辅助区分；已有计划标题不会被自动改写。
 
 响应 `data`：
 
@@ -1217,6 +1300,8 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 | 任务测试题 Markdown 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` | 返回 Markdown 文件流；只支持成功的 `task_test`，不保存作答、不判分、不生成 PDF。 |
 | 今日讲义 PDF 导出 | `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` | 返回 PDF 文件流；只支持成功的 `handout`，不保存导出历史，不支持任务测试题 PDF。 |
 
+今日待办、全局日期待办和课程日期待办中的任务对象均包含 `plan_id` 与 `plan_title`；全局 / 课程月历的 `task_summaries[]` 也包含相同字段。`plan_title` 是计划保存时的实际标题，前端应直接展示该值，不能根据课程名或任务名重新推导；历史计划标题保持原样。首页待办、首页月历和学习日历据此区分同课程下的多个计划。
+
 任务测试题后端生成和 Markdown 文件导出已实现。前端现在提供浏览器内存内的逐题作答交互：用户提交单道题后才显示正确答案和解析；单选、多选、判断题只做本地即时判断，简答题只显示参考答案和解析。该交互不调用新增 API，不保存 attempt 历史，不写错题本，也不影响二级任务完成、打卡或导出。
 ## 5. 前端最小工作台验收口径
 
@@ -1269,12 +1354,12 @@ G01-G06 已完成五类独立 POC 生成：后端按稳定顺序合并所选 par
 `task_test` 保持结构化 JSON 和逐题引用数据，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`。逐题引用继续用于后端导出和内部追溯，生成内容详情页不展示引用侧栏；浏览器端可以基于结构化题目做本地逐题提交反馈，但不保存作答记录。
 ## 7. 2026-07-15 任务讲义 Markdown 前端接入口径
 
-新生成 `handout` 的权威正文仍是 `GeneratedContentRead.content` Markdown，`content_json` 只保存 `{"format":"markdown","schema_version":1}`。前端详情页必须通过 `GeneratedContentRenderer` 的 `handout` 分支进入 `HandoutMarkdownRenderer`，不要自行拼接旧 `content_json.sections/blocks`，业务页面也不要直接注入 HTML；Mermaid 返回 SVG 的注入只封装在讲义 renderer 内部。
+新生成 `handout` 的权威正文仍是 `GeneratedContentRead.content` Markdown，`content_json` 只保存 `{"format":"markdown","schema_version":1}`。前端详情页必须通过 `GeneratedContentRenderer` 的 `handout` 分支进入 `HandoutMarkdownRenderer`，不要自行拼接旧 `content_json.sections/blocks`，业务页面也不要直接注入 HTML。
 
-前端讲义 Markdown renderer 当前依赖：`react-markdown`、`remark-gfm`、`remark-math`、`rehype-katex`、`rehype-raw`、`mermaid` 和 `katex/dist/katex.min.css`。真实详情页和 dev preview 共享同一个组件；前端同学接接口时只需要保证 `GeneratedContentRead.content` 为完整 Markdown 字符串，样式调整优先改 `frontend/src/features/generated-content/renderers/handout/handout-markdown.css`。
+前端讲义 Markdown renderer 当前依赖：`react-markdown`、`remark-gfm`、`remark-math`、`rehype-katex`、`rehype-raw`、`rehype-sanitize`、`mermaid` 和 `katex/dist/katex.min.css`。真实详情页和 dev preview 共享同一个组件；前端同学接接口时只需要保证 `GeneratedContentRead.content` 为完整 Markdown 字符串，样式调整优先改 `frontend/src/features/generated-content/renderers/handout/handout-markdown.css`。
 
-讲义可直接包含原始 `<svg>...</svg>`，也可通过 `![说明](path/to/image.svg)` 引用 SVG 图片。Mermaid 使用 ```mermaid` fenced code block；renderer 会动态加载 Mermaid，把代码转换为内联 SVG，失败时显示原始 Mermaid 源码，其他语言的代码围栏保持普通代码块。
+新生成讲义必须包含至少一张安全内联 `<svg>...</svg>`，并禁止 Mermaid fenced code block；后端在保存前校验这两条规则。前端仍保留 Mermaid 动态渲染，仅兼容历史或手写 Markdown，失败时显示原始源码；其他语言的代码围栏保持普通代码块。
 
-当前 `rehype-raw` 和 Mermaid `securityLevel: "loose"` 只面向可信本地 POC 内容，没有 HTML 净化。任何用户可编辑 Markdown、外部 Markdown 或生产环境接入前，必须先补净化、白名单或隔离渲染；该前端能力也不会自动同步到 PDF 导出。
+`rehype-raw` 后必须经过 `rehype-sanitize` 的 HTML/SVG 白名单；Mermaid 使用 `securityLevel: "strict"`、禁用 HTML labels，最终 SVG 注入前再次净化。禁止 script、iframe、object、embed、foreignObject、style、事件属性和危险 URL。该前端兼容能力不会自动同步到 PDF 导出。
 
 Callout 使用 GitHub alert 风格 blockquote，支持 `[!NOTE]`、`[!EXAMPLE]`、`[!SUMMARY]`、`[!WARNING]`、`[!TIP]`。正文每一行必须继续以 `>` 开头。前端渲染时保留整片背景色、去掉左侧强调线、使用圆角；普通 blockquote 不带这些 callout class。颜色约定为 `NOTE #fbf7f3 / #8c725e`，`EXAMPLE #f6f9f5 / #667c69`，`SUMMARY #f8f6fb / #706982`，`WARNING #fbf3ee / #9b6048`，`TIP #f3f7fa / #597089`。这里是 study-mode handout 局部规范，不写入全局 UI guidelines。

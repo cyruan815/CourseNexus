@@ -89,22 +89,23 @@ flowchart LR
 | Docling parser adapter | 解析 PDF、DOCX、PPTX、Markdown、文本和图片；保留标题、页码、表格等结构；输出项目内部 `ParsedDocument`。 | 不写数据库，不判断用户权限。 |
 | LlamaIndex RAG adapter | 把内部 chunk 转为 node，调用 embedding，写入 Chroma，构造带 metadata filter 的 retriever。 | 不暴露 LlamaIndex 类型给业务层，不生成业务内容。 |
 | Chroma adapter | 用本地 `PersistentClient` 持久化向量，按 chunk upsert/delete/query。 | 不保存用户、课程、计划或生成记录。 |
-| `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`。 | 不调用生成模型，不保存生成结果。 |
+| `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`；在模型返回后复核输入材料和版本快照仍可发布。 | 不调用生成模型，不保存生成结果。 |
 | `model-provider` | 通过 OpenAI SDK 规范调用当前业务用途配置的生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件，不复用其他用途的模型配置。 |
 | `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不直接读取资料表或向量库，不生成 Flashcard、Mindmap、Quiz 或学习计划。 |
-| `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
-| `study-plans`（后续消费者） | 后续使用全材料上下文生成计划预览。 | 本轮不实现 AI 计划算法，不改变当前计划行为。 |
+| `generation-orchestrator` / generators | 五类课程级生成读取完整选定上下文；任务内容按全材料批次生成，并保存实际材料版本快照。 | 不拥有解析、索引或资料权限规则。 |
+| `study-plans` | 使用全材料批次生成计划预览，并把实际输入版本写入计划快照。 | 不绕过 material-context 读取候选或退休版本。 |
 
 ## 4. 存储和标识
 
 ### 4.1 权威数据
 
-- SQLite 的 `CourseMaterial` 是资料元数据和解析状态的权威来源。
-- SQLite 的 `MaterialChunk` 是 chunk 文本、顺序和引用定位的权威来源。
+- SQLite 的 `CourseMaterial` 是资料元数据、当前操作状态和 `active_parse_version_id` 生效指针的权威来源。
+- SQLite 的 `MaterialParseVersion` 记录每轮解析的候选、生效、失败和退休状态；同一资料最多有一个 `building` 版本。
+- SQLite 的 `MaterialChunk` 是 chunk 文本、顺序和引用定位的权威来源，每个 chunk 必须属于一个解析版本。
 - Chroma 只保存检索索引及查询所需 metadata，可从 SQLite 重建。
 - 上传原文件保存在现有本地文件存储目录。
 
-Chroma 不替代 SQLite，不能成为业务记录的唯一来源。删除、重试解析和重建索引都以 `CourseMaterial` / `MaterialChunk` 为准。
+Chroma 不替代 SQLite，不能成为业务记录的唯一来源。删除、重试解析和重建索引都以 `CourseMaterial` / `MaterialParseVersion` / `MaterialChunk` 为准。
 
 ### 4.2 Chroma collection
 
@@ -117,13 +118,14 @@ Chroma 不替代 SQLite，不能成为业务记录的唯一来源。删除、重
 | `user_id` | 强制用户隔离。 |
 | `course_id` | 强制单课程范围。 |
 | `material_id` | 指定资料过滤、删除和重建。 |
+| `parse_version_id` | 隔离候选、生效和退休版本，并支持候选完整性校验。 |
 | `folder_id` | 保留资料归类元数据；移动资料时同步更新。删除目录会清理其中资料的整组向量，不把目录作为 Agent 范围选择条件。 |
 | `chunk_id` | 回查 SQLite 和保存引用。 |
 | `chunk_index` | 恢复资料内顺序。 |
 | `page` / `page_index` | 引用定位。 |
 | `heading` | 检索上下文和引用展示。 |
 
-查询过滤条件必须始终包含 `user_id` 和 `course_id`，显式范围只叠加 `material_scope.material_ids`。文件夹只负责归类，不能转换为批量资料选择。材料范围是硬过滤，不是 prompt 提示。
+查询过滤条件必须始终包含 `user_id` 和 `course_id`，显式范围只叠加 `material_scope.material_ids`。检索前从 SQLite 解析当前 scope 的生效 chunk ID，并作为向量查询硬过滤；候选或退休版本即使仍有向量也不能进入结果。文件夹只负责归类，不能转换为批量资料选择。材料范围和生效版本都是硬过滤，不是 prompt 提示。
 
 ## 5. 资料摄取链路
 
@@ -136,26 +138,30 @@ sequenceDiagram
     participant C as Chroma PersistentClient
     participant O as Embedding Endpoint
 
-    M->>M: parse_status = parsing
+    M->>DB: create building MaterialParseVersion
+    M->>M: parse_status = parsing; keep old active pointer
     M->>D: parse(local_file_path)
     D-->>M: ordered ParsedChunk[] + source metadata
-    M->>DB: replace MaterialChunk using deterministic ids
-    M->>R: index_chunks(chunks, metadata)
+    M->>DB: insert candidate MaterialChunk[]
+    M->>R: index candidate chunks with parse_version_id
     R->>O: embed chunk texts
     O-->>R: vectors
-    R->>C: delete old material records + upsert new records
-    C-->>R: success
-    R-->>M: indexed chunk ids
-    M->>M: parse_status = parsed
+    R->>C: upsert candidate records
+    C-->>R: candidate chunk ids
+    M->>M: verify SQLite ids == Chroma ids
+    M->>DB: retire old active + activate candidate + switch pointer
+    M->>M: 原子切换 active_parse_version_id; parse_status = parsed
 ```
 
 实现规则：
 
 - Docling 负责文档结构识别，优先使用 `HybridChunker` 生成 token-aware chunk；LlamaIndex 不再次切分这些 chunk。
 - LlamaIndex 负责 node / metadata 组织、OpenAI-compatible embedding 和 Chroma retriever 编排。
-- chunk id 必须对同一轮解析稳定；重试解析先按 `material_id` 删除旧向量，再幂等 upsert。
-- 只有 SQLite chunk 和 Chroma 索引都成功后才写 `parse_status = parsed`。
-- 索引失败写 `parse_status = parse_failed` 和稳定错误 `INDEXING_FAILED`；清理本轮部分向量后允许重试。
+- chunk id 包含 `parse_version_id`，同一候选内稳定，不同解析版本之间不冲突。
+- 重解析不先删除旧内容。只有候选 SQLite chunk、Chroma 向量和两端 ID 完整性校验都成功后，才在数据库事务中把候选切换为 `active`，旧生效版本改为 `retired`。
+- 解析、索引、完整性校验或切换失败时，只清理候选 chunk 和候选向量并把候选标为 `failed`。已有 `active_parse_version_id` 时旧版本继续可学习，`parse_error` 记录本次更新失败；首次失败才进入 `parse_failed`。
+- `parse_status = parsing` 表示当前有候选正在构建，不表示旧版本不可用；是否可学习以 `active_parse_version_id` / `is_learning_ready` 为准。
+- 退休和失败版本本轮不自动清理；全量索引重建只从 SQLite 写入当前生效版本。
 - 删除单份资料时物理删除业务记录、chunk、原始文件并按 `material_id` 删除 Chroma records；删除文件夹时对其中全部资料执行同一清理。历史问答和生成内容保留，引用只保留去关联的快照字段。
 - 用户原始文件名只作为 `CourseMaterial.name` 展示；本地存储路径使用 ASCII `source.<ext>`。Docling adapter 通过 ASCII `DocumentStream` 读取文件内容，避免 Windows 非 ASCII 路径触发底层 PDF backend 解析失败。
 
@@ -224,11 +230,13 @@ sequenceDiagram
     QA->>DB: save Message with markers + SourceCitation snapshots
 ```
 
-问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。prompt 使用上下文序号要求模型在相关论述后输出 `[[cite:N]]`；model-provider 将合法上下文序号映射为内部 chunk id，course-qa 再与本次检索结果取交集、去重并转换为从 1 开始的稳定引用序号。模型返回越界序号、未检索 chunk 或伪造标记时删除标记且不保存 fallback 引用。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
+问答默认 `top_k = 8`，配置可调。命中结果按相似度排序，并回查 SQLite 取得权威文本和定位信息。prompt 使用上下文序号要求模型在相关论述后输出 `[[cite:N]]`；model-provider 将合法上下文序号映射为内部 chunk id，course-qa 再与本次检索结果取交集、去重并转换为从 1 开始的稳定引用序号。模型返回越界序号、未检索 chunk 或伪造标记时删除标记且不保存 fallback 引用。合法引用除资料和 chunk 快照外还保存 `material_version_id`，使重解析后的历史回答仍能指向原输入版本。无可用资料或无检索命中时返回 `no_source` 且不调用模型。
 
 ## 8. 指定材料生成链路：两种全材料策略
 
 五类独立 POC 使用完整上下文单次生成；学习计划、handout 和 task_test 等消费者可保留批处理、覆盖核算与引用策略。两种策略都必须覆盖全部选中资料，不能退化为普通 Top-K。
+
+所有生成消费者保存实际读取的 `{material_id, version_id}` 范围快照。五类独立生成和任务内容写入 `material_scope_json.material_versions`；学习计划写入 `parsed_config_json.material_snapshot.material_versions`。快照描述本次输入事实，不会因材料后续重解析而改写。
 
 ```mermaid
 sequenceDiagram
@@ -272,7 +280,7 @@ sequenceDiagram
 | 课程智能体问答 | `COURSE_QA` |
 | Quiz / Flashcard / Mindmap | `QUIZ` / `FLASHCARD` / `MINDMAP` |
 | Outline / Knowledge List | `OUTLINE` / `KNOWLEDGE_LIST` |
-| 学习计划输入解析 / 计划生成 | `STUDY_PLAN_PARSER` / `STUDY_PLAN_GENERATOR` |
+| 学习计划输入解析 / 计划生成 | `STUDY_PLAN_PARSER` / `STUDY_PLAN_GENERATOR` / `STUDY_PLAN_MAP` |
 | 任务讲义 / 任务测试 | `HANDOUT` / `TASK_TEST` |
 
 RAG 相关示例配置：
@@ -283,7 +291,7 @@ EMBEDDING_BASE_URL=
 EMBEDDING_MODEL=text-embedding-3-small
 COURSE_QA_API_KEY=
 COURSE_QA_BASE_URL=
-COURSE_QA_MODEL=gpt-5.4-mini
+COURSE_QA_MODEL=deepseek-flash
 CHROMA_PERSIST_PATH=./data/chroma
 CHROMA_COLLECTION=course_nexus_material_chunks
 RAG_SIMILARITY_TOP_K=8
@@ -291,22 +299,30 @@ RAG_CHUNK_MAX_TOKENS=800
 MATERIAL_BATCH_MAX_TOKENS=12000
 ```
 
+学习计划 `generator` 和 `map` 还可分别配置 `STUDY_PLAN_GENERATOR_API_STYLE`、`STUDY_PLAN_MAP_API_STYLE`（`auto`、`responses` 或 `chat`）。`auto` 对 OpenAI 地址使用 Responses API，对 DeepSeek 地址使用 Chat Completions；显式配置只覆盖对应的学习计划 provider，不影响其他模型用途。
+
 本地运行方式：
 
 1. 在现有 `course-nexus` Conda 环境安装 Python 依赖。
 2. 使用现有命令启动 FastAPI；第一次使用 Docling 时允许其下载所需模型文件。
-3. Chroma 由后端进程通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口。
-4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`。
+3. Chroma 由后端进程级 `RagIndexManager` 通过 `PersistentClient` 打开 `CHROMA_PERSIST_PATH`，不单独启动端口；请求复用同一实例，应用退出只释放引用，不重置持久化数据。
+4. SQLite、上传目录和 Chroma 目录都保留在开发机本地，并加入 `.gitignore`；相对路径统一相对仓库配置根目录解析，API、Alembic 与维护命令不得随启动目录改变数据位置。
 5. 真实 embedding 至少配置 `EMBEDDING_API_KEY`；真实课程问答至少配置 `COURSE_QA_API_KEY`。各自的 `*_BASE_URL` 和 `*_MODEL` 只作用于对应用途。单元测试使用 fake embedding、fake retriever 和 mock model provider，不访问网络。
+
+旧版本若在 `backend/` 等启动目录遗留 SQLite、上传或 Chroma 数据，规范位置为空时运行入口会拒绝继续并报告迁移目标。程序不自动移动或删除旧数据；备份、迁移和 SQLite 连接基线见 [本地存储运行与迁移](../engineering/local-runtime-storage.md)。
 
 ## 10. 错误与一致性
 
 | 场景 | 处理 |
 | --- | --- |
-| 不支持的文件或 Docling 解析失败 | `parse_status = parse_failed`，记录 `UNSUPPORTED_FILE_TYPE` 或 `PARSE_FAILED`。 |
-| Embedding endpoint 调用失败 | 清理本轮部分向量，记录 `INDEXING_FAILED`，资料不可进入问答。 |
+| 首次解析遇到不支持文件或 Docling 失败 | 候选标记 `failed`，`parse_status = parse_failed`，记录 `UNSUPPORTED_FILE_TYPE` 或 `PARSE_FAILED`。 |
+| 已有生效版本的重解析或 Embedding 失败 | 清理候选 chunk / 向量并记录稳定错误；旧生效版本保持可学习。 |
+| 候选 SQLite / Chroma ID 不一致 | 返回 `INDEXING_INCOMPLETE`，候选失败，旧生效版本不变。 |
+| 生效切换失败 | 返回 `PARSE_VERSION_SWITCH_FAILED`，删除候选向量和切片，旧生效版本不变。 |
 | Chroma 目录损坏或记录缺失 | 返回 `RETRIEVAL_FAILED`；提供按 SQLite 全量重建索引命令。 |
 | 资料或文件夹物理删除时 RAG 或 SQLite 提交失败 | SQLite 回滚；暂存文件移回原路径，并用删除前的 SQLite chunk 快照重新索引已解析资料。补偿失败返回 `DELETE_COMPENSATION_FAILED`。 |
+| 上传原文件后数据库写入失败 | 回滚数据库并幂等删除该材料独立目录；文件补偿也失败时返回 `UPLOAD_COMPENSATION_FAILED`。 |
+| 模型调用期间材料被删除、转移或输入版本失效 | 在发布回答、预览或生成内容前重新校验用户、课程、材料和版本快照；返回 `MATERIAL_SCOPE_STALE`，不发布迟到的成功结果。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
 | 问答无命中 | 返回 `answer_type = no_source`，不调用或不采信无依据回答。 |
 | 五类独立生成完整上下文超限 | 返回 `MATERIAL_CONTEXT_TOO_LARGE`，不调用模型、不创建历史。 |
@@ -321,7 +337,9 @@ python -m app.commands.rebuild_rag_index --all
 python -m app.commands.rebuild_rag_index --material-id <material_id>
 ```
 
-`--all` 只重建当前配置的 CourseNexus Chroma collection，不删除 SQLite 业务数据、上传文件或其他 Chroma collection。`--material-id` 只删除并重建单个资料的派生向量；未解析资料会清理旧向量并返回 0 个索引 chunk。
+`--all` 只重建当前配置的 CourseNexus Chroma collection，并且只索引每份资料 `active_parse_version_id` 对应的切片；不删除 SQLite 业务数据、上传文件或其他 Chroma collection。`--material-id` 只删除并重建单个资料当前生效版本的派生向量；没有生效版本的资料会清理旧向量并返回 0 个索引 chunk。
+
+跨存储对账使用同一套规范路径和现有 Chroma collection，以只读方式枚举 SQLite、上传目录与向量 metadata。它能报告原文件缺失、孤儿材料目录、生效版本 chunk/vector 集合不一致、孤儿或 metadata 异常向量、非法 active 指针、多个 active 版本，以及长期停留在 `building` 的候选。按 R02 保留策略存在的 `failed` / `retired` 版本和未超时 `building` 版本仅作为 notice，不导致失败退出。命令不删除、不重建、不自动修复数据，详细运行契约见[本地存储运行与迁移](../engineering/local-runtime-storage.md)。
 
 ## 11. 测试与验收重点
 
@@ -332,7 +350,11 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 - 参考问答消费者只暴露 Top-K 命中片段，并将可用引用限制在这些片段内。
 - 参考消费者记录每个选中 `material_id` 都进入 map 阶段。
 - 超长资料触发多个 batch，覆盖执行器能校验处理材料集合和引用 chunk 集合。
-- 删除和重试解析不会留下可检索的旧 chunk。
+- 候选和退休版本即使保留 SQLite chunk 或 Chroma 向量，也不能被当前上下文或 Top-K 检索命中。
+- 解析、索引、完整性校验和生效切换分别注入故障后，旧生效版本仍可问答、生成和制定计划。
+- 并发重解析只有一个 `building` 候选可以进入构建。
+- 问答、独立生成、计划预览/诊断/保存/替换、任务讲义和任务测试都在模型返回或数据库写入前复核输入版本；复核失败不得保存成功结果。
+- 只读对账能发现文件、数据库和向量库的构造不一致；正常数据和仅有按策略保留的退休版本不得误报失败。
 - 无真实模型 API key 的单元测试和基础开发仍可运行。
 - 公共材料上下文测试不替代 Flashcard、Quiz、Mindmap 或 AI 学习计划各自的业务质量验收。
 - 图片格式已进入 Docling adapter 路由；OCR 质量、复杂版面和跨页结构回归夹具后置。

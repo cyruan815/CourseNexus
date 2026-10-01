@@ -1,6 +1,6 @@
 import { Alert, Anchor, Box, Button, PasswordInput, Stack, Text, TextInput, Title } from "@mantine/core";
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { login, register } from "./api";
 import { WelcomeParticleCanvas } from "./WelcomeParticleCanvas";
@@ -45,7 +45,10 @@ function AuthArt({ mode }: { mode: AuthMode }) {
 
 function AuthForm({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const isLogin = mode === "login";
+  const passwordChanged =
+    isLogin && (location.state as { reason?: string } | null)?.reason === "password_changed";
   const [values, setValues] = useState<AuthFormState>({
     nickname: "",
     password: "",
@@ -89,6 +92,12 @@ function AuthForm({ mode }: { mode: AuthMode }) {
         <Text className="auth-form-card__copy">
           {isLogin ? "使用用户名或邮箱进入学习工作台。" : "创建账号后进入系统首页。"}
         </Text>
+
+        {passwordChanged ? (
+          <Alert color="green" title="密码已修改">
+            请使用新密码重新登录。
+          </Alert>
+        ) : null}
 
         {error ? (
           <Alert color="red" role="alert" title={isLogin ? "登录失败" : "注册失败"}>

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  createMaterialLink,
   createMaterialFolder,
-  getMaterialPdf,
+  getMaterial,
+  getMaterialFile,
   listMaterialFolders,
   moveMaterialToFolder,
   updateMaterial,
@@ -26,13 +26,14 @@ describe("materials api", () => {
     );
   });
 
-  it("loads an authenticated PDF blob for preview", async () => {
+  it("loads an authenticated original-file blob for preview", async () => {
     window.localStorage.setItem("course_nexus_token", "token_1");
+    const abortController = new AbortController();
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response("%PDF-1.4", { status: 200, headers: { "Content-Type": "application/pdf" } }),
     );
 
-    const blob = await getMaterialPdf("mat_1");
+    const blob = await getMaterialFile("mat_1", abortController.signal);
 
     expect(blob.type).toBe("application/pdf");
     expect(fetch).toHaveBeenCalledWith(
@@ -40,7 +41,17 @@ describe("materials api", () => {
       expect.objectContaining({
         method: "GET",
         headers: { Authorization: "Bearer token_1" },
+        signal: abortController.signal,
       }),
+    );
+  });
+
+  it("loads material metadata for citation routing", async () => {
+    await getMaterial("mat_1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/materials/mat_1",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
@@ -79,28 +90,11 @@ describe("materials api", () => {
     expect(body.get("folder_id")).toBe("fld_1");
   });
 
-  it("creates link materials and renames materials", async () => {
-    await createMaterialLink("crs_1", {
-      name: "课程网站",
-      source_url: "https://example.com/course",
-      folder_id: "fld_1",
-    });
+  it("renames materials", async () => {
     await updateMaterial("mat_1", { name: "第一章重命名.pdf" });
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      "/api/v1/courses/crs_1/material-links",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          name: "课程网站",
-          source_url: "https://example.com/course",
-          folder_id: "fld_1",
-        }),
-      }),
-    );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
       "/api/v1/materials/mat_1",
       expect.objectContaining({
         method: "PATCH",

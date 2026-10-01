@@ -58,7 +58,16 @@ class MaterialPlanProvider:
                                     "estimated_minutes": 30,
                                     "citation_chunk_ids": ["chk_flow"],
                                     "sort_order": 1,
-                                }
+                                },
+                                {
+                                    "title": "当日测试",
+                                    "subtask_type": "test",
+                                    "description": "完成当日测试",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 2,
+                                },
                             ],
                         },
                         {
@@ -74,7 +83,16 @@ class MaterialPlanProvider:
                                     "estimated_minutes": 30,
                                     "citation_chunk_ids": ["chk_flow"],
                                     "sort_order": 1,
-                                }
+                                },
+                                {
+                                    "title": "综合测试",
+                                    "subtask_type": "test",
+                                    "description": "完成全计划综合测试",
+                                    "related_material_ids": material_ids,
+                                    "estimated_minutes": 15,
+                                    "citation_chunk_ids": ["chk_flow"],
+                                    "sort_order": 2,
+                                },
                             ],
                         },
                     ],
@@ -108,7 +126,9 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         max_file_size_bytes=1024,
     )
     app.dependency_overrides[get_rag_index] = lambda: rag_index
-    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: MaterialPlanProvider()
+    provider = MaterialPlanProvider()
+    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = lambda: provider
     try:
         yield TestClient(app)
     finally:

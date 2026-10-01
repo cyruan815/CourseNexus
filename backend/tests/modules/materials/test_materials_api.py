@@ -112,21 +112,23 @@ def test_upload_list_detail_and_delete_file_material(client: TestClient) -> None
     assert client.get(f"/api/v1/courses/{course_id}/materials", headers=headers).json()["data"] == []
 
 
-def test_create_link_material(client: TestClient) -> None:
+def test_create_link_material_endpoint_returns_gone(client: TestClient) -> None:
     token = register_and_token(client, "alice")
     course_id = create_course(client, token)
+    headers = {"Authorization": f"Bearer {token}"}
 
     response = client.post(
         f"/api/v1/courses/{course_id}/material-links",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
         json={"name": "Course Site", "source_url": "https://example.com/course"},
     )
 
-    assert response.status_code == 200
-    material = response.json()["data"]
-    assert material["source_type"] == "url"
-    assert material["material_type"] == "link"
-    assert material["source_url"] == "https://example.com/course"
+    assert response.status_code == 410
+    assert response.json()["error"]["code"] == "MATERIAL_LINK_REMOVED"
+
+    list_response = client.get(f"/api/v1/courses/{course_id}/materials", headers=headers)
+    assert list_response.status_code == 200
+    assert list_response.json()["data"] == []
 
 
 def test_preview_pdf_material_returns_owned_original_file(client: TestClient) -> None:
@@ -150,7 +152,7 @@ def test_preview_pdf_material_returns_owned_original_file(client: TestClient) ->
     assert response.headers["content-disposition"].startswith("inline;")
 
 
-def test_preview_material_rejects_unsupported_type_and_cross_user_access(client: TestClient) -> None:
+def test_preview_material_returns_owned_non_pdf_file_and_rejects_cross_user_access(client: TestClient) -> None:
     alice_token = register_and_token(client, "alice")
     bob_token = register_and_token(client, "bob")
     alice_course_id = create_course(client, alice_token)
@@ -162,14 +164,16 @@ def test_preview_material_rejects_unsupported_type_and_cross_user_access(client:
     )
     material_id = upload_response.json()["data"]["id"]
 
-    unsupported_response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
+    content_response = client.get(f"/api/v1/materials/{material_id}/content", headers=headers)
     cross_user_response = client.get(
         f"/api/v1/materials/{material_id}/content",
         headers={"Authorization": f"Bearer {bob_token}"},
     )
 
-    assert unsupported_response.status_code == 415
-    assert unsupported_response.json()["error"]["code"] == "PREVIEW_UNSUPPORTED"
+    assert content_response.status_code == 200
+    assert content_response.content == b"# Intro"
+    assert content_response.headers["content-type"].startswith("text/markdown")
+    assert content_response.headers["cache-control"] == "private, no-store"
     assert cross_user_response.status_code == 404
     assert cross_user_response.json()["error"]["code"] == "NOT_FOUND"
 
@@ -190,6 +194,8 @@ def test_parse_retry_parses_uploaded_text_material(client: TestClient) -> None:
     assert parse_response.status_code == 200
     parsed = parse_response.json()["data"]
     assert parsed["parse_status"] == "parsed"
+    assert parsed["active_parse_version_id"]
+    assert parsed["is_learning_ready"] is True
     assert parsed["parse_error"] is None
     assert parsed["parse_quality"] == "complete"
     assert parsed["parse_diagnostics_json"]["parser"] == "plain_text"

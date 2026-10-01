@@ -6,7 +6,7 @@ from typing import Sequence
 
 import chromadb
 from llama_index.core import StorageContext
-from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.embeddings import BaseEmbedding, MockEmbedding
 from llama_index.core.schema import TextNode
 from llama_index.core.vector_stores import (
     FilterCondition,
@@ -20,11 +20,12 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from app.core.errors import CourseNexusError
 from app.core.logging import get_logger
-from app.integrations.rag.base import RagChunk, RagScopeFilter, RetrievalHit
+from app.integrations.rag.base import RagChunk, RagIndexRecord, RagScopeFilter, RetrievalHit
 
 
 index_logger = get_logger("rag.index")
 retrieve_logger = get_logger("rag.retrieve")
+RECONCILIATION_PAGE_SIZE = 1_000
 
 
 class LlamaIndexChromaRagIndex:
@@ -96,6 +97,56 @@ class LlamaIndexChromaRagIndex:
         except Exception as exc:
             raise CourseNexusError(code="INDEXING_FAILED", message="资料索引删除失败", status_code=502) from exc
 
+    def delete_parse_version(self, parse_version_id: str) -> None:
+        started_at = perf_counter()
+        try:
+            self.collection.delete(where={"parse_version_id": parse_version_id})
+            index_logger.info(
+                "解析版本索引删除成功 | collection=%s version=%s cost_ms=%.2f",
+                self.collection_name,
+                parse_version_id,
+                (perf_counter() - started_at) * 1000,
+            )
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="解析版本索引删除失败", status_code=502) from exc
+
+    def list_parse_version_chunk_ids(self, parse_version_id: str) -> set[str]:
+        try:
+            stored = self.collection.get(where={"parse_version_id": parse_version_id}, include=[])
+            return set(stored.get("ids") or [])
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="解析版本索引校验失败", status_code=502) from exc
+
+    def list_records(self) -> list[RagIndexRecord]:
+        records: list[RagIndexRecord] = []
+        offset = 0
+        try:
+            while True:
+                stored = self.collection.get(
+                    include=["metadatas"],
+                    limit=RECONCILIATION_PAGE_SIZE,
+                    offset=offset,
+                )
+                ids = stored.get("ids") or []
+                metadatas = stored.get("metadatas") or []
+                for chunk_id, metadata in zip(ids, metadatas, strict=False):
+                    values = metadata or {}
+                    records.append(
+                        RagIndexRecord(
+                            chunk_id=str(chunk_id),
+                            user_id=_metadata_text(values.get("user_id")),
+                            course_id=_metadata_text(values.get("course_id")),
+                            material_id=_metadata_text(values.get("material_id")),
+                            parse_version_id=_metadata_text(values.get("parse_version_id")),
+                        )
+                    )
+                if len(ids) < RECONCILIATION_PAGE_SIZE:
+                    break
+                offset += len(ids)
+        except Exception as exc:
+            raise CourseNexusError(code="INDEXING_FAILED", message="资料索引对账读取失败", status_code=502) from exc
+        return sorted(records, key=lambda item: item.chunk_id)
+
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
         started_at = perf_counter()
         try:
@@ -156,6 +207,7 @@ class LlamaIndexChromaRagIndex:
                 "user_id": chunk.user_id,
                 "course_id": chunk.course_id,
                 "material_id": chunk.material_id,
+                "parse_version_id": chunk.parse_version_id or "",
                 "folder_id": chunk.folder_id or "",
                 "chunk_id": chunk.chunk_id,
                 "chunk_index": chunk.chunk_index,
@@ -173,6 +225,10 @@ class LlamaIndexChromaRagIndex:
         if scope.material_ids:
             filters.append(
                 MetadataFilter(key="material_id", value=list(scope.material_ids), operator=FilterOperator.IN)
+            )
+        if scope.chunk_ids:
+            filters.append(
+                MetadataFilter(key="chunk_id", value=list(scope.chunk_ids), operator=FilterOperator.IN)
             )
         return MetadataFilters(filters=filters, condition=FilterCondition.AND)
 
@@ -194,3 +250,35 @@ def create_openai_chroma_rag_index(
             api_base=api_base_url,
         ),
     )
+
+
+def open_existing_chroma_rag_index(
+    *,
+    persist_path: str | Path,
+    collection_name: str,
+) -> LlamaIndexChromaRagIndex | None:
+    path = Path(persist_path)
+    if not (path / "chroma.sqlite3").is_file():
+        return None
+    try:
+        client = chromadb.PersistentClient(path=str(path))
+        collection_names = {
+            collection.name if hasattr(collection, "name") else str(collection)
+            for collection in client.list_collections()
+        }
+        if collection_name not in collection_names:
+            return None
+        return LlamaIndexChromaRagIndex(
+            persist_path=path,
+            collection_name=collection_name,
+            embed_model=MockEmbedding(embed_dim=1),
+        )
+    except Exception as exc:
+        raise CourseNexusError(code="INDEXING_FAILED", message="资料索引对账打开失败", status_code=502) from exc
+
+
+def _metadata_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None

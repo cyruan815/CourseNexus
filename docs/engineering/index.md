@@ -13,6 +13,8 @@
 | [collaboration.md](collaboration.md) | 小团队分工、分支、提交、评审、任务拆分和文档责任。 | 2026-08-02 |
 | [definition-of-done.md](definition-of-done.md) | 代码、测试、文档、API / 数据契约和 Review 完成标准。 | 2026-07-12 |
 | [rag-consumer-guide.md](rag-consumer-guide.md) | 业务功能接入材料上下文 RAG 的调用链、边界、错误和测试规则。 | 2026-07-10 |
+| [local-runtime-storage.md](local-runtime-storage.md) | 单机 V1 的规范数据路径、SQLite 连接基线、Chroma 生命周期、对账和旧数据迁移规则。 | 2026-10-01 |
+| [v1-release-acceptance.md](v1-release-acceptance.md) | V1 确定性闭环、真实格式、历史迁移、真实模型门槛和候选证据。 | 2026-10-01 |
 | [frontend-ui-guidelines.md](frontend-ui-guidelines.md) | 前端亮色 UI 风格、色彩、排版、组件和场景规范。 | 2026-07-10 |
 
 ## 相关链接

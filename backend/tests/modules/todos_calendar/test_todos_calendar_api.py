@@ -10,10 +10,13 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
 from app.db.session import get_db
+from app.integrations.model_provider.mock import MockModelProvider
 from app.modules.courses.models import Course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
+from app.modules.study_plans import router as study_plan_router
 import app.db.models  # noqa: F401
 from app.main import app
+from tests.fixtures.study_mode_samples import compliant_daily_task
 
 
 @pytest.fixture()
@@ -34,6 +37,12 @@ def client() -> Generator[TestClient, None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = (
+        lambda: MockModelProvider()
+    )
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = (
+        lambda: MockModelProvider()
+    )
     app.state.todos_calendar_testing_session = testing_session
     try:
         yield TestClient(app)
@@ -68,22 +77,13 @@ def _plan_payload(*, title: str, material_id: str, task_date: str = "2026-07-11"
         "daily_available_minutes": 60,
         "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
         "tasks": [
-            {
-                "title": f"{title} 任务 {index}",
-                "task_date": task_date,
-                "sort_order": index,
-                "subtasks": [
-                    {
-                        "title": f"{title} 子任务 {index}",
-                        "subtask_type": "learn",
-                        "description": "学习内容",
-                        "related_material_ids": [material_id],
-                        "estimated_minutes": 30,
-                        "citation_chunk_ids": [],
-                        "sort_order": 1,
-                    }
-                ],
-            }
+            # 保存契约要求每天恰好一个测试任务并排在最后（见 tests/fixtures/study_mode_samples.py）。
+            compliant_daily_task(
+                title=f"{title} 任务 {index}",
+                task_date=task_date,
+                sort_order=index,
+                plan_material_ids=[material_id],
+            )
             for index in range(1, task_count + 1)
         ],
     }
@@ -95,6 +95,7 @@ def _seed_parsed_material(client: TestClient, course_id: str, material_id: str) 
     try:
         course = db.get(Course, course_id)
         assert course is not None
+        parse_version_id = f"mpv_{material_id}"
         db.add_all(
             [
                 CourseMaterial(
@@ -108,10 +109,20 @@ def _seed_parsed_material(client: TestClient, course_id: str, material_id: str) 
                     file_size=16,
                     mime_type="text/plain",
                     parse_status="parsed",
+                    active_parse_version_id=parse_version_id,
+                ),
+                MaterialParseVersion(
+                    id=parse_version_id,
+                    material_id=material_id,
+                    course_id=course.id,
+                    user_id=course.user_id,
+                    status="active",
+                    parse_quality="complete",
                 ),
                 MaterialChunk(
                     id=f"chk_{material_id}_000001",
                     material_id=material_id,
+                    parse_version_id=parse_version_id,
                     course_id=course.id,
                     chunk_index=1,
                     heading="Calendar",
@@ -149,7 +160,7 @@ def _seed_api_data(client: TestClient) -> tuple[str, str, str, str]:
     return token, net_course_id, math_course_id, other_course_id
 
 
-def test_today_todos_endpoint_returns_nested_tasks_without_plan_title(client: TestClient) -> None:
+def test_today_todos_endpoint_returns_nested_tasks_with_plan_title(client: TestClient) -> None:
     token, _, _, _ = _seed_api_data(client)
 
     response = client.get("/api/v1/todos/today?date=2026-07-11", headers={"Authorization": f"Bearer {token}"})
@@ -158,7 +169,7 @@ def test_today_todos_endpoint_returns_nested_tasks_without_plan_title(client: Te
     data = response.json()["data"]
     assert data["date"] == "2026-07-11"
     assert data["tasks"][0]["subtasks"]
-    assert "plan_title" not in data["tasks"][0]
+    assert {task["plan_title"] for task in data["tasks"]} == {"网络", "数学"}
     assert {task["course_name"] for task in data["tasks"]} == {"Computer Networks", "Math"}
 
 
@@ -171,6 +182,7 @@ def test_month_calendar_endpoint_limits_task_summaries_to_three(client: TestClie
     day = response.json()["data"]["days"][0]
     assert day["task_count"] == 5
     assert len(day["task_summaries"]) == 3
+    assert {summary["plan_title"] for summary in day["task_summaries"]} == {"网络"}
     assert day["hidden_task_count"] == 2
 
 

@@ -11,6 +11,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.core.config import Settings
+from app.core.redaction import SensitiveDataRedactor
 
 
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -69,9 +70,21 @@ def _stream_supports_color(stream: object) -> bool:
 
 
 class TimezoneFormatter(logging.Formatter):
+    def __init__(
+        self,
+        *args: Any,
+        redactor: SensitiveDataRedactor | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.redactor = redactor
+
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         timestamp = datetime.fromtimestamp(record.created, _LOG_TIMEZONE)
         return timestamp.isoformat(sep=" ", timespec="seconds")
+
+    def redact(self, output: str) -> str:
+        return self.redactor.redact(output) if self.redactor else output
 
 
 class ExceptionSummaryFormatter(TimezoneFormatter):
@@ -85,8 +98,8 @@ class ExceptionSummaryFormatter(TimezoneFormatter):
         if summary:
             headline = f"{headline} | error={summary}"
         if record.exc_info:
-            return f"{headline}\n{self.formatException(record.exc_info)}"
-        return headline
+            return self.redact(f"{headline}\n{self.formatException(record.exc_info)}")
+        return self.redact(headline)
 
 
 class CompactConsoleFormatter(ExceptionSummaryFormatter):
@@ -106,7 +119,8 @@ class CompactConsoleFormatter(ExceptionSummaryFormatter):
                 compact.levelname = f"{color}{record.levelname}{_ANSI_RESET}"
                 compact.event_name = f"{color}{record.event_name}{_ANSI_RESET}"
         headline = logging.Formatter.format(self, compact)
-        return f"{headline} | error={summary}" if summary else headline
+        output = f"{headline} | error={summary}" if summary else headline
+        return self.redact(output)
 
 
 class UvicornRequestExceptionFilter(logging.Filter):
@@ -129,12 +143,14 @@ def configure_logging(settings: Settings) -> None:
     logger.propagate = False
 
     context_filter = RequestContextFilter()
+    redactor = SensitiveDataRedactor(settings)
     console = logging.StreamHandler()
     console.addFilter(context_filter)
     console.setFormatter(
         CompactConsoleFormatter(
             _FORMAT,
             _DATE_FORMAT,
+            redactor=redactor,
             use_colors=_stream_supports_color(console.stream),
         )
     )
@@ -146,7 +162,9 @@ def configure_logging(settings: Settings) -> None:
         encoding="utf-8",
     )
     file_handler.addFilter(context_filter)
-    file_handler.setFormatter(ExceptionSummaryFormatter(_FORMAT, _DATE_FORMAT))
+    file_handler.setFormatter(
+        ExceptionSummaryFormatter(_FORMAT, _DATE_FORMAT, redactor=redactor)
+    )
 
     logger.addHandler(console)
     logger.addHandler(file_handler)

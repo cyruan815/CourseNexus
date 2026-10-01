@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from collections.abc import Generator
 from datetime import date, datetime, timezone
 from io import BytesIO
@@ -10,11 +11,13 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.errors import CourseNexusError
 from app.db.base import Base
+from app.db.session import create_database_engine
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.modules.checkins.models import CheckinRecord
@@ -24,19 +27,21 @@ from app.integrations.rag.fake import FakeRagIndex
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
+from app.modules.materials.models import CourseMaterial
 from app.modules.materials.service import parse_material, upload_file_material
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
     StudyPlanConfigExtraction,
+    StudyPlanDiagnosticQuestionRequest,
     StudyPlanParsedConfig,
     StudyPlanRegenerationPreviewRequest,
     StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
     StudySubTaskPreview,
 )
-from app.modules.study_plans.service import delete_study_plan, get_study_plan_detail, list_study_plans, parse_study_plan_config, preview_study_plan, preview_study_plan_regeneration, replace_study_plan, save_study_plan
+from app.modules.study_plans.service import build_study_plan_diagnostic_questions, delete_study_plan, get_study_plan_detail, list_study_plans, parse_study_plan_config, preview_study_plan, preview_study_plan_regeneration, replace_study_plan, save_study_plan
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -130,6 +135,42 @@ class RecordingPlanProvider:
         raise AssertionError(output_schema)
 
 
+class DeletingPlanProvider(RecordingPlanProvider):
+    def __init__(self, material_ids: list[str], *, db: Session, deleted_material: CourseMaterial) -> None:
+        super().__init__(material_ids)
+        self.db = db
+        self.deleted_material = deleted_material
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        output = super().generate_structured(prompt=prompt, output_schema=output_schema)
+        if output_schema.__name__ == "StudyPlanReduction":
+            self.deleted_material.deleted_at = datetime.now(timezone.utc)
+            self.db.add(self.deleted_material)
+            self.db.commit()
+        return output
+
+
+class DeletingDiagnosticProvider:
+    def __init__(self, *, db: Session, deleted_material: CourseMaterial) -> None:
+        self.db = db
+        self.deleted_material = deleted_material
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        assert output_schema.__name__ == "StudyPlanDiagnosticTopicExtraction"
+        self.deleted_material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.deleted_material)
+        self.db.commit()
+        return output_schema.model_validate(
+            {
+                "topics": [
+                    {"topic_title": "可靠传输"},
+                    {"topic_title": "拥塞控制"},
+                    {"topic_title": "流量控制"},
+                ]
+            }
+        )
+
+
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, filename: str, content: bytes) -> str:
     material = upload_file_material(
         db,
@@ -211,6 +252,36 @@ def test_save_request_accepts_old_body_without_tasks() -> None:
 
     assert request.tasks is None
     assert request.preference == "balanced"
+
+
+@pytest.mark.parametrize("title", ["   ", "x" * 256])
+def test_save_request_rejects_invalid_title(title: str) -> None:
+    with pytest.raises(ValidationError):
+        StudyPlanSaveRequest.model_validate(
+            {
+                "goal_text": "掌握传输层",
+                "start_date": "2026-07-11",
+                "end_date": "2026-07-12",
+                "daily_available_minutes": 60,
+                "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+                "title": title,
+            }
+        )
+
+
+def test_save_request_normalizes_editable_title() -> None:
+    request = StudyPlanSaveRequest.model_validate(
+        {
+            "goal_text": "掌握传输层",
+            "start_date": "2026-07-11",
+            "end_date": "2026-07-12",
+            "daily_available_minutes": 60,
+            "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
+            "title": "  传输层   冲刺计划  ",
+        }
+    )
+
+    assert request.title == "传输层 冲刺计划"
 
 
 def test_replace_request_requires_tasks() -> None:
@@ -296,7 +367,87 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
     assert preview.tasks[0].subtasks[-1].subtask_type == "test"
     assert sum(subtask.estimated_minutes for subtask in preview.tasks[0].subtasks) == 60
     assert set(preview.tasks[0].subtasks[0].related_material_ids) == set(material_ids)
+    assert preview.material_snapshot["material_versions"] == [
+        {
+            "material_id": material_id,
+            "version_id": db.get(CourseMaterial, material_id).active_parse_version_id,
+        }
+        for material_id in sorted(material_ids)
+    ]
     assert _study_plan_counts(db) == before_counts
+
+
+def test_preview_study_plan_rejects_result_after_material_is_deleted(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="preview-stale", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "transport-stale.txt",
+        b"Reliable transport",
+    )
+    material = db.get(CourseMaterial, material_id)
+    provider = DeletingPlanProvider([material_id], db=db, deleted_material=material)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        preview_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=StudyPlanBuildRequest(
+                goal_text="掌握传输层",
+                start_date=date(2026, 7, 11),
+                end_date=date(2026, 7, 11),
+                daily_available_minutes=60,
+                material_scope=MaterialScope(include_all_parsed_materials=True, material_ids=[]),
+            ),
+            model_provider=provider,
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_diagnostic_questions_reject_result_after_material_is_deleted(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="diagnostic-stale", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "diagnostic-stale.txt",
+        b"Reliable transport congestion control flow control",
+    )
+    material = db.get(CourseMaterial, material_id)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        build_study_plan_diagnostic_questions(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=StudyPlanDiagnosticQuestionRequest(
+                goal_text="掌握传输层",
+                material_scope=MaterialScope(
+                    include_all_parsed_materials=False,
+                    material_ids=[material_id],
+                ),
+            ),
+            model_provider=DeletingDiagnosticProvider(db=db, deleted_material=material),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    _assert_no_plan_write_side_effects(db)
 
 def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
     return StudyPlanSaveRequest.model_validate(
@@ -460,7 +611,7 @@ def test_save_study_plan_rejects_confirmed_task_material_violations_without_side
             max_tokens=12_000,
         )
 
-    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND", "MATERIAL_SCOPE_STALE"}
     _assert_no_plan_write_side_effects(db)
 
 
@@ -503,6 +654,47 @@ def test_save_study_plan_rejects_task_without_subtasks_without_side_effects(db: 
         )
 
     assert exc_info.value.code == "VALIDATION_ERROR"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_save_study_plan_rejects_deleted_material_snapshot_without_side_effects(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="save-stale-snapshot", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "save-stale.txt",
+        b"Reliable transport",
+    )
+    material = db.get(CourseMaterial, material_id)
+    data = _request_data([material_id])
+    data["material_snapshot"] = {
+        "mode": "all_parsed",
+        "material_ids": [material_id],
+        "material_versions": [
+            {"material_id": material_id, "version_id": material.active_parse_version_id}
+        ],
+    }
+    material.deleted_at = datetime.now(timezone.utc)
+    db.add(material)
+    db.commit()
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request_from_data(data),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
     _assert_no_plan_write_side_effects(db)
 
 
@@ -562,7 +754,7 @@ def test_replace_study_plan_rejects_confirmed_task_material_violations_without_s
     with pytest.raises(CourseNexusError) as exc_info:
         replace_study_plan(db, user_id=user.id, plan_id=saved.plan.id, payload=_replace_request_from_data(saved.plan.updated_at, data))
 
-    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND"}
+    assert exc_info.value.code in {"VALIDATION_ERROR", "NOT_FOUND", "MATERIAL_SCOPE_STALE"}
     assert _study_plan_counts(db) == before_counts
     assert get_study_plan_detail(db, user_id=user.id, plan_id=saved.plan.id).subtasks[0].related_material_ids_json == [valid_material_id]
 
@@ -625,10 +817,51 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert first.subtasks[0].title == "用户调整后的学习项"
     assert first.subtasks[0].related_material_ids_json == [material_id]
     assert first.subtasks[1].title == "saved test"
+    assert first.plan.parsed_config_json["material_snapshot"]["material_versions"] == [
+        {
+            "material_id": material_id,
+            "version_id": db.get(CourseMaterial, material_id).active_parse_version_id,
+        }
+    ]
     task_snapshot = first.plan.parsed_config_json["task_snapshot"]
     assert task_snapshot[0]["subtasks"][1]["generation_parameters"]["task_test"]["question_count"] == 5
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 1
     assert provider.batch_prompts == []
+
+
+def test_save_study_plan_respects_sqlite_foreign_keys(tmp_path: Path) -> None:
+    database_path = tmp_path / "study-plan-foreign-keys.db"
+    engine = create_database_engine(f"sqlite:///{database_path.as_posix()}")
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = testing_session()
+    try:
+        user = register_user(db, UserCreate(username="foreign-key-save", password="password123"))
+        course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+        material_id = create_parsed_material(
+            db,
+            tmp_path / "uploads",
+            user.id,
+            course.id,
+            "foreign-key-save.txt",
+            b"Reliable transport",
+        )
+
+        saved = save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="foreign-key-save",
+        )
+
+        assert saved.plan.id
+        assert _study_plan_counts(db) == {"plans": 1, "tasks": 1, "subtasks": 2, "checkins": 1}
+    finally:
+        db.close()
+        engine.dispose()
 
 
 def _legacy_request_hash_without_client_flow(payload: StudyPlanSaveRequest) -> str:
@@ -696,6 +929,7 @@ def test_save_study_plan_without_idempotency_key_keeps_existing_create_behavior(
     )
 
     assert first.plan.id != second.plan.id
+    assert first.plan.title == second.plan.title
     assert first.plan.idempotency_key_hash is None
     assert second.plan.idempotency_key_hash is None
     assert len(list_study_plans(db, user_id=user.id, course_id=course.id)) == 2
@@ -953,6 +1187,47 @@ def test_save_study_plan_rolls_back_when_subtask_flush_fails(db: Session, tmp_pa
             model_provider=RecordingPlanProvider([material_id]),
             max_tokens=12_000,
             idempotency_key="rollback-key",
+        )
+
+    assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0
+
+
+def test_save_study_plan_does_not_mask_unrelated_integrity_error(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = register_user(db, UserCreate(username="integrity-error", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "integrity-error.txt",
+        b"Reliable transport",
+    )
+
+    from app.modules.study_plans import repository as study_plan_repository
+
+    def fail_with_foreign_key_error(*_args: object, **_kwargs: object) -> object:
+        raise IntegrityError(
+            "INSERT INTO study_subtasks ...",
+            {},
+            sqlite3.IntegrityError("FOREIGN KEY constraint failed"),
+        )
+
+    monkeypatch.setattr(study_plan_repository, "add_study_plan_bundle", fail_with_foreign_key_error)
+
+    with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="unrelated-integrity-error",
         )
 
     assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0

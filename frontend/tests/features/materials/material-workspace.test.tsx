@@ -8,6 +8,24 @@ import * as materialsApi from "../../../src/features/materials/api";
 import type { MaterialScope } from "../../../src/features/materials/types";
 
 vi.mock("../../../src/features/materials/api");
+vi.mock("docx-preview", () => ({
+  renderAsync: vi.fn(async (_file: ArrayBuffer, container: HTMLElement) => {
+    const page = document.createElement("section");
+    page.textContent = "DOCX 课程讲义";
+    container.append(page);
+  }),
+}));
+vi.mock("@aiden0z/pptx-renderer", () => ({
+  PptxViewer: {
+    open: vi.fn(async (_file: ArrayBuffer, container: HTMLElement) => {
+      const slide = document.createElement("div");
+      slide.textContent = "PPTX 课程课件";
+      container.append(slide);
+      return { destroy: vi.fn() };
+    }),
+  },
+  RECOMMENDED_ZIP_LIMITS: { maxEntries: 2_000 },
+}));
 
 const folder = {
   id: "fld_1",
@@ -89,6 +107,7 @@ describe("MaterialWorkspace", () => {
     });
     vi.mocked(materialsApi.listMaterialFolders).mockResolvedValue([folder]);
     vi.mocked(materialsApi.listMaterials).mockResolvedValue(materials);
+    vi.mocked(materialsApi.getMaterialFile).mockResolvedValue(new Blob(["# Intro"], { type: "text/markdown" }));
   });
 
   it("presents the redesigned resource summary without a persistent upload dropzone", async () => {
@@ -110,10 +129,9 @@ describe("MaterialWorkspace", () => {
 
     const createFolderButton = screen.getByRole("button", { name: "新建文件夹" });
     const uploadButton = screen.getByRole("button", { name: "上传资料" });
-    const createLinkButton = screen.getByRole("button", { name: "添加链接" });
     expect(createFolderButton).toHaveTextContent("");
     expect(uploadButton).toHaveTextContent("");
-    expect(createLinkButton).toHaveTextContent("");
+    expect(screen.queryByRole("button", { name: "添加链接" })).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(createFolderButton);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("新建文件夹");
@@ -143,7 +161,7 @@ describe("MaterialWorkspace", () => {
   });
 
   it("opens a PDF preview modal when clicking the material name", async () => {
-    vi.mocked(materialsApi.getMaterialPdf).mockResolvedValue(
+    vi.mocked(materialsApi.getMaterialFile).mockResolvedValue(
       new Blob(["%PDF-1.4"], { type: "application/pdf" }),
     );
 
@@ -157,12 +175,56 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "预览资料 第一章.pdf" }));
 
-    expect(await screen.findByRole("dialog", { name: "第一章.pdf" })).toBeInTheDocument();
-    await waitFor(() => expect(materialsApi.getMaterialPdf).toHaveBeenCalledWith("mat_1"));
+    expect(await screen.findByRole("dialog", { name: "预览 · 第一章.pdf" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(materialsApi.getMaterialFile).toHaveBeenCalledWith("mat_1", expect.any(AbortSignal)),
+    );
     expect(await screen.findByTitle("第一章.pdf PDF 预览")).toHaveAttribute("src", "blob:material-preview");
 
     fireEvent.click(screen.getByRole("button", { name: "关闭资料预览" }));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:material-preview");
+  });
+
+  it.each([
+    {
+      content: "DOCX 课程讲义",
+      id: "mat_docx",
+      materialType: "word",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      name: "课程讲义.docx",
+    },
+    {
+      content: "PPTX 课程课件",
+      id: "mat_pptx",
+      materialType: "ppt",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      name: "课程课件.pptx",
+    },
+  ])("opens $name with the unified Office preview", async ({ content, id, materialType, mimeType, name }) => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      {
+        ...materials[0],
+        id,
+        material_type: materialType,
+        mime_type: mimeType,
+        name,
+      },
+    ]);
+    vi.mocked(materialsApi.getMaterialFile).mockResolvedValue(new Blob(["office fixture"], { type: mimeType }));
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: true, material_ids: [] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: `预览资料 ${name}` }));
+
+    expect(await screen.findByText(content)).toBeInTheDocument();
+    expect(materialsApi.getMaterialFile).toHaveBeenCalledWith(id, expect.any(AbortSignal));
+    expect(screen.getByRole("link", { name: "下载原文件" })).toHaveAttribute("download", name);
   });
 
   it("uses folders only for organization and selects individual parsed files", async () => {
@@ -189,11 +251,10 @@ describe("MaterialWorkspace", () => {
       material_ids: ["mat_1"],
     });
 
-    fireEvent.click(screen.getByText("待解析.md"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("资料需解析成功后才能选择。");
+    expect(screen.getByRole("button", { name: "预览资料 待解析.md" })).toBeEnabled();
   });
 
-  it("returns to all parsed materials when the last selected material is cleared", async () => {
+  it("keeps an empty scope when the last selected material is cleared", async () => {
     const onScopeChange = vi.fn();
 
     renderWorkspace(
@@ -208,7 +269,7 @@ describe("MaterialWorkspace", () => {
     fireEvent.click(parsedMaterial);
 
     expect(onScopeChange).toHaveBeenCalledWith({
-      include_all_parsed_materials: true,
+      include_all_parsed_materials: false,
       material_ids: [],
     });
   });
@@ -292,7 +353,7 @@ describe("MaterialWorkspace", () => {
 
     fireEvent.click(firstMaterial);
     expect(onScopeChange).toHaveBeenLastCalledWith({
-      include_all_parsed_materials: true,
+      include_all_parsed_materials: false,
       material_ids: [],
     });
     expect(allScope).not.toBeChecked();
@@ -388,7 +449,7 @@ describe("MaterialWorkspace", () => {
     });
     expect(screen.queryByRole("dialog", { name: "上传课程资料" })).not.toBeInTheDocument();
     expect(screen.getByText("chapter.pdf")).toBeInTheDocument();
-    expect(screen.getByText("解析中")).toBeInTheDocument();
+    expect(screen.getByLabelText("解析中")).toBeInTheDocument();
   });
 
   it("opens material actions from a three-dot button without a manual start-parse action", async () => {
@@ -405,6 +466,58 @@ describe("MaterialWorkspace", () => {
     expect(screen.getByRole("menuitem", { name: "重命名资料" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "删除资料" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "开始解析" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the active version selectable while a replacement version is parsing", async () => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      {
+        ...materials[0],
+        active_parse_version_id: "mpv_active",
+        is_learning_ready: true,
+        parse_status: "parsing",
+      },
+    ]);
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("checkbox", { name: "选择资料 第一章.pdf" })).toBeEnabled();
+    expect(screen.getByLabelText("正在更新")).toBeInTheDocument();
+    await openMaterialActions();
+    expect(screen.queryByRole("menuitem", { name: "重新解析" })).not.toBeInTheDocument();
+  });
+
+  it("offers reparse for usable materials and preserves the active version after failure", async () => {
+    const activeMaterial = {
+      ...materials[0],
+      active_parse_version_id: "mpv_active",
+      is_learning_ready: true,
+    };
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([activeMaterial]);
+    vi.mocked(materialsApi.retryParseMaterial).mockResolvedValue({
+      ...activeMaterial,
+      parse_error: "INDEXING_FAILED",
+    });
+
+    renderWorkspace(
+      <MaterialWorkspace
+        courseId="crs_1"
+        materialScope={{ include_all_parsed_materials: false, material_ids: ["mat_1"] }}
+        onMaterialScopeChange={vi.fn()}
+      />,
+    );
+
+    await openMaterialActions();
+    fireEvent.click(screen.getByRole("menuitem", { name: "重新解析" }));
+
+    await waitFor(() => expect(materialsApi.retryParseMaterial).toHaveBeenCalledWith("mat_1"));
+    expect(await screen.findByLabelText("更新失败，当前版本仍可用")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "选择资料 第一章.pdf" })).toBeEnabled();
   });
 
   it("removes a deleted folder and its materials after confirmation", async () => {
@@ -503,16 +616,29 @@ describe("MaterialWorkspace", () => {
     expect(screen.queryByLabelText("拖拽上传课程资料")).not.toBeInTheDocument();
   });
 
-  it("creates a link material from the top action button", async () => {
-    vi.mocked(materialsApi.createMaterialLink).mockResolvedValue({
-      ...materials[1],
-      id: "mat_link",
-      name: "课程网站",
-      source_type: "url",
-      material_type: "link",
-      file_url: null,
-      source_url: "https://example.com/course",
-    });
+  it("marks legacy url materials as discontinued without parse entry points", async () => {
+    vi.mocked(materialsApi.listMaterials).mockResolvedValue([
+      ...materials,
+      {
+        id: "mat_url_1",
+        course_id: "crs_1",
+        user_id: "usr_1",
+        folder_id: null,
+        name: "课程网站",
+        material_type: "link",
+        source_type: "url",
+        file_url: null,
+        source_url: "https://example.com/course",
+        file_size: null,
+        mime_type: null,
+        parse_status: "uploaded",
+        parse_error: null,
+        page_count: null,
+        created_at: "2026-07-10T00:00:00Z",
+        updated_at: "2026-07-10T00:00:00Z",
+        deleted_at: null,
+      },
+    ]);
 
     renderWorkspace(
       <MaterialWorkspace
@@ -522,21 +648,16 @@ describe("MaterialWorkspace", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "添加链接" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /资料名称/ }), { target: { value: "课程网站" } });
-    fireEvent.change(screen.getByRole("textbox", { name: /资料链接/ }), {
-      target: { value: "https://example.com/course" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    expect(await screen.findByText("课程网站")).toBeInTheDocument();
+    expect(screen.getByText("URL")).toBeInTheDocument();
+    expect(screen.getByTitle("已停止支持")).toBeInTheDocument();
+    expect(screen.getByLabelText("选择资料 课程网站")).toBeDisabled();
+    expect(screen.getByLabelText("选择资料 课程网站")).not.toBeChecked();
 
-    await waitFor(() => {
-      expect(materialsApi.createMaterialLink).toHaveBeenCalledWith("crs_1", {
-        name: "课程网站",
-        source_url: "https://example.com/course",
-        folder_id: null,
-      });
-    });
-    expect(screen.getByText("课程网站")).toBeInTheDocument();
+    await openMaterialActions("课程网站");
+    expect(screen.queryByRole("menuitem", { name: "重试解析" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "重命名资料" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "删除资料" })).toBeInTheDocument();
   });
 
   it("renames a material from its actions menu", async () => {

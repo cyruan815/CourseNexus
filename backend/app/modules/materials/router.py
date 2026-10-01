@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_rag_index, get_required_user
 from app.core.config import get_settings
+from app.core.errors import CourseNexusError
 from app.core.request_id import get_request_id
 from app.db.session import get_db
 from app.integrations.file_storage.base import FileStorage
@@ -18,17 +19,15 @@ from app.modules.materials.schemas import (
     MaterialFolderCreate,
     MaterialFolderRead,
     MaterialFolderUpdate,
-    MaterialLinkCreate,
     MaterialRead,
     MaterialUpdate,
 )
 from app.modules.materials.service import (
     create_material_folder,
-    create_link_material,
     delete_material_folder,
     delete_material,
     get_material_detail,
-    get_material_pdf_content,
+    get_material_file_content,
     list_material_folders,
     list_course_materials,
     move_material_to_folder,
@@ -161,14 +160,13 @@ def upload_material_endpoint(
 
 @router.post("/courses/{course_id}/material-links")
 def create_link_material_endpoint(
-    course_id: str,
-    payload: MaterialLinkCreate,
-    request: Request,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_required_user),
 ) -> dict[str, object]:
-    material = create_link_material(db, user_id=current_user.id, course_id=course_id, payload=payload)
-    return success_response(_material_data(material), request_id=get_request_id(request))
+    raise CourseNexusError(
+        code="MATERIAL_LINK_REMOVED",
+        message="链接资料入口已停止支持，请上传文件资料",
+        status_code=410,
+    )
 
 
 @router.get("/materials/{material_id}")
@@ -189,7 +187,7 @@ def get_material_content_endpoint(
     current_user: User = Depends(get_required_user),
     storage: FileStorage = Depends(get_material_storage),
 ) -> FileResponse:
-    material, file_path = get_material_pdf_content(
+    material, file_path = get_material_file_content(
         db,
         user_id=current_user.id,
         material_id=material_id,
@@ -197,7 +195,7 @@ def get_material_content_endpoint(
     )
     return FileResponse(
         file_path,
-        media_type="application/pdf",
+        media_type=material.mime_type or "application/octet-stream",
         filename=material.name,
         content_disposition_type="inline",
         headers={"Cache-Control": "private, no-store"},

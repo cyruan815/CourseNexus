@@ -1,0 +1,13 @@
+CourseNexus Release Validation
+
+Limits and Continuity
+
+A limit describes the value a function approaches near an input.
+
+Continuity at x = a requires all three conditions:
+
+1. The value f(a) exists.
+2. The left and right limits agree.
+3. The limit equals f(a).
+
+A function is continuous at x = a when all three conditions hold.

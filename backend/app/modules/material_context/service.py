@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
 import tiktoken
@@ -11,6 +11,9 @@ from app.integrations.rag.base import RagIndex, RagScopeFilter
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.repository import (
     has_parsed_context_chunks,
+    list_active_context_chunk_ids,
+    list_active_material_versions,
+    list_publishable_material_versions,
     list_active_scope_material_ids,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
@@ -37,6 +40,64 @@ class _ResolvedScope:
     empty_selection: bool = False
 
 
+def assert_material_snapshot_publishable(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_versions: Sequence[Mapping[str, str]],
+    expected_material_ids: Sequence[str] | None = None,
+) -> None:
+    assert_course_owner(db, user_id, course_id)
+    expected_ids = set(expected_material_ids or [])
+    if not material_versions:
+        if expected_ids:
+            _raise_stale_material_scope(expected_count=len(expected_ids), current_count=0)
+        return
+
+    expected_pairs: set[tuple[str, str]] = set()
+    for item in material_versions:
+        material_id = item.get("material_id", "").strip()
+        version_id = item.get("version_id", "").strip()
+        if not material_id or not version_id:
+            _raise_stale_material_scope(expected_count=len(material_versions), current_count=0)
+        expected_pairs.add((material_id, version_id))
+
+    if len(expected_pairs) != len(material_versions) or len({pair[0] for pair in expected_pairs}) != len(
+        expected_pairs
+    ):
+        _raise_stale_material_scope(expected_count=len(material_versions), current_count=0)
+    if expected_ids and {pair[0] for pair in expected_pairs} != expected_ids:
+        _raise_stale_material_scope(expected_count=len(expected_ids), current_count=len(expected_pairs))
+
+    current_pairs = set(
+        list_publishable_material_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=[pair[0] for pair in expected_pairs],
+            version_ids=[pair[1] for pair in expected_pairs],
+        )
+    )
+    if current_pairs != expected_pairs:
+        _raise_stale_material_scope(
+            expected_count=len(expected_pairs),
+            current_count=len(current_pairs),
+        )
+
+
+def _raise_stale_material_scope(*, expected_count: int, current_count: int) -> None:
+    raise CourseNexusError(
+        code="MATERIAL_SCOPE_STALE",
+        message="生成期间资料范围已变化，请重新确认后重试",
+        status_code=409,
+        details={
+            "expected_version_count": expected_count,
+            "current_version_count": current_count,
+        },
+    )
+
+
 def resolve_material_scope_ids(
     db: Session,
     *,
@@ -48,6 +109,27 @@ def resolve_material_scope_ids(
     if resolved_scope.empty_selection:
         return ()
     return resolved_scope.eligible_material_ids
+
+
+def resolve_material_scope_versions(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_scope: MaterialScope | None,
+) -> list[dict[str, str]]:
+    resolved_scope = _resolve_scope(db, user_id=user_id, course_id=course_id, material_scope=material_scope)
+    if resolved_scope.empty_selection:
+        return []
+    return [
+        {"material_id": material_id, "version_id": version_id}
+        for material_id, version_id in list_active_material_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=list(resolved_scope.eligible_material_ids),
+        )
+    ]
 
 
 def summarize_material_quality_for_scope(
@@ -128,7 +210,19 @@ def retrieve_relevant_context(
 
     hits = rag_index.retrieve(
         query=query,
-        scope=_rag_scope_filter(user_id=user_id, course_id=course_id, resolved_scope=resolved_scope),
+        scope=_rag_scope_filter(
+            user_id=user_id,
+            course_id=course_id,
+            resolved_scope=resolved_scope,
+            active_chunk_ids=tuple(
+                list_active_context_chunk_ids(
+                    db,
+                    user_id=user_id,
+                    course_id=course_id,
+                    material_ids=material_ids,
+                )
+            ),
+        ),
         top_k=top_k,
     )
     rows_by_chunk_id = {
@@ -271,14 +365,21 @@ def _resolve_scope(
     )
 
 
-def _rag_scope_filter(*, user_id: str, course_id: str, resolved_scope: _ResolvedScope) -> RagScopeFilter:
+def _rag_scope_filter(
+    *,
+    user_id: str,
+    course_id: str,
+    resolved_scope: _ResolvedScope,
+    active_chunk_ids: tuple[str, ...],
+) -> RagScopeFilter:
     if resolved_scope.material_ids:
         return RagScopeFilter(
             user_id=user_id,
             course_id=course_id,
             material_ids=resolved_scope.eligible_material_ids,
+            chunk_ids=active_chunk_ids,
         )
-    return RagScopeFilter(user_id=user_id, course_id=course_id)
+    return RagScopeFilter(user_id=user_id, course_id=course_id, chunk_ids=active_chunk_ids)
 
 
 def _batch_context_chunks(chunks: list[ContextChunk], *, max_tokens: int) -> Iterator[MaterialContextBatch]:
@@ -331,6 +432,7 @@ def _format_generation_context(chunks: list[ContextChunk]) -> str:
 def _to_context_chunk(chunk: MaterialChunk, material_name: str, *, score: float | None = None) -> ContextChunk:
     return ContextChunk(
         material_id=chunk.material_id,
+        material_version_id=chunk.parse_version_id,
         chunk_id=chunk.id,
         chunk_index=chunk.chunk_index,
         material_name=material_name,

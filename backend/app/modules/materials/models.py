@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -56,6 +56,9 @@ class CourseMaterial(Base):
     )
     parse_diagnostics_json: Mapped[dict | list | None] = mapped_column(JSON)
     page_count: Mapped[int | None] = mapped_column(Integer)
+    active_parse_version_id: Mapped[str | None] = mapped_column(
+        ForeignKey("material_parse_versions.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -83,8 +86,61 @@ class CourseMaterial(Base):
         Index("ix_course_materials_material_type", "material_type"),
         Index("ix_course_materials_source_type", "source_type"),
         Index("ix_course_materials_course_parse_status", "course_id", "parse_status"),
+        Index("ix_course_materials_active_parse_version_id", "active_parse_version_id"),
         Index("ix_course_materials_created_at", "created_at"),
         Index("ix_course_materials_deleted_at", "deleted_at"),
+    )
+
+    @property
+    def is_learning_ready(self) -> bool:
+        return self.active_parse_version_id is not None and self.deleted_at is None and self.parse_status != "deleted"
+
+
+class MaterialParseVersion(Base):
+    __tablename__ = "material_parse_versions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    material_id: Mapped[str] = mapped_column(
+        ForeignKey("course_materials.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    parse_error: Mapped[str | None] = mapped_column(Text)
+    parse_quality: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+    )
+    parse_diagnostics_json: Mapped[dict | list | None] = mapped_column(JSON)
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('building', 'active', 'failed', 'retired')",
+            name="material_parse_version_status",
+        ),
+        CheckConstraint(
+            "parse_quality in ('unknown', 'complete', 'partial')",
+            name="material_parse_version_parse_quality",
+        ),
+        Index("ix_material_parse_versions_material_id", "material_id"),
+        Index("ix_material_parse_versions_course_id", "course_id"),
+        Index("ix_material_parse_versions_user_id", "user_id"),
+        Index("ix_material_parse_versions_status", "status"),
+        Index("ix_material_parse_versions_created_at", "created_at"),
+        Index(
+            "uq_material_parse_versions_one_building",
+            "material_id",
+            unique=True,
+            sqlite_where=text("status = 'building'"),
+        ),
     )
 
 
@@ -93,6 +149,10 @@ class MaterialChunk(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     material_id: Mapped[str] = mapped_column(ForeignKey("course_materials.id"), nullable=False)
+    parse_version_id: Mapped[str] = mapped_column(
+        ForeignKey("material_parse_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     page: Mapped[str | None] = mapped_column(String(64))
@@ -103,8 +163,9 @@ class MaterialChunk(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("material_id", "chunk_index", name="uq_material_chunks_material_chunk_index"),
+        UniqueConstraint("parse_version_id", "chunk_index", name="uq_material_chunks_version_chunk_index"),
         Index("ix_material_chunks_material_id", "material_id"),
+        Index("ix_material_chunks_parse_version_id", "parse_version_id"),
         Index("ix_material_chunks_course_id", "course_id"),
         Index("ix_material_chunks_page", "page"),
         Index("ix_material_chunks_page_index", "page_index"),

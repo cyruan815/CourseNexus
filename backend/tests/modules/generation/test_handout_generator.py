@@ -256,7 +256,7 @@ def test_handout_generator_prompt_requires_a_visual_diagram() -> None:
     prompt = provider.prompts[0]
     assert "safe inline SVG visual diagram" in prompt
     assert "Never output fenced ```mermaid code blocks" in prompt
-    assert "safe SVG" in prompt
+    assert "SVG may only use safe presentation elements" in prompt
     assert "foreignObject" in prompt
     assert "javascript:" in prompt
     assert "Mermaid mindmap" not in prompt

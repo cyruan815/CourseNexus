@@ -25,7 +25,10 @@ from app.modules.course_qa.repository import (
 from app.modules.course_qa.schemas import CourseAnswerRead, CourseQuestionCreate, MessageRead, SourceCitationRead
 from app.modules.courses.service import assert_course_owner
 from app.modules.material_context.schemas import ContextChunk
-from app.modules.material_context.service import retrieve_relevant_context
+from app.modules.material_context.service import (
+    assert_material_snapshot_publishable,
+    retrieve_relevant_context,
+)
 
 
 logger = get_logger("course_qa.answer")
@@ -171,6 +174,12 @@ def ask_course_question(
         )
         raise
 
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions(context.chunks),
+    )
     selected_chunks = _select_citation_chunks(context.chunks, model_answer.citation_chunk_ids)
     answer_text = _normalize_inline_citations(model_answer.answer_text, selected_chunks)
     assistant_message = save_message(
@@ -249,6 +258,17 @@ def _used_material_ids(chunks: list[ContextChunk]) -> list[str]:
     return list(dict.fromkeys(chunk.material_id for chunk in chunks))
 
 
+def _material_versions(chunks: list[ContextChunk]) -> list[dict[str, str]]:
+    versions: dict[str, str] = {}
+    for chunk in chunks:
+        if chunk.material_version_id is not None:
+            versions[chunk.material_id] = chunk.material_version_id
+    return [
+        {"material_id": material_id, "version_id": version_id}
+        for material_id, version_id in versions.items()
+    ]
+
+
 def _model_question(question: str, context: str | None) -> str:
     if not context:
         return question
@@ -320,6 +340,7 @@ def _build_citations(message_id: str, chunks: list[ContextChunk]) -> list[Source
             id=_new_citation_id(),
             message_id=message_id,
             material_id=chunk.material_id,
+            material_version_id=chunk.material_version_id,
             chunk_id=chunk.chunk_id,
             material_name=chunk.material_name,
             page=chunk.page,

@@ -35,7 +35,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `study-plans`：当前负责单课程计划配置回填、学前诊断题生成、diagnostic_profile 归纳、计划预览、保存和任务结构写入；诊断题使用独立 `study_plan_diagnostic` 模型 purpose，但不负责执行页、日历聚合、打卡或讲义 / 任务测试题生成。
 - `todos-calendar`：已实现 S03 五个只读聚合接口，读取学习计划任务树生成首页今日待办、全局月历、全局当日待办、课程月历和课程当日任务；不拥有写模型。
 - `study-mode S01`：已固定计划学习模式第一阶段契约和无 migration 结论；S02-S07 只允许复用 13 张核心表，不得创建待办、日历、讲义、任务测试题或导出历史独立表。
-- `frontend`：当前只承担最小集成验证工作台，不承载完整资料上传 UI、资料范围选择 UI 或课程问答 UI。
+- `frontend`：承载当前 V1 浏览器闭环，并通过共享 API client、统一文件预览器和业务 feature adapter 复用鉴权、文件下载与错误处理边界。
 
 ## 2. 模块拓扑图
 
@@ -116,7 +116,7 @@ flowchart TB
 | --- | --- | --- | --- | --- |
 | `users` | 注册、登录、退出、修改密码、当前用户识别。 | `User`、登录态。 | 当前用户上下文、登录状态。 | 不查询课程、资料、计划等业务对象。 |
 | `courses` | 课程创建、编辑、删除、列表、详情、课程归属校验，以及首页课程卡片的只读摘要。 | `Course`。 | 可访问课程、课程基础信息、课程归属判断、资料数量与今日任务三态摘要。 | 不解析资料，不生成内容，不处理任务状态或写入计划 / 任务数据。 |
-| `materials` | 文件 / 链接资料、一级目录归类、上传状态、Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialChunk`；触发可重建向量索引。 | 已解析且已索引资料、逐文件资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划；文件夹不作为 Agent 资料范围。 |
+| `materials` | 文件资料（链接资料入口已停止支持，历史 URL 记录仅保留查看与删除）、一级目录归类、上传状态、版本化 Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialParseVersion`、`MaterialChunk`；触发可重建向量索引。 | 学习可用资料、生效版本、逐文件资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划；文件夹不作为 Agent 资料范围。 |
 | `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为五类独立 POC 提供完整上下文；为其他消费者提供全量批次。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`resolve_generation_context()`、`iter_material_context_batches()`、`ContextChunk`。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |
 | `generation-orchestrator` | 接收生成请求、校验权限、校验资料范围、处理幂等、维护生成状态、调用具体生成模块。 | 生成请求状态，可复用 `AIGeneratedContent.generation_status`。 | 生成任务状态、错误码、生成模块调用结果。 | 不写具体业务算法，不直接渲染结果。 |
 | `course-qa` | 基于课程资料问答，保存对话消息和引用来源。 | `Conversation`、`Message`、`SourceCitation`。 | `answer_text`、`answer_type`、引用列表。 | 不生成 Flashcard、Mindmap 或学习计划。 |

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
 
+from app.core.config import get_settings
 from app.core.request_id import get_request_id
 from app.modules.checkins.router import router as checkins_router
 from app.modules.course_qa.router import router as course_qa_router
@@ -32,4 +33,12 @@ api_router.include_router(todos_calendar_router)
 
 @api_router.get("/health", tags=["system"])
 def health(request: Request) -> dict[str, object]:
-    return success_response({"status": "ok"}, request_id=get_request_id(request))
+    settings = get_settings()
+    return success_response(
+        {
+            "status": "ok",
+            "environment": settings.app_env,
+            "mock_model_provider_enabled": settings.enable_mock_model_provider,
+        },
+        request_id=get_request_id(request),
+    )

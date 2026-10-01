@@ -104,6 +104,7 @@ def test_course_qa_api_answers_with_citations(client: TestClient) -> None:
     assert data["answer_text"]
     assert len(data["source_citations"]) == 1
     assert data["source_citations"][0]["material_name"] == "notes.md"
+    assert data["source_citations"][0]["material_version_id"]
     assert data["answer_text"].endswith("[[cite:1]]")
 
     history_response = client.get(

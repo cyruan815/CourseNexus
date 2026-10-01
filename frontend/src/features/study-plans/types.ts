@@ -232,6 +232,7 @@ export interface StudyPlanDetail {
 export interface StudyCalendarTaskSummary {
   task_id: string;
   plan_id: string;
+  plan_title: string;
   course_id: string;
   course_name: string;
   title: string;
@@ -271,6 +272,7 @@ export interface StudyCalendarSubtaskTodo {
 export interface StudyCalendarTaskTodo {
   task_id: string;
   plan_id: string;
+  plan_title: string;
   course_id: string;
   course_name: string;
   title: string;
@@ -369,6 +371,7 @@ export interface StudySubtaskQuestionRequest {
 export interface StudySubtaskQaSourceCitation {
   id?: string;
   material_id: string | null;
+  material_version_id?: string | null;
   chunk_id: string | null;
   material_name: string;
   page: string | number | null;
@@ -439,7 +442,7 @@ export interface GeneratedContentRead {
   generation_status: string;
   material_scope_json: unknown;
   error_code: string | null;
-  source_citations: unknown[];
+  source_citations: StudySubtaskQaSourceCitation[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

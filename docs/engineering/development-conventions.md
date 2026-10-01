@@ -25,10 +25,10 @@
 - 前端页面应区分数据请求、状态展示和交互组件，避免页面文件无限膨胀。
 - 复杂状态变化必须有清晰函数名和测试或验收说明。
 
-## 前端基础设施阶段约定
+## 前端运行约定
 
-- 基础设施阶段的前端只作为最小集成验证工作台，不追求完整产品体验、视觉完善度或复杂前端状态管理。
-- 前端工作台用于验证后端接口是否能被浏览器侧接入，例如登录、课程选择、资料上传、资料范围选择、问答和引用展示。
+- 前端承载 V1 浏览器闭环，业务页面通过共享 API client、feature adapter 和项目级组件复用鉴权、错误处理与文件预览能力。
+- 登录、课程、资料、问答、生成、计划、执行、日历和导出必须遵守同一后端契约；不得在页面中复制鉴权下载或绕过资料范围规则。
 - 所有核心能力必须能通过后端接口、后端测试或命令独立运行，不能依赖前端页面作为唯一验证方式。
 - 每个后端能力落地后，必须同步更新 [../api-data/frontend-integration.md](../api-data/frontend-integration.md)，写清楚请求体、响应 `data`、主要错误码和前端兜底口径。
 - 前端测试优先覆盖请求参数、响应拆包、错误码处理、路由跳转和基础状态兜底；基础设施阶段不把复杂视觉细节作为完成标准。
@@ -55,7 +55,7 @@
 - 已知业务错误记录稳定 `error.code`；底层异常记录原始类型和消息；未捕获异常在文件中保留 traceback。
 - 同一个异常只在最终处理边界记录一次；请求汇总不附加 traceback，避免重复打印同一堆栈。
 - 交互式终端 Handler 按日志级别为级别和事件名着色，只显示单行最底层根因摘要；重定向输出或设置 `NO_COLOR` 时关闭颜色。Uvicorn 不得为已由应用最终处理边界记录的请求异常重复输出 traceback；`LOG_DIR` 中的轮转文件保存完整异常，默认单文件 `20 MiB`，保留 `20` 个备份。
-- 不记录密码、Authorization、Token、Cookie、API Key、完整资料内容、完整用户问题、prompt、模型响应或向量。
+- 不记录密码、Authorization、Token、Cookie、API Key、完整资料内容、完整用户问题、prompt、模型响应或向量。统一 Formatter 会按当前 Settings 对签名密钥、用途级 API Key、兼容 Key、Bearer Token 和带标签凭据进行脱敏，覆盖格式化参数、异常摘要与文件 traceback；业务代码不得自行绕开统一 Handler。
 - 新增日志时必须测试或手动确认关键字段完整，并确认敏感信息未进入终端和文件。
 
 ## 配置和环境变量约定
@@ -63,10 +63,17 @@
 - 数据库地址、密钥、初始账号配置、文件存储路径通过配置或环境变量管理。
 - 本地默认配置可以有示例值，但真实密钥不得提交。
 - SQLite 是当前 POC 默认数据库，模型设计保持可迁移。
+- SQLite、上传目录、Chroma 和日志的相对路径统一相对仓库配置根目录解析，显式绝对路径保持原样；旧启动目录数据迁移及连接参数见 [local-runtime-storage.md](local-runtime-storage.md)。
 - 本仓库长期按 monorepo 管理，环境变量示例统一放在根目录 `.env.example`，真实 `.env` 也只放在根目录且不得提交。
 - 后端读取根目录 `.env`；前端 Vite 读取根目录 `.env` 中的 `VITE_` 公共变量。
+- `APP_ENV` 只允许 `development`、`test`、`production`。`production` 必须配置至少 32 位的非默认 `SECRET_KEY` 和当前 V1 全部已开放模型用途的 API Key，否则应用拒绝启动。
+- `ENABLE_MOCK_MODEL_PROVIDER` 默认 `false`；只有 `development` / `test` 可以显式设为 `true`，`production` 禁止 Mock。缺少模型配置且未开启 Mock 时返回 `503 MODEL_PROVIDER_NOT_CONFIGURED`，不能隐式产生模拟内容。
 - API Key、`SECRET_KEY`、模型服务地址等敏感配置只能作为后端变量使用，禁止放入 `VITE_` 变量。
+- `VITE_API_BASE_URL` 只能声明 CourseNexus 后端的 HTTP(S) Origin，不能包含凭据、路径、查询参数或 fragment；业务 API 和鉴权文件下载统一使用 `/api/v1/...` 根相对路径，由共享客户端拼接受信 Origin。
+- 自动附加登录凭据的前端客户端不得接受外部 URL；外部资源访问必须使用不附加 Authorization、Cookie 或其他 CourseNexus 会话信息的独立请求入口。
 - 每个模型用途必须独立声明 `*_API_KEY`、`*_BASE_URL` 和 `*_MODEL`，并通过 `Settings.model_endpoint(purpose)` 读取；OpenAI SDK 只是统一接口规范，不得隐式复用其他用途的密钥、地址或模型。
+- 业务 Router 统一通过 `model_provider.factory` 获取 Provider，不直接实例化 `OpenAIModelProvider` 或自行判断 Mock。学习计划 `map` 可按已记录规则显式复用 generator；其他用途不允许隐式复用。
+- 学习计划 `generator` 和 `map` 可分别声明 `STUDY_PLAN_GENERATOR_API_STYLE` / `STUDY_PLAN_MAP_API_STYLE`，取值为 `auto`、`responses` 或 `chat`；该协议选择只由学习计划 provider 使用，其他模型用途不接入。
 - 模型用途前缀固定为 `EMBEDDING`、`COURSE_QA`、`QUIZ`、`FLASHCARD`、`MINDMAP`、`OUTLINE`、`KNOWLEDGE_LIST`、`STUDY_PLAN_PARSER`、`STUDY_PLAN_GENERATOR`、`STUDY_PLAN_DIAGNOSTIC`、`HANDOUT` 和 `TASK_TEST`；新增用途必须先同步 `.env.example`、配置模型、测试和架构文档。
 
 ## 包管理约定

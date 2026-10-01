@@ -14,7 +14,7 @@ The five independent generated-content modules use: scope validation -> all pars
 注册 / 登录 -> 创建课程 -> 上传资料 -> 解析 -> 写入 MaterialChunk -> Chroma 索引 -> retrieve_relevant_context() -> ask_question() -> 保存回答和引用
 ```
 
-前端在本阶段只承担最小集成验证：API client、token 管理、路由壳、课程列表和课程详情空工作台。资料上传 UI、资料范围选择 UI 和问答 UI 不属于当前基础设施主线验收条件。
+前端已承载 V1 浏览器闭环，并通过共享 API client 调用受信 `/api/v1/...` 路径；资料上传、显式范围选择、课程问答、引用定位、内容生成、学习计划、执行与导出均已接入。后端接口、测试与维护命令仍是独立验收边界。
 
 当前后端已使用 FastAPI + LlamaIndex + Docling + Chroma + OpenAI-compatible APIs 实现本地 RAG，各模型用途独立配置服务 endpoint。详细设计见 [material-context-rag.md](material-context-rag.md)。
 

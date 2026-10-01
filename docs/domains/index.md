@@ -17,6 +17,7 @@
 | [course-workspace/index.md](course-workspace/index.md) | 课程详情工作台、资料范围、问答、生成内容和学习计划入口实现。 | 2026-07-12 |
 | [course-qa/index.md](course-qa/index.md) | 课程资料问答、行内引用校验、引用快照和历史消息契约。 | 2026-07-15 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
+| [model-runtime/index.md](model-runtime/index.md) | 用途级 Provider、显式 Mock、生产配置校验、运行状态提示和日志脱敏。 | 2026-10-01 |
 | [profile/index.md](profile/index.md) | 个人中心第一版：账号信息、退出登录、今日打卡和近 14 天打卡颜色。 | 2026-07-14 |
 | [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
 | [study-mode/plan-lifecycle.md](study-mode/plan-lifecycle.md) | S02 学习计划生命周期：配置回填、全材料预览、保存幂等、替换、重生成和软删除。 | 2026-07-11 |
@@ -73,6 +74,7 @@
 | `courses/` | 课程管理和首页课程工作台。 |
 | `course-workspace/` | 课程详情布局和共享资料范围。 |
 | `materials/` | 资料上传、一级文件夹归类、解析、索引、逐文件范围选择和前端资料工作区。 |
+| `model-runtime/` | 跨业务模型 Provider、运行模式、配置安全和凭据脱敏。 |
 | `course-qa/` | 课程资料问答、会话、消息和引用。 |
 | `generated-content/` | 公共生成编排及 Quiz、Flashcard、Mindmap、Outline、Knowledge List。 |
 | `profile/` | 个人中心、账号资料入口和学习打卡颜色展示。 |

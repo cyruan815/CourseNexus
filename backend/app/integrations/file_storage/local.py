@@ -190,6 +190,20 @@ class LocalFileStorage:
             trash_root=trash_root,
         )
 
+    def discard_material_files(
+        self,
+        *,
+        user_id: str,
+        course_id: str,
+        material_id: str,
+    ) -> None:
+        staged = self.stage_material_deletion(
+            user_id=user_id,
+            course_id=course_id,
+            material_id=material_id,
+        )
+        staged.finalize()
+
     def _material_directory(self, *, user_id: str, course_id: str, material_id: str) -> Path:
         parts = (user_id, course_id, material_id)
         if any(not part or Path(part).name != part for part in parts):

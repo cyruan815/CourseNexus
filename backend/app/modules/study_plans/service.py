@@ -21,8 +21,10 @@ from app.modules.generation.generators.task_test.schemas import TaskTestGenerati
 from app.modules.material_context.coverage import map_material_coverage_batches, reduce_material_coverage
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
 from app.modules.material_context.service import (
+    assert_material_snapshot_publishable,
     iter_material_context_batches,
     resolve_material_scope_ids,
+    resolve_material_scope_versions,
     summarize_material_quality_for_scope,
 )
 from app.modules.study_plans import repository as study_plan_repository
@@ -66,6 +68,7 @@ from app.modules.study_plans.task_tree_rules import validate_daily_assessment_co
 logger = get_logger("study_plan.build")
 
 _CONFIG_PARSE_REFERENCE_TIMEZONE = "Asia/Shanghai"
+_STUDY_PLAN_TITLE_MAX_LENGTH = 255
 _CONFIG_PARSE_SYSTEM_FIELDS = {
     "recommended_daily_minutes",
     "daily_minutes_source",
@@ -198,6 +201,12 @@ def build_study_plan_diagnostic_questions(
         batches=batches,
         model_provider=model_provider,
     )
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_batches(batches),
+    )
     questions: list[StudyPlanDiagnosticQuestion] = []
     for index, topic in enumerate(topics, start=1):
         questions.append(
@@ -299,6 +308,8 @@ def preview_study_plan(
     payload: StudyPlanBuildRequest,
     model_provider: ModelProvider,
     max_tokens: int,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanPreview:
     started_at = perf_counter()
     course = assert_course_owner(db, user_id, course_id)
@@ -372,9 +383,10 @@ def preview_study_plan(
         )
         daily_minutes_source = resolved_payload.daily_minutes_source or "system_estimated"
         available_total_minutes = daily_available_minutes * duration_days
-        material_snapshot = payload.material_snapshot or _build_material_snapshot(
+        material_snapshot = _build_material_snapshot(
             material_scope=payload.material_scope,
             expected_material_ids=expected_material_ids,
+            material_versions=_material_versions_from_batches(batches),
         )
         capacity = _build_capacity_summary(
             estimated_total_minutes=estimated_total_minutes,
@@ -391,7 +403,11 @@ def preview_study_plan(
         )
         return StudyPlanPreview(
             course_id=course_id,
-            title=coverage_result.value.title,
+            title=_default_study_plan_title(
+                goal_text=payload.goal_text,
+                start_date=payload.start_date,
+                fallback_title=coverage_result.value.title,
+            ),
             goal_text=payload.goal_text,
             start_date=payload.start_date,
             end_date=payload.end_date,
@@ -414,27 +430,61 @@ def preview_study_plan(
             tasks=task_previews,
         )
 
-    mapped_result = map_material_coverage_batches(
-        batches=batches,
-        expected_material_ids=expected_material_ids,
-        map_batch=lambda batch: map_material_batch(batch=batch, payload=payload, model_provider=model_provider),
-    )
+    map_started_at = perf_counter()
+    try:
+        mapped_result = map_material_coverage_batches(
+            batches=batches,
+            expected_material_ids=expected_material_ids,
+            map_batch=lambda batch: map_material_batch(
+                batch=batch,
+                payload=payload,
+                model_provider=map_model_provider or model_provider,
+            ),
+            map_concurrency=map_concurrency,
+        )
+    finally:
+        logger.info(
+            "计划预览阶段 | phase=map course=%s batch_count=%d concurrency=%d cost_ms=%.2f",
+            course_id,
+            len(batches),
+            map_concurrency,
+            (perf_counter() - map_started_at) * 1000,
+        )
 
     retry_feedback: str | None = None
     last_error: CourseNexusError | None = None
     preview: StudyPlanPreview | None = None
     for attempt in range(2):
-        coverage_result = reduce_material_coverage(
-            mapped_result=mapped_result,
-            reduce_results=lambda mapped_batches: reduce_results(
-                mapped_batches,
-                retry_feedback=retry_feedback,
-            ),
-        )
+        reduce_started_at = perf_counter()
+        try:
+            coverage_result = reduce_material_coverage(
+                mapped_result=mapped_result,
+                reduce_results=lambda mapped_batches: reduce_results(
+                    mapped_batches,
+                    retry_feedback=retry_feedback,
+                ),
+            )
+        finally:
+            logger.info(
+                "计划预览阶段 | phase=reduce course=%s batch_count=%d attempt=%d cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                (perf_counter() - reduce_started_at) * 1000,
+            )
         preview = build_preview(coverage_result)
+        validation_started_at = perf_counter()
         try:
             validate_preview(preview=preview, scoped_material_ids=expected_material_ids)
         except CourseNexusError as exc:
+            logger.info(
+                "计划预览阶段 | phase=validation course=%s batch_count=%d attempt=%d status=failed error_code=%s cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                exc.code,
+                (perf_counter() - validation_started_at) * 1000,
+            )
             message = invalid_generation_message(exc)
             if attempt == 0 and message == "学习或复习任务不能包含测试题量要求":
                 retry_feedback = message
@@ -442,6 +492,14 @@ def preview_study_plan(
                 resolved_payload = None
                 continue
             raise
+        else:
+            logger.info(
+                "计划预览阶段 | phase=validation course=%s batch_count=%d attempt=%d status=success cost_ms=%.2f",
+                course_id,
+                len(batches),
+                attempt + 1,
+                (perf_counter() - validation_started_at) * 1000,
+            )
         break
     else:
         if last_error is not None:
@@ -451,6 +509,12 @@ def preview_study_plan(
     if preview is None:
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_batches(batches),
+    )
     logger.info(
         "计划预览成功 | course=%s tasks=%d subtasks=%d cost_ms=%.2f",
         course_id,
@@ -469,6 +533,8 @@ def save_study_plan(
     model_provider: ModelProvider,
     max_tokens: int,
     idempotency_key: str | None = None,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanBundle:
     started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
@@ -478,6 +544,15 @@ def save_study_plan(
             code="PREVIEW_TASKS_REQUIRED",
             message="新向导保存必须提交预览中的 tasks",
             status_code=422,
+        )
+    submitted_material_versions = _material_versions_from_snapshot(save_payload.material_snapshot)
+    if submitted_material_versions:
+        assert_material_snapshot_publishable(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_versions=submitted_material_versions,
+            expected_material_ids=_task_previews_material_ids(save_payload.tasks or []),
         )
     key_hash = _hash_value(idempotency_key) if idempotency_key else None
     request_hash = _hash_request(save_payload)
@@ -504,6 +579,8 @@ def save_study_plan(
             payload=save_payload,
             model_provider=model_provider,
             max_tokens=max_tokens,
+            map_concurrency=map_concurrency,
+            map_model_provider=map_model_provider,
         )
         title = save_payload.title or preview.title
         tasks_preview = preview.tasks
@@ -541,6 +618,30 @@ def save_study_plan(
         save_payload = _resolve_save_payload_daily_minutes(save_payload, tasks_preview=tasks_preview)
 
     tasks_preview = _with_subtask_generation_parameters(tasks_preview)
+    if not save_payload.material_snapshot:
+        material_versions = resolve_material_scope_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_scope=save_payload.material_scope,
+        )
+        save_payload = save_payload.model_copy(
+            update={
+                "material_snapshot": _build_material_snapshot(
+                    material_scope=save_payload.material_scope,
+                    expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
+                    material_versions=material_versions,
+                )
+            }
+        )
+
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_snapshot(save_payload.material_snapshot),
+        expected_material_ids=_task_previews_material_ids(tasks_preview),
+    )
 
     plan_id = _new_plan_id()
     now = datetime.now(timezone.utc)
@@ -573,9 +674,9 @@ def save_study_plan(
         study_plan_repository.add_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
         _recalculate_checkins_for_dates(db, user_id=user_id, dates=_task_dates(tasks))
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        if key_hash:
+        if key_hash and _is_idempotency_key_integrity_error(exc):
             return _resolve_idempotency_write_conflict(
                 db,
                 user_id=user_id,
@@ -619,6 +720,8 @@ def preview_study_plan_regeneration(
     payload: StudyPlanRegenerationPreviewRequest,
     model_provider: ModelProvider,
     max_tokens: int,
+    map_concurrency: int = 1,
+    map_model_provider: ModelProvider | None = None,
 ) -> StudyPlanPreview:
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_replace_allowed(db, plan_id=plan_id)
@@ -682,6 +785,8 @@ def preview_study_plan_regeneration(
         payload=build_payload,
         model_provider=model_provider,
         max_tokens=max_tokens,
+        map_concurrency=map_concurrency,
+        map_model_provider=map_model_provider,
     )
     return preview
 
@@ -690,6 +795,28 @@ def replace_study_plan(db: Session, *, user_id: str, plan_id: str, payload: Stud
     plan = _get_active_plan_or_404(db, user_id=user_id, plan_id=plan_id)
     _assert_expected_updated_at(plan.updated_at, payload.expected_updated_at)
     _assert_replace_allowed(db, plan_id=plan_id)
+    if not payload.material_snapshot:
+        payload = payload.model_copy(
+            update={
+                "material_snapshot": _build_material_snapshot(
+                    material_scope=payload.material_scope,
+                    expected_material_ids=set(_task_previews_material_ids(payload.tasks)),
+                    material_versions=resolve_material_scope_versions(
+                        db,
+                        user_id=user_id,
+                        course_id=plan.course_id,
+                        material_scope=payload.material_scope,
+                    ),
+                )
+            }
+        )
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=plan.course_id,
+        material_versions=_material_versions_from_snapshot(payload.material_snapshot),
+        expected_material_ids=_task_previews_material_ids(payload.tasks),
+    )
     _validate_confirmed_task_tree(
         db,
         user_id=user_id,
@@ -790,6 +917,22 @@ def _resolve_idempotency_write_conflict(
     raise CourseNexusError(code="IDEMPOTENCY_CONFLICT", message="幂等键已用于不同请求", status_code=409)
 
 
+def _is_idempotency_key_integrity_error(exc: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "uq_study_plans_user_course_idempotency_key_hash":
+        return True
+
+    message = str(exc.orig).lower()
+    return "unique constraint failed" in message and all(
+        column in message
+        for column in (
+            "study_plans.user_id",
+            "study_plans.course_id",
+            "study_plans.idempotency_key_hash",
+        )
+    )
+
+
 def _task_dates(tasks: list[StudyTask]) -> set[date]:
     return {task.task_date for task in tasks}
 
@@ -845,6 +988,17 @@ def _hash_request(payload: StudyPlanSaveRequest) -> str:
 
 def _duration_days_between(start_date: date, end_date: date) -> int:
     return (end_date - start_date).days + 1
+
+
+def _default_study_plan_title(*, goal_text: str, start_date: date, fallback_title: str) -> str:
+    normalized_goal = re.sub(r"\s+", " ", goal_text).strip().rstrip("。.!！?？")
+    normalized_fallback = re.sub(r"\s+", " ", fallback_title).strip().rstrip("。.!！?？")
+    topic = normalized_goal or normalized_fallback or "学习计划"
+    date_suffix = f" · {start_date.isoformat()}"
+    max_topic_length = _STUDY_PLAN_TITLE_MAX_LENGTH - len(date_suffix)
+    if len(topic) > max_topic_length:
+        topic = f"{topic[:max_topic_length - 1].rstrip()}…"
+    return f"{topic}{date_suffix}"
 
 
 def _normalize_preference_value(value: str | None) -> str | None:
@@ -1412,19 +1566,56 @@ def _task_previews_material_ids(task_previews: list[StudyTaskPreview]) -> list[s
     return material_ids
 
 
-def _build_material_snapshot(*, material_scope: object, expected_material_ids: set[str]) -> dict[str, object]:
+def _build_material_snapshot(
+    *,
+    material_scope: object,
+    expected_material_ids: set[str],
+    material_versions: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
     scope = material_scope if hasattr(material_scope, "include_all_parsed_materials") else None
     include_all = bool(getattr(scope, "include_all_parsed_materials", False)) if scope is not None else False
     material_ids = sorted(expected_material_ids)
+    versions = sorted(
+        material_versions or [],
+        key=lambda item: (item["material_id"], item["version_id"]),
+    )
     snapshot_basis = {
         "mode": "all_parsed" if include_all else "selected",
         "material_ids": material_ids,
+        "material_versions": versions,
     }
     snapshot_hash = hashlib.sha256(json.dumps(snapshot_basis, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     return {
         **snapshot_basis,
         "snapshot_hash": f"sha256:{snapshot_hash}",
     }
+
+
+def _material_versions_from_batches(batches: list[MaterialContextBatch]) -> list[dict[str, str]]:
+    versions: dict[str, str] = {}
+    for batch in batches:
+        for chunk in batch.chunks:
+            if chunk.material_version_id is not None:
+                versions[chunk.material_id] = chunk.material_version_id
+    return [
+        {"material_id": material_id, "version_id": version_id}
+        for material_id, version_id in sorted(versions.items())
+    ]
+
+
+def _material_versions_from_snapshot(snapshot: dict[str, object]) -> list[dict[str, str]]:
+    raw_versions = snapshot.get("material_versions")
+    if not isinstance(raw_versions, list):
+        return []
+    versions: list[dict[str, str]] = []
+    for item in raw_versions:
+        if not isinstance(item, dict):
+            continue
+        material_id = item.get("material_id")
+        version_id = item.get("version_id")
+        if isinstance(material_id, str) and isinstance(version_id, str):
+            versions.append({"material_id": material_id, "version_id": version_id})
+    return versions
 
 
 
@@ -1540,6 +1731,7 @@ def _saved_config(
     material_snapshot = payload.material_snapshot or _build_material_snapshot(
         material_scope=payload.material_scope,
         expected_material_ids=set(_task_previews_material_ids(tasks_preview)),
+        material_versions=[],
     )
     coverage_value = coverage or _build_coverage_summary(tasks_preview)
     capacity_value = _build_capacity_summary(

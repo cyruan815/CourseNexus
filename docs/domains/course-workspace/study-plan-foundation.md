@@ -12,9 +12,20 @@
 - 2026-07-13 C3 已在创建页接入配置自动解析回填：用户输入自然语言目标后，前端调用 `POST /api/v1/courses/{course_id}/study-plan-config-parses`，把后端明确解析出的目标、日期、每日时长和学习方式回填到可编辑表单；`unresolved_fields` 只展示当前页面真实可编辑且仍无有效值的字段，系统追溯字段不展示为“需手动补齐”。
 - 2026-07-15 创建页改为自动生成闭环：用户只在首屏输入自然语言目标；提交后前端自动解析配置并获取学情诊断题，中间卡片展示轻量问卷准备动画；随后同一张卡片切换为混合问卷，把缺失日期 / 天数补问和后端 LLM 学情诊断题放在一起；问卷提交后自动生成诊断 profile、调用 preview、保存 `wizard_v1` exact tasks。计划生成等待态展示日历拆分动画，生成完成后把本次 preview tasks 回填到日历格子供用户预览，并由用户点击“进入计划”跳转计划详情页。等待态只表现前端等待状态，不代表新增后端日志流接口。
 
+## 2026-10-01 P08 / P09 当前实现
+
+- 课程详情学习计划入口把当前已勾选 parsed 资料的 `{id, name}` 作为路由快照传给创建页。创建页始终把“全选当前资料”固化为具体 ID，配置解析、诊断、preview 和保存使用同一范围。
+- 首屏在目标输入下展示资料名称、数量和“调整资料”入口；空范围阻止继续。快照中的资料被删除、失效或不再 parsed 时保留原名称并要求用户重新选择，不自动改成全部资料。
+- 草稿 key 为 `course-nexus:study-plan-create:v2:{user_id}:{course_id}`，内容带 `version=2`、用户、课程和资料名称快照。刷新 / 返回可恢复，其他账号不会读取该草稿。旧 key 可迁移；旧版动态“全部资料”迁移后必须明确确认。
+- 问卷提交后只生成日历 preview。Preview 默认名称为“学习目标 · 开始日期”，用户可在首次保存前编辑；空白和超过 255 字符会被前后端共同拒绝。
+- 保存使用编辑后的 `title + wizard_v1 + exact preview tasks`。同一未变化保存 payload 的网络重试复用幂等键；标题变化会产生新的 payload 和幂等键。保存成功后才清理草稿并允许进入详情。
+- 同课程允许同名计划；历史标题不迁移、不批量改写。计划列表和详情继续读取实际持久化的 `StudyPlan.title`，并展示日期范围辅助区分。
+
+下方带日期的小节保留历史演进记录；与本节冲突时以本节为准。
+
 ## 创建页状态流转
 
-- 用户先填写自然语言 `goal_text`，点击“提交”。当前创建页不再展示资料范围选择器、开始日期、结束日期、每日时长和学习方式的大表单；资料范围默认使用本课程全部已解析资料，仍会在进入流程前校验至少有一份 parsed 资料。
+- 用户从课程详情页携带当前勾选的资料 ID / 名称快照进入创建页，再填写自然语言 `goal_text` 并点击“提交”。创建页不展示日期、每日时长和学习方式的大表单，但会展示资料名称、数量和调整入口；空范围或失效范围阻止继续。
 - 提交目标后，前端用当前 `goal_text` 和当前 `material_scope` 请求配置解析，再用解析后的配置请求学情诊断题。等待期间中间卡片展示轻量问卷准备动画，只保留标题、说明和沿卡片边框持续流动的等待动效，不显示伪日志或步骤文字，不提供伪造后端能力。
 - 问卷阶段把前端补问和后端诊断题合并展示。当前后端 `StudyPlanBuildRequest` 仍要求 `start_date`，并要求 `end_date` 或 `duration_days` 至少一个；诊断 profile 还不返回日期或天数。因此自然语言解析后若仍缺少完整日期范围，前端在问卷顶部同时展示开始日期和学习天数补问：开始日期提供 A 今天 / B 明天 / C 下周一 / D 自定义开始日期，学习天数提供 A 2 天 / B 3 天 / C 7 天 / D 自定义学习天数。前端用日历日期运算派生 `end_date`，并把最终 `start_date + end_date` 放入 preview / save 请求。每日学习时长仍不作为必填项。
 - `daily_available_minutes` 不作为创建页必填项；只有自然语言解析出有效每日时长时才随 preview 请求提交，否则省略，让后端按资料量估算。`preference` 未解析时使用默认 `balanced`。
@@ -31,7 +42,7 @@
 - 计划重新生成已接入详情页内生命周期面板：用户调整目标、日期、每日学习时长和学习方式后调用 `POST /api/v1/study-plans/{plan_id}/regeneration-previews`；该 preview 不落库。
 - 用户确认替换时调用 `PUT /api/v1/study-plans/{plan_id}`，提交新 preview 的 `title`、exact `tasks`、`material_scope`、`client_flow = "wizard_v1"` 和当前详情的 `expected_updated_at`。后端若返回 `STATE_CONFLICT`，前端只提示刷新或新建计划，不强行覆盖。
 - 删除计划已接入二次确认；确认后调用 `DELETE /api/v1/study-plans/{plan_id}`，成功回到课程详情页。删除是软删除，不删除课程资料或已有生成内容。
-- 导出计划仍保持 disabled / 后续接入；学习计划自身没有前端伪造导出。C11 只在执行页为已有成功 `handout` 提供 PDF 导出、为已有成功 `task_test` 提供 Markdown 导出。
+- 学习计划自身不提供伪造导出。执行页为已有成功 `handout` 提供 PDF 导出、为已有成功 `task_test` 提供 Markdown 导出。
 - 2026-07-15 执行页三栏布局支持用户拖拽两条竖向分隔条调整任务列表、主内容和 AI 助教宽度。前端只在浏览器 `localStorage` 保存 `course-nexus:study-plan-execution-columns` 本地偏好，不写后端；列宽有最小值保护，页面挂载和容器尺寸变化时会把超出当前网格的历史像素宽度按可收缩空间同比压回可用宽度。执行页在视口不超过 `1100px` 时提前切换单列并隐藏拖拽条，避免三栏最小总宽度在临界窄屏被裁切；其他学习计划页面仍沿用既有 `900px` 响应式规则。
 
 ## 测试入口
@@ -67,6 +78,7 @@
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendar(courseId, month)` 调用 `GET /api/v1/courses/{course_id}/study-calendar?month=YYYY-MM`。
 - `frontend/src/features/study-plans/api.ts::fetchCourseStudyCalendarDay(courseId, date)` 调用 `GET /api/v1/courses/{course_id}/study-calendar/days/{date}`。
 - 月视图只展示后端日期摘要；点击日期后才读取当天任务树。
+- 日期摘要和任务树都携带已持久化的 `plan_title`；月历行以“计划名称 · 任务名称”展示，单日任务卡单独标明所属计划，用于区分同课程下的多个计划。
 - 任务卡在有可执行二级任务时优先跳转 `/study-subtasks/{subtask_id}`，没有可执行子任务时退回计划详情；日历页本身仍不写完成状态。
 
 测试入口：
@@ -87,14 +99,14 @@
 - 创建页会按 courseId 将 `goal_text`、已识别日期、每日时长、资料范围和已生成的诊断 profile 写入浏览器 `localStorage` 草稿；刷新页面后恢复这些输入，保存计划成功后清理草稿。用户修改 `goal_text` 时，前端会清空旧目标解析出的日期、天数、每日时长和学习方式，避免新目标缺少日期时被旧草稿误判为已补齐。preview 结果本身不持久化，刷新期间仍在运行的后端 preview 请求不会自动回填到新页面。
 - `NO_PARSED_MATERIAL` 在向导内提示先上传并等待资料解析完成；`DIAGNOSTIC_STALE` 提示重新获取问题并作答；其他错误透传 API message 或显示通用失败提示。
 
-已知性能观察：真实 preview 依赖 `study_plan_generator` 模型执行 map/reduce 两段结构化生成；本地日志中 `deepseek-v4-flash` 单次 preview 曾耗时约 184-196 秒，其中两段 `generate_structured` 分别约 86-100 秒。诊断 questions/profile 接口本身通常为毫秒级，不是 preview 慢的主要来源。
+历史性能观察：真实 preview 依赖 `study_plan_generator` 模型执行 map/reduce 两段结构化生成；2026-07 的旧模型配置曾观察到单次 preview 约 184-196 秒。该数字不是当前模型 SLA，发布验收以当次 Provider、步骤耗时和结果状态为准。诊断 profile 的本地归纳通常为毫秒级，不是 preview 慢的主要来源。
 
 验证入口：
 
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖诊断题加载、答题、profile 生成以及 preview payload 携带 `diagnostic_profile`。
 ## 2026-07-14 C4 创建向导资料范围选择落地
 
-历史阶段：创建页曾将 C2/C3 阶段“固定全部已解析资料”的临时约束替换为真实资料范围选择器，入口为 `frontend/src/features/study-plans/components/StudyPlanMaterialScopeSelector.tsx`。2026-07-15 自动闭环版本暂不在首屏展示资料范围选择器，当前默认使用全部已解析资料。
+历史阶段：创建页曾将 C2/C3 阶段“固定全部已解析资料”的临时约束替换为真实资料范围选择器，入口为 `frontend/src/features/study-plans/components/StudyPlanMaterialScopeSelector.tsx`。2026-07-15 自动闭环版本一度隐藏选择器并使用动态全部资料；该行为已由上方 P08 显式快照流程取代。
 
 - 创建页通过 `frontend/src/features/materials/api.ts::listMaterials(courseId)` 读取当前课程资料，只允许 `parse_status = "parsed"` 的资料进入 Agent 生成范围；解析中、待解析或解析失败的资料只展示状态，不可勾选。
 - 支持两种 `MaterialScope`：全部已解析资料 `{ include_all_parsed_materials: true, material_ids: [] }`，以及指定资料 `{ include_all_parsed_materials: false, material_ids: [...] }`。前端不提交文件夹 ID，文件夹仍只用于资料管理归类。

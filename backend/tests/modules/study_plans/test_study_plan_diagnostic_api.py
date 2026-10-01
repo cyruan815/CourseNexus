@@ -172,6 +172,7 @@ def api_context(tmp_path) -> Generator[tuple[TestClient, DiagnosticApiProvider],
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[study_plan_router.get_plan_parser_provider] = lambda: provider
     app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = lambda: provider
     app.dependency_overrides[study_plan_router.get_plan_diagnostic_provider] = lambda: provider
     app.dependency_overrides[get_material_storage] = lambda: LocalFileStorage(root_path=tmp_path, max_file_size_bytes=4096)
     app.dependency_overrides[get_material_parser] = lambda: PlainTextParser()

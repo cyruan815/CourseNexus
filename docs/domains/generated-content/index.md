@@ -38,10 +38,10 @@
 - 课程详情页的每条生成内容右侧提供三点菜单，前端展示“重命名”“删除”。重命名成功后就地替换该列表项，删除经二次确认后移除该项；请求失败时保留弹窗和原列表数据并显示错误。列表正文区域仍作为详情链接，菜单按钮不触发详情跳转。
 - 课程详情页右侧将“学习工具”和生成内容列表放在同一个工作室卡片内，中间使用横向分隔线保持层级；生成内容列表不重复展示分区标题，占用剩余高度并独立滚动，响应式断点下整张卡片保持同一栏。
 - 课程详情的生成内容列表不展示学习计划任务讲义：后端列表查询和前端渲染都排除 `content_type=handout` 且 `study_subtask_id` 非空的记录。该过滤只改变课程级列表可见性，任务执行页仍通过 execution-context 内容 ID 查看详情、重新生成和导出 PDF。
-- 前端详情页只渲染后端返回内容，不补造引用或统计，也不展示生成信息和引用侧栏；五类 POC 生成内容不提供逐条引用，handout / task_test 的真实引用保留在后端与 API 中供内部追溯和导出。
+- 前端详情页只渲染后端返回内容，不补造引用或统计。Quiz、Flashcard、Mindmap、Outline 和 Knowledge List 在结果上方展示 `material_scope_json.source_materials` 的真实资料名称与数量，但不展示逐条引用；Task Test 在用户提交单题后按该题的 `source_citation_ids` 展示可点击来源；Handout 只展示 Markdown 顶部来源说明，不展示逐段引用。
 - 2026-07-14 前端详情页增加 `task_test` 只读 renderer，用于计划学习执行页生成的任务测试题。它展示题目、选项、正确答案和解析，不提供作答、判分、保存记录或 attempt 历史；任务测试题仍不属于五类公共课程生成器。
 - 生成失败记录展示 `error_code` 和失败态，不伪装成成功内容。
-- 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json` 是生成时选择范围快照，不是引用契约。
+- 来源资料被用户永久删除后，已保存的生成内容继续保留；`material_scope_json.source_materials` 是实际进入生成上下文的资料名称快照，`material_scope_json.material_versions` 保存实际输入的解析版本。两者用于追溯与结果页范围说明，但不是条目级引用契约，后续重解析不会改写历史快照。
 - 为了在资料解析 / 索引未配置时手动查看前端详情页，后端提供仅限本地开发使用的 seed 命令。该命令创建或更新固定 demo 用户、课程、已解析占位资料、MaterialChunk 和五类示例生成内容，不新增正式 API，也不代表生产数据生成路径。
 
 详细架构、算法、资源预算和失败策略见 [architecture.md](architecture.md)。
@@ -58,6 +58,10 @@
 Quiz 提供单题即时判题和本地正确率；Flashcard 提供翻卡、掌握/未掌握与错卡重练；Mindmap 直接使用 `markmap-view` 渲染后端预处理树；Outline 提供章节导航；Knowledge List 提供搜索、重要程度筛选、逐项已学习标记和整体进度。Quiz 作答、Flashcard 练习、Outline 展开和筛选状态仅存在页面内存；Flashcard 添加 / 删除卡片通过完整牌组替换接口写入后端；Knowledge List 的 `learned` 状态通过单项 PATCH 接口写回 `content_json.items`。
 
 `task_test` 使用 `TaskTestResult` 只读展示 `content_json.questions`，与课程自测 Quiz 的本地判题交互分开。它只服务计划学习执行页的任务测试题查看和 Markdown 导出，不保存学生答案。
+
+任务测试题的每道题可以包含 `source_citation_ids`。前端只在该题提交后，从顶层 `source_citations` 中按合法 ID 匹配并展示来源卡片；一个题目可展示多份资料或同一资料的多个位置。匹配不到时不补造来源。执行页和生成内容详情页复用同一个 `TaskTestResult` 与 `CitationLocator`。
+
+五类独立生成内容的范围说明由 `GeneratedSourceScope` 读取 `material_scope_json.source_materials`；旧记录没有该字段时静默不展示，不从标题、模型正文或请求中的 `material_ids` 反推资料名。
 
 ### 五类详情页标题统一
 

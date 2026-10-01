@@ -92,7 +92,7 @@ function getDateKey(year: number, month: number, day: number): string {
 
 function homeCalendarTaskTitle(summary: StudyCalendarDaySummary): string {
   const taskTitles = summary.task_summaries
-    .map((task) => task.title)
+    .map((task) => `${task.plan_title} · ${task.title}`)
     .filter((title) => title.trim().length > 0);
   return taskTitles[0] ?? `${summary.task_count} 个任务`;
 }
@@ -317,7 +317,7 @@ function Header() {
       <Group justify="space-between" wrap="nowrap">
         <Group gap="lg" wrap="nowrap">
           <Title className="home-brand-title" order={1}>
-            <img alt="" src="/brand/coursenexus-logo.png" />
+            <img alt="课枢 CourseNexus" src="/brand/coursenexus-logo.png" />
           </Title>
         </Group>
 
@@ -441,7 +441,7 @@ function TodayTodoPanel() {
                 <Group justify="space-between" wrap="nowrap">
                   <Stack gap={2}>
                     <Text fw={750} size="sm">{task.title}</Text>
-                    <Text c="dimmed" size="xs">{task.course_name}</Text>
+                    <Text c="dimmed" size="xs">{task.plan_title} · {task.course_name}</Text>
                     <Text c="dimmed" size="xs">
                       {task.completed_subtask_count}/{task.total_subtask_count}
                     </Text>

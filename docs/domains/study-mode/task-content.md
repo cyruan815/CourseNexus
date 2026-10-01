@@ -46,7 +46,7 @@ S06 为计划学习模式的二级任务提供按需生成内容：
 - `quiz` / `test` 二级任务显示“任务测试题”，默认调用 `POST /api/v1/study-subtasks/{subtask_id}/task-tests`，请求 `{ "force_regenerate": false }`；不传 `parameters` 时由后端读取计划快照中的默认测试题参数。
 - 若 execution-context 已返回 `handout_content_id` 或 `task_test_content_id`，前端不自动重新生成，只显示查看入口和“重新生成”按钮。
 - “重新生成”显式传 `force_regenerate=true`，由后端创建新的成功内容或失败记录。
-- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-07-15 前端为 `task_test` 接入本地逐题交互：执行页和生成内容详情页都读取 `GeneratedContentRead.content_json.questions`，用户提交单道题后才显示正确答案 / 参考答案和解析；选择题与判断题只做浏览器内存内即时判断，简答题不自动判分。该视图不保存 attempt 历史。
+- 生成成功后，执行页用返回的 `GeneratedContentRead.id/title/status` 局部更新内容面板，并通过 `/generated-contents/{id}` 跳转到生成内容详情页。2026-09-30 前端为 `task_test` 接入本地逐题交互与来源查看：执行页和生成内容详情页都读取 `GeneratedContentRead.content_json.questions` 与顶层 `source_citations`，用户提交单道题后才显示正确答案 / 参考答案、解析和该题合法 `source_citation_ids` 对应的来源卡片；选择题与判断题只做浏览器内存内即时判断，简答题不自动判分。该视图不保存 attempt 历史。
 - 生成失败只展示错误提示，不修改二级任务完成状态，不触发 completion，也不写打卡。
 - C9/C11 不接入测试题作答持久化、后端判分、attempt 历史或反馈闭环；当前逐题提交反馈只存在浏览器内存，刷新后可以丢失。
 - 前端 C11 已接入执行页导出入口：`handout` 只显示“导出PDF”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/pdf`；`task_test` 只显示“导出Markdown”，调用 `GET /api/v1/generated-contents/{generated_content_id}/exports/markdown`。导出入口只在 execution-context 或本次生成成功返回已有内容 ID 后显示；未生成、生成失败或内容类型不匹配时不展示假导出按钮。2026-07-14 前端展示文案已从“今日讲义”调整为“任务讲义”，避免误解为全局今日唯一讲义；后端 `handout` 内容类型和导出文件名保持不变。
@@ -94,6 +94,7 @@ sequenceDiagram
         GEN->>GEN: validate count/type/id/options/duplicates/citations
         GEN-->>LE: fixed-size GeneratorOutput
     end
+    LE->>MC: revalidate material/version snapshot
     LE->>DB: save AIGeneratedContent; task_test also saves SourceCitation
     LE-->>FE: GeneratedContentRead
 ```
@@ -107,6 +108,7 @@ sequenceDiagram
 - Task test 不再“每个 batch 各生成一整套题再拼接”；它把当前二级任务的所有批次一次性传给 task-test generator，由 prompt 要求先在内部汇总候选考点，再只输出最终 `question_count` 道题。
 - Task test 的 `question_count` 是最终硬约束；当参数包含 `question_type_counts` 时，每种 `question_type` 的输出数量也是硬约束。输出多题、少题、每种题型数量不匹配、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
 - Handout 不保存逐条 `source_citations`；来源说明放在 Markdown 顶部。Task test 的题目引用必须来自本次材料上下文的 chunk id，且必须落在当前二级任务允许的材料批次内，不允许伪造 fallback 引用。
+- Handout 和 task test 在模型返回后、写成功记录前复核实际使用的 `{material_id, version_id}`；任务级问答通过 Course QA 复用同一发布前复核。迟到结果返回 `MATERIAL_SCOPE_STALE` 并保存 failed 审计记录，不进入最近成功内容选择。
 
 ## 内容结构
 
@@ -152,6 +154,7 @@ sequenceDiagram
 - `STATE_CONFLICT`：任务层级或课程归属不一致，或任务类型不允许生成该内容。
 - `NO_PARSED_MATERIAL`：二级任务没有关联资料，或关联资料没有可用解析上下文。
 - `MATERIAL_COVERAGE_INCOMPLETE`：全材料覆盖未完成。
+- `MATERIAL_SCOPE_STALE`：生成期间材料被删除、移出课程或输入解析版本失效；不发布迟到结果。
 - `GENERATION_SCHEMA_INVALID`：模型输出结构、测试题硬约束或引用不符合契约。
 - `GENERATION_FAILED`：模型调用或未知生成失败。
 - `EXPORT_UNSUPPORTED_CONTENT_TYPE`：导出格式不支持当前生成内容类型。
@@ -207,7 +210,7 @@ Handout 模型调用次数等于材料批次数。Task test 模型调用次数�
 - `frontend/tests/features/study-plans/api.test.ts` 覆盖 PDF / Markdown 导出 adapter 路径。
 - `frontend/tests/pages/study-plan-pages.test.tsx` 覆盖执行页已有内容时的导出按钮和文件流请求。
 - `frontend/tests/features/generated-content/task-test-result.test.tsx` 覆盖 `task_test` 本地逐题作答、单选、多选、判断和简答提交反馈。
-- `frontend/tests/features/generated-content/generated-content-renderer.test.tsx` 和 `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页提交后反馈，不展示引用侧栏。
+- `frontend/tests/features/generated-content/generated-content-renderer.test.tsx` 和 `frontend/tests/pages/generated-content-detail.test.tsx` 覆盖 `task_test` 生成内容详情页提交后反馈；只显示当前题合法引用，不展示与题目无关的全局引用侧栏。
 
 ## 2026-07-13 引用、PDF 和默认参数修复补充
 
@@ -215,7 +218,7 @@ Handout prompt 要求行内公式只使用 `$...$`，块级公式只使用独立
 
 `ensure_handout_header()` 只负责清理最外层 `markdown` 代码围栏、校验正文非空、删除模型返回的首个一级标题，并写入统一的 `# {StudySubTask.title}讲义` 和来源说明。它保留模型正文原样，不正则改写代码块、普通方括号或数学公式内容。
 
-Handout 仍只读取当前二级任务关联资料。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，仅 handout 专用分支过滤 material-context batch；公共 material-context 查询保持当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序等基础边界。
+Handout 仍只读取当前二级任务关联资料。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，仅 handout 专用分支过滤 material-context batch；公共 material-context 查询保持当前用户、当前课程、未删除资料、生效解析版本和 chunk 顺序等基础边界，候选、失败和退休版本不会进入生成上下文。
 
 若当前二级任务上下文在 token 限制内，handout 应尽量一次 prompt 生成整篇 Markdown；若必须分 batch，reducer 必须通过模型合成为一整篇连贯最终稿，不把 batch Markdown 硬拼接作为最终讲义。
 
@@ -261,10 +264,10 @@ Task-test prompt 要求 `single_choice` / `multiple_choice` 恰好输出 4 个�
 - `ai_generated_contents.content` 保存完整 Markdown 正文，正文顶部在一级标题后保留来源说明句，格式为 `本讲义基于《资料名1》《资料名2》中“二级任务标题”相关内容生成。`。
 - 来源说明中的资料名来自本次 handout 实际使用的 material-context batch 资料名去重；知识点优先使用当前 `StudySubTask.title`。
 - `ai_generated_contents.content_json` 只保存轻量格式元信息：`{"format":"markdown","schema_version":1}`。
-- `ai_generated_contents.material_scope_json` 继续保存本次资料范围，用于说明讲义基于哪些资料生成。
+- `ai_generated_contents.material_scope_json` 保存请求范围，在 `source_materials` 中快照实际进入本次 material-context batch 的 `material_id` 与资料名，并在 `material_versions` 中保存对应的 `{material_id, version_id}`；讲义和任务测试题都用该快照说明真实输入范围，不从模型正文反推资料名，也不随后续重解析改写历史输入版本。
 - 新生成 handout 不写 `source_citations`，不做 section / block / formula card 级引用回绑，不兼容历史结构化 handout 导出。
 
-生成流程仍只读取当前二级任务关联资料：`StudySubTask.related_material_ids_json -> MaterialScope(include_all_parsed_materials=false)`。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，handout 专用分支会用该 chunk 范围过滤 material-context batch；公共 `material_context.repository.list_parsed_context_chunks_for_scope()` 只保留当前用户、当前课程、未删除资料、`parse_status == "parsed"` 和 chunk 顺序这些基础边界，不承载任务级 chunk 范围规则。
+生成流程仍只读取当前二级任务关联资料：`StudySubTask.related_material_ids_json -> MaterialScope(include_all_parsed_materials=false)`。若计划快照中存在当前 subtask 的 `citation_chunk_ids`，handout 专用分支会用该 chunk 范围过滤 material-context batch；公共 `material_context.repository.list_parsed_context_chunks_for_scope()` 只保留当前用户、当前课程、未删除资料、`MaterialChunk.parse_version_id == CourseMaterial.active_parse_version_id` 和 chunk 顺序这些基础边界，不承载任务级 chunk 范围规则。
 
 Handout 生成优先在当前二级任务上下文可放入 token 限制时一次 prompt 产出整篇 Markdown。若资料必须分 batch，单 batch 先产出局部草稿，reducer 再调用模型把多个草稿合成为一整篇上下连贯、去重后的最终 Markdown；不得把多个 batch Markdown 用分隔线硬拼为最终稿。
 
@@ -272,10 +275,10 @@ Handout 生成优先在当前二级任务上下文可放入 token 限制时一�
 
 - Markdown 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/markdown` 对成功 `handout` 直接返回 `content`。
 - PDF 导出：`GET /api/v1/generated-contents/{generated_content_id}/exports/pdf` 对成功 `handout` 读取 `content`，复用 Markdown -> HTML -> KaTeX auto-render -> Playwright PDF renderer。
-- 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。
+- 前端 handout 详情页只渲染 `GeneratedContentRead.content` Markdown，不展示引用侧栏或逐条 citation 列表；来源说明已经在 Markdown 顶部。`material_scope_json.source_materials` 与 `material_versions` 仍保存真实输入快照，供追溯而非逐段引用。
 - 导出不写数据库、不修改任务状态、不写打卡记录。
 
-任务测试题 `task_test` 暂时仍保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；本轮只同步标题规则，`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`，不再固定为“任务测试题”。
+任务测试题 `task_test` 保留结构化 JSON、逐题引用和 Markdown 导出逻辑，不随 handout Markdown-first 改造为 Markdown 直存；`ai_generated_contents.title` 使用 `{StudySubTask.title}测试题`。执行页和详情页把每题 `source_citation_ids` 与顶层 `source_citations` 匹配，提交该题后显示编号、资料名和页码/未知位置，并复用引用来源定位弹窗。
 
 ## 2026-07-15 任务讲义前端预览渲染切片
 
@@ -425,3 +428,14 @@ PDF 导出同步支持相同 callout 契约。`render_markdown_pdf_html()` 会�
 当前前端讲义 renderer 仍保留 Mermaid 渲染能力，用于历史或手写 Markdown 兜底；新生成讲义的图示契约只依赖安全内联 SVG。PDF 中 Mermaid 的完整渲染仍属于独立能力，当前契约主要保证 Web 讲义详情页的新内容可视化展示。
 
 验证入口：`backend/tests/modules/generation/test_handout_generator.py` 覆盖 prompt 约束、SVG 通过、Mermaid 拒绝、缺图重试和 `MermaidBlock` schema 兼容。
+
+## 2026-08-25 任务之间并发生成（阶段一）
+
+执行页允许不同二级任务同时发起讲义或测试题生成。前端在 `StudyTaskExecutionPage.tsx` 中按 `subtask_id` 记录生成状态和错误，并使用任务级 in-flight 集合防止同一个二级任务重复点击；生成结果继续写入 `generatedContentBySubtask`，因此请求完成顺序不影响任务归属。
+
+本阶段不修改后端接口、数据库或生成服务。后端仍使用同步 HTTP 生成接口，但不同请求可并行执行；页面刷新、关闭页面后的任务恢复、持久化 job 状态、后端队列、重试和统一并发限流不属于本阶段，后续如需可靠后台任务应单独设计异步 job 方案。
+
+## 2026-09-30 任务测试题 PDF 导出延期确认
+
+负责人在 V1 收尾审定中确认：任务测试题 PDF 导出延期，不在 V1 实现。V1 任务测试题导出口径统一为 Markdown，任务讲义继续支持 PDF 导出；实现层无需改动——`exports` 服务本就只允许 `task_test` 走 Markdown、`handout` 走 PDF。PRD 与规划文档中的测试题 PDF 承诺已同步改为"Markdown 导出、PDF 为后续能力"；测试题导出埋点口径同步调整为 `test_export_markdown_click`。重新纳入 PDF 时需先补充题目排版与分页设计，再扩展 `exports` 服务允许的内容类型。
+

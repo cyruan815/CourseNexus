@@ -20,6 +20,7 @@ from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
 from app.modules.material_context.schemas import MaterialScope
 from app.modules.material_context.service import resolve_context
+from app.modules.materials.models import CourseMaterial
 from app.modules.materials.service import delete_material, parse_material, upload_file_material
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
@@ -115,6 +116,46 @@ def test_default_scope_returns_all_parsed_chunks_only(db: Session, tmp_path: Pat
     assert result.chunks[0].material_name == "parsed.txt"
     assert result.chunks[0].content_text == "parsed content"
     assert uploaded.id not in [chunk.material_id for chunk in result.chunks]
+
+
+def test_legacy_url_material_never_enters_resolved_context(db: Session, tmp_path: Path) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    parsed = create_material(
+        db,
+        tmp_path,
+        user_id=user.id,
+        course_id=course.id,
+        filename="parsed.txt",
+        content=b"parsed content",
+    )
+    parse_uploaded_material(db, tmp_path, user.id, parsed.id)
+    legacy_url = CourseMaterial(
+        id="mat_legacy_url",
+        course_id=course.id,
+        user_id=user.id,
+        name="reference",
+        material_type="link",
+        source_type="url",
+        source_url="https://example.com/reference",
+        parse_status="uploaded",
+    )
+    db.add(legacy_url)
+    db.commit()
+
+    result = resolve_context(db, user.id, course.id, MaterialScope())
+
+    assert result.no_parsed_material is False
+    assert [chunk.material_id for chunk in result.chunks] == [parsed.id]
+
+    scoped = resolve_context(
+        db,
+        user.id,
+        course.id,
+        MaterialScope(include_all_parsed_materials=False, material_ids=[legacy_url.id]),
+    )
+    assert scoped.no_parsed_material is True
+    assert scoped.chunks == []
 
 
 def test_material_ids_scope_returns_requested_parsed_material(db: Session, tmp_path: Path) -> None:

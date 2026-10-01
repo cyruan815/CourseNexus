@@ -13,7 +13,11 @@ from app.modules.generated_content.models import AIGeneratedContent
 from app.modules.generated_content.repository import add_generated_content
 from app.modules.generation.orchestrator.contracts import GenerateContentRequest
 from app.modules.generation.orchestrator.registry import GeneratorRegistry
-from app.modules.material_context.service import resolve_generation_context
+from app.modules.material_context.schemas import build_material_scope_snapshot
+from app.modules.material_context.service import (
+    assert_material_snapshot_publishable,
+    resolve_generation_context,
+)
 
 
 logger = get_logger("generation.content")
@@ -47,7 +51,6 @@ def generate_content(
     started_at = perf_counter()
     assert_course_owner(db, user_id, course_id)
     generator = registry.create(payload.content_type, model_provider)
-    material_scope_json = payload.material_scope.model_dump(mode="json")
     context = resolve_generation_context(
         db,
         user_id=user_id,
@@ -61,10 +64,17 @@ def generate_content(
             message="No parsed material exists in the selected scope",
             status_code=400,
         )
+    material_scope_json = build_material_scope_snapshot(payload.material_scope, context.chunks)
 
     content_id = _new_generated_content_id()
     try:
         output = generator.generate(context=context, parameters=payload.parameters)
+        assert_material_snapshot_publishable(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_versions=material_scope_json["material_versions"],
+        )
     except CourseNexusError as exc:
         if exc.code == "VALIDATION_ERROR":
             raise

@@ -1,4 +1,4 @@
-import { type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Group, Menu, Modal, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import {
   IconAlertCircle,
@@ -8,7 +8,6 @@ import {
   IconEdit,
   IconFolder,
   IconFolderPlus,
-  IconLink,
   IconLoader2,
   IconSearch,
   IconTrash,
@@ -19,10 +18,8 @@ import {
 import { ApiError } from "../../api/errors";
 import {
   createMaterialFolder,
-  createMaterialLink,
   deleteMaterial,
   deleteMaterialFolder,
-  getMaterialPdf,
   listMaterialFolders,
   listMaterials,
   moveMaterialToFolder,
@@ -31,7 +28,8 @@ import {
   updateMaterialFolder,
   uploadMaterial,
 } from "./api";
-import type { Material, MaterialFolder, MaterialScope } from "./types";
+import { MaterialPreviewModal } from "./MaterialPreviewModal";
+import { isMaterialLearningReady, type Material, type MaterialFolder, type MaterialScope } from "./types";
 import "./material-workspace.css";
 
 type DeleteTarget =
@@ -41,7 +39,6 @@ type DeleteTarget =
 type ActionTarget =
   | { kind: "createFolder" }
   | { folder: MaterialFolder; kind: "renameFolder" }
-  | { kind: "createLink" }
   | { kind: "renameMaterial"; material: Material }
   | null;
 
@@ -65,14 +62,20 @@ function errorMessage(error: unknown): string {
   return "资料操作失败";
 }
 
-function statusText(status: string): string {
+function statusText(material: Material): string {
+  if (material.parse_status === "parsing" && isMaterialLearningReady(material)) {
+    return "正在更新";
+  }
+  if (material.parse_error && isMaterialLearningReady(material)) {
+    return "更新失败，当前版本仍可用";
+  }
   const labels: Record<string, string> = {
     uploaded: "待解析",
     parsing: "解析中",
     parsed: "可使用",
-    parse_failed: "解析失败",
+    parse_failed: "首次解析失败",
   };
-  return labels[status] ?? status;
+  return labels[material.parse_status] ?? material.parse_status;
 }
 
 function materialMatchesSearch(material: Material, query: string): boolean {
@@ -115,16 +118,11 @@ export function MaterialWorkspace({
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionTarget, setActionTarget] = useState<ActionTarget>(null);
   const [actionName, setActionName] = useState("");
-  const [actionUrl, setActionUrl] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewMaterial, setPreviewMaterial] = useState<Material | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const previewRequestId = useRef(0);
 
   useEffect(() => {
     if (initialData) {
@@ -162,17 +160,8 @@ export function MaterialWorkspace({
     };
   }, [courseId, initialData]);
 
-  useEffect(
-    () => () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    },
-    [previewUrl],
-  );
-
   const parsedMaterialIds = useMemo(
-    () => materials.filter((material) => material.parse_status === "parsed").map((material) => material.id),
+    () => materials.filter(isMaterialLearningReady).map((material) => material.id),
     [materials],
   );
   const checkedParsedMaterialIds = materialScope.material_ids.filter((id) => parsedMaterialIds.includes(id));
@@ -180,7 +169,7 @@ export function MaterialWorkspace({
     parsedMaterialIds.length > 0 && checkedParsedMaterialIds.length === parsedMaterialIds.length;
 
   const parsedMaterials = useMemo(
-    () => materials.filter((material) => material.parse_status === "parsed"),
+    () => materials.filter(isMaterialLearningReady),
     [materials],
   );
 
@@ -227,8 +216,7 @@ export function MaterialWorkspace({
       ? checkedParsedMaterialIds.filter((id) => id !== materialId)
       : [...checkedParsedMaterialIds, materialId];
     onMaterialScopeChange({
-      include_all_parsed_materials:
-        nextMaterialIds.length === 0 || nextMaterialIds.length === parsedMaterialIds.length,
+      include_all_parsed_materials: nextMaterialIds.length === parsedMaterialIds.length,
       material_ids: nextMaterialIds,
     });
   }
@@ -262,28 +250,18 @@ export function MaterialWorkspace({
   function openCreateFolderModal() {
     setActionTarget({ kind: "createFolder" });
     setActionName("");
-    setActionUrl("");
     setActionError(null);
   }
 
   function openRenameFolderModal(folder: MaterialFolder) {
     setActionTarget({ folder, kind: "renameFolder" });
     setActionName(folder.name);
-    setActionUrl("");
-    setActionError(null);
-  }
-
-  function openCreateLinkModal() {
-    setActionTarget({ kind: "createLink" });
-    setActionName("");
-    setActionUrl("");
     setActionError(null);
   }
 
   function openRenameMaterialModal(material: Material) {
     setActionTarget({ kind: "renameMaterial", material });
     setActionName(material.name);
-    setActionUrl("");
     setActionError(null);
   }
 
@@ -301,14 +279,9 @@ export function MaterialWorkspace({
     }
 
     const name = actionName.trim();
-    const sourceUrl = actionUrl.trim();
 
     if (!name) {
-      setActionError(actionTarget.kind === "createLink" ? "资料名称不能为空" : "文件夹名称不能为空");
-      return;
-    }
-    if (actionTarget.kind === "createLink" && !sourceUrl) {
-      setActionError("资料链接不能为空");
+      setActionError(actionTarget.kind === "renameMaterial" ? "资料名称不能为空" : "文件夹名称不能为空");
       return;
     }
 
@@ -320,14 +293,6 @@ export function MaterialWorkspace({
       } else if (actionTarget.kind === "renameFolder") {
         const nextFolder = await updateMaterialFolder(actionTarget.folder.id, { name });
         setFolders((current) => current.map((item) => (item.id === nextFolder.id ? nextFolder : item)));
-      } else if (actionTarget.kind === "createLink") {
-        const material = await createMaterialLink(courseId, {
-          name,
-          source_url: sourceUrl,
-          folder_id: null,
-        });
-        setMaterials((current) => [material, ...current]);
-        setExpandedFolderIds((current) => new Set([...current, material.folder_id ?? "unfiled"]));
       } else if (actionTarget.kind === "renameMaterial") {
         updateMaterial(await renameMaterial(actionTarget.material.id, { name }));
       }
@@ -379,7 +344,7 @@ export function MaterialWorkspace({
         if (!materialScope.include_all_parsed_materials && removedMaterialIds.length > 0) {
           const nextMaterialIds = materialScope.material_ids.filter((id) => !removedMaterialIds.includes(id));
           onMaterialScopeChange({
-            include_all_parsed_materials: nextMaterialIds.length === 0,
+            include_all_parsed_materials: false,
             material_ids: nextMaterialIds,
           });
         }
@@ -390,7 +355,7 @@ export function MaterialWorkspace({
         if (!materialScope.include_all_parsed_materials) {
           const nextMaterialIds = materialScope.material_ids.filter((id) => id !== materialId);
           onMaterialScopeChange({
-            include_all_parsed_materials: nextMaterialIds.length === 0,
+            include_all_parsed_materials: false,
             material_ids: nextMaterialIds,
           });
         }
@@ -455,42 +420,22 @@ export function MaterialWorkspace({
 
   function handleParse(material: Material) {
     void mutate(async () => {
-      updateMaterial(await retryParseMaterial(material.id));
+      updateMaterial({ ...material, parse_error: null, parse_status: "parsing" });
+      try {
+        updateMaterial(await retryParseMaterial(material.id));
+      } catch (parseError) {
+        updateMaterial(material);
+        throw parseError;
+      }
     });
   }
 
-  async function openPdfPreview(material: Material) {
-    const requestId = previewRequestId.current + 1;
-    previewRequestId.current = requestId;
+  function openMaterialPreview(material: Material) {
     setPreviewMaterial(material);
-    setPreviewUrl(null);
-    setPreviewError(null);
-    setIsPreviewLoading(true);
-    try {
-      const blob = await getMaterialPdf(material.id);
-      const objectUrl = URL.createObjectURL(blob);
-      if (previewRequestId.current !== requestId) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-      setPreviewUrl(objectUrl);
-    } catch (nextError) {
-      if (previewRequestId.current === requestId) {
-        setPreviewError(errorMessage(nextError));
-      }
-    } finally {
-      if (previewRequestId.current === requestId) {
-        setIsPreviewLoading(false);
-      }
-    }
   }
 
-  function closePdfPreview() {
-    previewRequestId.current += 1;
+  function closeMaterialPreview() {
     setPreviewMaterial(null);
-    setPreviewUrl(null);
-    setPreviewError(null);
-    setIsPreviewLoading(false);
   }
 
   function renderMaterialActionsMenu(material: Material) {
@@ -510,9 +455,11 @@ export function MaterialWorkspace({
           <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameMaterialModal(material)}>
             重命名资料
           </Menu.Item>
-          {material.parse_status === "parse_failed" ? (
+          {material.source_type !== "url"
+          && material.parse_status !== "parsing"
+          && (isMaterialLearningReady(material) || material.parse_status === "parse_failed") ? (
             <Menu.Item leftSection={<IconLoader2 size={16} />} onClick={() => handleParse(material)}>
-              重试解析
+              {isMaterialLearningReady(material) ? "重新解析" : "重试解析"}
             </Menu.Item>
           ) : null}
           <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => requestDeleteMaterial(material)}>
@@ -552,15 +499,20 @@ export function MaterialWorkspace({
   }
 
   function renderMaterialRow(material: Material) {
-    const isParsed = material.parse_status === "parsed";
+    const isParsed = isMaterialLearningReady(material);
+    const isLegacyUrl = material.source_type === "url";
     const checked = isParsed && materialScope.material_ids.includes(material.id);
     const kind = materialKind(material);
-    const status = statusText(material.parse_status);
-    const StatusIcon = material.parse_status === "parsed"
-      ? IconCheck
-      : material.parse_status === "parse_failed"
-        ? IconAlertCircle
-        : IconLoader2;
+    const status = isLegacyUrl ? "已停止支持" : statusText(material);
+    const StatusIcon = isLegacyUrl
+      ? IconAlertCircle
+      : material.parse_status === "parsing"
+        ? IconLoader2
+        : material.parse_error || material.parse_status === "parse_failed"
+          ? IconAlertCircle
+          : isParsed
+            ? IconCheck
+            : IconLoader2;
 
     return (
       <li
@@ -574,7 +526,7 @@ export function MaterialWorkspace({
           onClick={(event) => {
             if (!isParsed) {
               event.preventDefault();
-              setError("资料需解析成功后才能选择。");
+              setError("资料需有可用解析版本后才能选择。");
             }
           }}
         >
@@ -583,7 +535,7 @@ export function MaterialWorkspace({
             checked={checked}
             disabled={!isParsed}
             onChange={() => toggleMaterial(material.id)}
-            title={isParsed ? "选择资料" : "资料需解析成功后才能选择"}
+            title={isParsed ? "选择资料" : "资料需有可用解析版本后才能选择"}
             type="checkbox"
           />
           <span
@@ -593,13 +545,13 @@ export function MaterialWorkspace({
             {kind}
           </span>
           <span className="material-workspace__file-copy">
-            {material.source_type === "file" && material.material_type === "pdf" ? (
+            {material.source_type === "file" ? (
               <button
                 aria-label={`预览资料 ${material.name}`}
                 className="material-workspace__file-name material-workspace__file-name-button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  void openPdfPreview(material);
+                  openMaterialPreview(material);
                 }}
                 type="button"
               >
@@ -608,6 +560,11 @@ export function MaterialWorkspace({
             ) : (
               <span className="material-workspace__file-name">{material.name}</span>
             )}
+            {status !== "可使用" ? (
+              <span className={`material-workspace__file-state material-workspace__file-state--${material.parse_status}`}>
+                {status}
+              </span>
+            ) : null}
           </span>
         </div>
         <span
@@ -616,7 +573,7 @@ export function MaterialWorkspace({
           title={status}
         >
           <StatusIcon
-            className={material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
+            className={!isLegacyUrl && material.parse_status === "parsing" ? "is-spinning" : undefined}
             size={13}
             stroke={2}
           />
@@ -714,17 +671,6 @@ export function MaterialWorkspace({
               <IconUpload aria-hidden size={21} stroke={1.8} />
             </button>
           </Tooltip>
-          <Tooltip label="添加链接" openDelay={250} position="bottom" withArrow>
-            <button
-              aria-label="添加链接"
-              className="material-workspace__action-button"
-              disabled={isMutating}
-              onClick={openCreateLinkModal}
-              type="button"
-            >
-              <IconLink aria-hidden size={21} stroke={1.8} />
-            </button>
-          </Tooltip>
         </div>
       </header>
 
@@ -792,7 +738,7 @@ export function MaterialWorkspace({
                 checked={isExplicitAllParsedScope}
                 onChange={() =>
                   onMaterialScopeChange({
-                    include_all_parsed_materials: true,
+                    include_all_parsed_materials: !isExplicitAllParsedScope,
                     material_ids: isExplicitAllParsedScope ? [] : parsedMaterialIds,
                   })
                 }
@@ -839,57 +785,12 @@ export function MaterialWorkspace({
         isSubmitting={isMutating}
         name={actionName}
         onChangeName={setActionName}
-        onChangeUrl={setActionUrl}
         onClose={closeActionModal}
         onSubmit={submitActionModal}
         target={actionTarget}
-        url={actionUrl}
       />
-      <PdfPreviewModal
-        error={previewError}
-        isLoading={isPreviewLoading}
-        material={previewMaterial}
-        onClose={closePdfPreview}
-        url={previewUrl}
-      />
+      <MaterialPreviewModal material={previewMaterial} onClose={closeMaterialPreview} />
     </section>
-  );
-}
-
-function PdfPreviewModal({
-  error,
-  isLoading,
-  material,
-  onClose,
-  url,
-}: {
-  error: string | null;
-  isLoading: boolean;
-  material: Material | null;
-  onClose: () => void;
-  url: string | null;
-}) {
-  return (
-    <Modal
-      centered
-      classNames={{ body: "material-workspace__preview-body", content: "material-workspace__preview-modal" }}
-      closeButtonProps={{ "aria-label": "关闭资料预览" }}
-      onClose={onClose}
-      opened={Boolean(material)}
-      size="min(1120px, calc(100vw - 32px))"
-      title={material?.name}
-      transitionProps={{ duration: 0 }}
-    >
-      <div className="material-workspace__preview-content">
-        {isLoading ? <Text role="status">正在加载 PDF...</Text> : null}
-        {error ? (
-          <Alert color="red" role="alert" title="预览失败" variant="light">
-            {error}
-          </Alert>
-        ) : null}
-        {url && material ? <iframe src={url} title={`${material.name} PDF 预览`} /> : null}
-      </div>
-    </Modal>
   );
 }
 
@@ -939,32 +840,26 @@ function ActionModal({
   isSubmitting,
   name,
   onChangeName,
-  onChangeUrl,
   onClose,
   onSubmit,
   target,
-  url,
 }: {
   error: string | null;
   isSubmitting: boolean;
   name: string;
   onChangeName: (value: string) => void;
-  onChangeUrl: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
   target: ActionTarget;
-  url: string;
 }) {
   const titleMap: Record<NonNullable<ActionTarget>["kind"], string> = {
     createFolder: "新建文件夹",
-    createLink: "添加链接资料",
     renameFolder: "重命名文件夹",
     renameMaterial: "重命名资料",
   };
-  const isLink = target?.kind === "createLink";
   const isRenameMaterial = target?.kind === "renameMaterial";
-  const label = isLink || isRenameMaterial ? "资料名称" : "文件夹名称";
-  const canSubmit = Boolean(name.trim()) && (!isLink || Boolean(url.trim())) && !isSubmitting;
+  const label = isRenameMaterial ? "资料名称" : "文件夹名称";
+  const canSubmit = Boolean(name.trim()) && !isSubmitting;
 
   return (
     <Modal
@@ -988,15 +883,6 @@ function ActionModal({
           required
           value={name}
         />
-        {isLink ? (
-          <TextInput
-            label="资料链接"
-            maxLength={2048}
-            onChange={(event) => onChangeUrl(event.currentTarget.value)}
-            required
-            value={url}
-          />
-        ) : null}
         <Group justify="flex-end">
           <Button disabled={isSubmitting} onClick={onClose} variant="default">
             取消

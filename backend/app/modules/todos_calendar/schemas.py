@@ -21,6 +21,7 @@ class SubTaskTodoRead(BaseModel):
 class TaskTodoRead(BaseModel):
     task_id: str
     plan_id: str
+    plan_title: str
     course_id: str
     course_name: str
     title: str
@@ -53,6 +54,7 @@ class DayTodosRead(BaseModel):
 class TaskSummaryRead(BaseModel):
     task_id: str
     plan_id: str
+    plan_title: str
     course_id: str
     course_name: str
     title: str

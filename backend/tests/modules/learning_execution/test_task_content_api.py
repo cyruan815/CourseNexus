@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +16,7 @@ from app.db.base import Base
 from app.db.session import get_db
 import app.db.models  # noqa: F401
 from app.integrations.model_provider.mock import MockModelProvider
+from tests.fixtures.study_mode_samples import SAFE_HANDOUT_SVG, handout_markdown
 from app.main import app
 from app.modules.course_qa.models import SourceCitation
 from app.modules.courses.models import Course
@@ -30,7 +31,7 @@ from app.modules.learning_execution.service import (
     generate_handout_for_subtask,
     generate_task_test_for_subtask,
 )
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.models import StudyPlan, StudySubTask, StudyTask
 from app.modules.users.models import User
 
@@ -56,7 +57,9 @@ def api() -> Generator[ApiHarness, None, None]:
         yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(text_outputs=["# 主键讲义\n\n主键用于唯一标识表中的一行。"])
+    app.dependency_overrides[learning_router.get_handout_model_provider] = lambda: MockModelProvider(
+        text_outputs=[handout_markdown(title="主键讲义", body="主键用于唯一标识表中的一行。")]
+    )
     app.dependency_overrides[learning_router.get_task_test_model_provider] = lambda: MockModelProvider(
         structured_outputs={
             TaskTestContent: {
@@ -113,12 +116,24 @@ def _seed_task_content_plan(
             source_type="file",
             file_url="/uploads/db.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content",
+            material_id="mat_api_content",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
         )
     )
     db.add(
         MaterialChunk(
             id="chunk_api_content",
             material_id="mat_api_content",
+            parse_version_id="mpv_api_content",
             course_id="crs_api_content",
             chunk_index=0,
             page="1",
@@ -182,6 +197,16 @@ def _add_related_material_without_chunks(db: Session, *, user_id: str, subtask_i
             source_type="file",
             file_url="/uploads/empty.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content_empty",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content_empty",
+            material_id="mat_api_content_empty",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
         )
     )
     subtask = db.get(StudySubTask, subtask_id)
@@ -202,12 +227,24 @@ def _add_related_material_with_chunk(db: Session, *, user_id: str, subtask_id: s
             source_type="file",
             file_url="/uploads/index.pdf",
             parse_status="parsed",
+            active_parse_version_id="mpv_api_content_second",
+        )
+    )
+    db.add(
+        MaterialParseVersion(
+            id="mpv_api_content_second",
+            material_id="mat_api_content_second",
+            course_id="crs_api_content",
+            user_id=user_id,
+            status="active",
+            parse_quality="complete",
         )
     )
     db.add(
         MaterialChunk(
             id="chunk_api_content_second",
             material_id="mat_api_content_second",
+            parse_version_id="mpv_api_content_second",
             course_id="crs_api_content",
             chunk_index=0,
             page="2",
@@ -263,9 +300,12 @@ def _set_stored_task_test_generation_parameters(db: Session, *, parameters: dict
     db.commit()
 
 class CountingHandoutModelProvider:
-    def __init__(self, *, markdown: str = "# 任务知识点讲义\n\n根据任务范围生成讲义。") -> None:
+    def __init__(self, *, markdown: str | None = None) -> None:
         self.prompts: list[str] = []
-        self.markdown = markdown
+        # 讲义生成契约要求至少一张安全内联 SVG 图示，默认样本必须自带。
+        self.markdown = markdown if markdown is not None else handout_markdown(
+            title="任务知识点讲义", body="根据任务范围生成讲义。"
+        )
 
     def answer_question(self, *, question, context_chunks):  # pragma: no cover - unused in S06 tests
         raise AssertionError("answer_question should not be called")
@@ -315,6 +355,34 @@ class CountingTaskTestModelProvider:
                 ],
             }
         )
+
+
+class DeletingHandoutModelProvider(CountingHandoutModelProvider):
+    def __init__(self, *, db: Session, material: CourseMaterial) -> None:
+        super().__init__()
+        self.db = db
+        self.material = material
+
+    def generate_text(self, *, prompt):
+        output = super().generate_text(prompt=prompt)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
+
+
+class DeletingTaskTestModelProvider(CountingTaskTestModelProvider):
+    def __init__(self, *, db: Session, material: CourseMaterial) -> None:
+        super().__init__()
+        self.db = db
+        self.material = material
+
+    def generate_structured(self, *, prompt, output_schema):
+        output = super().generate_structured(prompt=prompt, output_schema=output_schema)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
 
 
 class FlexibleTaskTestModelProvider:
@@ -392,7 +460,19 @@ def _successful_contents(db: Session, *, subtask_id: str, content_type: str) -> 
 
 
 def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
-    provider = CountingHandoutModelProvider(markdown="# 任务内容讲义\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。")
+    synthesized = handout_markdown(
+        title="任务内容讲义",
+        body="## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。",
+    )
+    # ensure_handout_header 会剥掉草稿 H1，并按参数重新写入标题与来源说明。
+    expected_reduced = handout_markdown(
+        title="任务内容讲义",
+        body=(
+            "本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。\n\n"
+            "## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。"
+        ),
+    )
+    provider = CountingHandoutModelProvider(markdown=synthesized)
 
     reduced = _reduce_task_content_outputs(
         content_type="handout",
@@ -420,7 +500,7 @@ def test_reduce_handout_outputs_synthesizes_markdown_batches() -> None:
     assert "批次草稿 1" in provider.prompts[0]
     assert "批次草稿 2" in provider.prompts[0]
     assert reduced.title == "任务内容讲义"
-    assert reduced.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》《索引讲义.pdf》中“任务内容”相关内容生成。\n\n## 综合讲解\n\n主键和索引需要放在同一条学习线里理解。"
+    assert reduced.content == expected_reduced
     assert reduced.content_json == {"format": "markdown", "schema_version": 1}
     assert reduced.item_citation_chunk_ids == {}
 
@@ -451,14 +531,19 @@ def test_generate_handout_for_learn_subtask_saves_markdown_content_without_citat
     assert data["study_subtask_id"] == subtask_id
     assert data["generation_status"] == "success"
     assert data["title"] == "任务内容讲义"
-    assert data["content"] == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    expected_content = (
+        "# 任务内容讲义\n\n"
+        "本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n"
+        "主键用于唯一标识表中的一行。\n\n" + SAFE_HANDOUT_SVG
+    )
+    assert data["content"] == expected_content
     assert data["content_json"] == {"format": "markdown", "schema_version": 1}
     assert data["source_citations"] == []
     content = api.db.get(AIGeneratedContent, data["id"])
     assert content is not None
     assert content.study_subtask_id == subtask_id
     assert content.title == "任务内容讲义"
-    assert content.content == "# 任务内容讲义\n\n本讲义基于《数据库讲义.pdf》中“任务内容”相关内容生成。\n\n主键用于唯一标识表中的一行。"
+    assert content.content == expected_content
     assert content.content_json == {"format": "markdown", "schema_version": 1}
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == data["id"])).scalars().all()
     assert citations == []
@@ -512,6 +597,59 @@ def test_generate_task_test_multi_batch_generates_requested_question_count_once(
     assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
 
 
+def test_generate_handout_does_not_publish_after_material_is_deleted(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    material = api.db.get(CourseMaterial, "mat_api_content")
+    assert material is not None
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        generate_handout_for_subtask(
+            api.db,
+            user_id=user_id,
+            subtask_id=subtask_id,
+            parameters={"language": "zh-CN", "detail_level": "standard"},
+            force_regenerate=True,
+            model_provider=DeletingHandoutModelProvider(db=api.db, material=material),
+            max_tokens=10_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    contents = api.db.execute(select(AIGeneratedContent)).scalars().all()
+    assert [(content.generation_status, content.error_code) for content in contents] == [
+        ("failed", "MATERIAL_SCOPE_STALE")
+    ]
+
+
+def test_generate_task_test_does_not_publish_after_material_is_deleted(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    material = api.db.get(CourseMaterial, "mat_api_content")
+    assert material is not None
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        generate_task_test_for_subtask(
+            api.db,
+            user_id=user_id,
+            subtask_id=subtask_id,
+            parameters={
+                "question_count": 2,
+                "question_types": ["single_choice"],
+                "difficulty": "medium",
+            },
+            force_regenerate=True,
+            model_provider=DeletingTaskTestModelProvider(db=api.db, material=material),
+            max_tokens=10_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    contents = api.db.execute(select(AIGeneratedContent)).scalars().all()
+    assert [(content.generation_status, content.error_code) for content in contents] == [
+        ("failed", "MATERIAL_SCOPE_STALE")
+    ]
+
+
 def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) -> None:
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
@@ -540,15 +678,17 @@ def test_generate_handout_preserves_markdown_math_and_brackets_verbatim(api: Api
     user_id, _ = _register_and_headers(api)
     subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
     provider = CountingHandoutModelProvider(
-        markdown=(
-            "# 信噪比讲义\n\n"
-            "从 dB 转换为线性比值：\n\n"
-            "[\n"
-            "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
-            "]\n\n"
-            "标准块级公式：\n\n"
-            "$$\nC = B \\log_2(1 + S/N)\n$$\n\n"
-            "行内公式 $C = B \\log_2(1 + S/N)$ 用来说明信道容量。"
+        markdown=handout_markdown(
+            title="信噪比讲义",
+            body=(
+                "从 dB 转换为线性比值：\n\n"
+                "[\n"
+                "\\frac{S}{N} = 10^{\\frac{\\text{SNR (dB)}}{10}}\n"
+                "]\n\n"
+                "标准块级公式：\n\n"
+                "$$\nC = B \\log_2(1 + S/N)\n$$\n\n"
+                "行内公式 $C = B \\log_2(1 + S/N)$ 用来说明信道容量。"
+            ),
         )
     )
 

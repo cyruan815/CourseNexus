@@ -3,7 +3,7 @@
 ## 状态
 
 - 日期：2026-07-13
-- 状态：后端接口、模型 purpose 和文档契约已更新；`confirmed_config` 已明确为自然语言解析后经开始前设置补齐/确认的有效配置；真实模型与端到端验证留到密钥配置后的任务七。
+- 状态：后端接口、模型 purpose 和文档契约已更新；`confirmed_config` 已明确为自然语言解析后经开始前设置补齐/确认的有效配置。V1 发布验收已使用真实 Provider 完成计划预览与保存，诊断题的专项语义质量继续按真实课程材料抽查，不再作为“任务七”占位项。
 - 范围：`study-plan-diagnostic-questions` 题目生成、`study-plan-diagnostic-profiles` 诊断归纳、模型配置、前端接入边界和失败补偿。
 - 非范围：开始前设置页 UI、配置补问 UI、计划 preview 生成、讲义/测试题正文生成、诊断 session 持久化。
 
@@ -76,7 +76,7 @@ v2 不再提供“讲课风格”用户选择项。用户只回答“你最担�
 ```env
 STUDY_PLAN_DIAGNOSTIC_API_KEY=
 STUDY_PLAN_DIAGNOSTIC_BASE_URL=
-STUDY_PLAN_DIAGNOSTIC_MODEL=gpt-5.4-mini
+STUDY_PLAN_DIAGNOSTIC_MODEL=deepseek-flash
 ```
 
 配置读取沿用 `Settings.model_endpoint(purpose)` 和 `ModelProvider.generate_structured()`，不得复用 planner、parser 或 task-test 的密钥配置。

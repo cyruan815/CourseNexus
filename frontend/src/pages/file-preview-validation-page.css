@@ -1,0 +1,127 @@
+.file-preview-validation-page {
+  min-height: 100vh;
+  padding: 32px;
+  color: #17243d;
+  background:
+    radial-gradient(circle at top left, rgb(202 227 255 / 55%), transparent 32%),
+    #f4f7fb;
+}
+
+.file-preview-validation-page__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  max-width: 1320px;
+  margin: 0 auto 20px;
+}
+
+.file-preview-validation-page__eyebrow {
+  color: #4d6e9f;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.file-preview-validation-page h1 {
+  margin: 8px 0 6px;
+  font-size: clamp(26px, 3vw, 38px);
+}
+
+.file-preview-validation-page p {
+  margin: 0;
+  color: #64748b;
+}
+
+.file-preview-validation-page__picker {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  color: #fff;
+  font-weight: 700;
+  background: #1769c2;
+  box-shadow: 0 9px 22px rgb(23 105 194 / 20%);
+  cursor: pointer;
+}
+
+.file-preview-validation-page__picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.file-preview-validation-page__tabs {
+  display: flex;
+  gap: 8px;
+  max-width: 1320px;
+  margin: 0 auto 12px;
+  overflow-x: auto;
+}
+
+.file-preview-validation-page__tabs button {
+  padding: 9px 13px;
+  border: 1px solid #d5dfec;
+  border-radius: 10px;
+  color: #52647f;
+  background: rgb(255 255 255 / 75%);
+  cursor: pointer;
+}
+
+.file-preview-validation-page__tabs button.is-active {
+  border-color: #86b8ee;
+  color: #0c579f;
+  background: #eaf4ff;
+}
+
+.file-preview-validation-page__stage {
+  max-width: 1320px;
+  min-height: 680px;
+  margin: 0 auto;
+  padding: 18px;
+  border: 1px solid #dce5ef;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 24px 60px rgb(32 54 86 / 12%);
+}
+
+.file-preview-validation-page__stage .universal-file-preview {
+  min-height: 640px;
+}
+
+.file-preview-validation-page__empty {
+  display: grid;
+  min-height: 640px;
+  place-content: center;
+  gap: 8px;
+  color: #8593a8;
+  text-align: center;
+}
+
+.file-preview-validation-page__empty strong {
+  color: #314361;
+  font-size: 18px;
+}
+
+@media (max-width: 720px) {
+  .file-preview-validation-page {
+    padding: 18px;
+  }
+
+  .file-preview-validation-page__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .file-preview-validation-page__picker {
+    justify-content: center;
+  }
+}

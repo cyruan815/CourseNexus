@@ -12,12 +12,13 @@ from app.db.base import Base
 import app.db.models  # noqa: F401
 from app.modules.courses.schemas import CourseCreate
 from app.modules.courses.service import create_course
-from app.modules.materials.models import CourseMaterial, MaterialChunk
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialParseVersion
 from app.modules.study_plans.schemas import StudyPlanSaveRequest
 from app.modules.study_plans.service import get_study_plan_detail, save_study_plan
 from app.modules.todos_calendar.service import get_course_day_todos, get_global_day_todos, get_global_month_calendar
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
+from tests.fixtures.study_mode_samples import compliant_daily_task, study_subtask
 
 
 class UnusedProvider:
@@ -60,10 +61,20 @@ def test_saved_plan_appears_in_today_calendar_and_plan_detail(db: Session) -> No
                 file_size=12,
                 mime_type="text/plain",
                 parse_status="parsed",
+                active_parse_version_id="mpv_mat_s03",
+            ),
+            MaterialParseVersion(
+                id="mpv_mat_s03",
+                material_id="mat_s03",
+                course_id=course.id,
+                user_id=user.id,
+                status="active",
+                parse_quality="complete",
             ),
             MaterialChunk(
                 id="chk_mat_s03_000001",
                 material_id="mat_s03",
+                parse_version_id="mpv_mat_s03",
                 course_id=course.id,
                 chunk_index=1,
                 heading="S03",
@@ -81,38 +92,35 @@ def test_saved_plan_appears_in_today_calendar_and_plan_detail(db: Session) -> No
             "daily_available_minutes": 60,
             "material_scope": {"include_all_parsed_materials": True, "material_ids": []},
             "tasks": [
-                {
-                    "title": "可靠传输",
-                    "task_date": "2026-07-11",
-                    "sort_order": 1,
-                    "subtasks": [
-                        {
-                            "title": "学习滑动窗口",
-                            "subtask_type": "learn",
-                            "description": "学习窗口推进",
-                            "related_material_ids": ["mat_s03"],
-                            "estimated_minutes": 30,
-                            "citation_chunk_ids": [],
-                            "sort_order": 1,
-                        }
+                # 保存契约要求每天恰好一个测试任务并排在最后（见 tests/fixtures/study_mode_samples.py）。
+                compliant_daily_task(
+                    title="可靠传输",
+                    task_date="2026-07-11",
+                    sort_order=1,
+                    plan_material_ids=["mat_s03"],
+                    study_subtasks=[
+                        study_subtask(
+                            title="学习滑动窗口",
+                            subtask_type="learn",
+                            material_ids=["mat_s03"],
+                            description="学习窗口推进",
+                        )
                     ],
-                },
-                {
-                    "title": "拥塞控制",
-                    "task_date": "2026-07-12",
-                    "sort_order": 2,
-                    "subtasks": [
-                        {
-                            "title": "复习拥塞窗口",
-                            "subtask_type": "review",
-                            "description": "复习拥塞控制",
-                            "related_material_ids": ["mat_s03"],
-                            "estimated_minutes": 30,
-                            "citation_chunk_ids": [],
-                            "sort_order": 1,
-                        }
+                ),
+                compliant_daily_task(
+                    title="拥塞控制",
+                    task_date="2026-07-12",
+                    sort_order=2,
+                    plan_material_ids=["mat_s03"],
+                    study_subtasks=[
+                        study_subtask(
+                            title="复习拥塞窗口",
+                            subtask_type="review",
+                            material_ids=["mat_s03"],
+                            description="复习拥塞控制",
+                        )
                     ],
-                },
+                ),
             ],
         }
     )

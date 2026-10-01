@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import BinaryIO
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import CourseNexusError
@@ -15,25 +16,28 @@ from app.integrations.parsers.base import ParseDiagnostics, Parser
 from app.integrations.rag.base import RagChunk, RagIndex
 from app.modules.course_qa.citations import detach_material_references
 from app.modules.courses.service import assert_course_owner
-from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder
+from app.modules.materials.models import CourseMaterial, MaterialChunk, MaterialFolder, MaterialParseVersion
 from app.modules.materials.repository import (
+    delete_material_chunks_for_parse_version_in_session,
+    get_building_parse_version,
     get_active_material_folder_for_user,
     get_active_material_for_user,
+    get_parse_version_for_material,
     list_active_material_folders_for_course,
     list_active_materials_for_course,
+    list_material_chunks_for_parse_version,
     list_material_chunks_for_material_ids,
     list_materials_for_folder,
     next_material_folder_sort_order,
-    replace_material_chunks,
-    replace_material_chunks_in_session,
     save_material,
     save_material_folder,
 )
-from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialLinkCreate, MaterialUpdate
+from app.modules.materials.schemas import MaterialFolderCreate, MaterialFolderUpdate, MaterialUpdate
 
 
 parse_logger = get_logger("materials.parse")
 index_logger = get_logger("rag.index")
+upload_logger = get_logger("materials.upload")
 
 
 def _new_material_id() -> str:
@@ -44,8 +48,12 @@ def _new_material_folder_id() -> str:
     return f"fld_{uuid4().hex}"
 
 
-def _chunk_id(material_id: str, chunk_index: int) -> str:
-    return f"chk_{material_id.removeprefix('mat_')}_{chunk_index:06d}"
+def _new_parse_version_id() -> str:
+    return f"mpv_{uuid4().hex}"
+
+
+def _chunk_id(parse_version_id: str, chunk_index: int) -> str:
+    return f"chk_{parse_version_id.removeprefix('mpv_')}_{chunk_index:06d}"
 
 
 def _material_type_for_filename(filename: str) -> str:
@@ -87,30 +95,34 @@ def upload_file_material(
         mime_type=stored_file.mime_type,
         parse_status="uploaded",
     )
-    return save_material(db, material)
-
-
-def create_link_material(
-    db: Session,
-    *,
-    user_id: str,
-    course_id: str,
-    payload: MaterialLinkCreate,
-) -> CourseMaterial:
-    assert_course_owner(db, user_id, course_id)
-    _assert_folder_in_course(db, user_id=user_id, course_id=course_id, folder_id=payload.folder_id)
-    material = CourseMaterial(
-        id=_new_material_id(),
-        course_id=course_id,
-        user_id=user_id,
-        folder_id=payload.folder_id,
-        name=payload.name,
-        material_type="link",
-        source_type="url",
-        source_url=payload.source_url,
-        parse_status="uploaded",
-    )
-    return save_material(db, material)
+    try:
+        return save_material(db, material)
+    except Exception:
+        db.rollback()
+        try:
+            storage.discard_material_files(
+                user_id=user_id,
+                course_id=course_id,
+                material_id=material_id,
+            )
+        except Exception as compensation_error:
+            upload_logger.error(
+                "上传补偿失败 | code=UPLOAD_COMPENSATION_FAILED material=%s course=%s",
+                material_id,
+                course_id,
+                exc_info=(
+                    type(compensation_error),
+                    compensation_error,
+                    compensation_error.__traceback__,
+                ),
+            )
+            raise CourseNexusError(
+                code="UPLOAD_COMPENSATION_FAILED",
+                message="上传失败且文件回收未完成，请联系管理员检查存储",
+                status_code=500,
+                details={"material_id": material_id},
+            ) from compensation_error
+        raise
 
 
 def list_course_materials(db: Session, user_id: str, course_id: str) -> list[CourseMaterial]:
@@ -125,7 +137,7 @@ def get_material_detail(db: Session, user_id: str, material_id: str) -> CourseMa
     return material
 
 
-def get_material_pdf_content(
+def get_material_file_content(
     db: Session,
     *,
     user_id: str,
@@ -133,15 +145,10 @@ def get_material_pdf_content(
     storage_root: str | Path,
 ) -> tuple[CourseMaterial, Path]:
     material = get_material_detail(db, user_id, material_id)
-    if (
-        material.source_type != "file"
-        or material.material_type != "pdf"
-        or material.mime_type != "application/pdf"
-        or material.file_url is None
-    ):
+    if material.source_type != "file" or material.file_url is None:
         raise CourseNexusError(
             code="PREVIEW_UNSUPPORTED",
-            message="当前仅支持预览 PDF 资料",
+            message="当前资料没有可预览的原文件",
             status_code=415,
         )
 
@@ -256,7 +263,7 @@ def move_material_to_folder(
     _assert_folder_in_course(db, user_id=user_id, course_id=material.course_id, folder_id=folder_id)
     if material.folder_id == folder_id:
         return material
-    if material.parse_status == "parsed":
+    if material.active_parse_version_id is not None:
         rag_index.update_material_folder(material.id, folder_id)
     material.folder_id = folder_id
     material.updated_at = datetime.now(timezone.utc)
@@ -306,13 +313,13 @@ def parse_material(
 ) -> CourseMaterial:
     started_at = perf_counter()
     material = get_material_detail(db, user_id, material_id)
-    material.parse_status = "parsing"
-    material.parse_error = None
-    material.parse_quality = "unknown"
-    material.page_count = None
-    material.parse_diagnostics_json = None
-    material.updated_at = datetime.now(timezone.utc)
-    save_material(db, material)
+    if material.source_type == "url":
+        raise CourseNexusError(
+            code="MATERIAL_LINK_REMOVED",
+            message="链接资料入口已停止支持，无法解析；请上传文件资料",
+            status_code=409,
+        )
+    candidate = _create_parse_candidate(db, material)
 
     if material.source_type != "file" or material.file_url is None:
         parse_logger.warning(
@@ -320,7 +327,13 @@ def parse_material(
             material.id,
             (perf_counter() - started_at) * 1000,
         )
-        return _mark_parse_failed(db, material, "UNSUPPORTED_FILE_TYPE", rag_index=rag_index)
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="UNSUPPORTED_FILE_TYPE",
+            rag_index=rag_index,
+        )
 
     try:
         parsed_document = parser.parse(Path(storage_root) / material.file_url)
@@ -333,7 +346,13 @@ def parse_material(
             (perf_counter() - started_at) * 1000,
             exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
         )
-        return _mark_parse_failed(db, material, exc.code, rag_index=rag_index)
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code=exc.code,
+            rag_index=rag_index,
+        )
     except Exception as exc:
         parse_logger.error(
             "解析失败：文件内容无法识别 | code=PARSE_FAILED material=%s cost_ms=%.2f",
@@ -341,12 +360,19 @@ def parse_material(
             (perf_counter() - started_at) * 1000,
             exc_info=(type(exc), exc, exc.__traceback__),
         )
-        return _mark_parse_failed(db, material, "PARSE_FAILED", rag_index=rag_index)
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="PARSE_FAILED",
+            rag_index=rag_index,
+        )
 
     chunks = [
         MaterialChunk(
-            id=_chunk_id(material.id, chunk.chunk_index),
+            id=_chunk_id(candidate.id, chunk.chunk_index),
             material_id=material.id,
+            parse_version_id=candidate.id,
             course_id=material.course_id,
             chunk_index=chunk.chunk_index,
             page=chunk.page,
@@ -356,13 +382,60 @@ def parse_material(
         )
         for chunk in parsed_document.chunks
     ]
-    replace_material_chunks_in_session(db, material=material, chunks=chunks)
-    db.commit()
-    db.refresh(material)
+    if not chunks:
+        parse_logger.warning(
+            "候选解析版本没有可用内容 | code=PARSE_FAILED material=%s version=%s cost_ms=%.2f",
+            material.id,
+            candidate.id,
+            (perf_counter() - started_at) * 1000,
+        )
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="PARSE_FAILED",
+            rag_index=rag_index,
+        )
+    try:
+        candidate.parse_quality = _parse_quality(parsed_document.diagnostics)
+        candidate.page_count = parsed_document.diagnostics.page_count
+        candidate.parse_diagnostics_json = _parse_diagnostics_json(parsed_document.diagnostics)
+        candidate.updated_at = datetime.now(timezone.utc)
+        db.add(candidate)
+        db.add_all(chunks)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        parse_logger.error(
+            "候选解析版本保存失败 | code=PARSE_FAILED material=%s version=%s chunks=%d cost_ms=%.2f",
+            material.id,
+            candidate.id,
+            len(chunks),
+            (perf_counter() - started_at) * 1000,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="PARSE_FAILED",
+            rag_index=rag_index,
+        )
 
     try:
-        rag_index.delete_material(material.id)
         rag_index.index_chunks(_rag_chunks_for_material(material, chunks))
+        expected_chunk_ids = {chunk.id for chunk in chunks}
+        indexed_chunk_ids = rag_index.list_parse_version_chunk_ids(candidate.id)
+        if indexed_chunk_ids != expected_chunk_ids:
+            raise CourseNexusError(
+                code="INDEXING_FAILED",
+                message="候选解析版本索引不完整",
+                status_code=502,
+                details={
+                    "expected_count": len(expected_chunk_ids),
+                    "indexed_count": len(indexed_chunk_ids),
+                },
+            )
     except CourseNexusError as exc:
         cause = exc.__cause__
         index_logger.error(
@@ -372,8 +445,13 @@ def parse_material(
             (perf_counter() - started_at) * 1000,
             exc_info=(type(cause), cause, cause.__traceback__) if cause is not None else None,
         )
-        _try_delete_material_vectors(rag_index, material.id)
-        return _mark_parse_failed(db, material, "INDEXING_FAILED")
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="INDEXING_FAILED",
+            rag_index=rag_index,
+        )
     except Exception as exc:
         index_logger.error(
             "索引失败 | code=INDEXING_FAILED material=%s chunks=%d cost_ms=%.2f",
@@ -382,21 +460,47 @@ def parse_material(
             (perf_counter() - started_at) * 1000,
             exc_info=(type(exc), exc, exc.__traceback__),
         )
-        _try_delete_material_vectors(rag_index, material.id)
-        return _mark_parse_failed(db, material, "INDEXING_FAILED")
+        return _mark_parse_candidate_failed(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            error_code="INDEXING_FAILED",
+            rag_index=rag_index,
+        )
 
-    for chunk in chunks:
-        chunk.embedding_id = chunk.id
-    material.parse_status = "parsed"
-    material.parse_error = None
-    material.parse_quality = _parse_quality(parsed_document.diagnostics)
-    material.page_count = parsed_document.diagnostics.page_count
-    material.parse_diagnostics_json = _parse_diagnostics_json(parsed_document.diagnostics)
-    material.updated_at = datetime.now(timezone.utc)
-    db.add_all(chunks)
-    db.add(material)
-    db.commit()
-    db.refresh(material)
+    try:
+        material = _activate_parse_candidate(
+            db,
+            material_id=material.id,
+            parse_version_id=candidate.id,
+            chunk_ids=expected_chunk_ids,
+        )
+    except Exception as exc:
+        db.rollback()
+        current_material = db.get(CourseMaterial, material.id)
+        current_candidate = db.get(MaterialParseVersion, candidate.id)
+        if (
+            current_material is not None
+            and current_candidate is not None
+            and current_material.active_parse_version_id == current_candidate.id
+            and current_candidate.status == "active"
+        ):
+            material = current_material
+        else:
+            index_logger.error(
+                "解析版本切换失败 | code=PARSE_VERSION_SWITCH_FAILED material=%s version=%s cost_ms=%.2f",
+                material.id,
+                candidate.id,
+                (perf_counter() - started_at) * 1000,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            return _mark_parse_candidate_failed(
+                db,
+                material_id=material.id,
+                parse_version_id=candidate.id,
+                error_code="PARSE_VERSION_SWITCH_FAILED",
+                rag_index=rag_index,
+            )
     page_count = len({chunk.page_index for chunk in chunks if chunk.page_index is not None})
     parse_logger.info(
         "解析成功 | material=%s pages=%d chunks=%d cost_ms=%.2f",
@@ -421,32 +525,168 @@ def _rag_chunks_for_material(material: CourseMaterial, chunks: list[MaterialChun
             page=chunk.page,
             page_index=chunk.page_index,
             heading=chunk.heading,
+            parse_version_id=chunk.parse_version_id,
         )
         for chunk in chunks
     ]
 
 
-def _mark_parse_failed(
-    db: Session,
-    material: CourseMaterial,
-    error_code: str,
-    *,
-    rag_index: RagIndex | None = None,
-) -> CourseMaterial:
-    if rag_index is not None:
-        _try_delete_material_vectors(rag_index, material.id)
-    material.parse_status = "parse_failed"
-    material.parse_error = error_code
-    material.parse_quality = "unknown"
-    material.page_count = None
-    material.parse_diagnostics_json = None
-    material.updated_at = datetime.now(timezone.utc)
-    return replace_material_chunks(db, material=material, chunks=[])
+def _create_parse_candidate(db: Session, material: CourseMaterial) -> MaterialParseVersion:
+    if get_building_parse_version(db, material.id) is not None:
+        raise CourseNexusError(
+            code="PARSE_ALREADY_IN_PROGRESS",
+            message="资料正在解析，请勿重复提交",
+            status_code=409,
+        )
 
-
-def _try_delete_material_vectors(rag_index: RagIndex, material_id: str) -> None:
+    now = datetime.now(timezone.utc)
+    candidate = MaterialParseVersion(
+        id=_new_parse_version_id(),
+        material_id=material.id,
+        course_id=material.course_id,
+        user_id=material.user_id,
+        status="building",
+        parse_quality="unknown",
+        created_at=now,
+        updated_at=now,
+    )
+    material.parse_status = "parsing"
+    material.parse_error = None
+    if material.active_parse_version_id is None:
+        material.parse_quality = "unknown"
+        material.page_count = None
+        material.parse_diagnostics_json = None
+    material.updated_at = now
+    db.add(candidate)
+    db.add(material)
     try:
-        rag_index.delete_material(material_id)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise CourseNexusError(
+            code="PARSE_ALREADY_IN_PROGRESS",
+            message="资料正在解析，请勿重复提交",
+            status_code=409,
+        ) from exc
+    db.refresh(candidate)
+    db.refresh(material)
+    return candidate
+
+
+def _activate_parse_candidate(
+    db: Session,
+    *,
+    material_id: str,
+    parse_version_id: str,
+    chunk_ids: set[str],
+) -> CourseMaterial:
+    material = db.get(CourseMaterial, material_id)
+    candidate = get_parse_version_for_material(
+        db,
+        material_id=material_id,
+        parse_version_id=parse_version_id,
+    )
+    if material is None or candidate is None or candidate.status != "building":
+        raise CourseNexusError(
+            code="PARSE_VERSION_SWITCH_FAILED",
+            message="候选解析版本状态已变化",
+            status_code=409,
+        )
+
+    now = datetime.now(timezone.utc)
+    if material.active_parse_version_id is not None:
+        previous = get_parse_version_for_material(
+            db,
+            material_id=material_id,
+            parse_version_id=material.active_parse_version_id,
+        )
+        if previous is not None:
+            previous.status = "retired"
+            previous.updated_at = now
+            previous.finished_at = now
+            db.add(previous)
+
+    chunks = list_material_chunks_for_parse_version(db, parse_version_id)
+    if {chunk.id for chunk in chunks} != chunk_ids:
+        raise CourseNexusError(
+            code="PARSE_VERSION_SWITCH_FAILED",
+            message="候选解析版本数据不完整",
+            status_code=409,
+        )
+    for chunk in chunks:
+        chunk.embedding_id = chunk.id
+
+    candidate.status = "active"
+    candidate.parse_error = None
+    candidate.activated_at = now
+    candidate.finished_at = now
+    candidate.updated_at = now
+    material.active_parse_version_id = candidate.id
+    material.parse_status = "parsed"
+    material.parse_error = None
+    material.parse_quality = candidate.parse_quality
+    material.page_count = candidate.page_count
+    material.parse_diagnostics_json = candidate.parse_diagnostics_json
+    material.updated_at = now
+    db.add_all(chunks)
+    db.add(candidate)
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return material
+
+
+def _mark_parse_candidate_failed(
+    db: Session,
+    *,
+    material_id: str,
+    parse_version_id: str,
+    error_code: str,
+    rag_index: RagIndex,
+) -> CourseMaterial:
+    db.rollback()
+    _try_delete_parse_version_vectors(rag_index, parse_version_id)
+    material = db.get(CourseMaterial, material_id)
+    candidate = get_parse_version_for_material(
+        db,
+        material_id=material_id,
+        parse_version_id=parse_version_id,
+    )
+    if material is None or candidate is None:
+        raise CourseNexusError(
+            code="PARSE_VERSION_SWITCH_FAILED",
+            message="候选解析版本不存在",
+            status_code=500,
+        )
+
+    if material.active_parse_version_id == candidate.id and candidate.status == "active":
+        return material
+
+    now = datetime.now(timezone.utc)
+    delete_material_chunks_for_parse_version_in_session(db, candidate.id)
+    candidate.status = "failed"
+    candidate.parse_error = error_code
+    candidate.updated_at = now
+    candidate.finished_at = now
+    if material.active_parse_version_id is None:
+        material.parse_status = "parse_failed"
+        material.parse_quality = "unknown"
+        material.page_count = None
+        material.parse_diagnostics_json = None
+    else:
+        material.parse_status = "parsed"
+    material.parse_error = error_code
+    material.updated_at = now
+    db.add(candidate)
+    db.add(material)
+    db.commit()
+    db.refresh(material)
+    return material
+
+
+def _try_delete_parse_version_vectors(rag_index: RagIndex, parse_version_id: str) -> None:
+    try:
+        rag_index.delete_parse_version(parse_version_id)
     except Exception:
         pass
 
@@ -461,14 +701,18 @@ def _permanently_delete_materials(
 ) -> None:
     material_ids = [material.id for material in materials]
     chunks = list_material_chunks_for_material_ids(db, material_ids)
-    parsed_materials = {material.id: material for material in materials if material.parse_status == "parsed"}
-    chunks_by_material: dict[str, list[MaterialChunk]] = {material_id: [] for material_id in parsed_materials}
+    versioned_materials = {
+        material.id: material for material in materials if material.active_parse_version_id is not None
+    }
+    chunks_by_material: dict[str, list[MaterialChunk]] = {
+        material_id: [] for material_id in versioned_materials
+    }
     for chunk in chunks:
         if chunk.material_id in chunks_by_material:
             chunks_by_material[chunk.material_id].append(chunk)
     rag_snapshot = [
         rag_chunk
-        for material_id, material in parsed_materials.items()
+        for material_id, material in versioned_materials.items()
         for rag_chunk in _rag_chunks_for_material(material, chunks_by_material[material_id])
     ]
     staged_files = _stage_material_file_deletions(storage, materials)
@@ -478,6 +722,7 @@ def _permanently_delete_materials(
         detach_material_references(db, material_ids)
         for chunk in chunks:
             db.delete(chunk)
+        db.flush()
         for material in materials:
             material.parse_status = "deleted"
             material.deleted_at = now

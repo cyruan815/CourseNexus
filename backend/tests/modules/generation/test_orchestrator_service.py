@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -45,6 +46,20 @@ class ErrorGenerator(RecordingGenerator):
         raise CourseNexusError(code=self.code, message="generation failed", status_code=502)
 
 
+class DeletingMaterialGenerator(RecordingGenerator):
+    def __init__(self, provider: ModelProvider, *, db: Session, material) -> None:
+        super().__init__(provider)
+        self.db = db
+        self.material = material
+
+    def generate(self, *, context: MaterialGenerationContext, parameters: dict[str, Any]) -> GeneratorOutput:
+        output = super().generate(context=context, parameters=parameters)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
+
+
 def test_generate_content_delivers_all_materials_once_without_citations(
     db: Session,
     alice_user,
@@ -74,6 +89,18 @@ def test_generate_content_delivers_all_materials_once_without_citations(
     assert set(generator.contexts[0].material_ids) == {material.id for material in parsed_materials}
     assert all(material.name in generator.contexts[0].text for material in parsed_materials)
     assert content.generation_status == "success"
+    assert content.material_scope_json == {
+        "include_all_parsed_materials": True,
+        "material_ids": [],
+        "source_materials": [
+            {"material_id": material.id, "material_name": material.name}
+            for material in sorted(parsed_materials, key=lambda item: item.id)
+        ],
+        "material_versions": [
+            {"material_id": material.id, "version_id": material.active_parse_version_id}
+            for material in sorted(parsed_materials, key=lambda item: item.id)
+        ],
+    }
     assert db.scalar(select(func.count()).select_from(SourceCitation)) == 0
 
 
@@ -142,3 +169,34 @@ def test_generation_failure_creates_failed_history(
     )
     assert content.generation_status == "failed"
     assert content.error_code == code
+
+
+def test_generation_does_not_publish_success_after_material_is_deleted(
+    db: Session,
+    alice_user,
+    owned_course,
+    parsed_materials,
+    registry_factory,
+) -> None:
+    content = generate_content(
+        db,
+        user_id=alice_user.id,
+        course_id=owned_course.id,
+        payload=GenerateContentRequest(content_type="outline"),
+        registry=registry_factory(
+            "outline",
+            lambda provider: DeletingMaterialGenerator(
+                provider,
+                db=db,
+                material=parsed_materials[0],
+            ),
+        ),
+        model_provider=MockModelProvider(),
+        max_context_tokens=10_000,
+    )
+
+    assert content.generation_status == "failed"
+    assert content.error_code == "MATERIAL_SCOPE_STALE"
+    assert content.content is None
+    assert content.content_json is None
+    assert db.scalar(select(func.count()).select_from(AIGeneratedContent)) == 1

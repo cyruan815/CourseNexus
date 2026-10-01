@@ -7,6 +7,7 @@ describe("App", () => {
   it("renders the application shell", () => {
     render(<App />);
 
-    expect(screen.getByText("CourseNexus")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CourseNexus 首页" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "课枢" })).toBeInTheDocument();
   });
 });

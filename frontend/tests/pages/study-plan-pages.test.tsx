@@ -1,6 +1,6 @@
 ﻿import { MantineProvider } from "@mantine/core";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, type InitialEntry } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StudyPlanCreatePage } from "../../src/pages/StudyPlanCreatePage";
@@ -69,6 +69,15 @@ const preview = {
   start_date: "2026-07-13",
   end_date: "2026-07-15",
   daily_available_minutes: 60,
+  diagnostic_profile: {
+    question_version: "study_plan_diagnostic_v2",
+    prior_knowledge_level: "little",
+    foundation_needed: true,
+    weak_topics: ["topic_vector_space"],
+    weak_area: "concept",
+    explanation_style: "plain_language",
+    diagnostic_note: "希望先补基础",
+  },
   material_scope: {
     include_all_parsed_materials: true,
     material_ids: [],
@@ -507,7 +516,12 @@ function successResponse(data: unknown, requestId = "req_1") {
   });
 }
 
-function renderStudyPlanRoutes(initialPath = "/courses/crs_123/study-plans/new") {
+function renderStudyPlanRoutes(initialPath: InitialEntry = {
+  pathname: "/courses/crs_123/study-plans/new",
+  state: {
+    studyPlanMaterialSelection: [{ id: materials[0].id, name: materials[0].name }],
+  },
+}) {
   return render(
     <MantineProvider>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -585,6 +599,163 @@ describe("study plan pages", () => {
     expect(screen.getByRole("heading", { name: "想生成什么学习计划？" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /切换为/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "打开个人中心" })).not.toBeInTheDocument();
+  });
+
+  it("blocks an empty scope and sends a current all-material snapshot after adjustment", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
+        return Promise.resolve(successResponse(course, "req_course"));
+      }
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      if (url.endsWith("/study-plan-config-parses")) {
+        return Promise.resolve(successResponse({
+          goal_text: "复习线性代数",
+          material_scope: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+          unresolved_fields: ["start_date", "duration_days"],
+        }, "req_parse"));
+      }
+      if (url.endsWith("/study-plan-diagnostic-questions")) {
+        return Promise.resolve(successResponse(diagnosticQuestions, "req_questions"));
+      }
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/new");
+    expect(await screen.findByText("尚未选择资料")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), { target: { value: "复习线性代数" } });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+    expect(await screen.findByText("请选择至少一份已解析资料。")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/study-plan-config-parses"))).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "全选当前可用资料" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认资料范围" }));
+    expect(screen.getByText(/已选 1 份：线代第一章\.pdf/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/courses/crs_123/study-plan-config-parses",
+      expect.objectContaining({
+        body: JSON.stringify({
+          goal_text: "复习线性代数",
+          material_scope: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+        }),
+      }),
+    ));
+  });
+
+  it("keeps a selected material available while its replacement version is parsing", async () => {
+    const versionedMaterials = materials.map((material) => material.id === "mat_2"
+      ? {
+          ...material,
+          active_parse_version_id: "mpv_active",
+          is_learning_ready: true,
+        }
+      : material);
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(versionedMaterials, "req_materials"));
+      }
+      return Promise.resolve(successResponse(url.endsWith("/courses/crs_123") ? course : {}));
+    }));
+
+    renderStudyPlanRoutes({
+      pathname: "/courses/crs_123/study-plans/new",
+      state: { studyPlanMaterialSelection: [{ id: "mat_2", name: "未解析习题.pdf" }] },
+    });
+
+    expect(await screen.findByText(/已选 1 份：未解析习题\.pdf/)).toBeInTheDocument();
+    expect(screen.queryByText(/已被删除、失效或尚未解析/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
+    expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeChecked();
+    expect(screen.getByText("正在更新")).toBeInTheDocument();
+  });
+
+  it("keeps an invalid material snapshot visible and requires explicit reselection", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      return Promise.resolve(successResponse(url.endsWith("/courses/crs_123") ? course : {}));
+    }));
+
+    renderStudyPlanRoutes({
+      pathname: "/courses/crs_123/study-plans/new",
+      state: { studyPlanMaterialSelection: [{ id: "mat_deleted", name: "已删除讲义.pdf" }] },
+    });
+
+    expect(await screen.findByText(/已选 1 份：已删除讲义\.pdf/)).toBeInTheDocument();
+    expect(screen.getByText(/有 1 份资料已被删除/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("学习目标"), { target: { value: "复习线性代数" } });
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+    expect(await screen.findByText("所选资料已被删除、失效或尚未解析，请调整并重新确认资料范围。")).toBeInTheDocument();
+  });
+
+  it("restores only the current user's versioned course draft", async () => {
+    window.localStorage.setItem("course-nexus:study-plan-create:v2:usr_other:crs_123", JSON.stringify({
+      version: 2,
+      userId: "usr_other",
+      courseId: "crs_123",
+      goalText: "其他账号的目标",
+      materialSelection: [{ id: "mat_1", name: "线代第一章.pdf" }],
+      materialScope: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+    }));
+    window.localStorage.setItem("course-nexus:study-plan-create:v2:usr_123:crs_123", JSON.stringify({
+      version: 2,
+      userId: "usr_123",
+      courseId: "crs_123",
+      goalText: "当前账号的目标",
+      materialSelection: [{ id: "mat_1", name: "线代第一章.pdf" }],
+      materialScope: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+    }));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      return Promise.resolve(successResponse(url.endsWith("/courses/crs_123") ? course : {}));
+    }));
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/new");
+
+    expect(await screen.findByDisplayValue("当前账号的目标")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("其他账号的目标")).not.toBeInTheDocument();
+    expect(screen.getByText(/已选 1 份：线代第一章\.pdf/)).toBeInTheDocument();
+  });
+
+  it("migrates a legacy all-material draft but requires confirmation", async () => {
+    window.localStorage.setItem("course-nexus:study-plan-create:crs_123", JSON.stringify({
+      goalText: "旧版草稿目标",
+      materialScope: { include_all_parsed_materials: true, material_ids: [] },
+    }));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/courses/crs_123/materials")) {
+        return Promise.resolve(successResponse(materials, "req_materials"));
+      }
+      return Promise.resolve(successResponse(url.endsWith("/courses/crs_123") ? course : {}));
+    }));
+
+    renderStudyPlanRoutes("/courses/crs_123/study-plans/new");
+
+    expect(await screen.findByDisplayValue("旧版草稿目标")).toBeInTheDocument();
+    expect(screen.getByText(/旧版未保存“全选”的历史快照/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
+    expect(await screen.findByText("旧草稿的“全部资料”没有历史快照，请确认本次实际使用的资料。")).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem("course-nexus:study-plan-create:crs_123")).toBeNull());
+    expect(JSON.parse(window.localStorage.getItem("course-nexus:study-plan-create:v2:usr_123:crs_123") ?? "{}")).toMatchObject({
+      version: 2,
+      userId: "usr_123",
+      courseId: "crs_123",
+      materialScope: { include_all_parsed_materials: false, material_ids: ["mat_1"] },
+    });
   });
 
   it("shows a short questionnaire preparation animation while questions are loading", async () => {
@@ -867,8 +1038,13 @@ describe("study plan pages", () => {
     boundingRectSpy.mockRestore();
   });
 
-  it("turns a natural language goal into a mixed questionnaire, auto-saves, and enters detail after calendar preview", async () => {
+  it("turns a natural language goal into a preview, edits its title, saves, and enters detail", async () => {
     freezeStudyPlanDate();
+    const editedPlanTitle = "向量空间冲刺计划";
+    const editedSavedDetail = {
+      ...savedDetail,
+      plan: { ...savedDetail.plan, title: editedPlanTitle },
+    };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/courses/crs_123") && init?.method !== "POST") {
@@ -902,10 +1078,10 @@ describe("study plan pages", () => {
         return Promise.resolve(successResponse(preview, "req_preview"));
       }
       if (url.endsWith("/courses/crs_123/study-plans") && init?.method === "POST") {
-        return Promise.resolve(successResponse(savedDetail, "req_save"));
+        return Promise.resolve(successResponse(editedSavedDetail, "req_save"));
       }
       if (url.endsWith("/study-plans/plan_1")) {
-        return Promise.resolve(successResponse(savedDetail, "req_detail"));
+        return Promise.resolve(successResponse(editedSavedDetail, "req_detail"));
       }
 
       return Promise.resolve(successResponse({}));
@@ -949,8 +1125,17 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
 
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input, init]) => (
+      String(input).endsWith("/courses/crs_123/study-plans") && (init as RequestInit | undefined)?.method === "POST"
+    ))).toBe(false);
+    const planTitleInput = screen.getByLabelText("计划名称");
+    fireEvent.change(planTitleInput, { target: { value: "   " } });
+    expect(screen.getByText("计划名称不能为空")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存学习计划" })).toBeDisabled();
+    fireEvent.change(planTitleInput, { target: { value: editedPlanTitle } });
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
-    expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: editedPlanTitle })).toBeInTheDocument();
     expect(screen.getByText("学习: 向量空间")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "开始学习" })).toHaveAttribute("href", "/study-subtasks/subtask_1");
 
@@ -961,8 +1146,8 @@ describe("study plan pages", () => {
           body: JSON.stringify({
             goal_text: "复习线性代数第一章",
             material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
             },
           }),
           method: "POST",
@@ -976,8 +1161,8 @@ describe("study plan pages", () => {
           body: JSON.stringify({
             goal_text: "复习线性代数第一章",
             material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
             },
             confirmed_config: {
               start_date: null,
@@ -1007,8 +1192,8 @@ describe("study plan pages", () => {
             weak_area: "concept",
             diagnostic_note: "希望先补基础",
             material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
             },
           }),
           method: "POST",
@@ -1023,8 +1208,8 @@ describe("study plan pages", () => {
             goal_text: "复习线性代数第一章",
             preference: "balanced",
             material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
             },
             start_date: "2026-07-13",
             end_date: "2026-07-14",
@@ -1042,13 +1227,13 @@ describe("study plan pages", () => {
             goal_text: "复习线性代数第一章",
             preference: "balanced",
             material_scope: {
-              include_all_parsed_materials: true,
-              material_ids: [],
+              include_all_parsed_materials: false,
+              material_ids: ["mat_1"],
             },
             start_date: "2026-07-13",
             end_date: "2026-07-14",
             diagnostic_profile: diagnosticProfile,
-            title: preview.title,
+            title: editedPlanTitle,
             client_flow: "wizard_v1",
             tasks: preview.tasks,
           }),
@@ -1126,10 +1311,11 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByLabelText("概念理解"));
 
     fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    fireEvent.click(await screen.findByRole("button", { name: "保存学习计划" }));
     expect(await screen.findByText("模拟保存响应丢失")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "开始前确认一下" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "确认计划名称" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("study-plan-questionnaire-submit"));
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     expect(await screen.findByRole("button", { name: "进入计划" })).toBeInTheDocument();
 
     expect(saveRequests).toHaveLength(2);
@@ -1213,7 +1399,7 @@ describe("study plan pages", () => {
     expect(screen.getByText("July 2026")).toBeInTheDocument();
     expect(screen.getByText("生成学习计划")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith("/api/v1/courses/crs_123/study-calendar?month=2026-07", expect.anything());
-    expect(screen.getByText("本次生成计划")).toBeInTheDocument();
+    expect(screen.getByRole("grid", { name: "生成中的计划日历" })).toBeInTheDocument();
     expect(screen.queryByText("日期冲突")).not.toBeInTheDocument();
     expect(screen.queryByText("汇总问卷答案")).not.toBeInTheDocument();
     expect(screen.queryByText("保存学习计划")).not.toBeInTheDocument();
@@ -1222,6 +1408,7 @@ describe("study plan pages", () => {
     profileDeferred.resolve();
     expect(await screen.findByText("第 1 天学习任务")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "高等数学学习计划" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存学习计划" }));
     fireEvent.click(await screen.findByRole("button", { name: "进入计划" }));
     expect(await screen.findByRole("heading", { name: "高等数学学习计划" })).toBeInTheDocument();
   });
@@ -1348,7 +1535,7 @@ describe("study plan pages", () => {
     expect(within(topbar as HTMLElement).queryByRole("button", { name: "重新生成" })).not.toBeInTheDocument();
     expect(within(topbar as HTMLElement).queryByRole("button", { name: "删除计划" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "学习入口" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导出计划（待接入）" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "导出计划（待接入）" })).not.toBeInTheDocument();
     expect(screen.getByText("阅读并整理概念")).toBeInTheDocument();
     expect(screen.queryByText("含义")).not.toBeInTheDocument();
     expect(document.querySelector(".study-plan-task-structure-panel")).toBeInTheDocument();
@@ -1421,6 +1608,7 @@ describe("study plan pages", () => {
             daily_available_minutes: replacementPreview.daily_available_minutes,
             preference: replacementPreview.preference,
             material_scope: replacementPreview.material_scope,
+            diagnostic_profile: replacementPreview.diagnostic_profile,
             title: replacementPreview.title,
             client_flow: "wizard_v1",
             tasks: replacementPreview.tasks,
@@ -1499,7 +1687,7 @@ describe("study plan pages", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "完成任务" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "取消完成" })).toBeInTheDocument());
-    expect(screen.getByText("打卡进度")).toBeInTheDocument();
+    expect(screen.getByText("进度")).toBeInTheDocument();
     expect(screen.getAllByText("2/2").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "取消完成" }));
@@ -1629,7 +1817,7 @@ describe("study plan pages", () => {
 
     expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
-    expect(await screen.findByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
+    expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成任务讲义" })).not.toBeInTheDocument();
   });
 
@@ -1661,6 +1849,98 @@ describe("study plan pages", () => {
     expect(screen.getByTestId("handout-callout-note")).toHaveTextContent("关键区别");
     expect(screen.getByTestId("handout-callout-note")).toHaveTextContent("发送时延取决于分组长度和链路速率。");
     expect(screen.queryByText("当前没有可展示的引用来源")).not.toBeInTheDocument();
+  });
+
+  it("keeps a regeneration failure after an older detail request resolves", async () => {
+    let resolveDetail: ((value: Response) => void) | undefined;
+    const pendingDetail = new Promise<Response>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return pendingDetail;
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({
+          error: { code: "GENERATION_FAILED", message: "生成失败" },
+        }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_handout_1",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+
+    expect(await screen.findByRole("alert", { name: "内容生成失败" })).toBeInTheDocument();
+    resolveDetail?.(successResponse(generatedHandout, "req_stale_detail"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert", { name: "内容生成失败" })).toBeInTheDocument();
+    });
+    expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
+  });
+
+  it("does not let an older detail request overwrite regenerated content", async () => {
+    let resolveDetail: ((value: Response) => void) | undefined;
+    const pendingDetail = new Promise<Response>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const regeneratedHandout = {
+      ...generatedHandout,
+      id: "gen_handout_2",
+      title: "向量空间新讲义",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/study-subtasks/subtask_1/execution-context")) {
+        return Promise.resolve(successResponse(executionContextWithHandout, "req_execution"));
+      }
+      if (url.endsWith("/generated-contents/gen_handout_1")) {
+        return pendingDetail;
+      }
+      if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
+        return Promise.resolve(successResponse(regeneratedHandout, "req_regenerated"));
+      }
+
+      return Promise.resolve(successResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderStudyPlanRoutes("/study-subtasks/subtask_1");
+
+    expect(await screen.findByRole("heading", { name: "学习: 向量空间" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/generated-contents/gen_handout_1",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+
+    expect(await screen.findByText("向量空间新讲义")).toBeInTheDocument();
+    resolveDetail?.(successResponse(generatedHandout, "req_stale_detail"));
+
+    await waitFor(() => {
+      expect(screen.getByText("向量空间新讲义")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
   });
 
   it("exports an existing handout as a PDF file", async () => {
@@ -1756,7 +2036,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("向量空间今日讲义")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务讲义" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1791,7 +2070,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
     const generatedTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");
@@ -1819,10 +2097,14 @@ describe("study plan pages", () => {
     });
   });
 
-  it("keeps switched task content independent and clears the background generation notice", async () => {
+  it("generates switched task content concurrently and keeps results independent", async () => {
     let resolveHandout: ((value: Response) => void) | undefined;
+    let resolveTaskTest: ((value: Response) => void) | undefined;
     const pendingHandout = new Promise<Response>((resolve) => {
       resolveHandout = resolve;
+    });
+    const pendingTaskTest = new Promise<Response>((resolve) => {
+      resolveTaskTest = resolve;
     });
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -1838,6 +2120,9 @@ describe("study plan pages", () => {
       if (url.endsWith("/study-subtasks/subtask_1/handouts") && init?.method === "POST") {
         return pendingHandout;
       }
+      if (url.endsWith("/study-subtasks/subtask_2/task-tests") && init?.method === "POST") {
+        return pendingTaskTest;
+      }
 
       return Promise.resolve(successResponse({}));
     });
@@ -1852,15 +2137,28 @@ describe("study plan pages", () => {
     expect(await screen.findByRole("heading", { name: "练习: 基础题" })).toBeInTheDocument();
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.getByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).toBeInTheDocument();
-    expect(screen.getByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).toBeInTheDocument();
+    expect(screen.getByText("其他任务的内容也在后台生成中，完成后会自动保存到对应任务。")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "重新生成" }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_1/handouts",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/study-subtasks/subtask_2/task-tests",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
     resolveHandout?.(successResponse(generatedHandout, "req_handout"));
+    resolveTaskTest?.(successResponse(generatedTaskTest, "req_task_test"));
 
     await waitFor(() => {
       expect(screen.queryByText("已切换任务；原任务内容仍在后台生成，不会影响当前页面。")).not.toBeInTheDocument();
     });
-    expect(screen.queryByText("另一个任务的内容仍在后台生成中，当前页面可以继续查看；完成前暂不能同时发起新的生成。")).not.toBeInTheDocument();
+    expect(screen.queryByText("其他任务的内容也在后台生成中，完成后会自动保存到对应任务。")).not.toBeInTheDocument();
     expect(screen.getByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByText("向量空间今日讲义")).not.toBeInTheDocument();
   });
@@ -1883,7 +2181,6 @@ describe("study plan pages", () => {
 
     expect(await screen.findByText("基础题任务测试题")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "查看任务测试题" })).not.toBeInTheDocument();
-    expect(screen.getByText("来源：线代第一章.pdf · 第 3 页")).toBeInTheDocument();
     expect(screen.getByText("向量空间必须满足哪类结构？")).toBeInTheDocument();
     expect(screen.queryByText("正确答案：A")).not.toBeInTheDocument();
     const existingTaskTestCard = screen.getByLabelText("第 1 题：向量空间必须满足哪类结构？");

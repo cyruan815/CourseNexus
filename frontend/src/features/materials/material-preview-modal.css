@@ -1,0 +1,101 @@
+.material-preview-modal__content {
+  border: 1px solid #dce4ea;
+  border-radius: 16px;
+  box-shadow: 0 28px 80px rgba(22, 35, 48, 0.24);
+  height: min(90vh, 960px);
+  overflow: hidden;
+}
+
+.material-preview-modal__header {
+  border-bottom: 1px solid #e4e9ee;
+  min-height: 56px;
+  padding: 0 18px 0 20px;
+}
+
+.material-preview-modal__title {
+  color: #1e2c3d;
+  font-size: 15px;
+  font-weight: 680;
+  max-width: calc(100% - 52px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-preview-modal__body {
+  display: flex;
+  height: calc(100% - 56px);
+  padding: 0;
+}
+
+.material-preview-modal__stage {
+  align-items: stretch;
+  background: #eef2f5;
+  display: flex;
+  flex: 1;
+  justify-content: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.material-preview-modal__loading {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dce4ea;
+  border-radius: 12px;
+  box-shadow: 0 16px 42px rgba(38, 53, 68, 0.08);
+  display: flex;
+  gap: 14px;
+  margin: auto;
+  max-width: min(420px, calc(100% - 40px));
+  padding: 22px 26px;
+}
+
+.material-preview-modal__loading div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.material-preview-modal__loading strong {
+  color: #26374a;
+  font-size: 14px;
+}
+
+.material-preview-modal__loading span {
+  color: #748294;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-preview-modal__error {
+  margin: auto;
+  max-width: min(520px, calc(100% - 40px));
+}
+
+.material-preview-modal__error p {
+  margin: 0 0 14px;
+}
+
+:root[data-course-nexus-theme="dark"] .material-preview-modal__content,
+:root[data-course-nexus-theme="dark"] .material-preview-modal__header,
+:root[data-course-nexus-theme="dark"] .material-preview-modal__loading {
+  background: #142033;
+  border-color: #2a3a4f;
+}
+
+:root[data-course-nexus-theme="dark"] .material-preview-modal__title,
+:root[data-course-nexus-theme="dark"] .material-preview-modal__loading strong {
+  color: #e7edf5;
+}
+
+:root[data-course-nexus-theme="dark"] .material-preview-modal__stage {
+  background: #0f1927;
+}
+
+:root[data-course-nexus-theme="dark"] .material-preview-modal__loading span {
+  color: #9eacbc;
+}

@@ -1,6 +1,6 @@
-import { Alert, Badge, Box, Checkbox, Group, SegmentedControl, Stack, Text } from "@mantine/core";
+import { Alert, Badge, Box, Checkbox, Group, Stack, Text } from "@mantine/core";
 
-import type { Material, MaterialScope } from "../../materials/types";
+import { isMaterialLearningReady, type Material, type MaterialScope } from "../../materials/types";
 
 interface StudyPlanMaterialScopeSelectorProps {
   error: string | null;
@@ -24,22 +24,15 @@ export function StudyPlanMaterialScopeSelector({
   materials,
   onMaterialScopeChange,
 }: StudyPlanMaterialScopeSelectorProps) {
-  const parsedMaterials = materials.filter((material) => material.parse_status === "parsed");
+  const parsedMaterials = materials.filter(isMaterialLearningReady);
   const parsedIds = parsedMaterials.map((material) => material.id);
-  const selectedIds = materialScope.include_all_parsed_materials
-    ? parsedIds
-    : materialScope.material_ids.filter((id) => parsedIds.includes(id));
-  const mode = materialScope.include_all_parsed_materials ? "all" : "specific";
+  const selectedIds = materialScope.material_ids.filter((id) => parsedIds.includes(id));
+  const hasSelectedAll = parsedIds.length > 0 && selectedIds.length === parsedIds.length;
 
-  function changeMode(nextMode: string) {
-    if (nextMode === "all") {
-      onMaterialScopeChange({ include_all_parsed_materials: true, material_ids: [] });
-      return;
-    }
-
+  function toggleAll() {
     onMaterialScopeChange({
       include_all_parsed_materials: false,
-      material_ids: [],
+      material_ids: hasSelectedAll ? [] : parsedIds,
     });
   }
 
@@ -63,21 +56,16 @@ export function StudyPlanMaterialScopeSelector({
           </Text>
         </Stack>
         <Badge color="teal" variant="light">
-          {materialScope.include_all_parsed_materials ? "全部已解析" : `已选 ${selectedIds.length}`}
+          已选 {selectedIds.length} / {parsedIds.length}
         </Badge>
       </Group>
 
-      <SegmentedControl
-        data={[
-          { label: <span data-testid="scope-mode-all">全部已解析资料</span>, value: "all" },
-          {
-            disabled: parsedIds.length === 0,
-            label: <span data-testid="scope-mode-specific">指定资料</span>,
-            value: "specific",
-          },
-        ]}
-        onChange={changeMode}
-        value={mode}
+      <Checkbox
+        checked={hasSelectedAll}
+        disabled={parsedIds.length === 0}
+        indeterminate={selectedIds.length > 0 && !hasSelectedAll}
+        label="全选当前可用资料"
+        onChange={toggleAll}
       />
 
       {error ? (
@@ -86,7 +74,7 @@ export function StudyPlanMaterialScopeSelector({
         </Alert>
       ) : null}
 
-      {!isLoading && mode === "specific" && selectedIds.length === 0 ? (
+      {!isLoading && selectedIds.length === 0 ? (
         <Alert color="yellow" role="status" variant="light">
           请选择至少一份已解析资料。
         </Alert>
@@ -103,21 +91,26 @@ export function StudyPlanMaterialScopeSelector({
       {!isLoading && materials.length > 0 ? (
         <Stack className="study-plan-scope-list" gap={8}>
           {materials.map((material) => {
-            const isParsed = material.parse_status === "parsed";
-            const isChecked = materialScope.include_all_parsed_materials
-              ? isParsed
-              : selectedIds.includes(material.id);
+            const isParsed = isMaterialLearningReady(material);
+            const isChecked = isParsed && selectedIds.includes(material.id);
+            const status = material.parse_status === "parsing" && isParsed
+              ? "正在更新"
+              : material.parse_error && isParsed
+                ? "更新失败，当前版本仍可用"
+                : material.parse_status === "parse_failed"
+                  ? "首次解析失败"
+                  : statusLabels[material.parse_status] ?? material.parse_status;
 
             return (
               <Group className="study-plan-scope-row" key={material.id} justify="space-between" wrap="nowrap">
                 <Checkbox
                   checked={isChecked}
-                  disabled={!isParsed || materialScope.include_all_parsed_materials}
+                  disabled={!isParsed}
                   label={material.name}
                   onChange={() => toggleMaterial(material.id)}
                 />
                 <Badge color={isParsed ? "teal" : "gray"} variant="light">
-                  {statusLabels[material.parse_status] ?? material.parse_status}
+                  {status}
                 </Badge>
               </Group>
             );
@@ -127,7 +120,7 @@ export function StudyPlanMaterialScopeSelector({
 
       {!isLoading && parsedIds.length === 0 ? (
         <Alert color="yellow" variant="light">
-          还没有可用于 Agent 的已解析资料，后续 preview 可能会由后端返回无可用资料提示。
+          还没有可用于 Agent 的已解析资料，请先完成资料解析。
         </Alert>
       ) : null}
     </Box>

@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 日期：2026-07-12
+- 日期：2026-10-01
 - 状态：已实现并通过自动化验证。
 - 范围：单课程学习计划生成、自然语言配置解析、开始前设置配置补问、学前诊断、诊断后 capacity 统计、确认保存、幂等、重生成预览、原子替换和软删除。
 
@@ -23,12 +23,22 @@
 2. 开始前设置：前端在同一页面顶部展示配置补问与确认控件，并在下方展示学前诊断。学习目标和资料范围来自第一步，开始前设置页只读展示；如需修改，应返回第一步并重新解析配置、重新生成诊断题。后端 API 字段 `confirmed_config` 表示自然语言解析结果经用户补齐/确认后的有效配置，不代表独立配置确认页。
 3. 学前诊断题：`POST /api/v1/courses/{course_id}/study-plan-diagnostic-questions` 使用 `study_plan_diagnostic` 模型配置，根据 `goal_text + confirmed_config + material_scope + chunk excerpts` 选择 3 个资料内 topic 候选；后端映射回当前 chunk、去重并补齐为 3 道 topic mastery 题，同时固定补 weak_area 和 diagnostic_note。
 4. 诊断 profile：`POST /api/v1/courses/{course_id}/study-plan-diagnostic-profiles` 不调用模型，只校验 question version、topic_id 与当前资料范围匹配关系，并把 3 个 topic mastery 答案、weak_area 和 diagnostic_note 归纳为 `diagnostic_profile`。
-5. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内所有已解析资料批次，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。`planner.derive_planner_strategy()` 会先把英文 `preference`、可选 `preference_overrides` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。P5a 同步通过 `material_context.summarize_material_quality_for_scope()` 读取同一 `material_scope` 内 parsed 资料的 `parse_quality` / `parse_diagnostics_json`，并写入 `generation_metadata.material_quality.warnings`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。
-6. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且已解析可用；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.preference_overrides` 保存原始局部覆盖值，`parsed_config_json.planner_strategy` 由当前 `preference + preference_overrides + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。
+5. 预览：`preview_study_plan()` 调用 `iter_material_context_batches()` 读取范围内每份资料的生效解析版本，再用 `run_material_coverage()` 包住 planner map/reduce，并使用 `study_plan_generator` 模型配置生成计划。map 与 reduce 使用独立的 provider：reduce 使用 `STUDY_PLAN_GENERATOR_*`，map 可通过 `STUDY_PLAN_MAP_*` 配置独立的 API key、base URL、模型和 API 风格；map 配置未填写时回退到 generator provider，保证旧配置兼容。`STUDY_PLAN_GENERATOR_API_STYLE` 和 `STUDY_PLAN_MAP_API_STYLE` 取值为 `auto`、`responses` 或 `chat`，其中 `auto` 对 OpenAI 地址优先使用 Responses API，对 DeepSeek 地址使用 Chat Completions，显式值覆盖 URL 判断。当前可运行示例的 map / reduce 均为 `deepseek-flash`，仍可按用途独立覆盖。`planner.derive_planner_strategy()` 会先把英文 `preference`、可选 `preference_overrides` 和可选 `diagnostic_profile` 合并为 `planner_strategy`，写入 reduce prompt 和 `generation_metadata`。解析质量摘要同样来自这些生效版本，并写入 `generation_metadata.material_quality.warnings`。`recommended_daily_minutes` 基于 map 阶段材料单元估算；`capacity.estimated_total_minutes` 在 reduce 后基于最终 `tasks[].subtasks[].estimated_minutes` 重新统计。map 阶段支持配置 `STUDY_PLAN_MAP_CONCURRENCY` 的有界并发，默认值为 `1`、允许范围为 `1..5`；只有模型 map 调用并发，资料读取、reduce、后处理、校验和保存保持串行。并发完成顺序不作为业务顺序，runner 按输入 `batch_index` 恢复结果后再交给 reduce。任意 batch 失败都会使本次 preview 失败，不将部分结果交给 reduce；未开始的 future 会被取消。preview 会记录 map/reduce/validation 阶段耗时、batch 数量、并发度和 retry attempt；结构化模型日志还会记录 `prompt_tokens`、`completion_tokens`、`total_tokens` 和 `usage_status`，不记录 prompt 或资料正文。
+6. 确认保存：`StudyPlanSaveRequest.client_flow` 默认为 `legacy`；旧客户端不传 `client_flow` 且不传 `tasks` 时，后端先生成真实 preview 再保存。新向导必须传 `client_flow = "wizard_v1"` 并提交 preview 中展示、用户确认后的非空 exact `tasks`；缺失或空数组返回 `422 PREVIEW_TASKS_REQUIRED`，不会进入兼容 preview 生成。显式 `tasks` 会在写库前校验一级/二级任务结构、日期范围、排序连续性，以及所有关联资料是否属于当前用户、当前课程、本次 `material_scope` 且存在生效版本；保存追溯中的 `parsed_config_json.tasks_source` 对确认任务树保持 `confirmed`，`parsed_config_json.preference_overrides` 保存原始局部覆盖值，`parsed_config_json.planner_strategy` 由当前 `preference + preference_overrides + diagnostic_profile` 重新派生，`parsed_config_json.capacity` 始终按最终 `tasks` 重新计算。`parsed_config_json.material_snapshot.material_versions` 保存 preview 实际读取的 `{material_id, version_id}`，后续重解析不会改写该历史快照；兼容客户端未提交快照时，保存阶段按当时生效版本补齐。
 7. 幂等：保存接口读取 `Idempotency-Key`，将 `key_hash` 写入 `StudyPlan.idempotency_key_hash`，并在 `StudyPlan.parsed_config_json.idempotency` 保存 `key_hash` 与 `request_hash`；同键同请求返回既有 bundle，同键不同请求返回 `IDEMPOTENCY_CONFLICT`。数据库唯一索引 `(user_id, course_id, idempotency_key_hash)` 负责兜底并发重复提交；软删除计划仍占用原 key，不允许复用。
-8. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
-9. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
-10. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+8. SQLite 外键：保存任务树在同一事务内按 `study_plans -> study_tasks -> study_subtasks` 分阶段 flush，保证启用 `foreign_keys=ON` 时父记录先于子记录可见。只有命中学习计划幂等唯一约束的 `IntegrityError` 才转换为 `IDEMPOTENCY_CONFLICT`；外键、检查约束等其他完整性错误必须回滚并保留原始异常类型，不能伪装成幂等冲突。
+9. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
+10. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
+11. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+11. 发布前复核：诊断题和计划 preview 在模型返回后、响应成功前复核实际读取的材料版本；保存和替换在任何计划、任务或打卡写入前复核请求快照。旧客户端没有版本快照时只能按请求中的明确材料 ID 构造一次当前快照，已提交但失效的快照不得静默替换。失败统一返回 `MATERIAL_SCOPE_STALE`。
+
+## P08 / P09 生命周期补充
+
+- 创建链路使用显式资料 ID 快照；“全选”只是选择当时全部学习可用资料，不使用动态 `include_all_parsed_materials=true`。资料范围在配置解析、诊断、preview 和 save 之间保持一致。
+- 失效资料不会被服务端或前端静默替换为全部资料；前端在发起后续请求前要求重新确认，后端继续执行归属、课程和生效版本校验。
+- `preview_study_plan()` 不再直接采用模型生成标题作为用户默认名，而是确定性输出“规范化目标 · start_date”；标题总长不超过数据库 `StudyPlan.title` 的 255 字符。
+- `StudyPlanSaveRequest.title` 可由用户在首次保存前编辑；后端去除多余空白并拒绝空白或超过 255 字符的标题。同一课程不对标题加唯一约束，因此允许同名计划。
+- 名称修改只作用于新保存的计划。历史 `StudyPlan.title` 保持原样，不执行批量改名；列表和详情直接读取该字段，待办任务与月历摘要由 `todos_calendar` 聚合契约返回同一 `plan_title`，保证四类视图一致。
 
 ## 计划质量约束
 
@@ -48,6 +58,7 @@
 - 学习计划配置解析和计划生成仍统一依赖 `ModelProvider.generate_structured()`，业务层不直接关心具体模型供应商。
 - `OpenAIModelProvider.generate_structured()` 优先使用 OpenAI Responses API 的结构化解析；当兼容模型服务对 `responses.parse` 返回 404 时，会回退到 Chat Completions，并通过 JSON Schema 提示词和 `response_format={"type":"json_object"}` 获取 JSON，再交给原 Pydantic schema 校验。
 - 回退只处理“接口形态不存在”的 404；普通网络、鉴权或服务端错误仍返回 `GENERATION_FAILED`，JSON 解析或 schema 校验失败仍返回 `GENERATION_SCHEMA_INVALID`。
+- `OpenAIModelProvider` 会从 Chat Completions 的 `usage.prompt_tokens` / `completion_tokens` 和 Responses API 的 `usage.input_tokens` / `output_tokens` 统一提取 token 指标；响应没有 usage 时记录 `usage_status=unavailable`，不自行估算。真实资料验证入口为 `backend/scripts/measure_study_plan_token_usage.py`，报告放在 `docs/domains/study-mode/validation/`。
 
 ## 不变量
 
@@ -57,9 +68,11 @@
 - 未携带 `Idempotency-Key` 的保存请求允许创建多份计划；携带 key 的保存请求必须在数据库唯一约束竞争后恢复为原计划或返回 `IDEMPOTENCY_CONFLICT`，不得暴露 500。
 - 计划保存不生成 `handout`、`task_test` 或任何 `ai_generated_contents`。
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
-- 每份范围内已解析资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
+- 每份范围内具有生效版本的资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
+- Preview 的 `material_snapshot` 同时保存排序后的 `material_ids`、`material_versions`、范围模式和覆盖这些字段的 `snapshot_hash`；确认保存必须保留该输入版本事实，不能因材料后来重解析而改写历史计划来源。
+- 诊断题、preview、保存和替换都必须在对外发布结果或写入计划前复核资料快照；复核覆盖用户与课程归属、材料未删除、版本仍存在且属于对应材料。失败不得退化为全选或当前最新版本。
 - Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；总时长超出总容量或任一天任务时长超过 `daily_available_minutes` 时，都必须返回 `PLAN_OVER_CAPACITY` warning。
-- Preview 的资料解析质量 warning 以当前 material-context scope 内 parsed 资料为事实来源，只进入 `generation_metadata.material_quality.warnings`；不得改变 capacity 计算，也不得把显式未 parsed 资料升级为新的 P5a 阻断。
+- Preview 的资料解析质量 warning 以当前 material-context scope 内生效版本为事实来源，只进入 `generation_metadata.material_quality.warnings`；不得改变 capacity 计算，也不得把没有生效版本的资料升级为新的 P5a 阻断。
 
 ## 验证
 

@@ -9,7 +9,8 @@
 | `User` | 用户账号与数据归属根对象。 | 根对象 |
 | `Course` | 课程基础对象。 | `user_id` |
 | `MaterialFolder` | 课程资料一级目录。 | `user_id`、`course_id` |
-| `CourseMaterial` | 文件或链接资料。 | `user_id`、`course_id` |
+| `CourseMaterial` | 文件资料；`source_type=url` 为历史保留记录。 | `user_id`、`course_id` |
+| `MaterialParseVersion` | 一轮材料解析的候选、生效、失败或退休版本。 | `material_id`、`user_id`、`course_id` |
 | `MaterialChunk` | 资料解析后的可检索片段。 | `material_id`、`course_id` |
 | `Conversation` | 课程问答会话。 | `user_id`、`course_id` |
 | `Message` | 用户消息或助手消息。 | `conversation_id`、`course_id` |
@@ -24,7 +25,7 @@
 
 ## 计划学习模式 S01 数据审计结论
 
-S01 已确认计划学习模式第一阶段复用当前 13 张核心表，不新增业务表，不修改 baseline migration：
+S01 已确认计划学习模式第一阶段复用最初 13 张业务表，不新增计划专用表，不修改 baseline migration。R02 后续新增 `material_parse_versions` 基础设施表，用于可靠重解析；它不是计划模式专用业务表：
 
 - 计划主记录复用 `study_plans`，用户确认配置、偏好、材料范围和自然语言解析结果写入 `parsed_config_json`。
 - 日期级一级任务复用 `study_tasks`，日历和今日待办从 `task_date`、`status`、`sort_order` 只读聚合。
@@ -52,7 +53,9 @@ erDiagram
   Course ||--o{ MaterialFolder : has
   Course ||--o{ CourseMaterial : has
   MaterialFolder ||--o{ CourseMaterial : groups
-  CourseMaterial ||--o{ MaterialChunk : splits_into
+  CourseMaterial ||--o{ MaterialParseVersion : has_versions
+  CourseMaterial ||--o| MaterialParseVersion : activates
+  MaterialParseVersion ||--o{ MaterialChunk : contains
   Course ||--o{ Conversation : has
   Conversation ||--o{ Message : contains
   Message ||--o{ SourceCitation : cites
@@ -71,7 +74,7 @@ erDiagram
 - 本期一个学习计划只绑定一门课程。
 - 多门课程计划通过创建多个 `StudyPlan` 实现。
 - 首页今日待办和首页大日历按日期合并展示多个单课程计划的任务。
-- `SourceCitation` 可关联 `Message` 或 `AIGeneratedContent`，并保留资料名快照。
+- `SourceCitation` 可关联 `Message` 或 `AIGeneratedContent`，并保留资料名和实际材料版本快照。
 - 生成内容与其`SourceCitation`必须在一个事务中提交；失败记录不允许保留部分结构或引用。
 - `handout` / `task_test` 生成器内部使用 chunk id 做材料覆盖和引用校验；落库成功后必须创建 `SourceCitation` 行，并把 `content_json.*.source_citation_ids` 回绑为 `SourceCitation.id`，导出层不得再把 chunk id 当成 citation id 使用。
 - 当前引用位置数据库约束保持不变；无分页来源使用`page_index=0`表示未知位置，API调用方不得将其解释为真实页码。
@@ -88,6 +91,7 @@ erDiagram
 | 枚举 | 值 |
 | --- | --- |
 | `parse_status` | `uploaded`、`parsing`、`parsed`、`parse_failed`、`deleted` |
+| `material_parse_version_status` | `building`、`active`、`failed`、`retired` |
 | `generation_status` | `pending`、`generating`、`success`、`failed` |
 | `content_type` | `quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`、`note`、`handout`、`task_test` |
 | `task_status` | `not_started`、`in_progress`、`completed` |
@@ -96,7 +100,7 @@ erDiagram
 
 状态规则：
 
-- 只有 `parse_status = parsed` 的资料可进入检索、问答、生成和计划上下文。
+- 只有 `active_parse_version_id` 非空且资料未删除时可进入检索、问答、生成和计划上下文；`parse_status = parsing` 可以与旧生效版本同时存在。
 - 生成失败必须保留失败状态和错误码，前端可展示重试入口。
 - 一级任务状态由二级任务状态汇总得出。
 - 二级任务完成状态更新必须幂等。
@@ -105,10 +109,10 @@ erDiagram
 
 - 主要业务表保留 `created_at`、`updated_at`、`deleted_at`。
 - 删除课程：课程及关联资料、对话、生成内容、计划、任务默认隐藏。
-- 删除资料：物理删除 `CourseMaterial`、`MaterialChunk`、RAG 向量和原始上传文件，不提供恢复；历史引用保留资料名、页码和命中文本快照，并将 `material_id`、`chunk_id` 置空。
+- 删除资料：物理删除 `CourseMaterial`、`MaterialParseVersion`、`MaterialChunk`、RAG 向量和原始上传文件，不提供恢复；历史引用保留资料名、页码和命中文本快照，并将 `material_id`、`material_version_id`、`chunk_id` 置空。
 - 删除目录：物理删除目录及其中全部资料；问答、生成内容和历史引用快照不随资料删除。
 - 删除计划：计划与任务从日历和今日待办隐藏。
-- 重新解析资料：新切片替换旧切片；历史引用定位失败时要可降级展示。
+- 重新解析资料：候选版本的切片和向量完整后原子切换生效指针；失败只清理候选，旧生效版本继续可用。退休版本本轮保留，历史引用按 `material_version_id` 追溯原输入版本。
 
 ## 后续数据库迁移规则
 

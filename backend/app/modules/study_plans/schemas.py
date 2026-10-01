@@ -18,6 +18,7 @@ StudyPlanClientFlow = Literal["legacy", "wizard_v1"]
 SubTaskTypeLiteral = Literal["learn", "review", "quiz", "test"]
 MIN_DAILY_AVAILABLE_MINUTES = 30
 DIAGNOSTIC_QUESTION_VERSION = "study_plan_diagnostic_v2"
+MAX_STUDY_PLAN_TITLE_LENGTH = 255
 MasteryLevel = Literal["none", "heard", "some", "familiar"]
 WeakArea = Literal["concept", "calculation", "application", "memorization", "other"]
 DiagnosticQuestionType = Literal["topic_mastery", "weak_area", "diagnostic_note"]
@@ -319,7 +320,7 @@ class StudyTaskPreview(BaseModel):
 
 
 class StudyPlanReduction(BaseModel):
-    title: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=MAX_STUDY_PLAN_TITLE_LENGTH)
     tasks: list[StudyTaskPreview] = Field(min_length=1)
     citation_chunk_ids: list[str] = Field(default_factory=list)
 
@@ -332,7 +333,7 @@ class StudyPlanCoverage(BaseModel):
 
 class StudyPlanPreview(BaseModel):
     course_id: str
-    title: str
+    title: str = Field(min_length=1, max_length=MAX_STUDY_PLAN_TITLE_LENGTH)
     goal_text: str
     start_date: date
     end_date: date
@@ -371,8 +372,18 @@ class StudyPlanPreview(BaseModel):
 
 class StudyPlanSaveRequest(StudyPlanBuildRequest):
     client_flow: StudyPlanClientFlow = "legacy"
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_STUDY_PLAN_TITLE_LENGTH)
     tasks: list[StudyTaskPreview] | None = None
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("title must not be blank")
+        return normalized
 
 
 class StudyPlanRegenerationPreviewRequest(BaseModel):
@@ -416,7 +427,7 @@ class StudyPlanRegenerationPreviewRequest(BaseModel):
 
 class StudyPlanReplaceRequest(StudyPlanSaveRequest):
     expected_updated_at: datetime
-    title: str
+    title: str = Field(min_length=1, max_length=MAX_STUDY_PLAN_TITLE_LENGTH)
     tasks: list[StudyTaskPreview] = Field(min_length=1)
 
 

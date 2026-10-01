@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { apiRequest } from "../../src/api/client";
+import { apiFileRequest, apiRequest } from "../../src/api/client";
 import { ApiError } from "../../src/api/errors";
 import {
   clearSessionToken,
@@ -117,5 +117,93 @@ describe("apiRequest", () => {
         }),
       }),
     );
+  });
+
+  it.each([
+    "https://attacker.example/api/v1/courses",
+    "//attacker.example/api/v1/courses",
+    "/api/v1/../outside",
+    "/api/v1/courses#token",
+  ])("rejects an untrusted target before sending credentials: %s", async (path) => {
+    setSessionToken("sensitive-token");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiRequest(path)).rejects.toThrow(/鉴权 API 请求/);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiFileRequest", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+  });
+
+  it("downloads a blob with authentication and a UTF-8 filename", async () => {
+    setSessionToken("token-file");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("file-body", {
+        status: 200,
+        headers: {
+          "Content-Disposition": "attachment; filename*=UTF-8''%E8%AE%B2%E4%B9%89.pdf",
+          "Content-Type": "application/pdf",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = await apiFileRequest("/api/v1/generated-contents/gen_1/exports/pdf");
+
+    expect(file.blob.type).toBe("application/pdf");
+    expect(file.filename).toBe("讲义.pdf");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/generated-contents/gen_1/exports/pdf",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ Authorization: "Bearer token-file" }),
+      }),
+    );
+  });
+
+  it("uses the fallback filename when the response omits content disposition", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("notes", { status: 200 })));
+
+    const file = await apiFileRequest("/api/v1/generated-contents/gen_1/exports/markdown", {
+      fallbackFilename: "notes.md",
+    });
+
+    expect(file.filename).toBe("notes.md");
+  });
+
+  it("normalizes file errors and clears unauthorized sessions", async () => {
+    setSessionToken("expired-file-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "UNAUTHORIZED", message: "登录已过期" }, meta: {} }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(apiFileRequest("/api/v1/materials/mat_1/content")).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      status: 401,
+    });
+    expect(getSessionToken()).toBeNull();
+  });
+
+  it("rejects an untrusted file target before fetch", async () => {
+    setSessionToken("sensitive-file-token");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFileRequest("https://attacker.example/file")).rejects.toThrow(
+      /鉴权 API 请求/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

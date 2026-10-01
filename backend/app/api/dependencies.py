@@ -10,6 +10,7 @@ from app.core.errors import CourseNexusError
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.integrations.rag.base import RagIndex
+from app.integrations.rag.manager import get_rag_index_manager
 from app.modules.users.models import User
 from app.modules.users.repository import get_user_by_id
 
@@ -25,12 +26,17 @@ def get_current_user(
         return None
 
     settings = get_settings()
-    user_id = decode_access_token(token, secret_key=settings.secret_key)
-    if user_id is None:
+    claims = decode_access_token(token, secret_key=settings.secret_key)
+    if claims is None:
         return None
 
-    user = get_user_by_id(db, user_id)
-    if user is None or user.status != "active" or user.deleted_at is not None:
+    user = get_user_by_id(db, claims.user_id)
+    if (
+        user is None
+        or user.status != "active"
+        or user.deleted_at is not None
+        or claims.token_epoch != user.token_epoch
+    ):
         return None
     return user
 
@@ -56,17 +62,7 @@ def get_retrieval_rag_index() -> RagIndex:
 
 
 def _create_openai_rag_index(*, missing_code: str, missing_message: str) -> RagIndex:
-    settings = get_settings()
-    endpoint = settings.model_endpoint("embedding")
-    if not endpoint.api_key:
-        raise CourseNexusError(code=missing_code, message=missing_message, status_code=502)
-
-    from app.integrations.rag.llama_index_chroma import create_openai_chroma_rag_index
-
-    return create_openai_chroma_rag_index(
-        persist_path=settings.chroma_persist_path,
-        collection_name=settings.chroma_collection,
-        api_key=endpoint.api_key,
-        embedding_model=endpoint.model,
-        api_base_url=endpoint.base_url,
+    return get_rag_index_manager().require_index(
+        missing_code=missing_code,
+        missing_message=missing_message,
     )
