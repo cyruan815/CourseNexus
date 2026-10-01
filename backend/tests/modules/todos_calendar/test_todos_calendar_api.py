@@ -40,6 +40,9 @@ def client() -> Generator[TestClient, None, None]:
     app.dependency_overrides[study_plan_router.get_plan_generator_provider] = (
         lambda: MockModelProvider()
     )
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = (
+        lambda: MockModelProvider()
+    )
     app.state.todos_calendar_testing_session = testing_session
     try:
         yield TestClient(app)

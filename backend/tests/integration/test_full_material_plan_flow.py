@@ -112,6 +112,7 @@ def client_and_provider(tmp_path) -> Generator[tuple[TestClient, PlanPreviewProv
     )
     app.dependency_overrides[get_rag_index] = lambda: rag_index
     app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = lambda: provider
     try:
         yield TestClient(app), provider
     finally:

@@ -126,7 +126,9 @@ def client(tmp_path) -> Generator[TestClient, None, None]:
         max_file_size_bytes=1024,
     )
     app.dependency_overrides[get_rag_index] = lambda: rag_index
-    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: MaterialPlanProvider()
+    provider = MaterialPlanProvider()
+    app.dependency_overrides[study_plan_router.get_plan_generator_provider] = lambda: provider
+    app.dependency_overrides[study_plan_router.get_plan_map_provider] = lambda: provider
     try:
         yield TestClient(app)
     finally:
