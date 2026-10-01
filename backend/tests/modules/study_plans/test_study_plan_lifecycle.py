@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from collections.abc import Generator
 from datetime import date, datetime, timezone
 from io import BytesIO
@@ -10,11 +11,13 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.errors import CourseNexusError
 from app.db.base import Base
+from app.db.session import create_database_engine
 import app.db.models  # noqa: F401
 from app.integrations.file_storage.local import LocalFileStorage
 from app.modules.checkins.models import CheckinRecord
@@ -826,6 +829,41 @@ def test_save_study_plan_uses_adjusted_task_tree_and_idempotency(db: Session, tm
     assert provider.batch_prompts == []
 
 
+def test_save_study_plan_respects_sqlite_foreign_keys(tmp_path: Path) -> None:
+    database_path = tmp_path / "study-plan-foreign-keys.db"
+    engine = create_database_engine(f"sqlite:///{database_path.as_posix()}")
+    Base.metadata.create_all(engine)
+    testing_session = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    db = testing_session()
+    try:
+        user = register_user(db, UserCreate(username="foreign-key-save", password="password123"))
+        course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+        material_id = create_parsed_material(
+            db,
+            tmp_path / "uploads",
+            user.id,
+            course.id,
+            "foreign-key-save.txt",
+            b"Reliable transport",
+        )
+
+        saved = save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="foreign-key-save",
+        )
+
+        assert saved.plan.id
+        assert _study_plan_counts(db) == {"plans": 1, "tasks": 1, "subtasks": 2, "checkins": 1}
+    finally:
+        db.close()
+        engine.dispose()
+
+
 def _legacy_request_hash_without_client_flow(payload: StudyPlanSaveRequest) -> str:
     data = payload.model_dump(mode="json")
     data.pop("client_flow", None)
@@ -1149,6 +1187,47 @@ def test_save_study_plan_rolls_back_when_subtask_flush_fails(db: Session, tmp_pa
             model_provider=RecordingPlanProvider([material_id]),
             max_tokens=12_000,
             idempotency_key="rollback-key",
+        )
+
+    assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0
+
+
+def test_save_study_plan_does_not_mask_unrelated_integrity_error(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = register_user(db, UserCreate(username="integrity-error", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "integrity-error.txt",
+        b"Reliable transport",
+    )
+
+    from app.modules.study_plans import repository as study_plan_repository
+
+    def fail_with_foreign_key_error(*_args: object, **_kwargs: object) -> object:
+        raise IntegrityError(
+            "INSERT INTO study_subtasks ...",
+            {},
+            sqlite3.IntegrityError("FOREIGN KEY constraint failed"),
+        )
+
+    monkeypatch.setattr(study_plan_repository, "add_study_plan_bundle", fail_with_foreign_key_error)
+
+    with pytest.raises(IntegrityError, match="FOREIGN KEY constraint failed"):
+        save_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=_save_request([material_id]),
+            model_provider=RecordingPlanProvider([material_id]),
+            max_tokens=12_000,
+            idempotency_key="unrelated-integrity-error",
         )
 
     assert db.scalar(select(func.count()).select_from(StudyPlan)) == 0

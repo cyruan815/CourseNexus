@@ -25,7 +25,9 @@ def add_study_plan_bundle(
     subtasks: list[StudySubTask],
 ) -> StudyPlanBundle:
     db.add(plan)
+    db.flush()
     db.add_all(tasks)
+    db.flush()
     db.add_all(subtasks)
     db.flush()
     return StudyPlanBundle(plan=plan, tasks=tasks, subtasks=subtasks)
