@@ -29,7 +29,7 @@ import {
   uploadMaterial,
 } from "./api";
 import { MaterialPreviewModal } from "./MaterialPreviewModal";
-import type { Material, MaterialFolder, MaterialScope } from "./types";
+import { isMaterialLearningReady, type Material, type MaterialFolder, type MaterialScope } from "./types";
 import "./material-workspace.css";
 
 type DeleteTarget =
@@ -62,14 +62,20 @@ function errorMessage(error: unknown): string {
   return "资料操作失败";
 }
 
-function statusText(status: string): string {
+function statusText(material: Material): string {
+  if (material.parse_status === "parsing" && isMaterialLearningReady(material)) {
+    return "正在更新";
+  }
+  if (material.parse_error && isMaterialLearningReady(material)) {
+    return "更新失败，当前版本仍可用";
+  }
   const labels: Record<string, string> = {
     uploaded: "待解析",
     parsing: "解析中",
     parsed: "可使用",
-    parse_failed: "解析失败",
+    parse_failed: "首次解析失败",
   };
-  return labels[status] ?? status;
+  return labels[material.parse_status] ?? material.parse_status;
 }
 
 function materialMatchesSearch(material: Material, query: string): boolean {
@@ -155,7 +161,7 @@ export function MaterialWorkspace({
   }, [courseId, initialData]);
 
   const parsedMaterialIds = useMemo(
-    () => materials.filter((material) => material.parse_status === "parsed").map((material) => material.id),
+    () => materials.filter(isMaterialLearningReady).map((material) => material.id),
     [materials],
   );
   const checkedParsedMaterialIds = materialScope.material_ids.filter((id) => parsedMaterialIds.includes(id));
@@ -163,7 +169,7 @@ export function MaterialWorkspace({
     parsedMaterialIds.length > 0 && checkedParsedMaterialIds.length === parsedMaterialIds.length;
 
   const parsedMaterials = useMemo(
-    () => materials.filter((material) => material.parse_status === "parsed"),
+    () => materials.filter(isMaterialLearningReady),
     [materials],
   );
 
@@ -414,7 +420,13 @@ export function MaterialWorkspace({
 
   function handleParse(material: Material) {
     void mutate(async () => {
-      updateMaterial(await retryParseMaterial(material.id));
+      updateMaterial({ ...material, parse_error: null, parse_status: "parsing" });
+      try {
+        updateMaterial(await retryParseMaterial(material.id));
+      } catch (parseError) {
+        updateMaterial(material);
+        throw parseError;
+      }
     });
   }
 
@@ -443,9 +455,11 @@ export function MaterialWorkspace({
           <Menu.Item leftSection={<IconEdit size={16} />} onClick={() => openRenameMaterialModal(material)}>
             重命名资料
           </Menu.Item>
-          {material.parse_status === "parse_failed" && material.source_type !== "url" ? (
+          {material.source_type !== "url"
+          && material.parse_status !== "parsing"
+          && (isMaterialLearningReady(material) || material.parse_status === "parse_failed") ? (
             <Menu.Item leftSection={<IconLoader2 size={16} />} onClick={() => handleParse(material)}>
-              重试解析
+              {isMaterialLearningReady(material) ? "重新解析" : "重试解析"}
             </Menu.Item>
           ) : null}
           <Menu.Item color="red" leftSection={<IconTrash size={16} />} onClick={() => requestDeleteMaterial(material)}>
@@ -485,18 +499,20 @@ export function MaterialWorkspace({
   }
 
   function renderMaterialRow(material: Material) {
-    const isParsed = material.parse_status === "parsed";
+    const isParsed = isMaterialLearningReady(material);
     const isLegacyUrl = material.source_type === "url";
     const checked = isParsed && materialScope.material_ids.includes(material.id);
     const kind = materialKind(material);
-    const status = isLegacyUrl ? "已停止支持" : statusText(material.parse_status);
+    const status = isLegacyUrl ? "已停止支持" : statusText(material);
     const StatusIcon = isLegacyUrl
       ? IconAlertCircle
-      : material.parse_status === "parsed"
-        ? IconCheck
-        : material.parse_status === "parse_failed"
+      : material.parse_status === "parsing"
+        ? IconLoader2
+        : material.parse_error || material.parse_status === "parse_failed"
           ? IconAlertCircle
-          : IconLoader2;
+          : isParsed
+            ? IconCheck
+            : IconLoader2;
 
     return (
       <li
@@ -510,7 +526,7 @@ export function MaterialWorkspace({
           onClick={(event) => {
             if (!isParsed) {
               event.preventDefault();
-              setError("资料需解析成功后才能选择。");
+              setError("资料需有可用解析版本后才能选择。");
             }
           }}
         >
@@ -519,7 +535,7 @@ export function MaterialWorkspace({
             checked={checked}
             disabled={!isParsed}
             onChange={() => toggleMaterial(material.id)}
-            title={isParsed ? "选择资料" : "资料需解析成功后才能选择"}
+            title={isParsed ? "选择资料" : "资料需有可用解析版本后才能选择"}
             type="checkbox"
           />
           <span
@@ -544,6 +560,11 @@ export function MaterialWorkspace({
             ) : (
               <span className="material-workspace__file-name">{material.name}</span>
             )}
+            {status !== "可使用" ? (
+              <span className={`material-workspace__file-state material-workspace__file-state--${material.parse_status}`}>
+                {status}
+              </span>
+            ) : null}
           </span>
         </div>
         <span
@@ -552,7 +573,7 @@ export function MaterialWorkspace({
           title={status}
         >
           <StatusIcon
-            className={isLegacyUrl || material.parse_status === "parsed" || material.parse_status === "parse_failed" ? undefined : "is-spinning"}
+            className={!isLegacyUrl && material.parse_status === "parsing" ? "is-spinning" : undefined}
             size={13}
             stroke={2}
           />
