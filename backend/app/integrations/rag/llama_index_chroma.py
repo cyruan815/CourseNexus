@@ -6,7 +6,7 @@ from typing import Sequence
 
 import chromadb
 from llama_index.core import StorageContext
-from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.embeddings import BaseEmbedding, MockEmbedding
 from llama_index.core.schema import TextNode
 from llama_index.core.vector_stores import (
     FilterCondition,
@@ -250,6 +250,31 @@ def create_openai_chroma_rag_index(
             api_base=api_base_url,
         ),
     )
+
+
+def open_existing_chroma_rag_index(
+    *,
+    persist_path: str | Path,
+    collection_name: str,
+) -> LlamaIndexChromaRagIndex | None:
+    path = Path(persist_path)
+    if not (path / "chroma.sqlite3").is_file():
+        return None
+    try:
+        client = chromadb.PersistentClient(path=str(path))
+        collection_names = {
+            collection.name if hasattr(collection, "name") else str(collection)
+            for collection in client.list_collections()
+        }
+        if collection_name not in collection_names:
+            return None
+        return LlamaIndexChromaRagIndex(
+            persist_path=path,
+            collection_name=collection_name,
+            embed_model=MockEmbedding(embed_dim=1),
+        )
+    except Exception as exc:
+        raise CourseNexusError(code="INDEXING_FAILED", message="资料索引对账打开失败", status_code=502) from exc
 
 
 def _metadata_text(value: object) -> str | None:
