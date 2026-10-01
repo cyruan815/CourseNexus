@@ -201,6 +201,12 @@ def build_study_plan_diagnostic_questions(
         batches=batches,
         model_provider=model_provider,
     )
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_batches(batches),
+    )
     questions: list[StudyPlanDiagnosticQuestion] = []
     for index, topic in enumerate(topics, start=1):
         questions.append(

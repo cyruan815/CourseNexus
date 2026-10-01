@@ -31,13 +31,14 @@ from app.modules.study_plans.schemas import (
     StudyPlanBuildRequest,
     StudyPlanConfigParseRequest,
     StudyPlanConfigExtraction,
+    StudyPlanDiagnosticQuestionRequest,
     StudyPlanParsedConfig,
     StudyPlanRegenerationPreviewRequest,
     StudyPlanReplaceRequest,
     StudyPlanSaveRequest,
     StudySubTaskPreview,
 )
-from app.modules.study_plans.service import delete_study_plan, get_study_plan_detail, list_study_plans, parse_study_plan_config, preview_study_plan, preview_study_plan_regeneration, replace_study_plan, save_study_plan
+from app.modules.study_plans.service import build_study_plan_diagnostic_questions, delete_study_plan, get_study_plan_detail, list_study_plans, parse_study_plan_config, preview_study_plan, preview_study_plan_regeneration, replace_study_plan, save_study_plan
 from app.modules.users.schemas import UserCreate
 from app.modules.users.service import register_user
 
@@ -144,6 +145,27 @@ class DeletingPlanProvider(RecordingPlanProvider):
             self.db.add(self.deleted_material)
             self.db.commit()
         return output
+
+
+class DeletingDiagnosticProvider:
+    def __init__(self, *, db: Session, deleted_material: CourseMaterial) -> None:
+        self.db = db
+        self.deleted_material = deleted_material
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        assert output_schema.__name__ == "StudyPlanDiagnosticTopicExtraction"
+        self.deleted_material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.deleted_material)
+        self.db.commit()
+        return output_schema.model_validate(
+            {
+                "topics": [
+                    {"topic_title": "可靠传输"},
+                    {"topic_title": "拥塞控制"},
+                    {"topic_title": "流量控制"},
+                ]
+            }
+        )
 
 
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, filename: str, content: bytes) -> str:
@@ -382,6 +404,42 @@ def test_preview_study_plan_rejects_result_after_material_is_deleted(
                 material_scope=MaterialScope(include_all_parsed_materials=True, material_ids=[]),
             ),
             model_provider=provider,
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    _assert_no_plan_write_side_effects(db)
+
+
+def test_diagnostic_questions_reject_result_after_material_is_deleted(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="diagnostic-stale", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "diagnostic-stale.txt",
+        b"Reliable transport congestion control flow control",
+    )
+    material = db.get(CourseMaterial, material_id)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        build_study_plan_diagnostic_questions(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=StudyPlanDiagnosticQuestionRequest(
+                goal_text="掌握传输层",
+                material_scope=MaterialScope(
+                    include_all_parsed_materials=False,
+                    material_ids=[material_id],
+                ),
+            ),
+            model_provider=DeletingDiagnosticProvider(db=db, deleted_material=material),
             max_tokens=12_000,
         )
 
