@@ -9,7 +9,7 @@ CourseNexus 的 AI 能力围绕“用户明确选择的课程资料”展开。�
 所有 AI 请求必须包含：
 
 - 当前用户和单门课程；
-- 明确的 `material_scope`，可表示当前课程全部已解析资料或指定资料 / 目录；
+- 明确的 `material_scope`，可表示当前课程全部学习可用资料或指定资料 ID；文件夹只用于资料管理，不作为 Agent 范围；
 - 问答文本，或具体生成类型及参数；
 - 可回溯到 `CourseMaterial` / `MaterialChunk` 的引用来源。
 
@@ -68,12 +68,12 @@ CourseNexus 的 AI 能力围绕“用户明确选择的课程资料”展开。�
 
 ## 3. 共同业务约束
 
-- 只有 `parse_status = parsed` 且未删除的资料可进入上下文。
+- 只有未删除且 `is_learning_ready = true` 的资料可进入上下文；该字段由生效解析版本指针决定，重解析期间即使 `parse_status = parsing`，旧生效版本仍可继续学习。
 - CourseNexus 后端负责用户和课程归属校验，AI 库不承担权限判断。
-- 引用必须能回到资料名称、页码 / 页序号和命中文本；可定位时同时保存 `chunk_id`。
+- 引用必须能回到资料名称、页码 / 页序号和命中文本；可定位时同时保存 `chunk_id` 与 `material_version_id`。生成内容和学习计划保存实际使用的材料版本快照，后续重解析不得改写历史输入事实。
 - 模型输出必须经过项目内部 Pydantic schema 校验后才能写入业务表。
 - 解析、检索或模型调用失败必须返回稳定错误码，并保留重试入口。
-- 当前 POC 使用单机本地资料处理与向量持久化，不使用 Docker；OpenAI API 是唯一外部 AI 服务。
+- 当前 POC 使用单机本地资料处理与向量持久化，不使用 Docker；模型能力通过用途级 OpenAI-compatible endpoint 接入，缺少配置时明确失败，不隐式生成 Mock 结果。
 
 ## 4. 当前范围和非目标
 
