@@ -112,6 +112,35 @@ def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -
     assert (tmp_path / material.file_url).read_text(encoding="utf-8") == "# Intro"
 
 
+def test_upload_file_material_discards_file_when_database_save_fails(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+
+    def fail_save(_db: Session, _material: CourseMaterial) -> CourseMaterial:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(materials_service, "save_material", fail_save)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        upload_file_material(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            filename="notes.md",
+            stream=BytesIO(b"# Intro"),
+            content_type="text/markdown",
+            storage=storage,
+        )
+
+    assert not (tmp_path / user.id / course.id).exists()
+    assert db.scalars(select(CourseMaterial).where(CourseMaterial.course_id == course.id)).all() == []
+
+
 @pytest.mark.parametrize(
     ("filename", "stream", "material_type", "mime_type"),
     [

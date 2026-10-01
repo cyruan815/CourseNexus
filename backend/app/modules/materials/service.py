@@ -94,7 +94,16 @@ def upload_file_material(
         mime_type=stored_file.mime_type,
         parse_status="uploaded",
     )
-    return save_material(db, material)
+    try:
+        return save_material(db, material)
+    except Exception:
+        db.rollback()
+        storage.discard_material_files(
+            user_id=user_id,
+            course_id=course_id,
+            material_id=material_id,
+        )
+        raise
 
 
 def list_course_materials(db: Session, user_id: str, course_id: str) -> list[CourseMaterial]:
