@@ -51,6 +51,7 @@ function previewMaterial(
   materialType: string,
   fileSize: number,
   parseStatus = "parsed",
+  parseError: string | null = parseStatus === "parse_failed" ? "示例解析失败" : null,
 ): Material {
   return {
     id,
@@ -65,7 +66,9 @@ function previewMaterial(
     file_size: fileSize,
     mime_type: materialType === "pdf" ? "application/pdf" : "application/octet-stream",
     parse_status: parseStatus,
-    parse_error: parseStatus === "parse_failed" ? "示例解析失败" : null,
+    parse_error: parseError,
+    active_parse_version_id: parseStatus === "parsed" || parseStatus === "parsing" ? `mpv-${id}` : null,
+    is_learning_ready: parseStatus === "parsed" || parseStatus === "parsing",
     page_count: materialType === "pdf" ? 12 : null,
     created_at: previewTimestamp,
     updated_at: previewTimestamp,
@@ -88,6 +91,7 @@ const previewMaterials: Material[] = [
   previewMaterial("preview-24", "preview-folder-02", "物理层重点清单.md", "markdown", 33_200),
   previewMaterial("preview-25", "preview-folder-02", "实验一说明.pdf", "pdf", 2_100_000, "parsing"),
   previewMaterial("preview-26", "preview-folder-02", "旧版课件.pdf", "pdf", 2_500_000, "parse_failed"),
+  previewMaterial("preview-27", "preview-folder-02", "课堂例题.docx", "word", 880_000, "parsed", "INDEXING_FAILED"),
 ];
 
 const previewData = {
