@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
 import { getSessionToken, subscribeSessionChange } from "../features/auth/session";
 import { CourseDetailPage } from "../pages/CourseDetailPage";
 import { CourseDetailPreviewPage } from "../pages/CourseDetailPreviewPage";
+import { FilePreviewValidationPage } from "../pages/FilePreviewValidationPage";
 import { CalendarPage } from "../pages/CalendarPage";
 import { GeneratedContentDetailPage } from "../pages/GeneratedContentDetailPage";
 import { HandoutPreviewPage } from "../pages/HandoutPreviewPage";
@@ -35,6 +36,7 @@ export function AppRouter() {
     <BrowserRouter>
       <Routes>
         {import.meta.env.DEV ? <Route element={<CourseDetailPreviewPage />} path="/preview/course-detail" /> : null}
+        {import.meta.env.DEV ? <Route element={<FilePreviewValidationPage />} path="/dev/file-preview" /> : null}
         {import.meta.env.DEV ? <Route element={<HandoutPreviewPage />} path="/dev/handout-preview" /> : null}
         <Route element={<WelcomePage />} path="/welcome" />
         <Route element={<LoginPage />} path="/login" />
