@@ -21,6 +21,7 @@ from app.modules.generation.generators.task_test.schemas import TaskTestGenerati
 from app.modules.material_context.coverage import map_material_coverage_batches, reduce_material_coverage
 from app.modules.material_context.schemas import ContextChunk, MaterialContextBatch
 from app.modules.material_context.service import (
+    assert_material_snapshot_publishable,
     iter_material_context_batches,
     resolve_material_scope_ids,
     resolve_material_scope_versions,
@@ -502,6 +503,12 @@ def preview_study_plan(
     if preview is None:
         raise CourseNexusError(code="GENERATION_FAILED", message="学习计划生成失败", status_code=500)
 
+    assert_material_snapshot_publishable(
+        db,
+        user_id=user_id,
+        course_id=course_id,
+        material_versions=_material_versions_from_batches(batches),
+    )
     logger.info(
         "计划预览成功 | course=%s tasks=%d subtasks=%d cost_ms=%.2f",
         course_id,

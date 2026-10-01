@@ -131,6 +131,21 @@ class RecordingPlanProvider:
         raise AssertionError(output_schema)
 
 
+class DeletingPlanProvider(RecordingPlanProvider):
+    def __init__(self, material_ids: list[str], *, db: Session, deleted_material: CourseMaterial) -> None:
+        super().__init__(material_ids)
+        self.db = db
+        self.deleted_material = deleted_material
+
+    def generate_structured(self, *, prompt: str, output_schema: type[BaseModel]) -> BaseModel:
+        output = super().generate_structured(prompt=prompt, output_schema=output_schema)
+        if output_schema.__name__ == "StudyPlanReduction":
+            self.deleted_material.deleted_at = datetime.now(timezone.utc)
+            self.db.add(self.deleted_material)
+            self.db.commit()
+        return output
+
+
 def create_parsed_material(db: Session, tmp_path: Path, user_id: str, course_id: str, filename: str, content: bytes) -> str:
     material = upload_file_material(
         db,
@@ -335,6 +350,43 @@ def test_preview_study_plan_processes_all_material_batches_without_writing_db(db
         for material_id in sorted(material_ids)
     ]
     assert _study_plan_counts(db) == before_counts
+
+
+def test_preview_study_plan_rejects_result_after_material_is_deleted(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    user = register_user(db, UserCreate(username="preview-stale", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Computer Networks"))
+    material_id = create_parsed_material(
+        db,
+        tmp_path,
+        user.id,
+        course.id,
+        "transport-stale.txt",
+        b"Reliable transport",
+    )
+    material = db.get(CourseMaterial, material_id)
+    provider = DeletingPlanProvider([material_id], db=db, deleted_material=material)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        preview_study_plan(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=StudyPlanBuildRequest(
+                goal_text="掌握传输层",
+                start_date=date(2026, 7, 11),
+                end_date=date(2026, 7, 11),
+                daily_available_minutes=60,
+                material_scope=MaterialScope(include_all_parsed_materials=True, material_ids=[]),
+            ),
+            model_provider=provider,
+            max_tokens=12_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    _assert_no_plan_write_side_effects(db)
 
 def _save_request(material_ids: list[str]) -> StudyPlanSaveRequest:
     return StudyPlanSaveRequest.model_validate(
