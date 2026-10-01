@@ -51,6 +51,8 @@ flowchart LR
 - production 必须为 `MODEL_PURPOSES` 中所有当前 V1 用途配置非空 API Key；学习计划 map 不单独要求 Key，因为它按上述显式规则复用 generator。
 - Health 只返回 `status`、`environment` 和 `mock_model_provider_enabled`。
 
+仓库 `.env.example` 保留完整用途级配置格式，并为当前已验证的单机组合预填非敏感的 Base URL / Model：Embedding 使用 AIHubMix 的 OpenAI-compatible 端点与 `text-embedding-3-large`，其余模型用途使用 DeepSeek 端点与 `deepseek-flash`。所有 `*_API_KEY` 和 `SECRET_KEY` 示例继续留空或使用明确占位值，真实密钥只写入被 Git 忽略的本地 `.env`。这些值是可运行示例，不是 Provider Factory 的硬编码限制；替换服务时仍可为每个用途独立覆盖。
+
 ## 5. 脱敏、失败与资源预算
 
 `SensitiveDataRedactor` 在统一 Formatter 输出完成后处理最终字符串，因此同时覆盖日志正文、`%s` 参数、异常摘要和文件 traceback。它屏蔽当前 Settings 中的签名密钥、全部用途 API Key、兼容 Key、Bearer Token，以及 `api_key=`、`secret_key=`、`authorization=` 形式的带标签凭据。

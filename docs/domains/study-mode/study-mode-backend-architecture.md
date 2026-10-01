@@ -349,7 +349,7 @@ flowchart LR
 
 ## 12. 模型端点和失败策略
 
-独立端点包括 study_plan_parser、study_plan_diagnostic、study_plan_generator、handout、task_test、course_qa；均可通过环境变量独立配置，当前默认 gpt-5.4-mini。
+独立端点包括 study_plan_parser、study_plan_diagnostic、study_plan_generator、handout、task_test、course_qa；均可通过环境变量独立配置。仓库当前可运行示例使用 DeepSeek `deepseek-flash`，但 Provider Factory 不把模型名硬编码为业务规则。
 
 当前是同步处理、没有任务队列。资源控制依赖资料分批、Top-K、超时重试、成功内容复用和显式 force_regenerate。
 

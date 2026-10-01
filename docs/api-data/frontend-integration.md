@@ -2,9 +2,9 @@
 
 ## 1. 阶段定位
 
-基础设施阶段的前端只作为最小集成验证工作台，用来验证登录态、课程选择、资料上传、资料范围、问答和计划基础接口是否能被浏览器侧接入。
+当前前端已经承载 V1 浏览器闭环：登录、课程与资料管理、统一文件预览、问答与引用、五类内容生成、学习计划、待办日历、任务执行、打卡和既定导出。本文是这些页面调用后端契约的权威接入入口。
 
-本阶段不追求完整产品体验、视觉完善度或复杂前端状态管理。所有核心能力必须能通过后端接口、后端测试或命令独立运行，不能依赖前端页面作为唯一验证方式。
+前端体验不替代后端契约验证；所有核心能力仍必须能通过后端接口、自动化测试或维护命令独立验证。
 
 ## 2. 接入基线
 
@@ -533,7 +533,7 @@
 
 `POST /api/v1/courses/{course_id}/qa/questions`
 
-要求：Bearer token。当前后端在无 `COURSE_QA_API_KEY` 时使用 deterministic mock provider；配置课程问答专用的 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL` 后，通过后端 `OpenAIModelProvider` 使用 OpenAI Python SDK 接口规范。该配置与 Embedding 及其他生成功能相互独立。
+要求：Bearer token。课程问答读取独立的 `COURSE_QA_API_KEY`、`COURSE_QA_BASE_URL` 和 `COURSE_QA_MODEL`，通过后端 `OpenAIModelProvider` 使用 OpenAI-compatible SDK 接口规范。缺少配置且未显式开启允许的 Mock 模式时返回 HTTP 503 / `MODEL_PROVIDER_NOT_CONFIGURED`，不得自动生成模拟回答。该配置与 Embedding 及其他生成功能相互独立。
 
 请求：
 

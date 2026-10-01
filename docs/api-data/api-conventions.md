@@ -80,16 +80,28 @@
 | `MATERIAL_LINK_REMOVED` | 链接资料入口已停止支持：创建端点返回 410，历史 URL 资料解析重试返回 409。 |
 | `FILE_TOO_LARGE` | 文件超过限制。 |
 | `NO_PARSED_MATERIAL` | 当前范围没有已解析资料。 |
+| `MODEL_PROVIDER_NOT_CONFIGURED` | 当前能力没有可调用的真实 Provider，且未显式开启允许的 Mock 模式（HTTP 503）。 |
 | `PARSE_FAILED` | 资料解析失败。 |
+| `PARSE_ALREADY_IN_PROGRESS` | 同一资料已有候选解析版本正在构建。 |
+| `PARSE_VERSION_SWITCH_FAILED` | 候选版本已构建但生效指针切换失败；旧生效版本保持不变。 |
 | `INDEXING_FAILED` | 资料索引写入、删除或重建失败。 |
 | `RETRIEVAL_FAILED` | 资料向量检索失败。 |
+| `PREVIEW_UNSUPPORTED` | 资料没有可供原文件预览的文件来源。 |
+| `PREVIEW_FILE_UNAVAILABLE` | 原文件丢失或受控存储路径不可用。 |
 | `UPLOAD_COMPENSATION_FAILED` | 上传数据库写入失败后，原文件目录回收也失败；服务端保留不一致告警供人工对账。 |
 | `DELETE_COMPENSATION_FAILED` | 删除链路失败后，文件或向量恢复补偿未完整成功。 |
 | `MATERIAL_SCOPE_STALE` | 长操作结束时输入材料或解析版本已失效，迟到结果未发布。 |
 | `MATERIAL_COVERAGE_INCOMPLETE` | 指定材料生成没有覆盖全部预期材料。 |
+| `MATERIAL_CONTEXT_TOO_LARGE` | 选定材料完整上下文超过当前能力预算，且该消费者不允许静默截断。 |
 | `GENERATION_FAILED` | Agent 或 AI 内容生成失败。 |
 | `GENERATION_SCHEMA_INVALID` | AI 结构化输出不符合调用方 schema。 |
+| `DIAGNOSTIC_STALE` | 学前诊断问题与当前目标、配置或资料范围不一致，需要重新生成。 |
+| `PREVIEW_TASKS_REQUIRED` | 新版计划向导保存时没有提交用户确认过的预览任务树。 |
 | `IDEMPOTENCY_CONFLICT` | 幂等键对应的请求内容冲突。 |
+| `EXPORT_CONTENT_NOT_READY` | 目标生成内容尚未成功，不能导出。 |
+| `EXPORT_CONTENT_INVALID` | 已保存内容不满足导出结构要求。 |
+| `EXPORT_UNSUPPORTED_CONTENT_TYPE` | 当前内容类型不支持请求的导出格式。 |
+| `EXPORT_FAILED` | 导出渲染或文件生成失败。 |
 | `RATE_LIMITED` | 请求过于频繁。 |
 | `INTERNAL_ERROR` | 服务端内部错误。 |
 
