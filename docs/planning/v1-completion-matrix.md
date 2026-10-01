@@ -37,7 +37,7 @@
 | R02 材料版本化重解析 | 完成 | 候选版本构建、版本化 chunk/vector、完整性校验、原子切换、失败回退、active-only 消费和输入版本快照。 | [PR #38](https://github.com/cyruan815/CourseNexus/pull/38) |
 | R04 跨存储补偿与对账 | 完成 | 上传失败文件补偿、补偿稳定错误、发布前材料/版本复核、只读文件/DB/Chroma/版本对账。 | [PR #39](https://github.com/cyruan815/CourseNexus/pull/39) |
 | V1 对抗性发布验收 | 完成 | 真实四格式、历史库升级、确定性闭环、跨用户、重解析故障、浏览器预览和真实模型 17 步闭环通过。 | [PR #40](https://github.com/cyruan815/CourseNexus/pull/40)、[验收规则](../engineering/v1-release-acceptance.md) |
-| M07 文档与契约收口 | 完成（随当前 PR 合并生效） | 产品、API、架构、领域、配置、当前状态、路线图、技术债和本矩阵与最终实现一致。 | 当前 M07 PR；合并后以 `dev` 记录为准 |
+| M07 文档与契约收口 | 完成（随 PR 合并生效） | 产品、API、架构、领域、配置、当前状态、路线图、技术债和本矩阵与最终实现一致。 | [PR #41](https://github.com/cyruan815/CourseNexus/pull/41)；合并后以 `dev` 记录为准 |
 
 ## 4. 公共契约现状
 

@@ -4,7 +4,7 @@
 
 - 日期：2026-10-01
 - 发布目标：可靠的单机 V1
-- 集成基线：`dev` 已合并 PR #30～#40；M07 文档收口随当前 PR 合并生效
+- 集成基线：`dev` 已合并 PR #30～#40；M07 文档收口随 PR #41 合并生效
 - 正式完成清单：[v1-completion-matrix.md](v1-completion-matrix.md)
 - 临时评审稿：`tmp/v1-closeout-plan-review.md` 只作为历史输入，不是状态或契约权威来源
 
