@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 from io import BytesIO
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,45 @@ def test_ask_course_question_uses_retrieved_chunks_for_model_and_citations(
         eigen_chunk.parse_version_id
     ]
     assert answer.answer_text == "retrieved answer [[cite:1]]"
+
+
+def test_ask_course_question_does_not_publish_after_material_is_deleted(
+    db: Session,
+    tmp_path: Path,
+) -> None:
+    rag_index = FakeRagIndex()
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    material = create_parsed_material(db, tmp_path, user.id, course.id, rag_index=rag_index)
+
+    class DeletingMaterialProvider:
+        def answer_question(
+            self,
+            *,
+            question: str,
+            context_chunks: list[ContextChunk],
+        ) -> ModelAnswer:
+            material.deleted_at = datetime.now(timezone.utc)
+            db.add(material)
+            db.commit()
+            return ModelAnswer(
+                answer_text="late answer",
+                citation_chunk_ids=[context_chunks[0].chunk_id],
+            )
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        ask_course_question(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            payload=CourseQuestionCreate(question="What is Alpha?", material_scope=MaterialScope()),
+            model_provider=DeletingMaterialProvider(),
+            rag_index=rag_index,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    assert [message.role for message in messages(db)] == ["user"]
+    assert citations(db) == []
 
 
 def test_list_conversation_messages_returns_saved_citations(db: Session, tmp_path: Path) -> None:
