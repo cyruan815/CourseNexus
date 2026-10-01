@@ -1354,12 +1354,12 @@ Preview 默认 `title` 采用“规范化学习目标 · 开始日期”，总�
 `task_test` 保持结构化 JSON 和逐题引用数据，不随 handout 改成 Markdown 直存；标题显示 `{二级任务标题}测试题`。逐题引用继续用于后端导出和内部追溯，生成内容详情页不展示引用侧栏；浏览器端可以基于结构化题目做本地逐题提交反馈，但不保存作答记录。
 ## 7. 2026-07-15 任务讲义 Markdown 前端接入口径
 
-新生成 `handout` 的权威正文仍是 `GeneratedContentRead.content` Markdown，`content_json` 只保存 `{"format":"markdown","schema_version":1}`。前端详情页必须通过 `GeneratedContentRenderer` 的 `handout` 分支进入 `HandoutMarkdownRenderer`，不要自行拼接旧 `content_json.sections/blocks`，业务页面也不要直接注入 HTML；Mermaid 返回 SVG 的注入只封装在讲义 renderer 内部。
+新生成 `handout` 的权威正文仍是 `GeneratedContentRead.content` Markdown，`content_json` 只保存 `{"format":"markdown","schema_version":1}`。前端详情页必须通过 `GeneratedContentRenderer` 的 `handout` 分支进入 `HandoutMarkdownRenderer`，不要自行拼接旧 `content_json.sections/blocks`，业务页面也不要直接注入 HTML。
 
-前端讲义 Markdown renderer 当前依赖：`react-markdown`、`remark-gfm`、`remark-math`、`rehype-katex`、`rehype-raw`、`mermaid` 和 `katex/dist/katex.min.css`。真实详情页和 dev preview 共享同一个组件；前端同学接接口时只需要保证 `GeneratedContentRead.content` 为完整 Markdown 字符串，样式调整优先改 `frontend/src/features/generated-content/renderers/handout/handout-markdown.css`。
+前端讲义 Markdown renderer 当前依赖：`react-markdown`、`remark-gfm`、`remark-math`、`rehype-katex`、`rehype-raw`、`rehype-sanitize`、`mermaid` 和 `katex/dist/katex.min.css`。真实详情页和 dev preview 共享同一个组件；前端同学接接口时只需要保证 `GeneratedContentRead.content` 为完整 Markdown 字符串，样式调整优先改 `frontend/src/features/generated-content/renderers/handout/handout-markdown.css`。
 
-讲义可直接包含原始 `<svg>...</svg>`，也可通过 `![说明](path/to/image.svg)` 引用 SVG 图片。Mermaid 使用 ```mermaid` fenced code block；renderer 会动态加载 Mermaid，把代码转换为内联 SVG，失败时显示原始 Mermaid 源码，其他语言的代码围栏保持普通代码块。
+新生成讲义必须包含至少一张安全内联 `<svg>...</svg>`，并禁止 Mermaid fenced code block；后端在保存前校验这两条规则。前端仍保留 Mermaid 动态渲染，仅兼容历史或手写 Markdown，失败时显示原始源码；其他语言的代码围栏保持普通代码块。
 
-当前 `rehype-raw` 和 Mermaid `securityLevel: "loose"` 只面向可信本地 POC 内容，没有 HTML 净化。任何用户可编辑 Markdown、外部 Markdown 或生产环境接入前，必须先补净化、白名单或隔离渲染；该前端能力也不会自动同步到 PDF 导出。
+`rehype-raw` 后必须经过 `rehype-sanitize` 的 HTML/SVG 白名单；Mermaid 使用 `securityLevel: "strict"`、禁用 HTML labels，最终 SVG 注入前再次净化。禁止 script、iframe、object、embed、foreignObject、style、事件属性和危险 URL。该前端兼容能力不会自动同步到 PDF 导出。
 
 Callout 使用 GitHub alert 风格 blockquote，支持 `[!NOTE]`、`[!EXAMPLE]`、`[!SUMMARY]`、`[!WARNING]`、`[!TIP]`。正文每一行必须继续以 `>` 开头。前端渲染时保留整片背景色、去掉左侧强调线、使用圆角；普通 blockquote 不带这些 callout class。颜色约定为 `NOTE #fbf7f3 / #8c725e`，`EXAMPLE #f6f9f5 / #667c69`，`SUMMARY #f8f6fb / #706982`，`WARNING #fbf3ee / #9b6048`，`TIP #f3f7fa / #597089`。这里是 study-mode handout 局部规范，不写入全局 UI guidelines。
