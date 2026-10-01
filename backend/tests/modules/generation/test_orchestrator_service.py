@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -43,6 +44,20 @@ class ErrorGenerator(RecordingGenerator):
 
     def generate(self, *, context: MaterialGenerationContext, parameters: dict[str, Any]) -> GeneratorOutput:
         raise CourseNexusError(code=self.code, message="generation failed", status_code=502)
+
+
+class DeletingMaterialGenerator(RecordingGenerator):
+    def __init__(self, provider: ModelProvider, *, db: Session, material) -> None:
+        super().__init__(provider)
+        self.db = db
+        self.material = material
+
+    def generate(self, *, context: MaterialGenerationContext, parameters: dict[str, Any]) -> GeneratorOutput:
+        output = super().generate(context=context, parameters=parameters)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
 
 
 def test_generate_content_delivers_all_materials_once_without_citations(
@@ -154,3 +169,34 @@ def test_generation_failure_creates_failed_history(
     )
     assert content.generation_status == "failed"
     assert content.error_code == code
+
+
+def test_generation_does_not_publish_success_after_material_is_deleted(
+    db: Session,
+    alice_user,
+    owned_course,
+    parsed_materials,
+    registry_factory,
+) -> None:
+    content = generate_content(
+        db,
+        user_id=alice_user.id,
+        course_id=owned_course.id,
+        payload=GenerateContentRequest(content_type="outline"),
+        registry=registry_factory(
+            "outline",
+            lambda provider: DeletingMaterialGenerator(
+                provider,
+                db=db,
+                material=parsed_materials[0],
+            ),
+        ),
+        model_provider=MockModelProvider(),
+        max_context_tokens=10_000,
+    )
+
+    assert content.generation_status == "failed"
+    assert content.error_code == "MATERIAL_SCOPE_STALE"
+    assert content.content is None
+    assert content.content_json is None
+    assert db.scalar(select(func.count()).select_from(AIGeneratedContent)) == 1
