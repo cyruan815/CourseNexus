@@ -42,7 +42,10 @@ from app.modules.learning_execution.schemas import (
 )
 from app.modules.material_context.coverage import run_material_coverage
 from app.modules.material_context.schemas import MaterialContextBatch, MaterialScope, build_material_scope_snapshot
-from app.modules.material_context.service import iter_material_context_batches
+from app.modules.material_context.service import (
+    assert_material_snapshot_publishable,
+    iter_material_context_batches,
+)
 from app.modules.study_plans.models import StudySubTask
 
 
@@ -268,6 +271,12 @@ def _generate_task_content(
                     parameters=effective_parameters,
                 ),
             ).value
+        assert_material_snapshot_publishable(
+            db,
+            user_id=user_id,
+            course_id=target.course.id,
+            material_versions=material_scope_json["material_versions"],
+        )
         content = _new_task_generated_content(
             content_id=content_id,
             user_id=user_id,

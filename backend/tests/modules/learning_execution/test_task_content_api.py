@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -357,6 +357,34 @@ class CountingTaskTestModelProvider:
         )
 
 
+class DeletingHandoutModelProvider(CountingHandoutModelProvider):
+    def __init__(self, *, db: Session, material: CourseMaterial) -> None:
+        super().__init__()
+        self.db = db
+        self.material = material
+
+    def generate_text(self, *, prompt):
+        output = super().generate_text(prompt=prompt)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
+
+
+class DeletingTaskTestModelProvider(CountingTaskTestModelProvider):
+    def __init__(self, *, db: Session, material: CourseMaterial) -> None:
+        super().__init__()
+        self.db = db
+        self.material = material
+
+    def generate_structured(self, *, prompt, output_schema):
+        output = super().generate_structured(prompt=prompt, output_schema=output_schema)
+        self.material.deleted_at = datetime.now(timezone.utc)
+        self.db.add(self.material)
+        self.db.commit()
+        return output
+
+
 class FlexibleTaskTestModelProvider:
     def __init__(self) -> None:
         self.prompts: list[str] = []
@@ -567,6 +595,59 @@ def test_generate_task_test_multi_batch_generates_requested_question_count_once(
     assert [question["id"] for question in result.content_json["questions"]] == ["q_1", "q_2"]
     citations = api.db.execute(select(SourceCitation).where(SourceCitation.generated_content_id == result.id)).scalars().all()
     assert {citation.chunk_id for citation in citations} == {"chunk_api_content", "chunk_api_content_second"}
+
+
+def test_generate_handout_does_not_publish_after_material_is_deleted(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="learn")
+    material = api.db.get(CourseMaterial, "mat_api_content")
+    assert material is not None
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        generate_handout_for_subtask(
+            api.db,
+            user_id=user_id,
+            subtask_id=subtask_id,
+            parameters={"language": "zh-CN", "detail_level": "standard"},
+            force_regenerate=True,
+            model_provider=DeletingHandoutModelProvider(db=api.db, material=material),
+            max_tokens=10_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    contents = api.db.execute(select(AIGeneratedContent)).scalars().all()
+    assert [(content.generation_status, content.error_code) for content in contents] == [
+        ("failed", "MATERIAL_SCOPE_STALE")
+    ]
+
+
+def test_generate_task_test_does_not_publish_after_material_is_deleted(api: ApiHarness) -> None:
+    user_id, _ = _register_and_headers(api)
+    subtask_id = _seed_task_content_plan(api.db, user_id=user_id, subtask_type="quiz")
+    _add_related_material_with_chunk(api.db, user_id=user_id, subtask_id=subtask_id)
+    material = api.db.get(CourseMaterial, "mat_api_content")
+    assert material is not None
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        generate_task_test_for_subtask(
+            api.db,
+            user_id=user_id,
+            subtask_id=subtask_id,
+            parameters={
+                "question_count": 2,
+                "question_types": ["single_choice"],
+                "difficulty": "medium",
+            },
+            force_regenerate=True,
+            model_provider=DeletingTaskTestModelProvider(db=api.db, material=material),
+            max_tokens=10_000,
+        )
+
+    assert exc_info.value.code == "MATERIAL_SCOPE_STALE"
+    contents = api.db.execute(select(AIGeneratedContent)).scalars().all()
+    assert [(content.generation_status, content.error_code) for content in contents] == [
+        ("failed", "MATERIAL_SCOPE_STALE")
+    ]
 
 
 def test_generate_handout_uses_stored_subtask_citation_scope(api: ApiHarness) -> None:

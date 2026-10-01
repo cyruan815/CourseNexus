@@ -94,6 +94,7 @@ sequenceDiagram
         GEN->>GEN: validate count/type/id/options/duplicates/citations
         GEN-->>LE: fixed-size GeneratorOutput
     end
+    LE->>MC: revalidate material/version snapshot
     LE->>DB: save AIGeneratedContent; task_test also saves SourceCitation
     LE-->>FE: GeneratedContentRead
 ```
@@ -107,6 +108,7 @@ sequenceDiagram
 - Task test 不再“每个 batch 各生成一整套题再拼接”；它把当前二级任务的所有批次一次性传给 task-test generator，由 prompt 要求先在内部汇总候选考点，再只输出最终 `question_count` 道题。
 - Task test 的 `question_count` 是最终硬约束；当参数包含 `question_type_counts` 时，每种 `question_type` 的输出数量也是硬约束。输出多题、少题、每种题型数量不匹配、题型越界、`id` / `sort_order` 不连续、选项答案不自洽、重复或高度相似题干都会返回 `GENERATION_SCHEMA_INVALID`。
 - Handout 不保存逐条 `source_citations`；来源说明放在 Markdown 顶部。Task test 的题目引用必须来自本次材料上下文的 chunk id，且必须落在当前二级任务允许的材料批次内，不允许伪造 fallback 引用。
+- Handout 和 task test 在模型返回后、写成功记录前复核实际使用的 `{material_id, version_id}`；任务级问答通过 Course QA 复用同一发布前复核。迟到结果返回 `MATERIAL_SCOPE_STALE` 并保存 failed 审计记录，不进入最近成功内容选择。
 
 ## 内容结构
 
@@ -152,6 +154,7 @@ sequenceDiagram
 - `STATE_CONFLICT`：任务层级或课程归属不一致，或任务类型不允许生成该内容。
 - `NO_PARSED_MATERIAL`：二级任务没有关联资料，或关联资料没有可用解析上下文。
 - `MATERIAL_COVERAGE_INCOMPLETE`：全材料覆盖未完成。
+- `MATERIAL_SCOPE_STALE`：生成期间材料被删除、移出课程或输入解析版本失效；不发布迟到结果。
 - `GENERATION_SCHEMA_INVALID`：模型输出结构、测试题硬约束或引用不符合契约。
 - `GENERATION_FAILED`：模型调用或未知生成失败。
 - `EXPORT_UNSUPPORTED_CONTENT_TYPE`：导出格式不支持当前生成内容类型。

@@ -73,3 +73,12 @@ class FileStorage(Protocol):
         material_id: str,
     ) -> StagedFileDeletion:
         """Move one material's files out of active storage for commit or rollback."""
+
+    def discard_material_files(
+        self,
+        *,
+        user_id: str,
+        course_id: str,
+        material_id: str,
+    ) -> None:
+        """Idempotently remove one material directory after a failed upload."""

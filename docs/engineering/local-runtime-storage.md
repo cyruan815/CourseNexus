@@ -70,10 +70,28 @@ FastAPI 进程通过 `RagIndexManager` 管理一个延迟创建、线程安全�
 
 ## 8. 验证入口
 
+跨存储只读对账命令：
+
+```powershell
+cd backend
+python -m app.commands.reconcile_storage
+python -m app.commands.reconcile_storage --json
+python -m app.commands.reconcile_storage --building-stale-minutes 60
+```
+
+命令只读取现有 SQLite、上传目录和 Chroma collection，不创建缺失数据库、不计算 embedding，也不删除或修复任何记录。人类可读输出适合本地排查，`--json` 输出稳定的 schema version、统计和带 `notice` / `warning` severity 的 `issues` 数组。退出码为：
+
+- `0`：没有不一致；按策略保留的 `failed` / `retired` 版本或未超时 `building` 版本可以作为 notice 出现。
+- `1`：发现文件缺失、孤儿目录、chunk/vector 集合差异、异常向量、非法 active 指针或超时 building 等不一致。
+- `2`：命令无法完成，例如规范 SQLite 数据库不存在或存储无法读取。
+
+发现不一致后先停止相关写入进程并按第 4 节备份，再根据报告人工决定恢复文件、重建派生索引或修复业务数据；本命令不提供自动删除或自动修复。
+
 ```powershell
 pnpm backend:test
 pnpm backend:migrate
 python -m app.commands.rebuild_rag_index --all
+python -m app.commands.reconcile_storage --json
 ```
 
-路径、冲突保护、SQLite PRAGMA 和 Chroma 单例分别由 `backend/tests/core/test_paths.py`、`backend/tests/db/test_session.py`、`backend/tests/api/test_lifespan.py` 与 `backend/tests/integrations/test_rag_index_manager.py` 覆盖。
+路径、冲突保护、SQLite PRAGMA、Chroma 单例与只读对账分别由 `backend/tests/core/test_paths.py`、`backend/tests/db/test_session.py`、`backend/tests/api/test_lifespan.py`、`backend/tests/integrations/test_rag_index_manager.py` 与 `backend/tests/commands/test_reconcile_storage.py` 覆盖。

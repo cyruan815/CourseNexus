@@ -112,6 +112,73 @@ def test_upload_file_material_creates_uploaded_material(db: Session, tmp_path) -
     assert (tmp_path / material.file_url).read_text(encoding="utf-8") == "# Intro"
 
 
+def test_upload_file_material_discards_file_when_database_save_fails(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+
+    def fail_save(_db: Session, _material: CourseMaterial) -> CourseMaterial:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(materials_service, "save_material", fail_save)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        upload_file_material(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            filename="notes.md",
+            stream=BytesIO(b"# Intro"),
+            content_type="text/markdown",
+            storage=storage,
+        )
+
+    assert not (tmp_path / user.id / course.id).exists()
+    assert db.scalars(select(CourseMaterial).where(CourseMaterial.course_id == course.id)).all() == []
+
+
+def test_upload_file_material_returns_stable_error_when_compensation_fails(
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    user = register_user(db, UserCreate(username="alice", password="password123"))
+    course = create_course(db, user.id, CourseCreate(name="Linear Algebra"))
+    storage = LocalFileStorage(root_path=tmp_path, max_file_size_bytes=1024)
+
+    def fail_save(_db: Session, _material: CourseMaterial) -> CourseMaterial:
+        raise RuntimeError("database unavailable")
+
+    def fail_compensation(**_kwargs) -> None:
+        raise OSError("storage unavailable")
+
+    monkeypatch.setattr(materials_service, "save_material", fail_save)
+    monkeypatch.setattr(storage, "discard_material_files", fail_compensation)
+
+    with pytest.raises(CourseNexusError) as exc_info:
+        upload_file_material(
+            db,
+            user_id=user.id,
+            course_id=course.id,
+            filename="notes.md",
+            stream=BytesIO(b"# Intro"),
+            content_type="text/markdown",
+            storage=storage,
+        )
+
+    assert exc_info.value.code == "UPLOAD_COMPENSATION_FAILED"
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.details is not None
+    assert exc_info.value.details["material_id"].startswith("mat_")
+    assert "code=UPLOAD_COMPENSATION_FAILED" in caplog.text
+    assert f"course={course.id}" in caplog.text
+
+
 @pytest.mark.parametrize(
     ("filename", "stream", "material_type", "mime_type"),
     [

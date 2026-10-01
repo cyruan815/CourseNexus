@@ -29,6 +29,7 @@
 8. 替换：`PUT /api/v1/study-plans/{plan_id}` 先校验无进度、无绑定生成内容和确认任务树完整性，再用 `id + user_id + expected_updated_at + active/deleted` 条件 UPDATE 获取替换权；影响 0 行返回 `STATE_CONFLICT`，影响 1 行后才在同一事务中删除旧任务树、写入新任务树并重算打卡。
 9. 重生成：`POST /api/v1/study-plans/{plan_id}/regeneration-previews` 使用 `study_plan_generator` 模型配置，先读取 `StudyPlan.parsed_config_json.confirmed_config` 和顶层追溯配置，再叠加请求覆盖项，只返回 preview，不写数据库。合并规则为：请求字段优先；未传 `diagnostic_profile` 时继承已保存诊断 profile，显式传入新 profile（包括空对象）时覆盖；未传 `preference_overrides` 时继承保存值，显式传入对象时覆盖，显式 `{}` 时清空保存覆盖；只传 `duration_days` 时基于有效 `start_date` 重新推导 `end_date`，只传 `end_date` 时重新计算 `duration_days`，避免复用旧日期造成范围冲突。
 10. 删除：`DELETE /api/v1/study-plans/{plan_id}` 写 `status = deleted`、`deleted_at`、`updated_at`，默认 list/detail 隐藏。
+11. 发布前复核：诊断题和计划 preview 在模型返回后、响应成功前复核实际读取的材料版本；保存和替换在任何计划、任务或打卡写入前复核请求快照。旧客户端没有版本快照时只能按请求中的明确材料 ID 构造一次当前快照，已提交但失效的快照不得静默替换。失败统一返回 `MATERIAL_SCOPE_STALE`。
 
 ## P08 / P09 生命周期补充
 
@@ -68,6 +69,7 @@
 - 已完成/进行中的二级任务，或已绑定 `ai_generated_contents` 的二级任务，会阻止替换并返回 `STATE_CONFLICT`。
 - 每份范围内具有生效版本的资料必须进入至少一个 batch；coverage 返回 `expected_material_ids`、`processed_material_ids` 和 `batch_count`。
 - Preview 的 `material_snapshot` 同时保存排序后的 `material_ids`、`material_versions`、范围模式和覆盖这些字段的 `snapshot_hash`；确认保存必须保留该输入版本事实，不能因材料后来重解析而改写历史计划来源。
+- 诊断题、preview、保存和替换都必须在对外发布结果或写入计划前复核资料快照；复核覆盖用户与课程归属、材料未删除、版本仍存在且属于对应材料。失败不得退化为全选或当前最新版本。
 - Preview 和保存追溯中的 capacity 以最终任务树为事实来源：`estimated_total_minutes = sum(tasks[].subtasks[].estimated_minutes)`，`available_total_minutes = daily_available_minutes * duration_days`；总时长超出总容量或任一天任务时长超过 `daily_available_minutes` 时，都必须返回 `PLAN_OVER_CAPACITY` warning。
 - Preview 的资料解析质量 warning 以当前 material-context scope 内生效版本为事实来源，只进入 `generation_metadata.material_quality.warnings`；不得改变 capacity 计算，也不得把没有生效版本的资料升级为新的 P5a 阻断。
 

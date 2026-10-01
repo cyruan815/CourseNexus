@@ -189,6 +189,38 @@ def list_active_material_versions(
     ]
 
 
+def list_publishable_material_versions(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_ids: list[str],
+    version_ids: list[str],
+) -> list[tuple[str, str]]:
+    if not material_ids or not version_ids:
+        return []
+    return [
+        (row[0], row[1])
+        for row in db.execute(
+            select(CourseMaterial.id, MaterialParseVersion.id)
+            .join(
+                MaterialParseVersion,
+                MaterialParseVersion.material_id == CourseMaterial.id,
+            )
+            .where(
+                CourseMaterial.user_id == user_id,
+                CourseMaterial.course_id == course_id,
+                CourseMaterial.deleted_at.is_(None),
+                CourseMaterial.parse_status != "deleted",
+                CourseMaterial.id.in_(material_ids),
+                MaterialParseVersion.user_id == user_id,
+                MaterialParseVersion.course_id == course_id,
+                MaterialParseVersion.id.in_(version_ids),
+            )
+        ).all()
+    ]
+
+
 def list_active_scope_material_ids(
     db: Session,
     *,

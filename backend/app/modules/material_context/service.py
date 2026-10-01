@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 
 import tiktoken
@@ -13,6 +13,7 @@ from app.modules.material_context.repository import (
     has_parsed_context_chunks,
     list_active_context_chunk_ids,
     list_active_material_versions,
+    list_publishable_material_versions,
     list_active_scope_material_ids,
     list_context_chunks_by_ids,
     list_eligible_material_ids,
@@ -37,6 +38,64 @@ class _ResolvedScope:
     material_ids: tuple[str, ...]
     eligible_material_ids: tuple[str, ...]
     empty_selection: bool = False
+
+
+def assert_material_snapshot_publishable(
+    db: Session,
+    *,
+    user_id: str,
+    course_id: str,
+    material_versions: Sequence[Mapping[str, str]],
+    expected_material_ids: Sequence[str] | None = None,
+) -> None:
+    assert_course_owner(db, user_id, course_id)
+    expected_ids = set(expected_material_ids or [])
+    if not material_versions:
+        if expected_ids:
+            _raise_stale_material_scope(expected_count=len(expected_ids), current_count=0)
+        return
+
+    expected_pairs: set[tuple[str, str]] = set()
+    for item in material_versions:
+        material_id = item.get("material_id", "").strip()
+        version_id = item.get("version_id", "").strip()
+        if not material_id or not version_id:
+            _raise_stale_material_scope(expected_count=len(material_versions), current_count=0)
+        expected_pairs.add((material_id, version_id))
+
+    if len(expected_pairs) != len(material_versions) or len({pair[0] for pair in expected_pairs}) != len(
+        expected_pairs
+    ):
+        _raise_stale_material_scope(expected_count=len(material_versions), current_count=0)
+    if expected_ids and {pair[0] for pair in expected_pairs} != expected_ids:
+        _raise_stale_material_scope(expected_count=len(expected_ids), current_count=len(expected_pairs))
+
+    current_pairs = set(
+        list_publishable_material_versions(
+            db,
+            user_id=user_id,
+            course_id=course_id,
+            material_ids=[pair[0] for pair in expected_pairs],
+            version_ids=[pair[1] for pair in expected_pairs],
+        )
+    )
+    if current_pairs != expected_pairs:
+        _raise_stale_material_scope(
+            expected_count=len(expected_pairs),
+            current_count=len(current_pairs),
+        )
+
+
+def _raise_stale_material_scope(*, expected_count: int, current_count: int) -> None:
+    raise CourseNexusError(
+        code="MATERIAL_SCOPE_STALE",
+        message="生成期间资料范围已变化，请重新确认后重试",
+        status_code=409,
+        details={
+            "expected_version_count": expected_count,
+            "current_version_count": current_count,
+        },
+    )
 
 
 def resolve_material_scope_ids(
