@@ -674,9 +674,9 @@ def save_study_plan(
         study_plan_repository.add_study_plan_bundle(db, plan=plan, tasks=tasks, subtasks=subtasks)
         _recalculate_checkins_for_dates(db, user_id=user_id, dates=_task_dates(tasks))
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
-        if key_hash:
+        if key_hash and _is_idempotency_key_integrity_error(exc):
             return _resolve_idempotency_write_conflict(
                 db,
                 user_id=user_id,
@@ -915,6 +915,22 @@ def _resolve_idempotency_write_conflict(
     if isinstance(idempotency, dict) and idempotency.get("request_hash") == request_hash:
         return _bundle_for_plan(db, existing_plan)
     raise CourseNexusError(code="IDEMPOTENCY_CONFLICT", message="幂等键已用于不同请求", status_code=409)
+
+
+def _is_idempotency_key_integrity_error(exc: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "uq_study_plans_user_course_idempotency_key_hash":
+        return True
+
+    message = str(exc.orig).lower()
+    return "unique constraint failed" in message and all(
+        column in message
+        for column in (
+            "study_plans.user_id",
+            "study_plans.course_id",
+            "study_plans.idempotency_key_hash",
+        )
+    )
 
 
 def _task_dates(tasks: list[StudyTask]) -> set[date]:
