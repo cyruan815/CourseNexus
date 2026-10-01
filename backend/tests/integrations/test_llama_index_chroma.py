@@ -233,6 +233,25 @@ def test_chroma_deletes_and_lists_one_parse_version(tmp_path: Path) -> None:
     assert rag_index.list_parse_version_chunk_ids("mpv_2") == {"c2"}
 
 
+def test_chroma_lists_identifier_metadata_without_documents(tmp_path: Path) -> None:
+    rag_index = index(tmp_path)
+    rag_index.index_chunks(
+        [
+            rag_chunk("c2", user_id="u2", course_id="history", material_id="m2", parse_version_id="mpv_2"),
+            rag_chunk("c1", user_id="u1", course_id="math", material_id="m1", parse_version_id="mpv_1"),
+        ]
+    )
+
+    records = rag_index.list_records()
+
+    assert [record.chunk_id for record in records] == ["c1", "c2"]
+    assert records[0].user_id == "u1"
+    assert records[0].course_id == "math"
+    assert records[0].material_id == "m1"
+    assert records[0].parse_version_id == "mpv_1"
+    assert not hasattr(records[0], "text")
+
+
 def test_chroma_updates_material_folder_without_reembedding(tmp_path: Path) -> None:
     rag_index = index(tmp_path)
     rag_index.index_chunks([rag_chunk("c1", material_id="m1", folder_id="old")])

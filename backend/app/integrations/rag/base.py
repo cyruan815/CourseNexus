@@ -33,6 +33,15 @@ class RetrievalHit:
     score: float
 
 
+@dataclass(frozen=True)
+class RagIndexRecord:
+    chunk_id: str
+    user_id: str | None
+    course_id: str | None
+    material_id: str | None
+    parse_version_id: str | None
+
+
 class RagIndex(Protocol):
     def clear(self) -> None:
         """Remove all derived records from the configured retrieval collection."""
@@ -51,6 +60,9 @@ class RagIndex(Protocol):
 
     def list_parse_version_chunk_ids(self, parse_version_id: str) -> set[str]:
         """Return stored chunk ids for parse-version integrity validation."""
+
+    def list_records(self) -> list[RagIndexRecord]:
+        """Return identifier metadata for read-only cross-store reconciliation."""
 
     def update_material_folder(self, material_id: str, folder_id: str | None) -> None:
         """Update folder metadata without recomputing embeddings."""
