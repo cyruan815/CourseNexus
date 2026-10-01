@@ -8,7 +8,7 @@ import { OutlineResult } from "../../../src/features/generated-content/renderers
 import { QuizResult } from "../../../src/features/generated-content/renderers/QuizResult";
 
 function renderUi(ui: React.ReactNode) {
-  return render(<MantineProvider>{ui}</MantineProvider>);
+  return render(<MantineProvider env="test">{ui}</MantineProvider>);
 }
 
 describe("generated content renderers", () => {
