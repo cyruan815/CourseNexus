@@ -93,6 +93,13 @@ export function StudyPlanMaterialScopeSelector({
           {materials.map((material) => {
             const isParsed = isMaterialLearningReady(material);
             const isChecked = isParsed && selectedIds.includes(material.id);
+            const status = material.parse_status === "parsing" && isParsed
+              ? "正在更新"
+              : material.parse_error && isParsed
+                ? "更新失败，当前版本仍可用"
+                : material.parse_status === "parse_failed"
+                  ? "首次解析失败"
+                  : statusLabels[material.parse_status] ?? material.parse_status;
 
             return (
               <Group className="study-plan-scope-row" key={material.id} justify="space-between" wrap="nowrap">
@@ -103,7 +110,7 @@ export function StudyPlanMaterialScopeSelector({
                   onChange={() => toggleMaterial(material.id)}
                 />
                 <Badge color={isParsed ? "teal" : "gray"} variant="light">
-                  {statusLabels[material.parse_status] ?? material.parse_status}
+                  {status}
                 </Badge>
               </Group>
             );

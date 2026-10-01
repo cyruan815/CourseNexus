@@ -674,6 +674,7 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
     expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeEnabled();
     expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeChecked();
+    expect(screen.getByText("正在更新")).toBeInTheDocument();
   });
 
   it("keeps an invalid material snapshot visible and requires explicit reselection", async () => {
