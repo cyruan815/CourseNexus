@@ -85,6 +85,8 @@ python -m app.commands.reconcile_storage --building-stale-minutes 60
 - `1`：发现文件缺失、孤儿目录、chunk/vector 集合差异、异常向量、非法 active 指针或超时 building 等不一致。
 - `2`：命令无法完成，例如规范 SQLite 数据库不存在或存储无法读取。
 
+JSON 报告中的稳定 `issue.code` 包括：`DATABASE_NOT_FOUND`、`MATERIAL_FILE_MISSING`、`ORPHAN_MATERIAL_DIRECTORY`、`ACTIVE_VECTOR_SET_MISMATCH`、`ORPHAN_VECTOR`、`VECTOR_FOR_DELETED_MATERIAL`、`VECTOR_METADATA_INVALID`、`VECTOR_METADATA_MISMATCH`、`ACTIVE_PARSE_VERSION_POINTER_INVALID`、`MULTIPLE_ACTIVE_PARSE_VERSIONS`、`PARSE_VERSION_RETAINED` 和 `STORAGE_RECONCILIATION_FAILED`。新增检测项可以扩展代码集合，但不得改变既有代码语义或把 notice 静默升级为 destructive 修复。
+
 发现不一致后先停止相关写入进程并按第 4 节备份，再根据报告人工决定恢复文件、重建派生索引或修复业务数据；本命令不提供自动删除或自动修复。
 
 ```powershell

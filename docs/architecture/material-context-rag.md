@@ -92,8 +92,8 @@ flowchart LR
 | `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`；在模型返回后复核输入材料和版本快照仍可发布。 | 不调用生成模型，不保存生成结果。 |
 | `model-provider` | 通过 OpenAI SDK 规范调用当前业务用途配置的生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件，不复用其他用途的模型配置。 |
 | `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不直接读取资料表或向量库，不生成 Flashcard、Mindmap、Quiz 或学习计划。 |
-| `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
-| `study-plans`（后续消费者） | 后续使用全材料上下文生成计划预览。 | 本轮不实现 AI 计划算法，不改变当前计划行为。 |
+| `generation-orchestrator` / generators | 五类课程级生成读取完整选定上下文；任务内容按全材料批次生成，并保存实际材料版本快照。 | 不拥有解析、索引或资料权限规则。 |
+| `study-plans` | 使用全材料批次生成计划预览，并把实际输入版本写入计划快照。 | 不绕过 material-context 读取候选或退休版本。 |
 
 ## 4. 存储和标识
 
@@ -150,7 +150,7 @@ sequenceDiagram
     C-->>R: candidate chunk ids
     M->>M: verify SQLite ids == Chroma ids
     M->>DB: retire old active + activate candidate + switch pointer
-    M->>M: parse_status = parsed; parse_error = null
+    M->>M: 原子切换 active_parse_version_id; parse_status = parsed
 ```
 
 实现规则：
@@ -291,7 +291,7 @@ EMBEDDING_BASE_URL=
 EMBEDDING_MODEL=text-embedding-3-small
 COURSE_QA_API_KEY=
 COURSE_QA_BASE_URL=
-COURSE_QA_MODEL=gpt-5.4-mini
+COURSE_QA_MODEL=deepseek-flash
 CHROMA_PERSIST_PATH=./data/chroma
 CHROMA_COLLECTION=course_nexus_material_chunks
 RAG_SIMILARITY_TOP_K=8

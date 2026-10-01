@@ -4,7 +4,7 @@
 
 `docs/` 是 CourseNexus 课枢的长期项目知识库，由开发者和 Agent 共同使用。它不是 README 的附属说明，而是产品、架构、API、数据契约、模块边界、工程规范和协作方式的权威上下文。
 
-当前文档基线为 v0.1，目标是支撑后续项目基座框架、walking skeleton 和前后端分工，不提前展开具体功能模块开发文档。
+当前文档基线描述 2026-10-01 的可靠单机 V1：产品闭环、运行安全、版本化材料、跨存储补偿和发布验收已经落地；后续事项必须在正式路线图和技术债中明确标记，不能沿用早期 walking skeleton 口径。
 
 ## 推荐阅读顺序
 
@@ -21,12 +21,12 @@
 
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
-| [product/index.md](product/index.md) | 产品目标、PRD 和 AI 资料业务范围入口。 | 2026-07-10 |
-| [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-07-10 |
-| [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-07-13 |
-| [engineering/index.md](engineering/index.md) | 项目骨架、开发约定和轻量协作规范入口。 | 2026-07-09 |
-| [planning/index.md](planning/index.md) | 当前状态、实现路线图、技术债和信息处理优化计划入口。 | 2026-08-02 |
-| [domains/index.md](domains/index.md) | 业务领域实现知识库入口，记录各功能实际架构、算法、状态和代码入口。 | 2026-07-10 |
+| [product/index.md](product/index.md) | 产品目标、PRD 和 AI 资料业务范围入口。 | 2026-10-01 |
+| [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-10-01 |
+| [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-10-01 |
+| [engineering/index.md](engineering/index.md) | 项目骨架、运行存储、发布验收和协作规范入口。 | 2026-10-01 |
+| [planning/index.md](planning/index.md) | 当前状态、V1 完成矩阵、路线图和技术债入口。 | 2026-10-01 |
+| [domains/index.md](domains/index.md) | 业务领域实现知识库入口，记录各功能实际架构、算法、状态和代码入口。 | 2026-10-01 |
 
 ## 相关链接
 

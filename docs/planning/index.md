@@ -10,9 +10,10 @@
 
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
-| [current-state.md](current-state.md) | 当前已完成基座、未完成范围、验证记录和下一步重点。 | 2026-07-09 |
-| [implementation-roadmap.md](implementation-roadmap.md) | 从项目基座到真实学习闭环的分阶段实现路线。 | 2026-07-09 |
-| [tech-debt-tracker.md](tech-debt-tracker.md) | 当前已知技术债、影响、优先级和处理状态。 | 2026-07-16 |
+| [current-state.md](current-state.md) | 可靠单机 V1 当前能力、发布边界、验证结果和延期范围。 | 2026-10-01 |
+| [v1-completion-matrix.md](v1-completion-matrix.md) | P/S/R/M 收口事项、对应 PR、验证证据、限制和延期项。 | 2026-10-01 |
+| [implementation-roadmap.md](implementation-roadmap.md) | V1 发布动作及共享部署、规模和体验的后续路线。 | 2026-10-01 |
+| [tech-debt-tracker.md](tech-debt-tracker.md) | 当前已知技术债、关闭证据、影响和接受边界。 | 2026-10-01 |
 | [material-understanding-pipeline-tech-debt.md](material-understanding-pipeline-tech-debt.md) | TD-017：多格式分层解析、完整性审计、透明迁移、结构化切块与自适应检索的大型技术债。 | 2026-07-14 |
 | [information-processing-optimization.md](information-processing-optimization.md) | 资料解析、切片、检索、引用、生成和学习反馈链路优化计划。 | 2026-07-09 |
 
@@ -26,5 +27,6 @@
 ## 维护规则
 
 - 当前状态变化、阶段路线调整、技术债新增或关闭时，更新本目录。
+- V1 完成状态以 `v1-completion-matrix.md` 为权威入口；临时 `tmp/` 评审稿不得覆盖正式状态。
 - 本目录记录共享规划，不记录一次性聊天计划或个人草稿。
 - 形成架构、API、数据契约或工程约定变更时，同步迁移或补充到对应正式分区。

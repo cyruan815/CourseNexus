@@ -27,7 +27,7 @@
 - 学情诊断在创建页为必填；没有 `diagnostic_profile` 时不生成 preview。
 - `daily_available_minutes` 不必填；只有自然语言明确解析出有效分钟数时才提交，否则由后端估算。
 - 创建页提交问卷后自动调用诊断 profile、preview 和 save；保存仍提交 `client_flow = "wizard_v1"` 与 preview exact tasks，保存成功后先把本次 preview tasks 回填到日历格子供用户预览，再由用户点击“进入计划”跳转详情。
-- 当前创建页默认使用全部已解析资料，不在首屏展示资料选择器；若资料范围内没有 parsed 资料，前端在进入流程前提示先上传或等待解析。
+- 当时创建页默认使用全部已解析资料且不在首屏展示资料选择器；该历史行为已由本文件顶部 P08 显式快照流程取代。
 - 当前创建页使用页面内轻导航替代工作台顶栏，只保留“返回上一步”和“回到课程详情”。问卷生成等待态只保留标题、说明和沿卡片边框持续流动的等待动效，不显示步骤文字；计划生成等待态使用日历拆分动画，只保留月份左右切换，不展示年月浮层。计划生成日历不读取已有计划占用，保存完成前保持空格子；保存完成后把本次 preview tasks 回填进日期小格，并显示“进入计划”按钮供用户手动跳转详情。
 - 预览和详情页的任务说明改为用户阅读结构：按 `含义 / 条件 / 步骤 / 练习检查` 等片段分行；详情页隐藏内部 `mat_xxx` 资料 ID。
 
@@ -822,11 +822,11 @@ else:
 
 测试入口：`frontend/tests/pages/study-plan-pages.test.tsx` 增加配置解析回填用例；当前本地 Vitest 仍可能被 `entities ./decode` exports 问题挡在收集前，验证时需如实记录。
 
-资料范围选择尚未在 C3 完成；当前创建页仍固定使用全部已解析资料。该能力属于 C4 完整创建向导的配置确认范围，或可作为 C4 前置小提交先落地，提交给后端时必须使用 `MaterialScope` 的资料 ID 结构，不能使用文件夹作为 Agent 范围。
+资料范围选择在 C3 阶段尚未完成，当时创建页仍固定使用全部已解析资料；后续 C4 和 P08 已完成该能力。提交给后端始终使用 `MaterialScope` 的资料 ID 结构，不能使用文件夹作为 Agent 范围。
 
 ## 2026-07-14 前端 C4 资料范围选择落地
 
-历史阶段：`/courses/:courseId/study-plans/new` 曾接入资料范围选择，`StudyPlanMaterialScopeSelector` 只允许选择 `parse_status = "parsed"` 的资料。2026-07-15 自动闭环版本暂不在首屏展示资料范围选择器，当前默认提交全部已解析资料的 `MaterialScope`。
+历史阶段：`/courses/:courseId/study-plans/new` 曾接入资料范围选择，`StudyPlanMaterialScopeSelector` 只允许选择 `parse_status = "parsed"` 的资料。2026-07-15 自动闭环版本一度隐藏选择器并提交动态全部范围；当前以顶部 P08 说明的 `is_learning_ready` 显式 ID / 名称快照为准。
 
 C4 后，`POST /study-plan-config-parses`、`POST /study-plan-diagnostic-questions`、`POST /study-plan-diagnostic-profiles`、`POST /study-plans/preview` 和保存请求都复用创建页当前 `materialScope`。资料范围变化会清空配置解析未补齐提示、清空已有 `diagnostic_profile`，并把现有 preview 标记为过期以禁用保存。创建页草稿同时持久化 `materialScope`，刷新后恢复。
 

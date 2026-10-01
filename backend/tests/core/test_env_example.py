@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from app.core.config import MODEL_PURPOSES
@@ -43,3 +44,17 @@ def test_env_example_disables_mock_model_provider_by_default() -> None:
     assert "APP_ENV=development" in content
     assert "ENABLE_MOCK_MODEL_PROVIDER=false" in content
     assert "production 必须使用至少 32 位的非默认 SECRET_KEY" in content
+
+
+def test_env_example_keeps_verified_provider_defaults_without_secrets() -> None:
+    content = (ROOT_DIR / ".env.example").read_text(encoding="utf-8")
+
+    assert "EMBEDDING_BASE_URL=https://aihubmix.com/v1" in content
+    assert "EMBEDDING_MODEL=text-embedding-3-large" in content
+    for purpose in MODEL_PURPOSES:
+        if purpose == "embedding":
+            continue
+        prefix = purpose.upper()
+        assert f"{prefix}_BASE_URL=https://api.deepseek.com" in content
+        assert f"{prefix}_MODEL=deepseek-flash" in content
+    assert not re.search(r"^[A-Z0-9_]+_API_KEY=.+$", content, re.MULTILINE)
