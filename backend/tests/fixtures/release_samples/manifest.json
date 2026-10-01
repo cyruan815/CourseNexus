@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "topic": "Limits and Continuity",
+  "anchor_text": "A limit describes the value a function approaches near an input.",
+  "samples": [
+    {
+      "file_name": "limits-and-continuity.txt",
+      "media_type": "text/plain",
+      "parser_kind": "plain_text"
+    },
+    {
+      "file_name": "limits-and-continuity.pdf",
+      "media_type": "application/pdf",
+      "parser_kind": "docling"
+    },
+    {
+      "file_name": "limits-and-continuity.docx",
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "parser_kind": "docling"
+    },
+    {
+      "file_name": "limits-and-continuity.pptx",
+      "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "parser_kind": "docling"
+    }
+  ]
+}
