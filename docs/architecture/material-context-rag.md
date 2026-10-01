@@ -89,7 +89,7 @@ flowchart LR
 | Docling parser adapter | 解析 PDF、DOCX、PPTX、Markdown、文本和图片；保留标题、页码、表格等结构；输出项目内部 `ParsedDocument`。 | 不写数据库，不判断用户权限。 |
 | LlamaIndex RAG adapter | 把内部 chunk 转为 node，调用 embedding，写入 Chroma，构造带 metadata filter 的 retriever。 | 不暴露 LlamaIndex 类型给业务层，不生成业务内容。 |
 | Chroma adapter | 用本地 `PersistentClient` 持久化向量，按 chunk upsert/delete/query。 | 不保存用户、课程、计划或生成记录。 |
-| `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`。 | 不调用生成模型，不保存生成结果。 |
+| `material-context` | 校验课程和材料范围；提供相关性检索与全材料覆盖读取；把结果统一为 `ContextChunk`；在模型返回后复核输入材料和版本快照仍可发布。 | 不调用生成模型，不保存生成结果。 |
 | `model-provider` | 通过 OpenAI SDK 规范调用当前业务用途配置的生成模型，返回项目内部 DTO 或经过 schema 校验的结构化结果。 | 不检索资料，不拼材料权限过滤条件，不复用其他用途的模型配置。 |
 | `course-qa` | 调用相关性检索，生成并保存回答、会话和引用。 | 不直接读取资料表或向量库，不生成 Flashcard、Mindmap、Quiz 或学习计划。 |
 | `generation-orchestrator` / generators（后续消费者） | 后续调用全材料读取，分批生成和汇总目标结构。 | 本轮不实现具体生成器、schema 或提示词。 |
@@ -321,6 +321,8 @@ MATERIAL_BATCH_MAX_TOKENS=12000
 | 生效切换失败 | 返回 `PARSE_VERSION_SWITCH_FAILED`，删除候选向量和切片，旧生效版本不变。 |
 | Chroma 目录损坏或记录缺失 | 返回 `RETRIEVAL_FAILED`；提供按 SQLite 全量重建索引命令。 |
 | 资料或文件夹物理删除时 RAG 或 SQLite 提交失败 | SQLite 回滚；暂存文件移回原路径，并用删除前的 SQLite chunk 快照重新索引已解析资料。补偿失败返回 `DELETE_COMPENSATION_FAILED`。 |
+| 上传原文件后数据库写入失败 | 回滚数据库并幂等删除该材料独立目录；文件补偿也失败时返回 `UPLOAD_COMPENSATION_FAILED`。 |
+| 模型调用期间材料被删除、转移或输入版本失效 | 在发布回答、预览或生成内容前重新校验用户、课程、材料和版本快照；返回 `MATERIAL_SCOPE_STALE`，不发布迟到的成功结果。 |
 | 材料范围包含无权或不存在资料 | 返回 `NOT_FOUND`，不泄露资源存在性。 |
 | 问答无命中 | 返回 `answer_type = no_source`，不调用或不采信无依据回答。 |
 | 五类独立生成完整上下文超限 | 返回 `MATERIAL_CONTEXT_TOO_LARGE`，不调用模型、不创建历史。 |
@@ -337,6 +339,8 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 
 `--all` 只重建当前配置的 CourseNexus Chroma collection，并且只索引每份资料 `active_parse_version_id` 对应的切片；不删除 SQLite 业务数据、上传文件或其他 Chroma collection。`--material-id` 只删除并重建单个资料当前生效版本的派生向量；没有生效版本的资料会清理旧向量并返回 0 个索引 chunk。
 
+跨存储对账使用同一套规范路径和现有 Chroma collection，以只读方式枚举 SQLite、上传目录与向量 metadata。它能报告原文件缺失、孤儿材料目录、生效版本 chunk/vector 集合不一致、孤儿或 metadata 异常向量、非法 active 指针、多个 active 版本，以及长期停留在 `building` 的候选。按 R02 保留策略存在的 `failed` / `retired` 版本和未超时 `building` 版本仅作为 notice，不导致失败退出。命令不删除、不重建、不自动修复数据，详细运行契约见[本地存储运行与迁移](../engineering/local-runtime-storage.md)。
+
 ## 11. 测试与验收重点
 
 - Docling fixture 能保留 PDF / DOCX / PPTX 的标题、页码和有序文本。
@@ -349,6 +353,8 @@ python -m app.commands.rebuild_rag_index --material-id <material_id>
 - 候选和退休版本即使保留 SQLite chunk 或 Chroma 向量，也不能被当前上下文或 Top-K 检索命中。
 - 解析、索引、完整性校验和生效切换分别注入故障后，旧生效版本仍可问答、生成和制定计划。
 - 并发重解析只有一个 `building` 候选可以进入构建。
+- 问答、独立生成、计划预览/诊断/保存/替换、任务讲义和任务测试都在模型返回或数据库写入前复核输入版本；复核失败不得保存成功结果。
+- 只读对账能发现文件、数据库和向量库的构造不一致；正常数据和仅有按策略保留的退休版本不得误报失败。
 - 无真实模型 API key 的单元测试和基础开发仍可运行。
 - 公共材料上下文测试不替代 Flashcard、Quiz、Mindmap 或 AI 学习计划各自的业务质量验收。
 - 图片格式已进入 Docling adapter 路由；OCR 质量、复杂版面和跨页结构回归夹具后置。

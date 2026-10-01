@@ -70,6 +70,7 @@ sequenceDiagram
 
 - 没有生效解析版本或没有检索命中：保存 `no_source` 回答，不调用模型，不保存引用。
 - 模型失败：保存失败消息并返回稳定生成错误；不会保存部分引用。
+- 模型返回后、保存 assistant 消息和引用前，服务会按本次检索记录的 `{material_id, version_id}` 快照重新校验用户、课程、材料和解析版本。模型调用期间资料被删除、转移或版本失效时返回 `MATERIAL_SCOPE_STALE`，只保留既有用户消息，不保存迟到的成功回答或引用。
 - 越界或伪造引用：删除标记，不保存 fallback 引用。
 - 来源资料物理删除：引用的 `material_id`、`material_version_id` 和 `chunk_id` 外键置空，但保留资料名、位置与片段快照供历史回答展示。
 - PDF 无可靠页码：不请求 PDF 原文，不默认跳到第一页，直接展示保存快照。
@@ -80,6 +81,7 @@ sequenceDiagram
 - `backend/tests/modules/course_qa/test_course_qa_service.py`
 - `backend/tests/modules/course_qa/test_course_qa_api.py`
 - `backend/tests/modules/course_qa/test_course_qa_persistence.py`
+- `backend/tests/modules/material_context/test_publication_guard.py`
 - `backend/tests/integrations/test_openai_model_provider.py`
 - `frontend/tests/features/course-qa/inline-citation-answer.test.tsx`
 - `frontend/tests/features/materials/api.test.ts`

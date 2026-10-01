@@ -101,7 +101,11 @@ python -m pytest
 python -m alembic upgrade head
 python -m app.commands.rebuild_rag_index --all
 python -m app.commands.rebuild_rag_index --material-id <material_id>
+python -m app.commands.reconcile_storage
+python -m app.commands.reconcile_storage --json
 ```
+
+`reconcile_storage` 只读检查 SQLite、上传文件和 Chroma 的一致性：退出码 0 表示未发现不一致，1 表示发现需人工处理的问题，2 表示命令未能完成。它不会自动删除或修复数据；完整报告项和处置步骤见[本地存储运行与迁移](../docs/engineering/local-runtime-storage.md)。
 
 提交前运行与改动匹配的测试；涉及共享契约、数据库、RAG 或跨模块行为时运行完整 `pnpm backend:test`。
 

@@ -84,6 +84,13 @@ SQLite、上传文件和 Chroma 的相对位置统一从仓库配置根目录解
 
 ### 5.2 算法步骤
 
+上传资料：
+
+1. 先把原文件写入当前课程和新材料 ID 对应的独立目录，再创建 `CourseMaterial` 记录。
+2. 数据库写入或提交失败时先回滚事务，再通过 `discard_material_files()` 幂等回收该材料目录；重复补偿或目录已不存在均视为成功，不会影响同课程其他材料。
+3. 文件回收成功时保留原始数据库错误语义；文件回收也失败时返回 `UPLOAD_COMPENSATION_FAILED`，日志只记录材料 ID、课程 ID 和错误码，不记录文件内容或用户输入。
+4. 上传成功后的自动解析仍是独立步骤；解析失败按版本化解析规则处理，不反向删除已成功保存的原文件和材料记录。
+
 PDF 解析：
 
 1. 使用 `pdf_text_first` profile，关闭 OCR 并强制读取 PDF 文本层。
@@ -141,6 +148,7 @@ PDF 解析：
 ### 5.3 复杂度与资源预算
 
 - 创建目录、重命名资料或目录、移动单份资料为常数次查询；目录列表排序由数据库索引辅助。
+- 上传补偿只删除当前材料的独立目录，工作量与该目录内文件数量及总大小线性相关；补偿接口幂等，不扫描或重写同课程其他材料。
 - 一次解析写入 `c` 个候选 chunk 和同量向量，完整性检查读取候选 ID 集合，时间与额外内存均为 `O(c)`。解析版本按次增长，旧版本默认保留；本轮不提供自动清理，磁盘预算需同时计入退休版本的 SQLite chunk 与 Chroma 向量。
 - 删除文件夹读取 `n` 份资料和 `c` 个 chunk，数据库与应用层工作量为 `O(n + c)`；RAG 使用一次批量 material-id 删除。文件目录使用同盘重命名暂存，正常路径不把文件内容载入内存。
 - metadata 更新不重新调用 Embedding 服务，不产生模型 token 成本。
@@ -153,6 +161,7 @@ PDF 解析：
 ## 6. 测试与验收
 
 - 文件夹 CRUD、资料重命名、资料移动、级联物理删除、历史引用脱钩、文件/RAG 清理、数据库回滚、索引与文件补偿和权限：`backend/tests/modules/materials/`。
+- 上传入库失败后的精确文件回收、重复补偿和 `UPLOAD_COMPENSATION_FAILED`：`backend/tests/modules/materials/test_materials_service.py`、`backend/tests/integrations/test_local_file_storage.py`。
 - 候选解析版本覆盖首次解析、成功重解析、解析/索引/完整性检查/切换故障、旧版本回退和同材料并发保护：`backend/tests/modules/materials/test_material_api.py`、`backend/tests/modules/materials/test_material_service.py`。
 - 历史材料、chunk 和引用的版本回填、异常空解析迁移与非空版本约束：`backend/tests/db/test_migrations.py`、`backend/tests/db/test_schema.py`。
 - metadata 原位更新：`backend/tests/integrations/test_llama_index_chroma.py`。
@@ -184,6 +193,7 @@ pnpm frontend:build
 - 2026-10-01 资料工作区统一使用项目级原文件预览器：PDF、图片与文本使用浏览器原生能力，DOCX 使用 `docx-preview`，PPTX 使用 `@aiden0z/pptx-renderer` 并配置本地 PDF.js 矢量回退资源；Office 适配器按需加载，失败时保留原文件下载入口。该能力是只读查看，不提供编辑、动画播放或桌面 Office 像素级一致性承诺。
 - 2026-10-01 本地业务数据统一使用仓库配置根目录：从不同当前目录启动不会生成第二套 SQLite、上传或 Chroma 数据；发现旧位置数据时先拒绝运行并要求人工备份迁移。Chroma 改为 FastAPI 进程级单例并由 lifespan 管理，退出不执行破坏性 reset。
 - 2026-10-01 资料解析改为候选版本切换：新版本在 `building` 状态完成 chunk、向量与完整性检查后才成为 `active`，旧版本转为 `retired`；任何候选失败均不破坏旧可用版本。首次失败没有生效版本，资料不可学习；重解析失败则保留旧版本并显示更新失败。旧版本默认保留，后续清理必须另行设计引用保留期和运维策略。
+- 2026-10-01 上传链路在“文件已写入、数据库未成功提交”时执行材料目录级幂等补偿；补偿本身失败返回 `UPLOAD_COMPENSATION_FAILED`，不把跨存储不一致伪装成普通数据库错误。
 - 如果未来需要嵌套目录、批量拖拽或异步解析，必须先更新 PRD、API 契约和本领域文档。
 - 当前 PDF 首轮关闭高级表格结构模型以避免不必要的内存峰值；需要恢复单元格级结构时，应单独建立带资源预算和复杂表格夹具的任务。
 

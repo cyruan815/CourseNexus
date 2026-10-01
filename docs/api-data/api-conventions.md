@@ -83,6 +83,9 @@
 | `PARSE_FAILED` | 资料解析失败。 |
 | `INDEXING_FAILED` | 资料索引写入、删除或重建失败。 |
 | `RETRIEVAL_FAILED` | 资料向量检索失败。 |
+| `UPLOAD_COMPENSATION_FAILED` | 上传数据库写入失败后，原文件目录回收也失败；服务端保留不一致告警供人工对账。 |
+| `DELETE_COMPENSATION_FAILED` | 删除链路失败后，文件或向量恢复补偿未完整成功。 |
+| `MATERIAL_SCOPE_STALE` | 长操作结束时输入材料或解析版本已失效，迟到结果未发布。 |
 | `MATERIAL_COVERAGE_INCOMPLETE` | 指定材料生成没有覆盖全部预期材料。 |
 | `GENERATION_FAILED` | Agent 或 AI 内容生成失败。 |
 | `GENERATION_SCHEMA_INVALID` | AI 结构化输出不符合调用方 schema。 |
