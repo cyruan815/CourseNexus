@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import sys
 from time import perf_counter
-from typing import Literal
+from typing import Callable, Literal
 from uuid import uuid4
 
 
@@ -121,6 +121,7 @@ def _request_json(
     method: str,
     path: str,
     resource_ids: dict[str, str] | None = None,
+    validate: Callable[[dict[str, object]], str | None] | None = None,
     **kwargs: object,
 ) -> dict[str, object]:
     started = perf_counter()
@@ -140,8 +141,27 @@ def _request_json(
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
         log.record(step, "failed", elapsed_ms=elapsed_ms, error_code="INVALID_RESPONSE")
         raise AcceptanceFailure("INVALID_RESPONSE")
+    data = payload["data"]
+    if validate is not None and (code := validate(data)) is not None:
+        log.record(
+            step,
+            "failed",
+            elapsed_ms=elapsed_ms,
+            resource_ids=resource_ids,
+            error_code=code,
+        )
+        raise AcceptanceFailure(code)
     log.record(step, "passed", elapsed_ms=elapsed_ms, resource_ids=resource_ids)
-    return payload["data"]
+    return data
+
+
+def _validate_parsed_material(material: dict[str, object]) -> str | None:
+    if material.get("parse_status") != "parsed" or not material.get("is_learning_ready"):
+        return "MATERIAL_NOT_LEARNING_READY"
+    version_id = material.get("active_parse_version_id")
+    if not isinstance(version_id, str) or not version_id:
+        return "ACTIVE_PARSE_VERSION_MISSING"
+    return None
 
 
 def _upload_and_parse_samples(
@@ -176,12 +196,10 @@ def _upload_and_parse_samples(
             path=f"/api/v1/materials/{material_id}/parse-retries",
             resource_ids={"course_id": course_id, "material_id": material_id},
             headers=headers,
+            validate=_validate_parsed_material,
         )
-        if parsed.get("parse_status") != "parsed" or not parsed.get("is_learning_ready"):
-            raise AcceptanceFailure("MATERIAL_NOT_LEARNING_READY")
         version_id = parsed.get("active_parse_version_id")
-        if not isinstance(version_id, str) or not version_id:
-            raise AcceptanceFailure("ACTIVE_PARSE_VERSION_MISSING")
+        assert isinstance(version_id, str)
         material_ids.append(material_id)
         version_ids.append(version_id)
     return material_ids, version_ids
