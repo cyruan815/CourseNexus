@@ -523,7 +523,7 @@ function renderStudyPlanRoutes(initialPath: InitialEntry = {
   },
 }) {
   return render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route element={<StudyPlanCreatePage />} path="/courses/:courseId/study-plans/new" />
@@ -634,7 +634,9 @@ describe("study plan pages", () => {
     fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "全选当前可用资料" }));
     fireEvent.click(screen.getByRole("button", { name: "确认资料范围" }));
-    expect(screen.getByText(/已选 1 份：线代第一章\.pdf/)).toBeInTheDocument();
+    expect(screen.getByText("已选 1 份")).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "调整资料" }));
+    expect(await screen.findByText("线代第一章.pdf")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -669,7 +671,9 @@ describe("study plan pages", () => {
       state: { studyPlanMaterialSelection: [{ id: "mat_2", name: "未解析习题.pdf" }] },
     });
 
-    expect(await screen.findByText(/已选 1 份：未解析习题\.pdf/)).toBeInTheDocument();
+    expect(await screen.findByText("已选 1 份")).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "调整资料" }));
+    expect(await screen.findByText("未解析习题.pdf")).toBeInTheDocument();
     expect(screen.queryByText(/已被删除、失效或尚未解析/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "调整资料" }));
     expect(screen.getByRole("checkbox", { name: "未解析习题.pdf" })).toBeEnabled();
@@ -691,7 +695,9 @@ describe("study plan pages", () => {
       state: { studyPlanMaterialSelection: [{ id: "mat_deleted", name: "已删除讲义.pdf" }] },
     });
 
-    expect(await screen.findByText(/已选 1 份：已删除讲义\.pdf/)).toBeInTheDocument();
+    expect(await screen.findByText("已选 1 份")).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "调整资料" }));
+    expect(await screen.findByText("已删除讲义.pdf")).toBeInTheDocument();
     expect(screen.getByText(/有 1 份资料已被删除/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("学习目标"), { target: { value: "复习线性代数" } });
     fireEvent.click(screen.getByTestId("study-plan-goal-submit"));
@@ -727,7 +733,9 @@ describe("study plan pages", () => {
 
     expect(await screen.findByDisplayValue("当前账号的目标")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("其他账号的目标")).not.toBeInTheDocument();
-    expect(screen.getByText(/已选 1 份：线代第一章\.pdf/)).toBeInTheDocument();
+    expect(screen.getByText("已选 1 份")).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "调整资料" }));
+    expect(await screen.findByText("线代第一章.pdf")).toBeInTheDocument();
   });
 
   it("migrates a legacy all-material draft but requires confirmation", async () => {
@@ -1756,7 +1764,7 @@ describe("study plan pages", () => {
     expect(screen.queryByText(/\[\[cite:1\]\]/)).not.toBeInTheDocument();
     const citationMarker = screen.getByRole("button", { name: "查看引用 1：线代第一章.pdf" });
     fireEvent.mouseEnter(citationMarker);
-    await waitFor(() => expect(screen.getByLabelText("引用 1 详情")).toHaveStyle({ opacity: "1" }));
+    await waitFor(() => expect(screen.getByLabelText("引用 1 详情")).toBeInTheDocument());
     const citationTooltip = screen.getByLabelText("引用 1 详情");
     expect(citationTooltip).toHaveTextContent("第 3 页");
     expect(citationTooltip).toHaveTextContent("向量空间定义");
