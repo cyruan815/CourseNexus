@@ -342,18 +342,11 @@
 }
 
 .study-plan-goal-actions {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
   align-items: flex-end;
   gap: 0;
-  pointer-events: none;
-  transform: translate(-20px, -20px);
 }
 
 .study-plan-goal-submit-button {
-  pointer-events: auto;
   background: var(--cn-button-primary-bg);
   color: var(--cn-button-primary-text);
   width: 38px;
