@@ -8,6 +8,7 @@ import {
   Divider,
   Group,
   Paper,
+  Popover,
   Radio,
   Skeleton,
   Stack,
@@ -16,7 +17,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconCalendarStats, IconChevronLeft, IconChevronRight, IconSend } from "@tabler/icons-react";
+import { IconArrowLeft, IconCalendarStats, IconChevronLeft, IconChevronRight, IconFolder, IconSend } from "@tabler/icons-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
@@ -557,6 +558,8 @@ export function StudyPlanCreatePage() {
   const [materialScope, setMaterialScope] = useState<MaterialScope>(defaultScope);
   const [materialSelection, setMaterialSelection] = useState<StudyPlanMaterialSelection[]>([]);
   const [isMaterialScopeOpen, setIsMaterialScopeOpen] = useState(false);
+  const [isScopePreviewHovered, setIsScopePreviewHovered] = useState(false);
+  const scopePreviewCloseTimerRef = useRef<number | null>(null);
   const [requiresMaterialConfirmation, setRequiresMaterialConfirmation] = useState(false);
   const [isCustomStartDateOpen, setIsCustomStartDateOpen] = useState(false);
   const [isCustomDurationDaysOpen, setIsCustomDurationDaysOpen] = useState(false);
@@ -905,6 +908,33 @@ export function StudyPlanCreatePage() {
     setIsMaterialScopeOpen(false);
   }
 
+  function openScopePreview() {
+    if (scopePreviewCloseTimerRef.current !== null) {
+      window.clearTimeout(scopePreviewCloseTimerRef.current);
+      scopePreviewCloseTimerRef.current = null;
+    }
+    setIsScopePreviewHovered(true);
+  }
+
+  function scheduleScopePreviewClose() {
+    if (scopePreviewCloseTimerRef.current !== null) {
+      return;
+    }
+    // The dropdown is portaled next to the chip; a short grace period keeps the
+    // preview open while the pointer travels from the chip into the dropdown.
+    scopePreviewCloseTimerRef.current = window.setTimeout(() => {
+      scopePreviewCloseTimerRef.current = null;
+      setIsScopePreviewHovered(false);
+    }, 140);
+  }
+
+  useEffect(() => () => {
+    if (scopePreviewCloseTimerRef.current !== null) {
+      window.clearTimeout(scopePreviewCloseTimerRef.current);
+      scopePreviewCloseTimerRef.current = null;
+    }
+  }, []);
+
   async function handleGoalSubmit() {
     if (!courseId) {
       return;
@@ -1191,78 +1221,138 @@ export function StudyPlanCreatePage() {
                     用一句话告诉我目标，后面会自动生成问卷和学习计划。
                   </Text>
                 </Stack>
-                <Textarea
-                  aria-label="学习目标"
-                  className="study-plan-goal-input"
-                  minRows={8}
-                  onChange={(event) => updateGoalText(event.currentTarget.value)}
-                  placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
-                  value={goalText}
-                />
-                <Paper className="study-plan-material-summary" p="md" radius="md" withBorder>
-                  <Stack gap="sm">
-                    <Group justify="space-between" wrap="nowrap">
-                      <Stack gap={2}>
-                        <Text fw={750}>本次使用的课程资料</Text>
-                        <Text c="dimmed" size="sm">
-                          {selectedMaterialNames.length > 0
-                            ? `已选 ${selectedMaterialNames.length} 份：${selectedMaterialNames.join("、")}`
-                            : "尚未选择资料"}
-                        </Text>
-                      </Stack>
-                      <Button onClick={() => setIsMaterialScopeOpen((open) => !open)} size="xs" variant="light">
-                        {isMaterialScopeOpen ? "收起" : "调整资料"}
-                      </Button>
-                    </Group>
-                    {invalidMaterialIds.length > 0 ? (
-                      <Alert color="red" role="alert" variant="light">
-                        有 {invalidMaterialIds.length} 份资料已被删除、失效或尚未解析，请重新选择并确认。
-                      </Alert>
-                    ) : null}
-                    {requiresMaterialConfirmation ? (
-                      <Alert color="yellow" role="status" variant="light">
-                        这是旧版草稿迁移出的当前资料列表。旧版未保存“全选”的历史快照，请确认后继续。
-                      </Alert>
-                    ) : null}
-                    {isMaterialScopeOpen ? (
-                      <Stack gap="sm">
-                        <StudyPlanMaterialScopeSelector
-                          error={materialsError}
-                          isLoading={isLoadingMaterials}
-                          materialScope={materialScope}
-                          materials={materials}
-                          onMaterialScopeChange={updateMaterialScope}
-                        />
-                        <Group justify="flex-end">
+                <Box className="study-plan-goal-composer">
+                  <Textarea
+                    aria-label="学习目标"
+                    className="study-plan-goal-input"
+                    minRows={6}
+                    onChange={(event) => updateGoalText(event.currentTarget.value)}
+                    placeholder="例如：三天完成线性代数第一章复习，重点理解向量空间和矩阵秩。"
+                    value={goalText}
+                  />
+                  <Group className="study-plan-goal-composer-bar" justify="space-between" wrap="nowrap">
+                    <Box
+                      className="study-plan-scope-cluster"
+                      onMouseEnter={openScopePreview}
+                      onMouseLeave={scheduleScopePreviewClose}
+                    >
+                      <Popover
+                        onChange={(opened) => {
+                          if (!opened) {
+                            setIsMaterialScopeOpen(false);
+                          }
+                        }}
+                        opened={isMaterialScopeOpen || isScopePreviewHovered}
+                        position="bottom-start"
+                        radius="md"
+                        shadow="md"
+                        width={400}
+                      >
+                        <Popover.Target>
                           <Button
-                            disabled={materialScope.material_ids.length === 0 || invalidMaterialIds.length > 0}
-                            onClick={confirmMaterialScope}
-                            size="xs"
+                            leftSection={<IconFolder size={15} />}
+                            onClick={() => setIsMaterialScopeOpen((open) => !open)}
+                            size="compact-sm"
+                            variant="light"
                           >
-                            确认资料范围
+                            调整资料
                           </Button>
-                        </Group>
-                      </Stack>
-                    ) : null}
-                  </Stack>
-                </Paper>
+                        </Popover.Target>
+                        <Popover.Dropdown
+                          className="study-plan-scope-popover"
+                          onMouseEnter={openScopePreview}
+                          onMouseLeave={scheduleScopePreviewClose}
+                        >
+                          {isMaterialScopeOpen ? (
+                            <Stack className="study-plan-scope-editor" gap="sm">
+                              <StudyPlanMaterialScopeSelector
+                                error={materialsError}
+                                isLoading={isLoadingMaterials}
+                                materialScope={materialScope}
+                                materials={materials}
+                                onMaterialScopeChange={updateMaterialScope}
+                              />
+                              <Group justify="flex-end">
+                                <Button
+                                  disabled={materialScope.material_ids.length === 0 || invalidMaterialIds.length > 0}
+                                  onClick={confirmMaterialScope}
+                                  size="xs"
+                                >
+                                  确认资料范围
+                                </Button>
+                              </Group>
+                            </Stack>
+                          ) : (
+                            <Stack className="study-plan-scope-preview" gap="xs">
+                              <Group justify="space-between" wrap="nowrap">
+                                <Text fw={750} size="sm">本次使用的课程资料</Text>
+                                <Badge color={selectedMaterialNames.length > 0 ? "teal" : "gray"} size="sm" variant="light">
+                                  {selectedMaterialNames.length > 0 ? `已选 ${selectedMaterialNames.length} 份` : "未选择"}
+                                </Badge>
+                              </Group>
+                              {selectedMaterialNames.length > 0 ? (
+                                <Box className="study-plan-scope-preview-list">
+                                  {materialSelection.map((material) => (
+                                    <Group
+                                      className={`study-plan-scope-preview-row${invalidMaterialIds.includes(material.id) ? " is-invalid" : ""}`}
+                                      gap="xs"
+                                      key={material.id}
+                                      wrap="nowrap"
+                                    >
+                                      <span aria-hidden="true" className="study-plan-scope-preview-dot" />
+                                      <Text className="study-plan-scope-preview-name" size="sm" title={material.name}>
+                                        {material.name}
+                                      </Text>
+                                      {invalidMaterialIds.includes(material.id) ? (
+                                        <Badge color="red" size="xs" variant="light">已失效</Badge>
+                                      ) : null}
+                                    </Group>
+                                  ))}
+                                </Box>
+                              ) : (
+                                <Text c="dimmed" size="sm">
+                                  尚未选择资料，点击「调整资料」选择本次计划使用的已解析资料。
+                                </Text>
+                              )}
+                            </Stack>
+                          )}
+                        </Popover.Dropdown>
+                      </Popover>
+                      <Badge
+                        className="study-plan-scope-count"
+                        color={selectedMaterialNames.length > 0 ? "teal" : "gray"}
+                        variant="light"
+                      >
+                        {selectedMaterialNames.length > 0 ? `已选 ${selectedMaterialNames.length} 份` : "尚未选择资料"}
+                      </Badge>
+                    </Box>
+                    <ActionIcon
+                      aria-label="提交"
+                      className="study-plan-goal-submit-button"
+                      data-testid="study-plan-goal-submit"
+                      disabled={isLoadingMaterials}
+                      onClick={handleGoalSubmit}
+                      radius="md"
+                      size={38}
+                      variant="filled"
+                    >
+                      <IconSend size={17} />
+                    </ActionIcon>
+                  </Group>
+                </Box>
+                {invalidMaterialIds.length > 0 ? (
+                  <Alert color="red" role="alert" variant="light">
+                    有 {invalidMaterialIds.length} 份资料已被删除、失效或尚未解析，请重新选择并确认。
+                  </Alert>
+                ) : null}
+                {requiresMaterialConfirmation ? (
+                  <Alert color="yellow" role="status" variant="light">
+                    这是旧版草稿迁移出的当前资料列表。旧版未保存“全选”的历史快照，请确认后继续。
+                  </Alert>
+                ) : null}
                 {materialsError ? (
                   <Alert color="red" role="alert" variant="light">{materialsError}</Alert>
                 ) : null}
-                <Group className="study-plan-goal-actions" justify="flex-end" wrap="nowrap">
-                  <ActionIcon
-                    aria-label="提交"
-                    className="study-plan-goal-submit-button"
-                    data-testid="study-plan-goal-submit"
-                    disabled={isLoadingMaterials}
-                    onClick={handleGoalSubmit}
-                    radius="md"
-                    size={38}
-                    variant="filled"
-                  >
-                    <IconSend size={17} />
-                  </ActionIcon>
-                </Group>
               </Stack>
             ) : null}
 
