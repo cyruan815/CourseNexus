@@ -13,6 +13,13 @@ from app.shared.responses import error_response
 
 
 logger = get_logger("api.error")
+_SENSITIVE_FIELD_MARKERS = (
+    "api_key",
+    "authorization",
+    "password",
+    "secret",
+    "token",
+)
 
 
 class CourseNexusError(Exception):
@@ -104,11 +111,23 @@ def _serializable_validation_errors(exc: RequestValidationError) -> list[dict[st
     errors: list[dict[str, Any]] = []
     for error in exc.errors():
         cleaned = dict(error)
+        if _is_sensitive_validation_location(cleaned.get("loc")):
+            cleaned["input"] = "[REDACTED]"
         ctx = cleaned.get("ctx")
         if isinstance(ctx, dict):
             cleaned["ctx"] = {key: str(value) for key, value in ctx.items()}
         errors.append(cleaned)
     return errors
+
+
+def _is_sensitive_validation_location(location: object) -> bool:
+    if not isinstance(location, (list, tuple)):
+        return False
+    return any(
+        marker in str(part).lower()
+        for part in location
+        for marker in _SENSITIVE_FIELD_MARKERS
+    )
 
 
 def _business_error_level(status_code: int) -> int:

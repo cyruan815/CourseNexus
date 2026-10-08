@@ -21,12 +21,12 @@
 
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
-| [product/index.md](product/index.md) | 产品目标、PRD 和 AI 资料业务范围入口。 | 2026-10-01 |
-| [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-10-01 |
-| [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-10-01 |
+| [product/index.md](product/index.md) | 产品目标、PRD 和 AI 资料业务范围入口。 | 2026-10-08 |
+| [architecture/index.md](architecture/index.md) | 架构文档、模块边界、资料上下文 / RAG 和技术决策入口。 | 2026-10-08 |
+| [api-data/index.md](api-data/index.md) | API 规范、数据模型和契约入口。 | 2026-10-08 |
 | [engineering/index.md](engineering/index.md) | 项目骨架、运行存储、发布验收和协作规范入口。 | 2026-10-01 |
-| [planning/index.md](planning/index.md) | 当前状态、V1 完成矩阵、路线图和技术债入口。 | 2026-10-01 |
-| [domains/index.md](domains/index.md) | 业务领域实现知识库入口，记录各功能实际架构、算法、状态和代码入口。 | 2026-10-01 |
+| [planning/index.md](planning/index.md) | 当前状态、V1 完成矩阵、路线图和技术债入口。 | 2026-10-08 |
+| [domains/index.md](domains/index.md) | 业务领域实现知识库入口，记录各功能实际架构、算法、状态和代码入口。 | 2026-10-08 |
 
 ## 相关链接
 

@@ -46,6 +46,12 @@
   padding: 20px;
 }
 
+.profile-model-config-section {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 16px;
+}
+
 .profile-metric {
   color: #1e477f;
   font-size: 2rem;
@@ -141,6 +147,21 @@
 }
 
 @media (max-width: 760px) {
+  .profile-nav {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-nav-actions {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-nav-actions > :last-child {
+    grid-column: 1 / -1;
+  }
+
   .profile-hero {
     align-items: flex-start;
     flex-direction: column;

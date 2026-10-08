@@ -15,7 +15,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconKey, IconLogout, IconUserCircle } from "@tabler/icons-react";
+import { IconArrowLeft, IconKey, IconLogout, IconSettings, IconUserCircle } from "@tabler/icons-react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/errors";
@@ -24,6 +24,7 @@ import type { AuthUser } from "../features/auth/api";
 import { clearSessionToken } from "../features/auth/session";
 import { fetchCheckinDay, fetchCheckinRange } from "../features/profile/api";
 import type { CheckinRangeRead, CheckinRead } from "../features/profile/api";
+import { ModelConfigModal } from "../features/profile/ModelConfigModal";
 import "./profile.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,6 +123,7 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isModelConfigOpen, setIsModelConfigOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -275,7 +277,14 @@ export function ProfilePage() {
           <Button component={Link} leftSection={<IconArrowLeft size={16} />} to="/" variant="subtle">
             返回首页
           </Button>
-          <Group gap="sm">
+          <Group className="profile-nav-actions" gap="sm">
+            <Button
+              leftSection={<IconSettings size={16} />}
+              onClick={() => setIsModelConfigOpen(true)}
+              variant="light"
+            >
+              模型配置
+            </Button>
             <Button leftSection={<IconKey size={16} />} onClick={openChangePasswordModal} variant="light">
               修改密码
             </Button>
@@ -483,6 +492,10 @@ export function ProfilePage() {
             )}
           </Stack>
         </Modal>
+        <ModelConfigModal
+          onClose={() => setIsModelConfigOpen(false)}
+          opened={isModelConfigOpen}
+        />
       </Box>
     </Box>
   );

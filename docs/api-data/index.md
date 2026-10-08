@@ -15,8 +15,8 @@
 | [api-conventions.md](api-conventions.md) | API 风格、请求响应、错误码、分页、鉴权、幂等、时间 / ID / 状态字段和版本策略。 | 2026-07-09 |
 | [data-model.md](data-model.md) | 核心实体、关系、数据归属、状态字段、软删除、审计字段和迁移规则。 | 2026-07-09 |
 | [table-schema.md](table-schema.md) | v0.1 后端数据表、字段、约束、索引和结构化 JSON 契约。 | 2026-07-09 |
-| [contracts.md](contracts.md) | 前后端契约、模块间契约、跨模块数据引用原则和契约变更规则。 | 2026-07-09 |
-| [frontend-integration.md](frontend-integration.md) | V1 浏览器端各业务页面的后端接口接入指南。 | 2026-10-01 |
+| [contracts.md](contracts.md) | 前后端契约、模块间契约、跨模块数据引用原则和契约变更规则。 | 2026-10-08 |
+| [frontend-integration.md](frontend-integration.md) | V1 浏览器端各业务页面的后端接口接入指南。 | 2026-10-08 |
 
 ## 相关链接
 
