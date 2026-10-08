@@ -176,6 +176,16 @@ def configure_logging(settings: Settings) -> None:
     uvicorn_error_logger.addFilter(UvicornRequestExceptionFilter())
 
 
+def refresh_logging_redactor(settings: Settings) -> None:
+    """Refresh configured secrets without reopening or relocating log files."""
+    redactor = SensitiveDataRedactor(settings)
+    logger = logging.getLogger("course_nexus")
+    for handler in logger.handlers:
+        formatter = handler.formatter
+        if isinstance(formatter, TimezoneFormatter):
+            formatter.redactor = redactor
+
+
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(f"course_nexus.{name}")
 

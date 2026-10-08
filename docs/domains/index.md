@@ -17,8 +17,8 @@
 | [course-workspace/index.md](course-workspace/index.md) | 课程详情工作台、资料范围、问答、生成内容和学习计划入口实现。 | 2026-07-12 |
 | [course-qa/index.md](course-qa/index.md) | 课程资料问答、行内引用校验、引用快照和历史消息契约。 | 2026-07-15 |
 | [materials/index.md](materials/index.md) | 资料上传、一级文件夹归类、逐文件范围、解析索引和前端工作区实现。 | 2026-07-10 |
-| [model-runtime/index.md](model-runtime/index.md) | 用途级 Provider、显式 Mock、生产配置校验、运行状态提示和日志脱敏。 | 2026-10-01 |
-| [profile/index.md](profile/index.md) | 个人中心第一版：账号信息、退出登录、今日打卡和近 14 天打卡颜色。 | 2026-07-14 |
+| [model-runtime/index.md](model-runtime/index.md) | 用途级 Provider、共享模型配置、显式 Mock、运行时刷新和凭据脱敏。 | 2026-10-08 |
+| [profile/index.md](profile/index.md) | 个人中心：账号、共享模型配置、退出登录和年度打卡颜色。 | 2026-10-08 |
 | [courses/index.md](courses/index.md) | 课程创建、列表和统一学期选项契约。 | 2026-07-12 |
 | [study-mode/plan-lifecycle.md](study-mode/plan-lifecycle.md) | S02 学习计划生命周期：配置回填、全材料预览、保存幂等、替换、重生成和软删除。 | 2026-07-11 |
 | [study-mode/plan-builder-wizard.md](study-mode/plan-builder-wizard.md) | Study Mode 计划生成向导：目标输入、配置确认、学前诊断、preview 页面和字段契约设计。 | 2026-07-13 |

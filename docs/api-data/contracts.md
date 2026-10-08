@@ -3,7 +3,7 @@
 ## 前后端契约基线
 
 - 前端已承载 V1 浏览器闭环；已落地接口、请求体和响应字段以 [frontend-integration.md](frontend-integration.md) 为前端接入入口。
-- 当前已落地的后端接口范围包括 Auth、Courses、Materials、Material Context、Course QA、Generation、Study Plans、Todos Calendar、Learning Execution、Checkins 和 S06 Task Content。
+- 当前已落地的后端接口范围包括 Auth、Model Runtime、Courses、Materials、Material Context、Course QA、Generation、Study Plans、Todos Calendar、Learning Execution、Checkins 和 S06 Task Content。
 - 当前基础设施阶段不要求前端实现资料上传面板、资料范围选择器或课程问答面板；这些应在后续前端任务中基于稳定后端接口独立开发。
 - 前端提交字段、后端返回字段统一使用 `snake_case`。
 - 课程学期由 `GET /api/v1/course-terms` 提供统一选项；创建和更新课程只能提交选项中的 `value` 或 `null`，前端不得提供自由文本输入。
@@ -44,6 +44,51 @@
 ```
 
 `details.purpose` 仅标识逻辑用途，不暴露环境变量名或其他敏感配置。Mock 只允许在非生产环境由后端显式启用，客户端不能请求或切换 Mock。
+
+### 登录态模型配置契约
+
+`GET /api/v1/model-runtime/config` 与 `PUT /api/v1/model-runtime/config` 要求 Bearer token。它们是单机版本个人中心的服务实例级配置入口，不是用户私有设置：所有登录用户读取并修改同一份根目录 `.env`，所有账号共享修改结果。
+
+读取响应的 `data` 只包含两组配置：
+
+```json
+{
+  "embedding": {
+    "model": "text-embedding-3-large",
+    "base_url": "https://embedding.example/v1",
+    "api_key_configured": true,
+    "api_key_hint": "sk-e••••"
+  },
+  "general": {
+    "model": "general-model",
+    "base_url": "https://models.example/v1",
+    "api_key_configured": true,
+    "api_key_hint": "sk-g••••"
+  },
+  "general_config_consistent": true
+}
+```
+
+完整 API Key 永不出现在读取或保存响应中；`api_key_hint` 只含至多前 4 位和固定掩码。`general_config_consistent=false` 表示历史用途级 `.env` 配置不一致，响应中的 `general` 以 `course_qa` 为回填基准。
+
+保存请求同样只提交 `embedding` 和 `general`。已配置时省略 `api_key` 表示保留旧 Key；首次配置缺少任一组 Key 返回 HTTP `422 MODEL_API_KEY_REQUIRED`。
+
+```json
+{
+  "embedding": {
+    "model": "text-embedding-3-large",
+    "base_url": "https://embedding.example/v1",
+    "api_key": "new-embedding-key"
+  },
+  "general": {
+    "model": "general-model",
+    "base_url": "https://models.example/v1",
+    "api_key": "new-general-key"
+  }
+}
+```
+
+后端把 `general` 原子展开到 `course_qa`、`quiz`、`flashcard`、`mindmap`、`outline`、`knowledge_list`、`study_plan_parser`、`study_plan_diagnostic`、`study_plan_generator`、`study_plan_map`、`handout` 和 `task_test` 的 `*_MODEL`、`*_BASE_URL`、`*_API_KEY`。保存保留 `.env` 中无关变量和注释，失败返回 `MODEL_CONFIG_WRITE_FAILED`；请求校验错误中的 Key、密码、Secret 和 Token 输入必须脱敏。
 
 ## 模块间契约基线
 
