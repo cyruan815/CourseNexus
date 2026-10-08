@@ -153,6 +153,7 @@ describe("ProfilePage", () => {
     expect(await screen.findByRole("heading", { name: "个人中心" })).toBeInTheDocument();
     expect(screen.getByText("林同学")).toBeInTheDocument();
     expect(screen.getByText("student@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "模型配置" })).toBeInTheDocument();
     expect(screen.getByText("今日完成 3/4")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("连续 2 天")).toBeInTheDocument();

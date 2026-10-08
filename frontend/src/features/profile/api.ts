@@ -26,6 +26,30 @@ export interface CheckinRangeRead {
   summary: CheckinRangeSummaryRead;
 }
 
+export interface ModelEndpointConfigRead {
+  model: string;
+  base_url: string | null;
+  api_key_configured: boolean;
+  api_key_hint: string | null;
+}
+
+export interface ModelRuntimeConfigRead {
+  embedding: ModelEndpointConfigRead;
+  general: ModelEndpointConfigRead;
+  general_config_consistent: boolean;
+}
+
+export interface ModelEndpointConfigUpdate {
+  model: string;
+  base_url: string;
+  api_key?: string;
+}
+
+export interface ModelRuntimeConfigUpdate {
+  embedding: ModelEndpointConfigUpdate;
+  general: ModelEndpointConfigUpdate;
+}
+
 export function fetchCheckinDay(date: string): Promise<CheckinRead> {
   return apiRequest<CheckinRead>(`/api/v1/checkins/${date}`, { method: "GET" });
 }
@@ -33,5 +57,18 @@ export function fetchCheckinDay(date: string): Promise<CheckinRead> {
 export function fetchCheckinRange(startDate: string, endDate: string): Promise<CheckinRangeRead> {
   return apiRequest<CheckinRangeRead>(`/api/v1/checkins?start_date=${startDate}&end_date=${endDate}`, {
     method: "GET",
+  });
+}
+
+export function fetchModelRuntimeConfig(): Promise<ModelRuntimeConfigRead> {
+  return apiRequest<ModelRuntimeConfigRead>("/api/v1/model-runtime/config", { method: "GET" });
+}
+
+export function updateModelRuntimeConfig(
+  payload: ModelRuntimeConfigUpdate,
+): Promise<ModelRuntimeConfigRead> {
+  return apiRequest<ModelRuntimeConfigRead>("/api/v1/model-runtime/config", {
+    method: "PUT",
+    body: JSON.stringify(payload),
   });
 }
