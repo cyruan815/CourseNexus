@@ -236,6 +236,9 @@ export function ModelConfigModal({ opened, onClose }: ModelConfigModalProps) {
 
           <Stack className="profile-model-config-section" gap="sm">
             <Title order={3}>Embedding 模型</Title>
+            <Text c="dimmed" size="sm">
+              更换模型或 Base URL 后，请运行后端全量索引重建命令，再继续检索或解析资料，避免新旧向量混用。
+            </Text>
             <TextInput
               disabled={isSaving}
               label="Embedding 模型名称"

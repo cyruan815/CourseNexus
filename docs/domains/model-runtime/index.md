@@ -58,6 +58,7 @@ flowchart LR
 - 个人中心只配置 `embedding` 和 `general` 两组。`general` 保存时统一展开到课程问答、五类课程级生成、学习计划 parser/diagnostic/generator/map、讲义和任务测试用途；Provider 运行时仍只读取自己用途的变量，不引入用途间回退。
 - 模型配置属于单机服务实例，全体登录用户共享同一份根目录 `.env`。任一登录用户都可读取脱敏配置和保存新配置；当前没有管理员角色、按用户 Key 或租户隔离，升级共享部署前按 `TD-027` 治理。
 - 已配置时请求省略 `api_key` 表示保留当前 Key；首次配置缺 Key 返回 `MODEL_API_KEY_REQUIRED`。GET/PUT 响应都不包含完整 Key。
+- 保存会关闭进程内 RAG 实例，但不会自动重算持久化 Chroma 向量。Embedding 模型或 Base URL 改变后，必须先运行 `python -m app.commands.rebuild_rag_index --all`，再继续检索或解析资料；只轮换同一服务同一模型的 Key 不要求重建。
 
 仓库 `.env.example` 保留完整用途级配置格式，并为当前已验证的单机组合预填非敏感的 Base URL / Model：Embedding 使用 AIHubMix 的 OpenAI-compatible 端点与 `text-embedding-3-large`，其余模型用途使用 DeepSeek 端点与 `deepseek-flash`。所有 `*_API_KEY` 和 `SECRET_KEY` 示例继续留空或使用明确占位值，真实密钥只写入被 Git 忽略的本地 `.env`。这些值是可运行示例，不是 Provider Factory 的硬编码限制；替换服务时仍可为每个用途独立覆盖。
 

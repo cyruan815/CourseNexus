@@ -109,7 +109,12 @@ def update_environment_file(env_path: Path, updates: dict[str, str]) -> None:
         temp_dir.mkdir(parents=True, exist_ok=True)
         temp_path = temp_dir / f".env.{uuid4().hex}.tmp"
         try:
-            with temp_path.open("w", encoding="utf-8", newline="") as file:
+            descriptor = os.open(
+                temp_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o600,
+            )
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as file:
                 file.write(updated)
                 file.flush()
                 os.fsync(file.fileno())

@@ -174,6 +174,8 @@
 
 保存时模型名和 Base URL 必填且 Base URL 只允许绝对 HTTP(S) 地址。API Key 输入框始终以空值打开；已有 Key 时省略 `api_key` 表示保留，不能把 `api_key_hint` 当作真实 Key 提交。保存成功后清空两个 Key 输入框，并以响应中的新脱敏提示更新页面。
 
+弹窗必须提示：Embedding 模型或 Base URL 改变后，现有 Chroma 向量不会自动重算；本地维护者需在后端运行 `python -m app.commands.rebuild_rag_index --all` 后再继续检索或解析资料。只轮换同一端点、同一模型的 API Key 不需要重建。
+
 稳定错误：
 
 | 错误码 | HTTP | 前端处理 |
