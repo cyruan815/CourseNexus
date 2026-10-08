@@ -31,6 +31,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 - `material-context`：作为问答、生成、学习计划共用的资料范围与上下文入口；已提供相关性检索、五类独立生成完整上下文和全材料分批读取三个接口。调用方不得绕过它直接查询 Chroma 或拼装 chunk。
 - `course-qa`：拥有会话、消息和课程问答引用保存；已通过 `retrieve_relevant_context()` 接入课程资料相关性检索，不负责 Flashcard、Mindmap、Quiz 或学习计划。
 - `model-provider`：所有需要调用 LLM 的地方必须通过 provider 边界；OpenAI-compatible 调用统一集中在 OpenAI SDK provider 实现中，并读取当前业务用途的独立 endpoint 配置。
+- `model-runtime`：拥有登录态模型配置契约、根目录 `.env` 原子更新、运行时 Settings/RAG 缓存刷新和 Key 脱敏；单机版所有用户共享一套实例配置，不写业务数据库。
 - `generation-orchestrator`：负责课程归属与注册类型校验、用途模型注入、完整材料上下文交付、总 token 检查、生成器工厂调用和 `AIGeneratedContent` 保存；五类 POC 不创建 `SourceCitation`，具体题型、卡片、导图、提纲或知识点规则仍由各生成器拥有。
 - `study-plans`：当前负责单课程计划配置回填、学前诊断题生成、diagnostic_profile 归纳、计划预览、保存和任务结构写入；诊断题使用独立 `study_plan_diagnostic` 模型 purpose，但不负责执行页、日历聚合、打卡或讲义 / 任务测试题生成。
 - `todos-calendar`：已实现 S03 五个只读聚合接口，读取学习计划任务树生成首页今日待办、全局月历、全局当日待办、课程月历和课程当日任务；不拥有写模型。
@@ -42,6 +43,7 @@ CourseNexus 后端采用 FastAPI 单体应用，但单体不等于随意耦合�
 ```mermaid
 flowchart TB
     U["users<br/>账号 / 登录态 / 当前用户"]
+    MR["model-runtime<br/>共享 .env 配置 / 脱敏 / 缓存刷新"]
     C["courses<br/>课程归属边界"]
     M["materials<br/>上传 / Docling 解析 / 切片 / 索引"]
     MC["material-context<br/>范围过滤 / 语义检索 / 全材料批次 / 引用候选"]
@@ -66,6 +68,7 @@ flowchart TB
     EX["exports<br/>PDF 导出"]
 
     U --> C
+    U --> MR
     C --> M
     M --> MC
     C --> SP
@@ -102,6 +105,7 @@ flowchart TB
 | 层级 | 模块 | 架构角色 |
 | --- | --- | --- |
 | 身份与归属层 | `users`、`courses` | 定义“当前用户是谁”和“这份数据属于哪门课程”。 |
+| 运行配置层 | `model-runtime`、`model-provider` | 安全更新服务实例级模型配置，并按用途创建真实或 Mock Provider。 |
 | 资料上下文层 | `materials`、`material-context` | 把资料转成可检索、可引用的上下文。 |
 | 生成编排层 | `generation-orchestrator` | 处理生成请求、幂等、状态、失败重试和调用独立生成模块。 |
 | 独立生成能力层 | `course-qa`、`quiz-generator`、`flashcard-generator`、`mindmap-generator`、`outline-generator`、`knowledge-list-generator`、`handout-generator`、`task-test-generator` | 每个能力只关心自己的输入、生成规则和输出结构。 |
@@ -115,6 +119,7 @@ flowchart TB
 | 模块 | 负责什么 | 拥有 / 主要写入 | 对外输出 | 不负责什么 |
 | --- | --- | --- | --- | --- |
 | `users` | 注册、登录、退出、修改密码、当前用户识别。 | `User`、登录态。 | 当前用户上下文、登录状态。 | 不查询课程、资料、计划等业务对象。 |
+| `model-runtime` | 读取脱敏模型配置；把 Embedding / 通用两组表单原子展开到用途级 `.env`；刷新 Settings、RAG 与日志脱敏。 | 根目录 `.env`；不拥有业务表。 | `GET/PUT /api/v1/model-runtime/config`、Key 配置状态与前缀。 | 不调用模型、不保存用户私有 Key；共享部署权限隔离归 `TD-027`。 |
 | `courses` | 课程创建、编辑、删除、列表、详情、课程归属校验，以及首页课程卡片的只读摘要。 | `Course`。 | 可访问课程、课程基础信息、课程归属判断、资料数量与今日任务三态摘要。 | 不解析资料，不生成内容，不处理任务状态或写入计划 / 任务数据。 |
 | `materials` | 文件资料（链接资料入口已停止支持，历史 URL 记录仅保留查看与删除）、一级目录归类、上传状态、版本化 Docling 解析、资料切片、Chroma 索引编排和资料预览定位。 | `MaterialFolder`、`CourseMaterial`、`MaterialParseVersion`、`MaterialChunk`；触发可重建向量索引。 | 学习可用资料、生效版本、逐文件资料范围、切片定位信息。 | 不生成回答、卡片、导图或计划；文件夹不作为 Agent 资料范围。 |
 | `material-context` | 校验课程和资料范围；为问答执行带硬过滤的语义检索；为五类独立 POC 提供完整上下文；为其他消费者提供全量批次。 | 不单独拥有业务表，读取 `MaterialChunk` 和 Chroma 派生索引。 | `retrieve_relevant_context()`、`resolve_generation_context()`、`iter_material_context_batches()`、`ContextChunk`。 | 不调用生成模型，不保存生成内容，不向业务层暴露 LlamaIndex / Chroma 类型。 |

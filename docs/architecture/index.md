@@ -13,7 +13,7 @@
 | [overview.md](overview.md) | 产品架构 L1：系统上下文、能力分层、核心设计原则和非目标。 | 2026-07-09 |
 | [topology.md](topology.md) | 技术架构 L1：本地 POC 部署形态、后端容器拓扑、信任边界和数据/文件流向。 | 2026-07-09 |
 | [codebase-structure.md](codebase-structure.md) | 代码结构架构：仓库目录、前端分层、后端分层、模块落位和依赖方向。 | 2026-07-09 |
-| [module-boundaries.md](module-boundaries.md) | 功能模块拓扑与模块边界：账号、课程、资料、Agent、独立 AI 生成模块、计划、日历、执行和打卡的依赖关系与禁止耦合事项。 | 2026-07-09 |
+| [module-boundaries.md](module-boundaries.md) | 功能模块拓扑与模块边界：账号、共享模型配置、课程、资料、Agent、独立 AI 生成模块、计划、日历、执行和打卡的依赖关系与禁止耦合事项。 | 2026-10-08 |
 | [runtime-flows.md](runtime-flows.md) | 关键运行链路：资料解析、问答、独立生成、计划生成、任务执行、日历聚合和导出。 | 2026-07-09 |
 | [material-context-rag.md](material-context-rag.md) | 资料上传、解析、索引、检索和引用架构，以及问答与指定材料生成两条链路。 | 2026-07-10 |
 | [adr/index.md](adr/index.md) | 架构决策记录入口、命名规则和当前 ADR 清单。 | 2026-07-09 |

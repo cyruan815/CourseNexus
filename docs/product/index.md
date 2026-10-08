@@ -11,7 +11,7 @@
 | 文件名 | 摘要 | 最后更新 |
 | --- | --- | --- |
 | [prd.md](prd.md) | 产品需求权威入口，指向完整 PRD 文档包并摘要当前产品口径。 | 2026-10-01 |
-| [PRD/README.md](PRD/README.md) | PRD v0.3 文档包说明、阅读顺序和关键产品口径。 | 2026-10-01 |
+| [PRD/README.md](PRD/README.md) | PRD v0.3 文档包说明、阅读顺序和关键产品口径。 | 2026-10-08 |
 | [ai-material-business.md](ai-material-business.md) | AI 资料业务线：区分选定范围 RAG 问答与指定材料全覆盖生成。 | 2026-10-01 |
 
 ## 相关链接

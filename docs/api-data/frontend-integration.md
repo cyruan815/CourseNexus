@@ -35,7 +35,7 @@
 
 - `mock_model_provider_enabled=true` 时，应用全局展示“模拟模型模式”，明确当前生成内容仅用于开发验证。
 - `false` 时不展示提示；Health 临时失败也不阻塞登录、首页或工作台渲染。
-- 前端不读取、缓存或展示任何模型 Key、Secret、模型地址或模型名。
+- 除个人中心的登录态模型配置弹窗外，前端不读取、缓存或展示模型 Key、Secret、模型地址或模型名。配置弹窗只接收 `api_key_configured` 与脱敏 `api_key_hint`，完整 Key 仅在用户本次输入期间驻留表单状态，保存成功后立即清空。
 - 依赖模型的业务请求收到 HTTP `503` 且 `error.code=MODEL_PROVIDER_NOT_CONFIGURED` 时，展示“模型服务未配置”类可恢复错误，不得伪造结果或自动切换 Mock。
 
 ## 3. 当前已落地接口
@@ -156,6 +156,32 @@
 | `UNAUTHORIZED` | 401 | 未登录或登录态已失效。 |
 
 修改成功后服务端递增该用户的 `token_epoch`，其全部存量 token（含本次请求所用 token）立即失效；前端应清理本地 token 并引导用户使用新密码重新登录。
+
+### 3.4.2 模型配置
+
+`GET /api/v1/model-runtime/config`
+
+`PUT /api/v1/model-runtime/config`
+
+要求：Bearer token。该配置属于单机服务实例，所有注册用户共享，不按账号隔离。前端只渲染两组表单：`embedding` 与 `general`；后端负责把 `general` 同步到所有非 Embedding 用途级 `.env` 变量。
+
+读取响应字段：
+
+- `model`、`base_url`：回填对应输入框。
+- `api_key_configured`：决定首次保存是否必须输入 Key。
+- `api_key_hint`：仅展示前几位和掩码，不能作为保存值回传。
+- `general_config_consistent`：为 `false` 时提示历史用途级配置不一致；保存会统一覆盖。
+
+保存时模型名和 Base URL 必填且 Base URL 只允许绝对 HTTP(S) 地址。API Key 输入框始终以空值打开；已有 Key 时省略 `api_key` 表示保留，不能把 `api_key_hint` 当作真实 Key 提交。保存成功后清空两个 Key 输入框，并以响应中的新脱敏提示更新页面。
+
+稳定错误：
+
+| 错误码 | HTTP | 前端处理 |
+| --- | --- | --- |
+| `MODEL_API_KEY_REQUIRED` | 422 | 标出首次配置仍缺 Key 的组，保留其他输入。 |
+| `MODEL_CONFIG_WRITE_FAILED` | 500 | 保留全部表单输入，允许重试。 |
+| `VALIDATION_ERROR` | 422 | 展示模型名、URL 或字段格式错误，不展示响应中的敏感输入。 |
+| `UNAUTHORIZED` | 401 | 按全局规则清理登录态并跳转登录。 |
 
 ### 3.5 课程列表
 
