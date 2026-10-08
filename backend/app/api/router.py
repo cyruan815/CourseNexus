@@ -10,6 +10,7 @@ from app.modules.generated_content.router import router as generated_content_rou
 from app.modules.generation.orchestrator.router import router as generation_router
 from app.modules.learning_execution.router import router as learning_execution_router
 from app.modules.materials.router import router as materials_router
+from app.modules.model_runtime.router import router as model_runtime_router
 from app.modules.study_plans.router import router as study_plans_router
 from app.modules.todos_calendar.router import router as todos_calendar_router
 from app.modules.users.router import router as users_router
@@ -22,6 +23,7 @@ api_router.include_router(courses_router)
 api_router.include_router(course_terms_router)
 api_router.include_router(checkins_router)
 api_router.include_router(materials_router)
+api_router.include_router(model_runtime_router)
 api_router.include_router(course_qa_router)
 api_router.include_router(generated_content_router)
 api_router.include_router(exports_router)

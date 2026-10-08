@@ -35,6 +35,7 @@ coverage/
 /logs/
 /backend/logs/
 .runtime-*.log
+/tmp/
 
 # Local agent/plugin process notes
 /docs/superpowers/

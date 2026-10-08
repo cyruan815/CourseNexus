@@ -16,6 +16,7 @@ from app.core.logging import (
     configure_logging,
     exception_summary,
     get_logger,
+    refresh_logging_redactor,
     reset_request_id,
 )
 
@@ -169,4 +170,28 @@ def test_configure_logging_redacts_message_arguments_and_exceptions(
         assert "runtime-secret-value" not in output
         assert "runtime-api-key" not in output
         assert "runtime-bearer-token" not in output
+        assert "[REDACTED]" in output
+
+
+def test_refresh_logging_redactor_applies_new_model_keys(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    configure_logging(Settings(_env_file=None, log_dir=str(tmp_path)))
+    refresh_logging_redactor(
+        Settings(
+            _env_file=None,
+            log_dir=str(tmp_path),
+            course_qa_api_key="new-runtime-api-key",
+        )
+    )
+
+    get_logger("model.security").error("provider error: new-runtime-api-key")
+    for handler in logging.getLogger("course_nexus").handlers:
+        handler.flush()
+
+    console = capsys.readouterr().err
+    file_text = (tmp_path / "course-nexus.log").read_text(encoding="utf-8")
+    for output in (console, file_text):
+        assert "new-runtime-api-key" not in output
         assert "[REDACTED]" in output
